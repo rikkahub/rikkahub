@@ -2,16 +2,23 @@ name: Release Build
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v2.4.1-procare)'
+        required: true
+        default: 'v2.4.1-procare'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: true
+          submodules: recursive
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -19,21 +26,21 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Cache pnpm store
-        uses: actions/cache@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          path: ~/.local/share/pnpm/store
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('web-ui/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          version: 11
 
-      - name: Cache web-ui node_modules
-        uses: actions/cache@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
         with:
-          path: web-ui/node_modules
-          key: ${{ runner.os }}-webui-node-modules-${{ hashFiles('web-ui/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-webui-node-modules-
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+
+      - name: Install web-ui dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
 
       - name: Gradle cache
         uses: actions/cache@v4
@@ -41,36 +48,24 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-            ~/.gradle/configuration-cache
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
-
-      - name: Install zsh and pnpm
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq zsh
-          npm install -g pnpm
-          cd web-ui && pnpm install --frozen-lockfile
 
       - name: Prepare build files
         run: |
-          # 解码base64编码的keystore文件
           echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
-          
-          # 写入签名配置到local.properties
           echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
-          
-          # 写入Google Services配置
           echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
 
       - name: Gradle Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --parallel --configuration-cache
+          ./gradlew assembleRelease
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
         if: success()
         with:
-          name: artifacts
-          path: app/build/outputs/apk/release/*.apk
+          tag_name: ${{ github.event.inputs.version }}
+          name: ${{ github.event.inputs.version }}
+          generate_release_notes: true
+          files: app/build/outputs/apk/release/*.apk
