@@ -446,6 +446,8 @@
   <string name="notification_web_server_running">Webサーバーが実行中</string>
   <string name="notification_web_server_starting">起動中…</string>
   <string name="notification_web_server_stop">停止</string>
+  <string name="permission_bluetooth">Bluetooth</string>
+  <string name="permission_bluetooth_desc">音声通話でヘッドセットの音声を使用するには、Bluetooth 権限が必要です</string>
   <string name="permission_camera">カメラ</string>
   <string name="permission_camera_desc">写真を撮影するにはカメラの権限が必要です</string>
   <string name="permission_desc_goto_setting">一部の権限が恒久的に拒否されています。アプリの設定から手動で有効にしてください：</string>
@@ -555,6 +557,7 @@
   <string name="safe_mode_current_assistant">現在のアシスタント: %s</string>
   <string name="safe_mode_default_assistant">デフォルトアシスタント</string>
   <string name="safe_mode_description">前回の起動時にアプリがクラッシュしました。別のアシスタントに切り替えて問題を解決できます。</string>
+  <string name="safe_mode_enter_app">アプリを開く</string>
   <string name="safe_mode_switch_assistant">アシスタントを切り替える</string>
   <string name="safe_mode_title">セーフモード</string>
   <string name="search_ability_scrape">スクレイピング</string>
@@ -975,6 +978,9 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_tts_page_speech_rate">音声速度</string>
   <string name="setting_tts_page_stability">安定性</string>
   <string name="setting_tts_page_stability_description">音声の安定性を制御（0.0 - 1.0、低いほど表現力豊か）</string>
+  <string name="setting_tts_page_temperature">温度</string>
+  <string name="setting_tts_page_temperature_description">音声のランダム性を制御します（0.0～1.0。値が高いほど表現力が増します）</string>
+  <string name="setting_tts_page_fish_audio_speed_description">音声速度（0.5～2.0、1.0が標準）</string>
   <string name="setting_tts_page_speech_rate_description">音声の再生速度を制御 (0.1 - 3.0、1.0が標準)</string>
   <string name="setting_tts_page_speed">速度</string>
   <string name="setting_tts_page_speed_description">音声合成の速度 (0.25 - 4.0)</string>
@@ -1276,4 +1282,3 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 括弧内を読み上げない</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">有効にすると、TTS は括弧内の内容を読み上げません</string>
 </resources>
-

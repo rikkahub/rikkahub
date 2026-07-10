@@ -9,6 +9,7 @@ import android.telecom.CallEndpoint
 import android.telecom.CallEndpointException
 import android.telecom.Connection
 import android.telecom.DisconnectCause
+import androidx.annotation.RequiresApi
 
 class VoiceAgentTelecomConnection(
     private val context: Context,
@@ -95,6 +96,7 @@ class VoiceAgentTelecomConnection(
         destroy()
     }
 
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private fun CallEndpoint.toCandidate(): VoiceAgentCallEndpointCandidate =
         VoiceAgentCallEndpointCandidate(
             id = identifier.toString(),
@@ -109,6 +111,7 @@ class VoiceAgentTelecomConnection(
             name = endpointName.toString(),
         )
 
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private fun CallEndpoint.toCurrentEndpoint(): VoiceAgentCurrentCallEndpoint =
         VoiceAgentCurrentCallEndpoint(
             id = identifier.toString(),
@@ -122,6 +125,7 @@ class VoiceAgentTelecomConnection(
             },
         )
 
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private fun currentCallEndpointOrNull(): VoiceAgentCurrentCallEndpoint? =
         runCatching { currentCallEndpoint.toCurrentEndpoint() }
             .onFailure { VoiceAgentLog.d(TAG, "current call endpoint unavailable: ${it.javaClass.simpleName}") }
@@ -130,6 +134,7 @@ class VoiceAgentTelecomConnection(
     private fun VoiceAgentCallEndpointCandidate.debugLabel(): String =
         "${type.name}:${name.ifBlank { "unnamed" }}:$id"
 
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private fun CallEndpoint.safeLabel(): String =
         "${toCandidate().type.name}:${endpointName.toString().ifBlank { "unnamed" }}:${identifier}"
 

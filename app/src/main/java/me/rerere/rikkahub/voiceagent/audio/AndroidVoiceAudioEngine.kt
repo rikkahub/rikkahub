@@ -17,6 +17,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
 import android.util.Log
+import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -430,6 +431,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         }
     }
 
+    @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     private fun createCaptureRecord(bufferSize: Int): AudioRecord {
         val format = AudioFormat.Builder()
             .setSampleRate(CAPTURE_SAMPLE_RATE)

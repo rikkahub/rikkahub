@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.intl.Locale as ComposeLocale
 import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
@@ -73,6 +74,7 @@ fun LanguageSelectionDialog(
             Locale.ITALIAN,
         )
     }
+    val currentLocale = ComposeLocale.current.platformLocale
 
     // 语言名称映射函数，原有的 locale.displayName 方法无法获取 emoji
     @Composable
@@ -87,7 +89,7 @@ fun LanguageSelectionDialog(
             Locale.GERMAN -> stringResource(R.string.language_german)
             Locale.ITALIAN -> stringResource(R.string.language_italian)
             Locale("es", "ES") -> stringResource(R.string.language_spanish)
-            else -> locale.getDisplayLanguage(Locale.getDefault())
+            else -> locale.getDisplayLanguage(currentLocale)
         }
     }
 

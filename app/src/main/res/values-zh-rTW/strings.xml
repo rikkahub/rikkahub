@@ -446,6 +446,8 @@
   <string name="notification_web_server_running">Web 伺服器運行中</string>
   <string name="notification_web_server_starting">啟動中…</string>
   <string name="notification_web_server_stop">停止</string>
+  <string name="permission_bluetooth">藍牙</string>
+  <string name="permission_bluetooth_desc">在語音通話中使用耳機音訊需要藍牙權限</string>
   <string name="permission_camera">相機</string>
   <string name="permission_camera_desc">需要相機權限才能拍照</string>
   <string name="permission_desc_goto_setting">部分權限已被永久拒絕，請前往應用程式設定手動啟用：</string>
@@ -555,6 +557,7 @@
   <string name="safe_mode_current_assistant">目前助理：%s</string>
   <string name="safe_mode_default_assistant">預設助理</string>
   <string name="safe_mode_description">應用程式在上次啟動時崩潰。您可以切換到其他助理來解決此問題。</string>
+  <string name="safe_mode_enter_app">進入應用</string>
   <string name="safe_mode_switch_assistant">切換助理</string>
   <string name="safe_mode_title">安全模式</string>
   <string name="search_ability_scrape">爬取</string>
@@ -1274,4 +1277,3 @@
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 不朗讀括號內的內容</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">啟用後，TTS 將不朗讀括號內的內容</string>
 </resources>
-
