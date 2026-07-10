@@ -2,6 +2,7 @@ package me.rerere.rikkahub.utils
 
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -27,6 +28,12 @@ class ImageUtilsTest {
     }
 
     @Test
+    fun `strict sample uses ceiling at the maximum boundary`() {
+        assertEquals(4, ImageUtils.calculateStrictInSampleSize(8193, 1000, 4096))
+        assertEquals(4, ImageUtils.calculateStrictInSampleSize(1000, 8193, 4096))
+    }
+
+    @Test
     fun `strict sample tolerates unknown source bounds`() {
         assertEquals(1, ImageUtils.calculateStrictInSampleSize(-1, -1, 4096))
         assertEquals(1, ImageUtils.calculateStrictInSampleSize(0, 0, 4096))
@@ -36,6 +43,24 @@ class ImageUtilsTest {
     fun `strict sample rejects a nonpositive maximum`() {
         assertThrows(IllegalArgumentException::class.java) {
             ImageUtils.calculateStrictInSampleSize(12000, 8000, 0)
+        }
+    }
+
+    @Test
+    fun `strict sample supports the largest representable power of two`() {
+        assertEquals(
+            1 shl 30,
+            ImageUtils.calculateStrictInSampleSize(1 shl 30, 1, 1),
+        )
+    }
+
+    @Test
+    fun `strict sample rejects edges above the largest representable sample`() {
+        assertThrows(IllegalStateException::class.java) {
+            ImageUtils.calculateStrictInSampleSize((1 shl 30) + 1, 1, 1)
+        }
+        assertThrows(IllegalStateException::class.java) {
+            ImageUtils.calculateStrictInSampleSize(Int.MAX_VALUE, 1, 1)
         }
     }
 
@@ -95,6 +120,42 @@ class ImageUtilsTest {
         } catch (thrown: IllegalStateException) {
             assertSame(failure, thrown.cause ?: thrown)
         }
+    }
+
+    @Test
+    fun `conversion failures propagate to the UI owner`() = runTest {
+        val failure = IllegalStateException("conversion failed")
+        try {
+            ImageUtils.prepareImageForCrop(
+                dispatcher = StandardTestDispatcher(testScheduler),
+                convert = { throw failure },
+                copyOriginal = { fail("failed conversion must not be copied") },
+            )
+            fail("IllegalStateException expected")
+        } catch (thrown: IllegalStateException) {
+            assertSame(failure, thrown.cause ?: thrown)
+        }
+    }
+
+    @Test
+    fun `cancellation after conversion suppresses original copy`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        var copied = false
+        lateinit var preparation: Deferred<Unit>
+        preparation = async(dispatcher) {
+            ImageUtils.prepareImageForCrop(
+                dispatcher = dispatcher,
+                convert = {
+                    preparation.cancel()
+                    false
+                },
+                copyOriginal = { copied = true },
+            )
+        }
+
+        testScheduler.runCurrent()
+        assertTrue(preparation.isCancelled)
+        assertFalse(copied)
     }
 
     @Test

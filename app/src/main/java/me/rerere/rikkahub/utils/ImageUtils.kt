@@ -18,6 +18,8 @@ import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /**
@@ -119,6 +121,10 @@ object ImageUtils {
         ) {
             sampleSize *= 2
         }
+        val decodedLargestEdge = (largestEdge.toLong() + sampleSize - 1L) / sampleSize
+        check(decodedLargestEdge <= maxSize.toLong()) {
+            "No positive Int power-of-two sample can satisfy maxSize"
+        }
         return sampleSize
     }
 
@@ -129,6 +135,7 @@ object ImageUtils {
     ) {
         withContext(dispatcher) {
             if (!convert()) {
+                currentCoroutineContext().ensureActive()
                 copyOriginal()
             }
         }
