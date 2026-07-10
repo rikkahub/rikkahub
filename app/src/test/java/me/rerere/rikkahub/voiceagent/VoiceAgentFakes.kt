@@ -75,16 +75,16 @@ internal fun hermesFailureFixture(
 )
 
 class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
-    val audioMessages = mutableListOf<String>()
-    val audioStreamEndSessionIds = mutableListOf<Long?>()
+    private val recordedAudioMessages = mutableListOf<String>()
+    private val recordedAudioStreamEndSessionIds = mutableListOf<Long?>()
     private val recordedToolResponses = mutableListOf<Pair<String, String>>()
     private val recordedToolResponseNames = mutableListOf<String>()
     private val recordedToolResponseSessionIds = mutableListOf<Long?>()
-    val textTurns = mutableListOf<Pair<Long?, String>>()
+    private val recordedTextTurns = mutableListOf<Pair<Long?, String>>()
     val failToolResponses = mutableSetOf<String>()
     val toolResponseErrors = mutableMapOf<String, Throwable>()
     var failTextTurns = false
-    var closeCalls = 0
+    private var recordedCloseCalls = 0
     var onBeforeToolResponseRecorded: (() -> Unit)? = null
     var onClose: (() -> Unit)? = null
     var connectEvent: GeminiLiveEvent? = null
@@ -101,6 +101,12 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     private val outboundSendLock = Any()
     private var outboundSessionId: Long? = null
 
+    val audioMessages: List<String>
+        get() = synchronized(outboundSendLock) { recordedAudioMessages.toList() }
+
+    val audioStreamEndSessionIds: List<Long?>
+        get() = synchronized(outboundSendLock) { recordedAudioStreamEndSessionIds.toList() }
+
     val toolResponses: List<Pair<String, String>>
         get() = synchronized(outboundSendLock) { recordedToolResponses.toList() }
 
@@ -109,6 +115,12 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
 
     val toolResponseSessionIds: List<Long?>
         get() = synchronized(outboundSendLock) { recordedToolResponseSessionIds.toList() }
+
+    val textTurns: List<Pair<Long?, String>>
+        get() = synchronized(outboundSendLock) { recordedTextTurns.toList() }
+
+    val closeCalls: Int
+        get() = synchronized(outboundSendLock) { recordedCloseCalls }
 
     fun blockToolResponse(callId: String): BlockedToolResponse {
         return blockNextToolResponse(callId)
@@ -158,13 +170,15 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
             if (sessionId != null && outboundSessionId != sessionId) {
                 return false
             }
-            audioMessages += base64Pcm16
+            recordedAudioMessages += base64Pcm16
             return true
         }
     }
 
     override fun activateOutboundSession(sessionId: Long) {
-        outboundSessionId = sessionId
+        synchronized(outboundSendLock) {
+            outboundSessionId = sessionId
+        }
         activateOutboundSessionEvent?.let { event ->
             eventHandlers.lastOrNull()?.invoke(event)
         }
@@ -175,7 +189,7 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
             if (sessionId != null && outboundSessionId != sessionId) {
                 return false
             }
-            audioStreamEndSessionIds += sessionId
+            recordedAudioStreamEndSessionIds += sessionId
             return true
         }
     }
@@ -223,11 +237,17 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
             blocked.started.countDown()
             blocked.release.await(blocked.timeoutMillis, TimeUnit.MILLISECONDS)
         }
+        val beforeRecord = synchronized(outboundSendLock) {
+            if (sessionId != null && outboundSessionId != sessionId) {
+                return false
+            }
+            onBeforeToolResponseRecorded
+        }
+        beforeRecord?.invoke()
         synchronized(outboundSendLock) {
             if (sessionId != null && outboundSessionId != sessionId) {
                 return false
             }
-            onBeforeToolResponseRecorded?.invoke()
             toolResponseErrors[callId]?.let { throw it }
             if (callId in failToolResponses) {
                 return false
@@ -247,15 +267,17 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
             if (failTextTurns) {
                 return false
             }
-            textTurns += sessionId to text
+            recordedTextTurns += sessionId to text
             return true
         }
     }
 
     override fun close() {
+        synchronized(outboundSendLock) {
+            outboundSessionId = null
+            recordedCloseCalls += 1
+        }
         onClose?.invoke()
-        outboundSessionId = null
-        closeCalls += 1
     }
 }
 
