@@ -104,4 +104,63 @@ class StringUtilsTest {
     fun `no brackets returns original text`() {
         assertEquals("没有括号", "没有括号".removeBracketedContent())
     }
+
+    @Test
+    fun `tts filter returns empty for bracket-only text`() {
+        assertEquals(
+            "",
+            "（舞台指示）".filterTextForTts(
+                onlyReadQuoted = false,
+                onlyReadOutsideBrackets = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `tts filter strips brackets and keeps ordinary text`() {
+        assertEquals(
+            "你好世界",
+            "你好(低声)世界".filterTextForTts(
+                onlyReadQuoted = false,
+                onlyReadOutsideBrackets = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `tts filter composes quoted extraction before bracket removal`() {
+        assertEquals(
+            "你好",
+            "他说“你好（低声）”".filterTextForTts(
+                onlyReadQuoted = true,
+                onlyReadOutsideBrackets = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `tts filter leaves text unchanged when filters are disabled`() {
+        val text = "  原文（旁白）  "
+
+        assertEquals(
+            text,
+            text.filterTextForTts(
+                onlyReadQuoted = false,
+                onlyReadOutsideBrackets = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `tts quoted-only filter falls back to original text without quotes`() {
+        val text = "没有引号"
+
+        assertEquals(
+            text,
+            text.filterTextForTts(
+                onlyReadQuoted = true,
+                onlyReadOutsideBrackets = false,
+            ),
+        )
+    }
 }
