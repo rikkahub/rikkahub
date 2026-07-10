@@ -30,13 +30,14 @@ jobs:
 
       - name: Prepare build files
         run: |
-          echo "${{ secrets.KEY_BASE64 }}" > /dev/null
-          echo "${{ secrets.SIGNING_CONFIG }}" > /dev/null
+          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
 
       - name: Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease --parallel --configuration-cache
+          ./gradlew assembleRelease
 
       - name: Publish
         uses: softprops/action-gh-release@v2
