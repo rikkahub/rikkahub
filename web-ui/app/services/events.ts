@@ -1,4 +1,10 @@
 import { ApiError, sse } from "~/services/api";
+import {
+  getEventsConnectionCloseDisposition,
+  shouldAcceptEventsCallback,
+  shouldCancelReconnect,
+  shouldScheduleReconnect,
+} from "~/services/events-policy";
 
 /**
  * Multiplexed SSE client for `/api/events`.
@@ -15,24 +21,6 @@ export const EVENT_CONVERSATION_LIST_INVALIDATE = "conversation_list_invalidate"
 export const EVENT_FOLDERS = "folders";
 
 type EventListener = (data: unknown) => void;
-
-type EventsConnectionCloseDisposition = "ignore" | "idle" | "reconnect";
-
-function getEventsConnectionCloseDisposition({
-  isCurrentConnection,
-  wasAborted,
-  unauthorized,
-  hasListeners,
-}: {
-  isCurrentConnection: boolean;
-  wasAborted: boolean;
-  unauthorized: boolean;
-  hasListeners: boolean;
-}): EventsConnectionCloseDisposition {
-  if (!isCurrentConnection) return "ignore";
-  if (!wasAborted && !unauthorized && hasListeners) return "reconnect";
-  return "idle";
-}
 
 const RECONNECT_DELAY_MS = 1000;
 
@@ -61,7 +49,7 @@ function dispatch(event: string, data: unknown) {
 }
 
 function scheduleReconnect() {
-  if (reconnectTimer !== null) return;
+  if (!shouldScheduleReconnect(reconnectTimer !== null)) return;
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     startConnection();
@@ -80,7 +68,7 @@ function startConnection() {
     "events",
     {
       onMessage: ({ event, data }) => {
-        if (abortController !== controller) return;
+        if (!shouldAcceptEventsCallback(abortController, controller)) return;
         dispatch(event, data);
       },
       onError: (error) => {
@@ -110,11 +98,12 @@ function startConnection() {
 }
 
 function stopIfIdle() {
-  if (hasListeners()) return;
-  if (reconnectTimer !== null) {
+  const listenersRemain = hasListeners();
+  if (reconnectTimer !== null && shouldCancelReconnect(listenersRemain, true)) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
+  if (listenersRemain) return;
   abortController?.abort();
   abortController = null;
   running = false;

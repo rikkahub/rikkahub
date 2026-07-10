@@ -2,12 +2,8 @@ package me.rerere.ai.provider.providers.openai
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -46,6 +42,7 @@ import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
+import me.rerere.ai.util.losslessProviderCallbackFlow
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
@@ -132,7 +129,7 @@ class ChatCompletionsAPI(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): Flow<MessageChunk> = callbackFlow {
+    ): Flow<MessageChunk> = losslessProviderCallbackFlow {
         val requestBody = buildChatCompletionRequest(
             messages = messages,
             params = params,
@@ -208,8 +205,8 @@ class ChatCompletionsAPI(
                             choices = choiceList,
                             usage = usage
                         )
-                        trySend(messageChunk).onFailure { e ->
-                            Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                        sendFromProviderCallback(messageChunk).onFailure { e ->
+                            Log.w(TAG, "onEvent: stream closed (${e?.message})")
                         }
                     }
             }
@@ -244,12 +241,11 @@ class ChatCompletionsAPI(
 
         val eventSource = EventSources.createFactory(client).newEventSource(request, listener)
 
-        awaitClose {
+        awaitProviderClose {
             println("[awaitClose] 关闭eventSource ")
             eventSource.cancel()
         }
-        // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
-    }.buffer(Channel.UNLIMITED)
+    }
 
 
     private fun buildChatCompletionRequest(
@@ -686,7 +682,9 @@ class ChatCompletionsAPI(
                                         put("url", encodedImage.base64)
                                     })
                                 }.onFailure {
-                                    Log.w(TAG, "encode tool result image failed: ${part.url}", it)
+                                    System.err.println(
+                                        "encode tool result image failed: ${part.url}: ${it.message}"
+                                    )
                                     put("type", "text")
                                     put("text", "Error: Failed to encode image to base64")
                                 }

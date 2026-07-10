@@ -6,6 +6,7 @@
     "build": "react-router build && tsx copy.ts",
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
+    "test": "tsx --test app/services/*.test.ts app/hooks/*.test.ts",
     "typecheck": "react-router typegen && tsc",
     "lint": "oxlint app --fix",
     "fmt": "oxfmt app",

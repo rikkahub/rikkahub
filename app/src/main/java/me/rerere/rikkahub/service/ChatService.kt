@@ -22,7 +22,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.jsonObject
@@ -79,8 +78,8 @@ import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.PersistedConversationFolder
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
-import me.rerere.rikkahub.data.repository.withPersistedLocation
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -156,6 +155,37 @@ class ChatService(
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val _sessionsVersion = MutableStateFlow(0L)
+    private val conversationPersistence = ConversationPersistenceOrchestrator(
+        object : ConversationPersistenceGateway {
+            override suspend fun <T> serialize(
+                conversationId: Uuid,
+                persistPrimary: suspend (PersistedConversationFolder) -> T,
+                onPrimaryCommitted: suspend (T) -> Unit,
+                postPrimary: suspend (T) -> Unit,
+            ): T = folderRepository.persistConversationSerialized(
+                conversationId = conversationId,
+                persistPrimary = persistPrimary,
+                onPrimaryCommitted = onPrimaryCommitted,
+                postPrimary = postPrimary,
+            )
+
+            override suspend fun insertPrimary(conversation: Conversation) {
+                conversationRepo.insertConversationPrimary(conversation)
+            }
+
+            override suspend fun updatePrimary(conversation: Conversation) {
+                conversationRepo.updateConversationPrimary(conversation)
+            }
+
+            override fun synchronizeSession(conversationId: Uuid, conversation: Conversation) {
+                updateExistingConversation(conversationId, conversation)
+            }
+
+            override suspend fun index(conversation: Conversation) {
+                conversationRepo.indexConversation(conversation)
+            }
+        }
+    )
 
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
@@ -481,7 +511,18 @@ class ChatService(
             model.displayName
         }
 
-        runCatching {
+        var terminalPreview: String? = null
+        withGuaranteedChatGenerationEnd(
+            eventBus = appEventBus,
+            terminalEvent = {
+                AppEvent.ChatGenerationEnded(
+                    conversationId = conversationId,
+                    senderName = senderName,
+                    contentPreview = terminalPreview,
+                )
+            },
+        ) {
+            runCatching {
 
             // reset suggestions
             updateConversation(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
@@ -503,7 +544,7 @@ class ChatService(
 
             // start generating
             val session = getOrCreateSession(conversationId)
-            generationHandler.generateText(
+                generationHandler.generateText(
                 settings = settings,
                 model = model,
                 processingStatus = session.processingStatus,
@@ -579,59 +620,56 @@ class ChatService(
                         )
                     }
                 },
-            ).onCompletion {
-                // 可能被取消了，或者意外结束，兜底更新
-                val updatedConversation = getConversationFlow(conversationId).value.copy(
-                    messageNodes = getConversationFlow(conversationId).value.messageNodes.map { node ->
-                        node.copy(messages = node.messages.map { it.finishReasoning() })
-                    },
-                    updateAt = Instant.now()
-                )
-                updateConversation(conversationId, updatedConversation)
+                ).let { generationFlow ->
+                    try {
+                        generationFlow.collect { chunk ->
+                            when (chunk) {
+                                is GenerationChunk.Messages -> {
+                                    val updatedConversation = getConversationFlow(conversationId).value
+                                        .updateCurrentMessages(chunk.messages)
+                                    updateConversation(conversationId, updatedConversation)
 
-                // 生成结束：取消 Live Update 通知，后台时发送完成通知
-                appEventBus.emit(
-                    AppEvent.ChatGenerationEnded(
-                        conversationId = conversationId,
-                        senderName = senderName,
-                        contentPreview = updatedConversation.currentMessages.lastOrNull()
-                            ?.toText()?.take(50)?.trim() ?: "",
-                    )
-                )
-            }.collect { chunk ->
-                when (chunk) {
-                    is GenerationChunk.Messages -> {
-                        val updatedConversation = getConversationFlow(conversationId).value
-                            .updateCurrentMessages(chunk.messages)
-                        updateConversation(conversationId, updatedConversation)
-
-                        // 通知等边缘副作用由 ChatNotificationManager 消费；
-                        // tryEmit 不挂起，事件丢失只影响单次通知更新，不能反压生成链
-                        chunk.messages.lastOrNull()?.let { lastMessage ->
-                            appEventBus.tryEmit(
-                                AppEvent.ChatGenerationUpdate(conversationId, lastMessage, senderName)
-                            )
+                                    // 通知等边缘副作用由 ChatNotificationManager 消费；
+                                    // tryEmit 不挂起，事件丢失只影响单次通知更新，不能反压生成链
+                                    chunk.messages.lastOrNull()?.let { lastMessage ->
+                                        appEventBus.tryEmit(
+                                            AppEvent.ChatGenerationUpdate(conversationId, lastMessage, senderName)
+                                        )
+                                    }
+                                }
+                            }
                         }
+                    } finally {
+                        // 可能被取消了，或者意外结束，兜底更新
+                        val currentConversation = getConversationFlow(conversationId).value
+                        updateConversation(
+                            conversationId,
+                            currentConversation.copy(
+                                messageNodes = currentConversation.messageNodes.map { node ->
+                                    node.copy(messages = node.messages.map { it.finishReasoning() })
+                                },
+                                updateAt = Instant.now(),
+                            ),
+                        )
                     }
                 }
-            }
-        }.onFailure {
-            // 兜底取消 Live Update 通知（生成开始前失败时 onCompletion 不会执行）
-            appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
+            }.onFailure {
+                it.printStackTrace()
+                addError(it, conversationId, title = context.getString(R.string.error_title_generation))
+                Logging.log(TAG, "handleMessageComplete: $it")
+                Logging.log(TAG, it.stackTraceToString())
+            }.onSuccess {
+                val finalConversation = getConversationFlow(conversationId).value
+                saveConversation(conversationId, finalConversation)
+                terminalPreview = finalConversation.currentMessages.lastOrNull()
+                    ?.toText()?.take(50)?.trim() ?: ""
 
-            it.printStackTrace()
-            addError(it, conversationId, title = context.getString(R.string.error_title_generation))
-            Logging.log(TAG, "handleMessageComplete: $it")
-            Logging.log(TAG, it.stackTraceToString())
-        }.onSuccess {
-            val finalConversation = getConversationFlow(conversationId).value
-            saveConversation(conversationId, finalConversation)
-
-            launchWithConversationReference(conversationId) {
-                generateTitle(conversationId, finalConversation)
-            }
-            launchWithConversationReference(conversationId) {
-                generateSuggestion(conversationId, finalConversation)
+                launchWithConversationReference(conversationId) {
+                    generateTitle(conversationId, finalConversation)
+                }
+                launchWithConversationReference(conversationId) {
+                    generateSuggestion(conversationId, finalConversation)
+                }
             }
         }
     }
@@ -1011,35 +1049,10 @@ class ChatService(
         conversation: Conversation,
         preservePersistedLocation: Boolean,
     ) {
-        folderRepository.persistConversationSerialized(
-            conversationId = conversation.id,
-            persistPrimary = { persistedFolder ->
-                if (!persistedFolder.exists && conversation.title.isBlank() && conversation.messageNodes.isEmpty()) {
-                    return@persistConversationSerialized null
-                }
-
-                val updatedConversation = if (preservePersistedLocation) {
-                    conversation.withPersistedLocation(persistedFolder)
-                } else {
-                    conversation
-                }
-                if (persistedFolder.exists) {
-                    conversationRepo.updateConversationPrimary(updatedConversation)
-                } else {
-                    conversationRepo.insertConversationPrimary(updatedConversation)
-                }
-                updatedConversation
-            },
-            onPrimaryCommitted = { updatedConversation ->
-                if (updatedConversation != null) {
-                    updateExistingConversation(conversationId, updatedConversation)
-                }
-            },
-            postPrimary = { updatedConversation ->
-                if (updatedConversation != null) {
-                    conversationRepo.indexConversation(updatedConversation)
-                }
-            },
+        conversationPersistence.persist(
+            conversationId = conversationId,
+            conversation = conversation,
+            preservePersistedLocation = preservePersistedLocation,
         )
     }
 

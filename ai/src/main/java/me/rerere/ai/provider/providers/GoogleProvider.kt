@@ -3,12 +3,8 @@ package me.rerere.ai.provider.providers
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -51,6 +47,7 @@ import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
+import me.rerere.ai.util.losslessProviderCallbackFlow
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.removeElements
 import me.rerere.ai.util.stringSafe
@@ -214,7 +211,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         providerSetting: ProviderSetting.Google,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): Flow<MessageChunk> = callbackFlow {
+    ): Flow<MessageChunk> = losslessProviderCallbackFlow {
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -289,8 +286,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         usage = usage
                     )
 
-                    trySend(messageChunk).onFailure { e ->
-                        Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                    sendFromProviderCallback(messageChunk).onFailure { e ->
+                        Log.w(TAG, "onEvent: stream closed (${e?.message})")
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
@@ -341,12 +338,11 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         val eventSource = EventSources.createFactory(client)
                 .newEventSource(request, listener)
 
-        awaitClose {
+        awaitProviderClose {
             println("[awaitClose] 关闭eventSource")
             eventSource.cancel()
         }
-        // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
-    }.buffer(Channel.UNLIMITED)
+    }
 
     private fun buildCompletionRequestBody(
         messages: List<UIMessage>,

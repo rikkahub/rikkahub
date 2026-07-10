@@ -2,6 +2,12 @@ import * as React from "react";
 
 import api from "~/services/api";
 import { EVENT_FOLDERS, subscribeToEvent } from "~/services/events";
+import {
+  reconcileSelectedFolderId,
+  shouldApplyFolderEvent,
+  shouldApplyFolderRefresh,
+  type FolderRefreshToken,
+} from "~/hooks/folder-policy";
 import type { FolderDto, FolderListEventDto } from "~/types";
 
 export interface UseFoldersResult {
@@ -14,14 +20,6 @@ export interface UseFoldersResult {
   renameFolder: (id: string, name: string) => Promise<void>;
   deleteFolder: (id: string) => Promise<void>;
   moveConversationToFolder: (conversationId: string, folderId: string | null) => Promise<void>;
-}
-
-function reconcileSelectedFolderId(
-  selectedFolderId: string | null,
-  folders: FolderDto[],
-): string | null {
-  if (selectedFolderId === null) return null;
-  return folders.some((folder) => folder.id === selectedFolderId) ? selectedFolderId : null;
 }
 
 /**
@@ -42,14 +40,22 @@ export function useFolders(currentAssistantId: string | null): UseFoldersResult 
   }, [currentAssistantId]);
 
   const refreshFolders = React.useCallback(async () => {
-    const epoch = ++requestEpochRef.current;
+    const request: FolderRefreshToken = {
+      assistantId: currentAssistantIdRef.current,
+      epoch: ++requestEpochRef.current,
+    };
     setLoading(true);
     try {
       const data = await api.get<FolderDto[]>("folders");
-      if (epoch !== requestEpochRef.current) return;
+      if (
+        !shouldApplyFolderRefresh(request, currentAssistantIdRef.current, requestEpochRef.current)
+      )
+        return;
       setFolders(data);
     } finally {
-      if (epoch === requestEpochRef.current) {
+      if (
+        shouldApplyFolderRefresh(request, currentAssistantIdRef.current, requestEpochRef.current)
+      ) {
         setLoading(false);
       }
     }
@@ -67,7 +73,7 @@ export function useFolders(currentAssistantId: string | null): UseFoldersResult 
   // Live folder updates for the current assistant (create/rename/delete from any client).
   React.useEffect(() => {
     return subscribeToEvent<FolderListEventDto>(EVENT_FOLDERS, (data) => {
-      if (data.assistantId !== currentAssistantIdRef.current) return;
+      if (!shouldApplyFolderEvent(data.assistantId, currentAssistantIdRef.current)) return;
       setFolders(data.folders);
       setSelectedFolderId((current) => reconcileSelectedFolderId(current, data.folders));
     });

@@ -34,7 +34,8 @@ class ChatCompletionsAPIMessageTest {
     // Helper to invoke private buildMessages method via reflection
     private fun invokeBuildMessages(
         messages: List<UIMessage>,
-        includeHistoryReasoning: Boolean = true
+        includeHistoryReasoning: Boolean = true,
+        inputModalities: List<Modality> = listOf(Modality.TEXT, Modality.IMAGE),
     ): JsonArray {
         val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
             "buildMessages",
@@ -47,8 +48,54 @@ class ChatCompletionsAPIMessageTest {
             api,
             messages,
             includeHistoryReasoning,
-            listOf(Modality.TEXT, Modality.IMAGE)
+            inputModalities
         ) as JsonArray
+    }
+
+    @Test
+    fun `tool image is returned as ordered image content when model supports image input`() {
+        val result = invokeBuildMessages(
+            listOf(UIMessage.user("run"), toolResultMessage("data:image/png;base64,aGVsbG8=")),
+        )
+        val content = result.single { it.jsonObject["role"]?.jsonPrimitive?.content == "tool" }
+            .jsonObject["content"]!!.jsonArray
+
+        assertEquals("text", content[0].jsonObject["type"]?.jsonPrimitive?.content)
+        assertEquals("result", content[0].jsonObject["text"]?.jsonPrimitive?.content)
+        assertEquals("image_url", content[1].jsonObject["type"]?.jsonPrimitive?.content)
+        assertEquals(
+            "data:image/png;base64,aGVsbG8=",
+            content[1].jsonObject["image_url"]?.jsonObject?.get("url")?.jsonPrimitive?.content,
+        )
+    }
+
+    @Test
+    fun `tool image is omitted as text when model lacks image input`() {
+        val result = invokeBuildMessages(
+            messages = listOf(UIMessage.user("run"), toolResultMessage("data:image/png;base64,aGVsbG8=")),
+            inputModalities = listOf(Modality.TEXT),
+        )
+        val content = result.single { it.jsonObject["role"]?.jsonPrimitive?.content == "tool" }
+            .jsonObject["content"]!!.jsonPrimitive.content
+
+        assertTrue(content.contains("result"))
+        assertTrue(content.contains("[Image output omitted: current model does not support image input]"))
+        assertFalse(content.contains("image_url"))
+    }
+
+    @Test
+    fun `tool image encode failure is returned as explicit error text`() {
+        val result = invokeBuildMessages(
+            listOf(UIMessage.user("run"), toolResultMessage("unsupported-image-url")),
+        )
+        val content = result.single { it.jsonObject["role"]?.jsonPrimitive?.content == "tool" }
+            .jsonObject["content"]!!.jsonArray
+
+        assertEquals("text", content[1].jsonObject["type"]?.jsonPrimitive?.content)
+        assertEquals(
+            "Error: Failed to encode image to base64",
+            content[1].jsonObject["text"]?.jsonPrimitive?.content,
+        )
     }
 
     @Test
@@ -400,4 +447,17 @@ class ChatCompletionsAPIMessageTest {
             output = listOf(UIMessagePart.Text(output))
         )
     }
+
+    private fun toolResultMessage(imageUrl: String): UIMessage = UIMessage(
+        role = MessageRole.ASSISTANT,
+        parts = listOf(
+            UIMessagePart.Text("calling"),
+            UIMessagePart.Tool(
+                toolCallId = "call_image",
+                toolName = "image_tool",
+                input = "{}",
+                output = listOf(UIMessagePart.Text("result"), UIMessagePart.Image(imageUrl)),
+            ),
+        ),
+    )
 }

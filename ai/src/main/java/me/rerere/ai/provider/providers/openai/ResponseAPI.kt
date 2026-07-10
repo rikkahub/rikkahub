@@ -1,12 +1,8 @@
 package me.rerere.ai.provider.providers.openai
 
 import android.util.Log
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
@@ -44,6 +40,7 @@ import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
+import me.rerere.ai.util.losslessProviderCallbackFlow
 import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.stringSafe
@@ -110,7 +107,7 @@ class ResponseAPI(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): Flow<MessageChunk> = callbackFlow {
+    ): Flow<MessageChunk> = losslessProviderCallbackFlow {
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -145,8 +142,8 @@ class ResponseAPI(
                 val json = json.parseToJsonElement(data).jsonObject
                 val chunk = parseResponseDelta(json)
                 if (chunk != null) {
-                    trySend(chunk).onFailure { e ->
-                        Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                    sendFromProviderCallback(chunk).onFailure { e ->
+                        Log.w(TAG, "onEvent: stream closed (${e?.message})")
                     }
                 }
                 if (type == "response.completed") {
@@ -184,12 +181,11 @@ class ResponseAPI(
         val eventSource = EventSources.createFactory(client)
             .newEventSource(request, listener)
 
-        awaitClose {
+        awaitProviderClose {
             println("[awaitClose] 关闭eventSource ")
             eventSource.cancel()
         }
-        // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
-    }.buffer(Channel.UNLIMITED)
+    }
 
     internal fun buildRequestBody(
         providerSetting: ProviderSetting.OpenAI,
@@ -788,4 +784,3 @@ internal fun resolveResponseProviderCapabilities(host: String): ResponseProvider
         else -> ResponseProviderCapabilities()
     }
 }
-
