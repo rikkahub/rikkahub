@@ -35,9 +35,12 @@ class WorkspaceRepository(
         for (workspace in workspaces) {
             val dir = manager.workspaceDir(workspace.root)
             if (!dir.exists()) {
-                Log.w(TAG, "Workspace directory missing, removing record: id=${workspace.id}, root=${workspace.root}")
-                dao.deleteById(workspace.id)
-                cleanupAssistantReferences(workspace.id)
+                // 目录缺失时不删除记录(例如恢复备份后工作区文件未随数据库一起恢复),
+                // 仅标记为 BROKEN 以保留记录与助手绑定, 避免误删用户工作区
+                Log.w(TAG, "Workspace directory missing, marking as broken: id=${workspace.id}, root=${workspace.root}")
+                if (workspace.shellStatus != WorkspaceShellStatus.BROKEN.name) {
+                    updateShellState(workspace.id, WorkspaceShellStatus.BROKEN.name)
+                }
                 continue
             }
             val statusName = workspace.shellStatus
