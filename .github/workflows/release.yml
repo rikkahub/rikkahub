@@ -13,7 +13,7 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - name: Test pipe
-        run: echo "hello" | cat
+      - name: Test base64
+        run: echo "aGVsbG8=" | base64 -d
       - name: Build
         run: echo "build ok"
