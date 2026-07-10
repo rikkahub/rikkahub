@@ -284,16 +284,25 @@ class ConversationRepository(
     }
 
     suspend fun insertConversation(conversation: Conversation) {
+        insertConversationPrimary(conversation)
+        indexConversation(conversation)
+    }
+
+    internal suspend fun insertConversationPrimary(conversation: Conversation) {
         database.withTransaction {
             conversationDAO.insert(
                 conversationToConversationEntity(conversation)
             )
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
-        messageFtsManager.indexConversation(conversation)
     }
 
     suspend fun updateConversation(conversation: Conversation) {
+        updateConversationPrimary(conversation)
+        indexConversation(conversation)
+    }
+
+    internal suspend fun updateConversationPrimary(conversation: Conversation) {
         database.withTransaction {
             conversationDAO.update(
                 conversationToConversationEntity(conversation)
@@ -302,6 +311,9 @@ class ConversationRepository(
             messageNodeDAO.deleteByConversation(conversation.id.toString())
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
+    }
+
+    internal suspend fun indexConversation(conversation: Conversation) {
         messageFtsManager.indexConversation(conversation)
     }
 

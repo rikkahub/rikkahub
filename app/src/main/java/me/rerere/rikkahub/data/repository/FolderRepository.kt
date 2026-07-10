@@ -79,12 +79,13 @@ class FolderRepository internal constructor(
 
     internal suspend fun <T> persistConversationSerialized(
         conversationId: Uuid,
-        persist: suspend (PersistedConversationFolder) -> T,
-        onCommitted: (T) -> Unit = {},
+        persistPrimary: suspend (PersistedConversationFolder) -> T,
+        onPrimaryCommitted: suspend (T) -> Unit = {},
+        postPrimary: suspend (T) -> Unit = {},
     ): T = mutationCoordinator.serialize(
-        operation = {
+        primaryOperation = {
             val entity = conversationDAO.getConversationById(conversationId.toString())
-            persist(
+            persistPrimary(
                 PersistedConversationFolder(
                     exists = entity != null,
                     assistantId = entity?.assistantId?.let(Uuid::parse),
@@ -92,7 +93,8 @@ class FolderRepository internal constructor(
                 )
             )
         },
-        onCommitted = onCommitted,
+        onPrimaryCommitted = onPrimaryCommitted,
+        postPrimary = postPrimary,
     )
 }
 
@@ -102,8 +104,15 @@ internal data class PersistedConversationFolder(
     val folderId: Uuid?,
 )
 
-internal fun Conversation.withPersistedFolder(state: PersistedConversationFolder): Conversation =
-    if (state.exists && assistantId == state.assistantId) copy(folderId = state.folderId) else this
+internal fun Conversation.withPersistedLocation(state: PersistedConversationFolder): Conversation =
+    if (state.exists) {
+        copy(
+            assistantId = checkNotNull(state.assistantId),
+            folderId = state.folderId,
+        )
+    } else {
+        this
+    }
 
 internal interface FolderTransactionRunner {
     suspend fun <T> runInTransaction(block: suspend () -> T): T
@@ -126,7 +135,7 @@ internal class FolderMutationCoordinator(
         mutation: suspend () -> T,
         onCommitted: (T) -> Unit = {},
     ): FolderMutationResult<T> = serialize(
-        operation = {
+        primaryOperation = {
             transactionRunner.runInTransaction {
                 if (validate()) {
                     FolderMutationResult.Applied(mutation())
@@ -135,7 +144,7 @@ internal class FolderMutationCoordinator(
                 }
             }
         },
-        onCommitted = { result ->
+        onPrimaryCommitted = { result ->
             if (result is FolderMutationResult.Applied) {
                 onCommitted(result.value)
             }
@@ -143,10 +152,14 @@ internal class FolderMutationCoordinator(
     )
 
     suspend fun <T> serialize(
-        onCommitted: (T) -> Unit = {},
-        operation: suspend () -> T,
+        onPrimaryCommitted: suspend (T) -> Unit = {},
+        postPrimary: suspend (T) -> Unit = {},
+        primaryOperation: suspend () -> T,
     ): T = mutex.withLock {
-        operation().also(onCommitted)
+        val result = primaryOperation()
+        onPrimaryCommitted(result)
+        postPrimary(result)
+        result
     }
 }
 

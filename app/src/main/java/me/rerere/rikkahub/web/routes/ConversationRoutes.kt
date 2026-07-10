@@ -45,11 +45,6 @@ import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
-internal fun Conversation.movedToAssistant(targetAssistantId: Uuid): Conversation = copy(
-    assistantId = targetAssistantId,
-    folderId = null,
-)
-
 internal fun Conversation?.requireCurrentAssistant(assistantId: Uuid): Conversation {
     val conversation = this
     if (conversation == null || conversation.assistantId != assistantId) {
@@ -266,7 +261,7 @@ fun Route.conversationRoutes(
             val conversation = conversationRepo.getConversationById(uuid)
                 ?: throw NotFoundException("Conversation not found")
 
-            chatService.saveConversation(uuid, conversation.movedToAssistant(targetAssistantId))
+            chatService.moveConversationToAssistant(uuid, conversation, targetAssistantId)
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
         }
 

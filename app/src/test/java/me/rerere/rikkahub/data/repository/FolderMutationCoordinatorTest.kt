@@ -130,14 +130,14 @@ class FolderMutationCoordinatorTest {
 
         val save = async {
             coordinator.serialize(
-                onCommitted = { session = it },
-                operation = {
+                onPrimaryCommitted = { session = it },
+                primaryOperation = {
                     val state = PersistedConversationFolder(
                         exists = true,
                         assistantId = persisted.assistantId,
                         folderId = persisted.folderId,
                     )
-                    stale.withPersistedFolder(state).also { persisted = it }
+                    stale.withPersistedLocation(state).also { persisted = it }
                 },
             )
         }
@@ -177,14 +177,14 @@ class FolderMutationCoordinatorTest {
 
         val save = async {
             coordinator.serialize(
-                onCommitted = { session = it },
-                operation = {
+                onPrimaryCommitted = { session = it },
+                primaryOperation = {
                     val state = PersistedConversationFolder(
                         exists = true,
                         assistantId = persisted.assistantId,
                         folderId = persisted.folderId,
                     )
-                    stale.withPersistedFolder(state).also { persisted = it }
+                    stale.withPersistedLocation(state).also { persisted = it }
                 },
             )
         }
@@ -205,7 +205,7 @@ class FolderMutationCoordinatorTest {
             messageNodes = emptyList(),
         )
 
-        val normalized = requested.withPersistedFolder(
+        val normalized = requested.withPersistedLocation(
             PersistedConversationFolder(exists = false, assistantId = null, folderId = null),
         )
 
@@ -213,22 +213,105 @@ class FolderMutationCoordinatorTest {
     }
 
     @Test
-    fun `assistant change keeps intentional folder clearing`() {
-        val movedAssistant = Conversation(
-            assistantId = Uuid.parse("44444444-4444-4444-8444-444444444444"),
-            folderId = null,
+    fun `inactive assistant move wins over queued stale generic save`() = runTest {
+        val targetAssistantId = Uuid.parse("44444444-4444-4444-8444-444444444444")
+        val moveEntered = CompletableDeferred<Unit>()
+        val releaseMove = CompletableDeferred<Unit>()
+        val coordinator = FolderMutationCoordinator(PassthroughTransactionRunner)
+        val stale = Conversation(
+            assistantId = assistantId,
+            folderId = originalFolderId,
             messageNodes = emptyList(),
         )
+        var persisted = stale
+        var activeSession: Conversation? = null
 
-        val normalized = movedAssistant.withPersistedFolder(
-            PersistedConversationFolder(
-                exists = true,
-                assistantId = assistantId,
-                folderId = originalFolderId,
-            ),
-        )
+        val move = async {
+            coordinator.serialize(
+                primaryOperation = {
+                    moveEntered.complete(Unit)
+                    releaseMove.await()
+                    stale.copy(assistantId = targetAssistantId, folderId = null).also { persisted = it }
+                },
+                onPrimaryCommitted = { normalized ->
+                    activeSession = activeSession?.let { normalized }
+                },
+            )
+        }
+        moveEntered.await()
 
-        assertEquals(null, normalized.folderId)
+        val save = async {
+            coordinator.serialize(
+                primaryOperation = {
+                    val state = PersistedConversationFolder(
+                        exists = true,
+                        assistantId = persisted.assistantId,
+                        folderId = persisted.folderId,
+                    )
+                    stale.withPersistedLocation(state).also { persisted = it }
+                },
+            )
+        }
+        runCurrent()
+        releaseMove.complete(Unit)
+        move.await()
+        save.await()
+
+        assertEquals(targetAssistantId, persisted.assistantId)
+        assertEquals(null, persisted.folderId)
+        assertEquals(null, activeSession)
+    }
+
+    @Test
+    fun `primary commit callback runs before throwing post primary maintenance`() = runTest {
+        val expected = IllegalStateException("fts failed")
+        val coordinator = FolderMutationCoordinator(PassthroughTransactionRunner)
+        val events = mutableListOf<String>()
+        var persisted = "before"
+        var session = "before"
+
+        val thrown = runCatching {
+            coordinator.serialize(
+                primaryOperation = {
+                    persisted = "normalized"
+                    events += "primary"
+                    persisted
+                },
+                onPrimaryCommitted = {
+                    session = it
+                    events += "session"
+                },
+                postPrimary = {
+                    events += "fts"
+                    throw expected
+                },
+            )
+        }.exceptionOrNull()
+
+        assertSame(expected, thrown)
+        assertEquals("normalized", persisted)
+        assertEquals("normalized", session)
+        assertEquals(listOf("primary", "session", "fts"), events)
+    }
+
+    @Test
+    fun `primary operation failure suppresses session and post primary work`() = runTest {
+        val expected = IllegalStateException("room failed")
+        val coordinator = FolderMutationCoordinator(PassthroughTransactionRunner)
+        var sessionUpdated = false
+        var ftsUpdated = false
+
+        val thrown = runCatching {
+            coordinator.serialize(
+                primaryOperation = { throw expected },
+                onPrimaryCommitted = { sessionUpdated = true },
+                postPrimary = { ftsUpdated = true },
+            )
+        }.exceptionOrNull()
+
+        assertSame(expected, thrown)
+        assertFalse(sessionUpdated)
+        assertFalse(ftsUpdated)
     }
 
     @Test
@@ -239,8 +322,8 @@ class FolderMutationCoordinatorTest {
 
         val thrown = runCatching {
             coordinator.serialize(
-                operation = { throw expected },
-                onCommitted = { committed = true },
+                primaryOperation = { throw expected },
+                onPrimaryCommitted = { committed = true },
             )
         }.exceptionOrNull()
 

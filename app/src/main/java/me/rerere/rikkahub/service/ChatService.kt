@@ -80,7 +80,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
-import me.rerere.rikkahub.data.repository.withPersistedFolder
+import me.rerere.rikkahub.data.repository.withPersistedLocation
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -924,6 +924,13 @@ class ChatService(
         session.state.value = conversation
     }
 
+    private fun updateExistingConversation(conversationId: Uuid, conversation: Conversation) {
+        if (conversation.id != conversationId) return
+        val session = sessions[conversationId] ?: return
+        checkFilesDelete(conversation, session.state.value)
+        session.state.value = conversation
+    }
+
     fun updateConversationState(conversationId: Uuid, update: (Conversation) -> Conversation) {
         val current = getConversationFlow(conversationId).value
         updateConversation(conversationId, update(current))
@@ -977,24 +984,60 @@ class ChatService(
     }
 
     suspend fun saveConversation(conversationId: Uuid, conversation: Conversation) {
+        persistConversation(
+            conversationId = conversationId,
+            conversation = conversation,
+            preservePersistedLocation = true,
+        )
+    }
+
+    internal suspend fun moveConversationToAssistant(
+        conversationId: Uuid,
+        conversation: Conversation,
+        targetAssistantId: Uuid,
+    ) {
+        persistConversation(
+            conversationId = conversationId,
+            conversation = conversation.copy(
+                assistantId = targetAssistantId,
+                folderId = null,
+            ),
+            preservePersistedLocation = false,
+        )
+    }
+
+    private suspend fun persistConversation(
+        conversationId: Uuid,
+        conversation: Conversation,
+        preservePersistedLocation: Boolean,
+    ) {
         folderRepository.persistConversationSerialized(
             conversationId = conversation.id,
-            persist = { persistedFolder ->
+            persistPrimary = { persistedFolder ->
                 if (!persistedFolder.exists && conversation.title.isBlank() && conversation.messageNodes.isEmpty()) {
                     return@persistConversationSerialized null
                 }
 
-                val updatedConversation = conversation.withPersistedFolder(persistedFolder)
-                if (persistedFolder.exists) {
-                    conversationRepo.updateConversation(updatedConversation)
+                val updatedConversation = if (preservePersistedLocation) {
+                    conversation.withPersistedLocation(persistedFolder)
                 } else {
-                    conversationRepo.insertConversation(updatedConversation)
+                    conversation
+                }
+                if (persistedFolder.exists) {
+                    conversationRepo.updateConversationPrimary(updatedConversation)
+                } else {
+                    conversationRepo.insertConversationPrimary(updatedConversation)
                 }
                 updatedConversation
             },
-            onCommitted = { updatedConversation ->
+            onPrimaryCommitted = { updatedConversation ->
                 if (updatedConversation != null) {
-                    updateConversation(conversationId, updatedConversation)
+                    updateExistingConversation(conversationId, updatedConversation)
+                }
+            },
+            postPrimary = { updatedConversation ->
+                if (updatedConversation != null) {
+                    conversationRepo.indexConversation(updatedConversation)
                 }
             },
         )
