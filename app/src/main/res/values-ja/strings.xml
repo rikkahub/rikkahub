@@ -91,7 +91,7 @@
   <string name="assistant_page_local_tools_javascript_engine_title">JavaScriptエンジン</string>
   <string name="assistant_page_local_tools_time_info_desc">デバイスから現在の日付、曜日、時刻、タイムゾーン情報を取得</string>
   <string name="assistant_page_local_tools_time_info_title">時刻情報</string>
-  <string name="assistant_page_local_tools_tts_desc">AIがデバイスのTTSエンジンを使ってテキストを読み上げます</string>
+  <string name="assistant_page_local_tools_tts_desc">AIが選択したTTSサービスを使ってテキストを読み上げます</string>
   <string name="assistant_page_local_tools_tts_title">テキスト読み上げ</string>
   <string name="assistant_page_manage_memory_title">記憶を管理</string>
   <string name="assistant_page_max_tokens">最大トークン数</string>
