@@ -1,5 +1,4 @@
 name: Release Build
-
 on: workflow_dispatch
 
 jobs:
@@ -15,33 +14,53 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: 17
 
-      - name: Install pnpm
-        run: |
-          npm install -g pnpm
-          cd web-ui && pnpm install --frozen-lockfile
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+
+      - name: Install web-ui
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
 
       - uses: actions/cache@v4
         with:
-          path: ~/.gradle/caches
-          key: gradle
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-cache
 
-      - name: Prepare build files
-        run: |
-          echo "${{ secrets.KEY_BASE64 }}" > /dev/null
-          echo "${{ secrets.SIGNING_CONFIG }}" > /dev/null
-          echo "test" > /dev/null
+      - name: Keystore
+        shell: bash
+        run: echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
 
-      - name: Build
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease --parallel --configuration-cache
+      - name: Signing config
+        shell: bash
+        run: echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
 
-      - name: Publish
+      - name: Google Services
+        shell: bash
+        run: echo '{}' > app/google-services.json
+
+      - name: Build APK
+        shell: bash
+        run: ./gradlew assembleRelease
+
+      - name: Release
         uses: softprops/action-gh-release@v2
+        if: success()
         with:
           tag_name: v2.4.1-procare
           name: v2.4.1-procare
+          generate_release_notes: true
           files: app/build/outputs/apk/release/*.apk
