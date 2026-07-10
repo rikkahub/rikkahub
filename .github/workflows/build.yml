@@ -10,6 +10,17 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+      - name: Install web-ui
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
       - uses: actions/cache@v4
         with:
           path: ~/.gradle/caches
