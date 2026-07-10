@@ -13,11 +13,14 @@ jobs:
       - uses: actions/github-script@v7
         with:
           script: |
+            const author = context.payload.issue.user.login;
+            const isOwner = author === context.repo.owner;
+
             const body = context.payload.issue.body;
             const templateMarkers = ['问题描述', '功能描述'];
             const usedTemplate = body && templateMarkers.some(marker => body.includes(marker));
 
-            if (!usedTemplate) {
+            if (!isOwner && !usedTemplate) {
               const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
