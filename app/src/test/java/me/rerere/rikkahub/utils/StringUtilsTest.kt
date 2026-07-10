@@ -46,6 +46,41 @@ class StringUtilsTest {
     }
 
     @Test
+    fun `extract mixed quote styles in source order`() {
+        assertEquals(
+            listOf("first", "second"),
+            "「first」 then “second”".extractQuotedContent(),
+        )
+    }
+
+    @Test
+    fun `extract all quote styles in source order independent of pattern order`() {
+        assertEquals(
+            listOf(
+                "white corner",
+                "corner",
+                "single",
+                "double",
+                "curly single",
+                "curly double",
+            ),
+            """『white corner』 「corner」 'single' "double" ‘curly single’ “curly double”"""
+                .extractQuotedContent(),
+        )
+    }
+
+    @Test
+    fun `tts quoted filter preserves mixed quote source order`() {
+        assertEquals(
+            "first\nsecond",
+            "「first」 then “second”".filterTextForTts(
+                onlyReadQuoted = true,
+                onlyReadOutsideBrackets = false,
+            ),
+        )
+    }
+
+    @Test
     fun `blank content is ignored`() {
         assertTrue("“” \"\" '  '".extractQuotedContent().isEmpty())
     }

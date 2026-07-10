@@ -105,26 +105,15 @@ fun Double.toFixed(digits: Int = 0) = "%.${digits}f".format(this)
  * @return 所有引号内内容的列表
  */
 fun String.extractQuotedContent(): List<String> {
-    val result = mutableListOf<String>()
-    // 匹配多种引号类型
-    val patterns = listOf(
-        "\u201C([^\u201D]*?)\u201D",  // 中文双引号
-        "\u2018([^\u2019]*?)\u2019",  // 中文单引号
-        """"([^"]*?)"""",  // 英文双引号
-        """'([^']*?)'""",  // 英文单引号
-        """「([^」]*?)」""",           // 直角引号
-        """『([^』]*?)』""",           // 白直角引号
+    val pattern = Regex(
+        """“([^”]*?)”|‘([^’]*?)’|"([^"]*?)"|'([^']*?)'|「([^」]*?)」|『([^』]*?)』"""
     )
-    for (pattern in patterns) {
-        val regex = Regex(pattern)
-        regex.findAll(this).forEach { matchResult ->
-            val content = matchResult.groupValues[1]
-            if (content.isNotBlank()) {
-                result.add(content)
-            }
-        }
-    }
-    return result
+    return pattern.findAll(this).mapNotNull { matchResult ->
+        matchResult.groupValues
+            .drop(1)
+            .firstOrNull { it.isNotEmpty() }
+            ?.takeIf { it.isNotBlank() }
+    }.toList()
 }
 
 /**
