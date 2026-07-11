@@ -41,6 +41,9 @@ object CustomJsSearchService : SearchService<SearchServiceOptions.CustomJsOption
                 put("urls", buildJsonObject {
                     put("type", "array")
                     put("description", "urls to scrape")
+                    put("items", buildJsonObject {
+                        put("type", "string")
+                    })
                 })
             },
             required = listOf("urls")
