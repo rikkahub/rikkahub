@@ -18,6 +18,7 @@ import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import me.rerere.rikkahub.data.files.FileFolders
+import me.rerere.rikkahub.ui.components.richtext.registerSerifCjkFallback
 import java.io.File
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -68,6 +69,9 @@ class RikkaHubApp : Application() {
 
         // Init QuickJS native library
         QuickJSLoader.init()
+
+        // Register system serif font as CJK fallback for RaTeX
+        runCatching { registerSerifCjkFallback(this) }
 
         // delete temp files
         deleteTempFiles()
