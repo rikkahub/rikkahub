@@ -23,9 +23,6 @@
 # keep kotlinx serializable classes
 -keep @kotlinx.serialization.Serializable class * {*;}
 
-# keep jlatexmath
--keep class org.scilab.forge.jlatexmath.** {*;}
-
 -dontwarn com.google.re2j.**
 -dontobfuscate
 

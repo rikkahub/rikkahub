@@ -536,7 +536,7 @@ private fun MarkdownNode(
         }
 
         GFMElementTypes.INLINE_MATH -> {
-            val formula = node.getTextInNode(content)
+            val formula = node.getTextInNode(content).trimStart('$').trimEnd('$').trim()
             val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
             if (enableLatexRendering) {
                 MathInline(
@@ -553,7 +553,7 @@ private fun MarkdownNode(
         }
 
         GFMElementTypes.BLOCK_MATH -> {
-            val formula = node.getTextInNode(content)
+            val formula = node.getTextInNode(content).trimStart('$').trimEnd('$').trim()
             val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
             if (enableLatexRendering) {
                 MathBlock(
@@ -1157,60 +1157,31 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             }
         }
 
-        node.type == GFMElementTypes.INLINE_MATH -> {
-            val formula = node.getTextInNode(content)
+                node.type == GFMElementTypes.INLINE_MATH -> {
+            val rawFormula = node.getTextInNode(content)
+            val formula = rawFormula.trimStart('$').trimEnd('$').trim()
             if (enableLatexRendering) {
-                val fontSizePx = with(density) { style.fontSize.toPx() }
-                // 将过长的行内公式按顶层运算符水平拆分为多段，每段最大宽度限制为字号的两倍，
-                // 使其能在文本流中换行，避免单体公式超出可用宽度被挤出屏幕
-                val drawables = splitLatex(
-                    latex = formula,
-                    maxWidthPx = fontSizePx * 2,
-                    fontSize = fontSizePx,
-                    color = latexColorArgb,
-                )
-                if (drawables.isEmpty()) {
-                    // 拆分失败时回退为单体内联渲染
-                    appendInlineContent(formula, "[Latex]")
-                    val (width, height) = with(density) {
-                        assumeLatexSize(
-                            latex = formula, fontSize = fontSizePx
-                        ).let {
-                            it.width().toSp() to it.height().toSp()
-                        }
-                    }
-                    inlineContents.putIfAbsent(/* key = */ formula,/* value = */ InlineTextContent(
-                        placeholder = Placeholder(
-                            width = width,
-                            height = height,
-                            placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
-                        ), children = {
-                            MathInline(
-                                latex = formula, modifier = Modifier
-                            )
-                        })
+                appendInlineContent(formula, "[Latex]")
+                val metrics = with(density) {
+                    assumeLatexSize(
+                        latex = formula, fontSizePx = style.fontSize.toPx()
                     )
-                } else {
-                    drawables.forEachIndexed { index, drawable ->
-                        // 段间插入零宽空格，提供换行点
-                        if (index > 0) append('\u200B')
-                        val key = "latex:${formula.hashCode()}:$index"
-                        appendInlineContent(key, "[Latex]")
-                        val (width, height) = with(density) {
-                            drawable.bounds.width().toSp() to drawable.bounds.height().toSp()
-                        }
-                        inlineContents.putIfAbsent(
-                            key, InlineTextContent(
-                                placeholder = Placeholder(
-                                    width = width,
-                                    height = height,
-                                    placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
-                                ), children = {
-                                    LatexDrawable(drawable = drawable)
-                                })
-                        )
-                    }
                 }
+                val placeholderWidth = metrics?.let { with(density) { it.widthPx.toSp() } }
+                val placeholderHeight = metrics?.let { with(density) { (it.heightPx + it.depthPx).toSp() } }
+                inlineContents.putIfAbsent(
+                    formula,
+                    InlineTextContent(
+                        placeholder = Placeholder(
+                            width = placeholderWidth ?: 0.sp,
+                            height = placeholderHeight ?: 0.sp,
+                            placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
+                        ),
+                        children = {
+                            MathInline(latex = formula, modifier = Modifier)
+                        }
+                    )
+                )
             } else {
                 // 禁用 LaTeX 渲染时，以等宽字体显示原始公式
                 withStyle(
@@ -1224,6 +1195,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             }
         }
 
+        // 其他类型继续递归处理
         // 其他类型继续递归处理
         else -> {
             node.children.fastForEach {
