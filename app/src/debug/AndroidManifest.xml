@@ -3,6 +3,9 @@
   xmlns:android="http://schemas.android.com/apk/res/android"
   xmlns:tools="http://schemas.android.com/tools">
   <application>
+    <activity
+      android:name="androidx.activity.ComponentActivity"
+      android:showWhenLocked="true" />
     <service
       android:name=".voiceagent.VoiceAgentCallService"
       android:exported="true"
