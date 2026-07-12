@@ -1,4 +1,4 @@
-name: Nightly Build (Debug)
+name: Nightly Build
 
 on:
   schedule:
@@ -23,6 +23,7 @@ jobs:
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_build=false" >> "$GITHUB_OUTPUT"
+            echo "过去 24 小时无新提交，跳过构建"
           fi
 
   build:
@@ -68,16 +69,29 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
+      - name: Generate signing key
+        run: |
+          keytool -genkey -v -keystore app/release.keystore \
+            -alias release -keyalg RSA -keysize 2048 -validity 3650 \
+            -storepass android -keypass android \
+            -dname "CN=Nightly, OU=CI, O=Nightly, L=City, ST=State, C=US"
+
       - name: Prepare build files
         run: |
-          echo 'android.useAndroidX=true' > local.properties
-          echo 'android.enableJetifier=false' >> local.properties
-          echo '{"project_info":{"project_number":"0","project_id":"nightly"},"client":[{"client_info":{"mobilesdk_app_id":"1:0:android:0000000000000000","android_client_info":{"package_name":"me.rerere.rikkahub.debug"}},"oauth_client":[],"api_key":[{"current_key":""}]}]}' > app/google-services.json
+          cat > local.properties << 'PROPERTIES'
+          android.useAndroidX=true
+          android.enableJetifier=false
+          storeFile=release.keystore
+          storePassword=android
+          keyAlias=release
+          keyPassword=android
+          PROPERTIES
+          echo '{"project_info":{"project_number":"0","project_id":"nightly"},"client":[{"client_info":{"mobilesdk_app_id":"1:0:android:0000000000000000","android_client_info":{"package_name":"me.rerere.rikkahub"}},"oauth_client":[],"api_key":[{"current_key":""}]}]}' > app/google-services.json
 
       - name: Gradle Build
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease
 
       - name: Publish nightly prerelease
         uses: softprops/action-gh-release@v2
@@ -89,5 +103,5 @@ jobs:
           body: |
             自动每日构建（commit `${{ github.sha }}`）
 
-            > ⚠️ Debug 版本，仅供测试。
-          files: app/build/outputs/apk/debug/*.apk
+            > 正式版构建，使用 CI 生成的签名密钥（与原始签名不同）。
+          files: app/build/outputs/apk/release/*.apk
