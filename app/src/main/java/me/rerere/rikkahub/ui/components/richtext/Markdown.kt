@@ -769,7 +769,10 @@ private fun Paragraph(
 ) {
     // dumpAst(node, content)
     if (node.findChildOfTypeRecursive(MarkdownElementTypes.IMAGE, GFMElementTypes.BLOCK_MATH) != null) {
-        FlowRow(modifier = modifier) {
+        FlowRow(
+            modifier = modifier,
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
             node.children.fastForEach { child ->
                 MarkdownNode(
                     node = child, content = content, onClickCitation = onClickCitation
