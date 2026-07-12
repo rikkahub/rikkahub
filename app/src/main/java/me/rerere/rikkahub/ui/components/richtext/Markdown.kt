@@ -1160,7 +1160,7 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             }
         }
 
-                node.type == GFMElementTypes.INLINE_MATH -> {
+        node.type == GFMElementTypes.INLINE_MATH -> {
             val rawFormula = node.getTextInNode(content)
             val formula = rawFormula.trimStart('$').trimEnd('$').trim()
             if (enableLatexRendering) {
@@ -1198,7 +1198,6 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             }
         }
 
-        // 其他类型继续递归处理
         // 其他类型继续递归处理
         else -> {
             node.children.fastForEach {

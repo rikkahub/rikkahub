@@ -44,6 +44,7 @@ fun MathBlock(
             latex = proceededLatex,
             color = LocalContentColor.current,
             fontSize = fontSize.takeOrElse { LocalTextStyle.current.fontSize },
+            displayMode = true,
             modifier = Modifier
                 .align(Alignment.Center)
                 .horizontalScroll(
