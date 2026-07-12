@@ -42,7 +42,7 @@ suspend fun registerSerifCjkFallback(context: Context) {
             val cache = cacheField.get(fontCache) as ConcurrentHashMap<String, Typeface>
 
             for ((fontId, originalTypeface) in cache) {
-                val merged = Typeface.Builder(tempFile)
+                val merged = Typeface.Builder(tempFile.absolutePath)
                     .setFallback(originalTypeface)
                     .build()
                 cache[fontId] = merged
