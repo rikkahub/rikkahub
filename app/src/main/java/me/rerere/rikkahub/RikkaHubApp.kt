@@ -71,7 +71,7 @@ class RikkaHubApp : Application() {
         QuickJSLoader.init()
 
         // Register system serif font as CJK fallback for RaTeX
-        runCatching { registerSerifCjkFallback(this) }
+        runCatching { registerSerifCjkFallback() }
 
         // delete temp files
         deleteTempFiles()
