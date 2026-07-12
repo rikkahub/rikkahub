@@ -321,3 +321,88 @@ Expected: no uncommitted files; the design commit and three focused test commits
 - [ ] **Step 4: Record completion without creating an empty commit**
 
 Do not create a verification-only commit. Report the exact Gradle exit results, connected test count, device model, and remaining branch divergence. Push only if the user explicitly requests synchronization or the active branch-finishing workflow requires it.
+
+### Task 5: Remove the stale speech package placeholder
+
+**Files:**
+- Delete: `speech/src/androidTest/java/me/rerere/tts/ExampleInstrumentedTest.kt`
+
+**Interfaces:**
+- Consumes: the Task 4 Galaxy failure proving the generated test expects `me.rerere.tts.test` while the module target package is `me.rerere.speech.test`.
+- Produces: no speech instrumentation source set requiring a package-name-only test; no dependency or production change.
+
+- [ ] **Step 1: Confirm the red evidence**
+
+Read `.superpowers/sdd/task-4-report.md` and confirm the Galaxy connected gate records `expected me.rerere.tts.test` and actual `me.rerere.speech.test` for `speech/ExampleInstrumentedTest.kt`.
+
+- [ ] **Step 2: Delete the generated placeholder**
+
+Delete exactly:
+
+```text
+speech/src/androidTest/java/me/rerere/tts/ExampleInstrumentedTest.kt
+```
+
+Do not modify `speech/build.gradle.kts`; the deleted test only asserts a generated package name and covers no speech behavior.
+
+- [ ] **Step 3: Verify the speech instrumentation source set is clean**
+
+Run:
+
+```bash
+ANDROID_HOME=/home/muly/Android/Sdk ./gradlew :speech:compileDebugAndroidTestKotlin --console=plain
+```
+
+Expected: `:speech:compileDebugAndroidTestKotlin NO-SOURCE` and `BUILD SUCCESSFUL`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add speech/src/androidTest/java/me/rerere/tts/ExampleInstrumentedTest.kt
+git commit -m "test: remove stale speech instrumentation placeholder"
+```
+
+### Task 6: Prove the final integrated branch on the Galaxy
+
+**Files:**
+- Verify only: all Gradle modules and `RZCX71NXRPB`.
+
+**Interfaces:**
+- Consumes: the complete branch through Task 5, the loopback ADB proxy technique proven in Task 4, and the debug `showWhenLocked` host override.
+- Produces: fresh connected and non-device release-readiness evidence for the final head.
+
+- [ ] **Step 1: Establish the exact device precondition**
+
+Route Gradle/ddmlib through a loopback-only TCP proxy to `100.69.79.32:5037`. Send `KEYCODE_WAKEUP` without any unlock gesture, PIN, or keyguard dismissal. Poll until all conditions are true for three consecutive observations:
+
+```text
+mWakefulness=Awake
+screenState=SCREEN_STATE_ON
+interactiveState=INTERACTIVE_STATE_AWAKE
+isKeyguardShowing=true
+deviceLocked=1
+```
+
+Expected: proxy inventory lists only `RZCX71NXRPB`; the phone is awake and still securely locked.
+
+- [ ] **Step 2: Run the repository-wide connected gate**
+
+Run with the proxy port exported through `ANDROID_ADB_SERVER_PORT`, `ANDROID_ADB_SERVER_ADDRESS=127.0.0.1`, and `ADB_SERVER_SOCKET`:
+
+```bash
+ANDROID_HOME=/home/muly/Android/Sdk ./gradlew connectedDebugAndroidTest --console=plain
+```
+
+Expected: `BUILD SUCCESSFUL`; generated XML/textproto identifies `SM-S711B` and `RZCX71NXRPB`; all instrumentation tests pass.
+
+- [ ] **Step 3: Run the fresh non-device gate**
+
+```bash
+ANDROID_HOME=/home/muly/Android/Sdk ./gradlew test lint assembleDebug --console=plain
+```
+
+Expected: `BUILD SUCCESSFUL`, zero unit-test failures, and zero lint errors.
+
+- [ ] **Step 4: Record final state**
+
+Report exact test counts, device identity, lint summary, clean worktree state, and branch divergence. Tear down only the temporary loopback proxy. Do not create a verification-only commit.
