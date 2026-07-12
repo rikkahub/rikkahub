@@ -17,7 +17,7 @@ suspend fun registerSerifCjkFallback(context: Context) {
     // 1. 先确保 KaTeX 字体已加载
     RaTeXFontLoader.ensureLoaded()
 
-    val cjkBytes = context.assets.open("fonts/NotoSerifCJKsc-Light.otf").readBytes()
+    val cjkBytes = context.assets.open("fonts/NotoSerifCJKsc-Regular.otf").readBytes()
     if (cjkBytes.isEmpty()) return
 
     // 2. 标准注册（兜底 CJK-Fallback font ID）
@@ -42,10 +42,13 @@ suspend fun registerSerifCjkFallback(context: Context) {
             val cache = cacheField.get(fontCache) as ConcurrentHashMap<String, Typeface>
 
             for ((fontId, originalTypeface) in cache) {
-                val merged = Typeface.Builder(tempFile.absolutePath)
-                    .setFallback(originalTypeface)
-                    .build()
-                cache[fontId] = merged
+                val builder = Typeface.Builder(tempFile.absolutePath)
+                builder::class.java
+                    .getMethod("setFallback", Typeface::class.java)
+                    .invoke(builder, originalTypeface)
+                cache[fontId] = builder::class.java
+                    .getMethod("build")
+                    .invoke(builder) as Typeface
             }
         } catch (_: Exception) {
             // 反射失败不影响 registerCjkFallbackFont
