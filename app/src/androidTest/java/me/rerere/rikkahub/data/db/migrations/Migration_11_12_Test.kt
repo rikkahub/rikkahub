@@ -15,6 +15,7 @@ import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.utils.JsonInstant
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -527,14 +528,23 @@ class Migration_11_12_Test {
         // 如果超大对话被跳过，其 nodes 字段应该仍然保留原始数据
         // 如果成功迁移，nodes 字段应该被清空为 "[]"
         val largeConvCursor = db.query(
-            "SELECT nodes FROM conversationentity WHERE id = ?",
+            "SELECT nodes = '[]', length(nodes) FROM conversationentity WHERE id = ?",
             arrayOf(largeConversationId)
         )
         assertTrue(largeConvCursor.moveToFirst())
-        val largeConvNodes = largeConvCursor.getString(0)
+        val largeConvNodesCleared = largeConvCursor.getInt(0) == 1
+        val largeConvNodesLength = largeConvCursor.getLong(1)
         largeConvCursor.close()
 
-        // 验证普通对话的 nodes 应该被清空
+        if (largeNodesMigrated == 0) {
+            assertFalse("Skipped large conversation should preserve nodes", largeConvNodesCleared)
+            assertTrue("Preserved nodes should contain the original JSON", largeConvNodesLength > 2L)
+        } else {
+            assertEquals("All large nodes should migrate together", largeNodes.size, largeNodesMigrated)
+            assertTrue("Migrated large conversation nodes should be cleared", largeConvNodesCleared)
+            assertEquals("Cleared nodes should be []", 2L, largeConvNodesLength)
+        }
+
         val normalConvCursor = db.query(
             "SELECT nodes FROM conversationentity WHERE id = ?",
             arrayOf(normalConversationId)
@@ -546,7 +556,8 @@ class Migration_11_12_Test {
 
         Log.i(
             "Migration_11_12_Test",
-            "Large conversation migration result: $largeNodesMigrated nodes migrated, nodes field: ${if (largeConvNodes == "[]") "cleared" else "preserved"}"
+            "Large conversation migration result: $largeNodesMigrated nodes migrated, " +
+                "nodes field: ${if (largeConvNodesCleared) "cleared" else "preserved"}"
         )
 
         db.close()
