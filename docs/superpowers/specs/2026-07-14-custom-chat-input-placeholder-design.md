@@ -2,104 +2,98 @@
 
 ## Goal
 
-Allow each Android assistant to control the placeholder shown in the chat message input while preserving the current localized placeholder as the default behavior.
+Allow each Android assistant to customize the placeholder shown in the chat message input while preserving the existing localized placeholder by default.
 
 ## Scope
 
 - Android app only.
-- Add the controls to **Assistant settings → Basic settings**.
-- Apply the result to both the normal chat input and the full-screen editor.
-- Preserve the existing Web UI behavior for a separate follow-up.
+- Controls live in **Assistant settings → Basic settings**.
+- The regular chat input and full-screen editor share the same behavior.
+- Web UI remains unchanged.
+- No Android compilation or Gradle tests run on the local server; GitHub Actions provides build and test evidence.
 
-## User-visible behavior
+## Persisted settings
 
-The assistant has three persisted settings:
-
-1. Whether custom chat input placeholder behavior is enabled.
-2. Whether the placeholder is intentionally empty.
-3. The custom placeholder text.
-
-The effective placeholder is resolved as follows:
-
-| Custom behavior | Allow empty | Custom text | Effective placeholder |
-|---|---|---|---|
-| Off | Either | Any | Existing localized `chat_input_placeholder` resource |
-| On | On | Any | No placeholder |
-| On | Off | Non-blank | Custom text |
-| On | Off | Empty or whitespace-only | Existing localized `chat_input_placeholder` resource |
-
-Disabling custom behavior or enabling the empty-placeholder option must not erase the saved custom text. This allows users to restore their previous text by changing the switches again.
-
-## Data model and persistence
-
-Extend the existing serializable `Assistant` model with three defaulted properties:
+Extend the existing serializable `Assistant` model with two defaulted properties:
 
 ```kotlin
 val enableCustomInputPlaceholder: Boolean = false
-val allowEmptyInputPlaceholder: Boolean = false
 val inputPlaceholder: String = ""
 ```
 
-These names are fixed for the implementation and follow the model's existing boolean and text naming conventions.
+These fields reuse the existing `Assistant` serialization and `SettingsStore` persistence path. Their defaults preserve compatibility with older assistant JSON, so no migration is required.
 
-The fields use the existing `Assistant` serialization and `SettingsStore` persistence path. Default values preserve compatibility with assistant JSON written by older versions, so no explicit preference migration is required.
+## Effective placeholder behavior
+
+| Custom behavior | Saved custom text | Effective placeholder |
+|---|---|---|
+| Off | Any value | Existing localized `chat_input_placeholder` resource |
+| On | Empty string | Existing localized `chat_input_placeholder` resource |
+| On | Any non-empty string, including whitespace-only text | Saved text exactly as entered |
+
+The resolver always returns a non-null `String`. It uses empty-string detection rather than blank-string detection, so spaces are not trimmed, rejected, or replaced. A knowledgeable user may enter one or more spaces to make the UI appear to have no placeholder without introducing nullable state.
+
+Disabling custom behavior hides the editor but does not erase the saved text.
 
 ## Assistant basic settings UI
 
-Add a new `FormItem` section to `AssistantBasicPage`, using the page's existing `Switch`, `OutlinedTextField`, divider, and `AssistantDetailVM.update()` patterns.
+Add a `FormItem` to `AssistantBasicPage`, reusing the existing `Switch`, `OutlinedTextField`, dividers, and `AssistantDetailVM.update()` flow.
 
-- The primary switch controls whether custom placeholder behavior is enabled.
-- When the primary switch is off, no subordinate controls are shown.
-- When it is on, show an **Allow empty placeholder** switch.
-- When **Allow empty placeholder** is off, show a single-line custom text field.
-- When **Allow empty placeholder** is on, hide the custom text field without clearing its value.
-- The custom text field's own placeholder reuses `R.string.chat_input_placeholder`, so an empty setting visually previews the localized fallback.
-- The text field has no additional application-level length limit.
+- The primary switch enables custom placeholder behavior.
+- When off, the subordinate text field is hidden.
+- When on, a single-line text field is shown.
+- The field has no additional application-level length limit.
+- The field's own placeholder reuses `R.string.chat_input_placeholder`, previewing the localized fallback while its saved value is empty.
+- Input is persisted exactly as entered, including whitespace.
 
-Only labels and descriptions for the new controls require new localized string resources. Add them to every currently maintained Android strings file.
+Only the primary setting and text-field labels/descriptions require new localized resources. Add them to every currently maintained Android strings file.
 
 ## Chat input integration
 
-`ChatInput` already resolves the current assistant from `Settings`. Reuse that value to compute one effective placeholder according to the behavior table.
+`ChatInput` already resolves the current assistant from `Settings`. Resolve one effective non-null placeholder string there and pass it through the existing private composables.
 
-Pass the resolved value through the existing input composables so that:
+Both the regular `TextField` and the full-screen `TextField` render:
 
-- the regular `TextField` and full-screen `TextField` use the same result;
-- a `null` effective value renders no placeholder composable;
-- a non-null value renders the existing placeholder `Text`.
+```kotlin
+placeholder = {
+    Text(inputPlaceholder)
+}
+```
 
-Keep resolution local to the existing chat input implementation unless extracting a small internal pure function materially improves testability. Do not introduce a repository, database table, migration, or unrelated abstraction.
+Do not modify `ChatInputState`; placeholder text remains UI-only and is never sent to an AI provider.
 
 ## Compatibility and edge cases
 
-- Existing assistants default to custom behavior disabled and remain visually unchanged.
-- Blank and whitespace-only custom text fall back to the localized default unless empty placeholders are explicitly allowed.
-- The current system locale determines the fallback text.
-- Switching assistants or opening a conversation associated with another assistant updates the placeholder from that assistant's settings.
-- Placeholder text remains UI-only and is never inserted into the message state or sent to an AI provider.
-- Saved custom text survives switch changes that temporarily hide or bypass it.
+- Existing assistants keep the current localized placeholder because the new switch defaults to off.
+- An enabled but empty custom field falls back to the localized default.
+- Whitespace-only text is preserved verbatim and produces intentionally blank-looking UI.
+- Switching assistant or conversation updates the placeholder from the active assistant.
+- Saved custom text survives disabling and re-enabling the feature.
+- No null placeholder value enters the Compose call chain.
 
 ## Verification
 
-Add focused tests around the effective-placeholder decision if the implementation extracts a pure resolver. Cover at minimum:
+Add focused JVM tests for the pure resolver:
 
-1. Custom behavior disabled uses the localized fallback.
-2. Custom behavior enabled with empty allowed returns no placeholder.
-3. Custom behavior enabled with non-blank text returns custom text.
-4. Custom behavior enabled with blank or whitespace-only text and empty disallowed uses the fallback.
+1. Disabled custom behavior uses the fallback regardless of saved text.
+2. Enabled behavior with normal text returns the custom text.
+3. Enabled behavior with an empty string uses the fallback.
+4. Enabled behavior with whitespace-only text preserves the whitespace exactly.
 
-Also verify:
+All Gradle tests and Android compilation run in GitHub Actions, not locally. Local verification is limited to non-compiling checks such as file inspection, XML parsing, `git diff --check`, and independent review.
 
-- Kotlin compilation for the Android app.
-- Relevant unit tests.
-- All Android locale files contain the new resources.
-- `git diff --check` succeeds.
-- No Web UI files are changed.
+GitHub Actions must verify:
+
+- Focused resolver tests.
+- App JVM unit tests.
+- Debug APK assembly.
+
+Also verify that every Android locale contains the new resources and no Web UI file changes.
 
 ## Development workflow
 
-- Work in fork `c45v3/rikkahub` on a feature branch based on `rikkahub/rikkahub:master`.
-- Commit the approved design before implementation.
-- Implement with focused tests and run the relevant Android verification commands.
-- Request an independent code review after implementation.
-- Push the feature branch and create an upstream pull request only after verification succeeds.
+- Work in fork `c45v3/rikkahub` on `feat/custom-chat-input-placeholder`, based on `rikkahub/rikkahub:master`.
+- Use a feature-branch GitHub Actions workflow for CI because upstream currently has no pull-request build workflow.
+- Do not publish releases or manually dispatch unrelated upstream workflows.
+- Request independent specification and code-quality reviews.
+- Create an upstream pull request only after GitHub Actions passes.
