@@ -155,6 +155,10 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().syncEntityRevisionDao()
+    }
+
+    single {
         MessageFtsManager(get())
     }
 

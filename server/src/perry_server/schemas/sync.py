@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 class MutationItem(BaseModel):
     mutation_id: UUID
     entity_type: str = Field(min_length=1, max_length=64)
-    entity_id: str = Field(min_length=1, max_length=64)
+    entity_id: str = Field(min_length=1, max_length=256)
     operation: Literal["upsert", "delete"]
     base_revision: int = Field(ge=0)
     payload_schema_version: int = Field(default=1, ge=1)
@@ -55,3 +55,4 @@ class BootstrapResponse(BaseModel):
     cursor: int
     server_time: str
     settings: list[dict[str, Any]] = Field(default_factory=list)
+    assistants: list[dict[str, Any]] = Field(default_factory=list)

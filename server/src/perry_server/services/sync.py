@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from perry_server.models.assistant import Assistant
 from perry_server.models.change_log import ChangeLog
 from perry_server.models.mutation_receipt import MutationReceipt
 from perry_server.models.setting import Setting
@@ -20,7 +21,7 @@ from perry_server.schemas.sync import (
     MutationsResponse,
 )
 
-SUPPORTED_ENTITY_TYPES = {"setting"}
+SUPPORTED_ENTITY_TYPES = {"setting", "assistant"}
 
 
 def _now() -> datetime:
@@ -40,6 +41,21 @@ def _setting_payload(setting: Setting) -> dict[str, Any]:
     }
 
 
+def _assistant_payload(assistant: Assistant) -> dict[str, Any]:
+    return {
+        "id": str(assistant.id),
+        "name": assistant.name,
+        "payload": json.loads(assistant.payload_json),
+        "revision": assistant.revision,
+        "payload_schema_version": assistant.payload_schema_version,
+        "updated_at": assistant.updated_at.isoformat() if assistant.updated_at else None,
+        "deleted_at": assistant.deleted_at.isoformat() if assistant.deleted_at else None,
+        "updated_by_device": (
+            str(assistant.updated_by_device) if assistant.updated_by_device else None
+        ),
+    }
+
+
 async def get_current_cursor(session: AsyncSession, user_id: UUID) -> int:
     result = await session.execute(
         select(ChangeLog.seq)
@@ -53,14 +69,17 @@ async def get_current_cursor(session: AsyncSession, user_id: UUID) -> int:
 
 async def bootstrap(session: AsyncSession, *, user_id: UUID) -> BootstrapResponse:
     cursor = await get_current_cursor(session, user_id)
-    result = await session.execute(
+    settings_result = await session.execute(
         select(Setting).where(Setting.user_id == user_id, Setting.deleted_at.is_(None))
     )
-    settings = [_setting_payload(row) for row in result.scalars().all()]
+    assistants_result = await session.execute(
+        select(Assistant).where(Assistant.user_id == user_id, Assistant.deleted_at.is_(None))
+    )
     return BootstrapResponse(
         cursor=cursor,
         server_time=_now().isoformat(),
-        settings=settings,
+        settings=[_setting_payload(row) for row in settings_result.scalars().all()],
+        assistants=[_assistant_payload(row) for row in assistants_result.scalars().all()],
     )
 
 
@@ -144,6 +163,10 @@ async def _apply_one(
         result = await _apply_setting_mutation(
             session, user_id=user_id, device_id=device_id, item=item
         )
+    elif item.entity_type == "assistant":
+        result = await _apply_assistant_mutation(
+            session, user_id=user_id, device_id=device_id, item=item
+        )
     else:  # pragma: no cover
         result = MutationResult(
             mutation_id=item.mutation_id,
@@ -193,7 +216,6 @@ async def _apply_setting_mutation(
 
     if item.operation == "delete":
         if setting is None or setting.deleted_at is not None:
-            # Idempotent delete of missing/tombstoned key.
             rev = setting.revision if setting is not None else 0
             return MutationResult(
                 mutation_id=item.mutation_id,
@@ -237,7 +259,6 @@ async def _apply_setting_mutation(
             server_payload=_setting_payload(setting),
         )
 
-    # upsert
     payload = item.payload or {}
     if "value" not in payload:
         return MutationResult(
@@ -325,6 +346,176 @@ async def _apply_setting_mutation(
         entity_id=item.entity_id,
         revision=setting.revision,
         server_payload=_setting_payload(setting),
+    )
+
+
+async def _apply_assistant_mutation(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    device_id: UUID,
+    item: MutationItem,
+) -> MutationResult:
+    try:
+        assistant_id = UUID(item.entity_id)
+    except ValueError:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message="entity_id must be a UUID for assistant",
+        )
+
+    result = await session.execute(
+        select(Assistant).where(Assistant.user_id == user_id, Assistant.id == assistant_id)
+    )
+    assistant = result.scalar_one_or_none()
+
+    if item.operation == "delete":
+        if assistant is None or assistant.deleted_at is not None:
+            rev = assistant.revision if assistant is not None else 0
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="applied",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=rev,
+                server_payload=_assistant_payload(assistant) if assistant else None,
+            )
+        if item.base_revision != 0 and item.base_revision != assistant.revision:
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="conflict",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=assistant.revision,
+                server_payload=_assistant_payload(assistant),
+                message="base_revision mismatch",
+            )
+        assistant.revision += 1
+        assistant.deleted_at = _now()
+        assistant.updated_at = _now()
+        assistant.updated_by_device = device_id
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="assistant",
+            entity_id=str(assistant_id),
+            operation="delete",
+            revision=assistant.revision,
+            payload=_assistant_payload(assistant),
+        )
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="applied",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=assistant.revision,
+            server_payload=_assistant_payload(assistant),
+        )
+
+    payload = item.payload or {}
+    if "payload" not in payload:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message="payload.payload is required for assistant upsert",
+        )
+
+    body = payload["payload"]
+    if not isinstance(body, dict):
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message="payload.payload must be an object",
+        )
+    name = str(payload.get("name") or body.get("name") or "")
+    payload_json = json.dumps(body, ensure_ascii=False, separators=(",", ":"))
+
+    if assistant is None:
+        if item.base_revision not in (0,):
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="conflict",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=0,
+                message="entity does not exist; base_revision must be 0",
+            )
+        assistant = Assistant(
+            id=assistant_id,
+            user_id=user_id,
+            name=name,
+            payload_json=payload_json,
+            revision=1,
+            payload_schema_version=item.payload_schema_version,
+            updated_by_device=device_id,
+            deleted_at=None,
+        )
+        session.add(assistant)
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="assistant",
+            entity_id=str(assistant_id),
+            operation="upsert",
+            revision=assistant.revision,
+            payload=_assistant_payload(assistant),
+        )
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="applied",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=assistant.revision,
+            server_payload=_assistant_payload(assistant),
+        )
+
+    if item.base_revision != assistant.revision:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="conflict",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=assistant.revision,
+            server_payload=_assistant_payload(assistant),
+            message="base_revision mismatch",
+        )
+
+    assistant.name = name
+    assistant.payload_json = payload_json
+    assistant.revision += 1
+    assistant.payload_schema_version = item.payload_schema_version
+    assistant.updated_at = _now()
+    assistant.updated_by_device = device_id
+    assistant.deleted_at = None
+    await session.flush()
+    await _append_change(
+        session,
+        user_id=user_id,
+        device_id=device_id,
+        entity_type="assistant",
+        entity_id=str(assistant_id),
+        operation="upsert",
+        revision=assistant.revision,
+        payload=_assistant_payload(assistant),
+    )
+    return MutationResult(
+        mutation_id=item.mutation_id,
+        status="applied",
+        entity_type=item.entity_type,
+        entity_id=item.entity_id,
+        revision=assistant.revision,
+        server_payload=_assistant_payload(assistant),
     )
 
 

@@ -12,6 +12,7 @@ import me.rerere.rikkahub.data.repository.GenMediaRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.sync.cloud.CloudSyncRepository
+import me.rerere.rikkahub.data.sync.cloud.SettingsDomainSync
 import me.rerere.workspace.ProotShellRunner
 import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceBindMount
@@ -86,10 +87,24 @@ val repositoryModule = module {
 
     single {
         CloudSyncRepository(
+            appContext = get(),
             outboxDao = get(),
             stateDao = get(),
+            revisionDao = get(),
             settingsStore = get(),
             okHttpClient = get(),
         )
+    }
+
+    // createdAtStart: observe Settings changes into outbox as soon as process starts
+    single(createdAtStart = true) {
+        val domain = SettingsDomainSync(
+            cloudSyncRepository = get(),
+            revisionDao = get(),
+            settingsStore = get(),
+            appScope = get(),
+        )
+        get<CloudSyncRepository>().settingsDomainSync = domain
+        domain
     }
 }

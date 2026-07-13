@@ -185,6 +185,7 @@ data class SyncBootstrapResponse(
     val cursor: Long,
     @SerialName("server_time") val serverTime: String,
     val settings: List<JsonElement> = emptyList(),
+    val assistants: List<JsonElement> = emptyList(),
 )
 
 @Serializable
@@ -229,6 +230,7 @@ data class SyncMutationResult(
     @SerialName("entity_type") val entityType: String,
     @SerialName("entity_id") val entityId: String,
     val revision: Long? = null,
+    @SerialName("server_payload") val serverPayload: JsonElement? = null,
     val message: String? = null,
 )
 

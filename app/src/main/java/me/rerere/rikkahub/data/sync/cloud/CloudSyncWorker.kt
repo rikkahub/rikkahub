@@ -52,9 +52,11 @@ class CloudSyncWorker(
                         .build()
                 )
                 .build()
+            // REPLACE: if a previous run is waiting, use the latest request so
+            // recent outbox mutations are not stuck behind a dropped KEEP enqueue.
             WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE_WORK,
-                ExistingWorkPolicy.KEEP,
+                ExistingWorkPolicy.REPLACE,
                 request,
             )
         }

@@ -93,8 +93,7 @@ def get_app() -> FastAPI:
     return create_app()
 
 
-# Default ASGI app for `uvicorn perry_server.main:app` when env/.env is present.
-try:
-    app = create_app()
-except Exception:  # pragma: no cover - allows importing package without full env
-    app = None  # type: ignore[assignment]
+# Default ASGI app for `uvicorn perry_server.main:app`.
+# Fail loudly if settings/.env are missing — never export app=None (causes
+# TypeError: 'NoneType' object is not callable under uvicorn).
+app = create_app()

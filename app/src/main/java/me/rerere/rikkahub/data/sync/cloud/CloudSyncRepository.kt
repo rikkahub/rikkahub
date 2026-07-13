@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.sync.cloud
 
+import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -7,15 +8,23 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.db.dao.SyncEntityRevisionDAO
 import me.rerere.rikkahub.data.db.dao.SyncOutboxDAO
 import me.rerere.rikkahub.data.db.dao.SyncStateDAO
+import me.rerere.rikkahub.data.db.entity.SyncEntityRevisionEntity
 import me.rerere.rikkahub.data.db.entity.SyncOutboxEntity
 import me.rerere.rikkahub.data.db.entity.SyncStateEntity
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.utils.JsonInstant
 import okhttp3.OkHttpClient
+import java.io.IOException
 import java.util.UUID
 
 sealed class CloudSyncOutcome {
@@ -36,16 +45,38 @@ data class ConnectionProbeResult(
  * Local outbox + Perry connection/sync cycle.
  */
 class CloudSyncRepository(
+    private val appContext: Context,
     private val outboxDao: SyncOutboxDAO,
     private val stateDao: SyncStateDAO,
+    private val revisionDao: SyncEntityRevisionDAO,
     private val settingsStore: SettingsStore,
     private val okHttpClient: OkHttpClient,
 ) {
+    // Set after Koin creates SettingsDomainSync to avoid ctor cycles.
+    var settingsDomainSync: SettingsDomainSync? = null
+    private val syncMutex = Mutex()
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.NOT_CONFIGURED)
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
 
     private val _lastMessage = MutableStateFlow<String?>(null)
     val lastMessage: StateFlow<String?> = _lastMessage.asStateFlow()
+
+    @Volatile
+    var isSuppressingLocalEnqueue: Boolean = false
+        private set
+
+    fun requestSync() {
+        CloudSyncWorker.enqueue(appContext)
+    }
+
+    suspend fun <T> withRemoteApply(block: suspend () -> T): T {
+        isSuppressingLocalEnqueue = true
+        return try {
+            block()
+        } finally {
+            isSuppressingLocalEnqueue = false
+        }
+    }
 
     fun observeOutboxCount(): Flow<Int> = outboxDao.observeCount()
 
@@ -300,6 +331,19 @@ class CloudSyncRepository(
     }
 
     suspend fun runSyncCycle(): CloudSyncOutcome {
+        // Avoid overlapping cycles (manual Sync now + WorkManager + settings enqueue).
+        if (!syncMutex.tryLock()) {
+            Log.d(TAG, "sync cycle already running; skip")
+            return CloudSyncOutcome.Skipped
+        }
+        return try {
+            runSyncCycleLocked()
+        } finally {
+            syncMutex.unlock()
+        }
+    }
+
+    private suspend fun runSyncCycleLocked(): CloudSyncOutcome {
         val state = ensureState()
         val mode = SyncMode.fromStorage(state.syncMode)
         if (mode != SyncMode.AUTO) {
@@ -313,21 +357,30 @@ class CloudSyncRepository(
         }
 
         return try {
-            val client = PerryApiClient(
-                okHttpClient,
-                config.normalizedBaseUrl(),
-                deviceToken = token,
-            )
-            pushOutbox(client, state.deviceId!!)
-            pullChanges(client)
-            val now = System.currentTimeMillis()
-            stateDao.updateCursor(
-                cursor = ensureState().changeCursor,
-                lastSuccessAt = now,
-                updatedAt = now,
-            )
-            _connectionStatus.value = ConnectionStatus.ONLINE
-            CloudSyncOutcome.Success
+            withContext(Dispatchers.IO) {
+                val client = PerryApiClient(
+                    okHttpClient,
+                    config.normalizedBaseUrl(),
+                    deviceToken = token,
+                )
+                if (state.changeCursor <= 0L) {
+                    val bootstrap = client.bootstrap()
+                    applyBootstrap(bootstrap)
+                    if (bootstrap.settings.isEmpty() && bootstrap.assistants.isEmpty()) {
+                        settingsDomainSync?.seedLocalSnapshot(settingsStore.settingsFlow.value)
+                    }
+                }
+                pushOutbox(client, state.deviceId!!)
+                pullChanges(client)
+                val now = System.currentTimeMillis()
+                stateDao.updateCursor(
+                    cursor = ensureState().changeCursor,
+                    lastSuccessAt = now,
+                    updatedAt = now,
+                )
+                _connectionStatus.value = ConnectionStatus.ONLINE
+                CloudSyncOutcome.Success
+            }
         } catch (e: PerryApiException) {
             Log.w(TAG, "sync failed: ${e.code} ${e.message}")
             stateDao.updateError(e.message, System.currentTimeMillis())
@@ -339,10 +392,15 @@ class CloudSyncRepository(
                 409 -> CloudSyncOutcome.Failed(e.message ?: "conflict")
                 else -> CloudSyncOutcome.Retryable(e.message ?: e.code)
             }
+        } catch (e: IOException) {
+            // WSL/LAN blips are common; WorkManager will retry.
+            Log.w(TAG, "sync network error: ${e.message}")
+            stateDao.updateError(e.message, System.currentTimeMillis())
+            CloudSyncOutcome.Retryable(e.message ?: "network error")
         } catch (e: Exception) {
             Log.e(TAG, "sync cycle failed", e)
             stateDao.updateError(e.message, System.currentTimeMillis())
-            CloudSyncOutcome.Retryable(e.message ?: "network error")
+            CloudSyncOutcome.Retryable(e.message ?: "sync error")
         }
     }
 
@@ -369,8 +427,32 @@ class CloudSyncRepository(
         val now = System.currentTimeMillis()
         response.results.forEach { result ->
             when (result.status) {
-                "applied", "already_applied" -> outboxDao.deleteById(result.mutationId)
-                "conflict", "rejected" -> {
+                "applied", "already_applied" -> {
+                    outboxDao.deleteById(result.mutationId)
+                    result.revision?.let { rev ->
+                        rememberRevision(result.entityType, result.entityId, rev)
+                    }
+                }
+                "conflict" -> {
+                    val existing = outboxDao.getById(result.mutationId)
+                    result.revision?.let { rev ->
+                        rememberRevision(result.entityType, result.entityId, rev)
+                    }
+                    // Server wins for v1: apply server payload and drop local mutation.
+                    val operation = existing?.operation ?: "upsert"
+                    result.serverPayload?.let { payload ->
+                        applyEntityPayload(
+                            result.entityType,
+                            result.entityId,
+                            operation,
+                            payload,
+                            result.revision,
+                        )
+                    }
+                    outboxDao.deleteById(result.mutationId)
+                    Log.w(TAG, "conflict on ${result.entityType}/${result.entityId}: ${result.message}")
+                }
+                "rejected" -> {
                     val existing = outboxDao.getById(result.mutationId) ?: return@forEach
                     outboxDao.update(
                         existing.copy(
@@ -397,7 +479,9 @@ class CloudSyncRepository(
         while (guard < 20) {
             guard++
             val page = client.changes(cursor = cursor, limit = 200)
-            // Phase 3: cursor advances; entity apply for settings domains comes in Phase 4.
+            if (page.changes.isNotEmpty()) {
+                applyChangeBatch(page.changes)
+            }
             if (page.nextCursor > cursor) {
                 cursor = page.nextCursor
                 val state = ensureState()
@@ -412,6 +496,139 @@ class CloudSyncRepository(
             }
             if (!page.hasMore || page.changes.isEmpty()) break
         }
+    }
+
+    private suspend fun applyBootstrap(bootstrap: SyncBootstrapResponse) {
+        withRemoteApply {
+            var settings = settingsStore.settingsFlow.value
+            bootstrap.settings.forEach { element ->
+                val obj = element as? JsonObject ?: return@forEach
+                val key = obj["key"]?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return@forEach
+                val value = obj["value"] ?: return@forEach
+                val revision = obj["revision"]?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0L
+                settings = SyncableSettings.applyKey(settings, key, value)
+                rememberRevision(SettingsDomainSync.ENTITY_SETTING, key, revision)
+            }
+            val assistants = settings.assistants.toMutableList()
+            bootstrap.assistants.forEach { element ->
+                val obj = element as? JsonObject ?: return@forEach
+                val id = obj["id"]?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return@forEach
+                val payload = obj["payload"] ?: return@forEach
+                val revision = obj["revision"]?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0L
+                val assistant = runCatching {
+                    JsonInstant.decodeFromJsonElement(Assistant.serializer(), payload)
+                }.getOrNull() ?: return@forEach
+                val idx = assistants.indexOfFirst { it.id.toString() == id }
+                if (idx >= 0) assistants[idx] = assistant else assistants.add(assistant)
+                rememberRevision(SettingsDomainSync.ENTITY_ASSISTANT, id, revision)
+            }
+            settingsStore.update(settings.copy(assistants = assistants))
+            val state = ensureState()
+            stateDao.upsert(
+                state.copy(
+                    changeCursor = bootstrap.cursor,
+                    lastSuccessAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis(),
+                    lastError = null,
+                )
+            )
+        }
+    }
+
+    private suspend fun applyChangeBatch(changes: List<SyncChangeItem>) {
+        withRemoteApply {
+            var settings = settingsStore.settingsFlow.value
+            var assistants = settings.assistants.toMutableList()
+            var dirty = false
+            changes.forEach { change ->
+                when (change.entityType) {
+                    SettingsDomainSync.ENTITY_SETTING -> {
+                        val key = change.entityId
+                        if (change.operation == "delete") {
+                            rememberRevision(change.entityType, key, change.revision)
+                            return@forEach
+                        }
+                        val value = change.payload
+                            ?.let { it as? JsonObject }
+                            ?.get("value")
+                            ?: return@forEach
+                        settings = SyncableSettings.applyKey(settings, key, value)
+                        rememberRevision(change.entityType, key, change.revision)
+                        dirty = true
+                    }
+                    SettingsDomainSync.ENTITY_ASSISTANT -> {
+                        val id = change.entityId
+                        if (change.operation == "delete") {
+                            assistants.removeAll { it.id.toString() == id }
+                            rememberRevision(change.entityType, id, change.revision)
+                            dirty = true
+                            return@forEach
+                        }
+                        val payload = change.payload
+                            ?.let { it as? JsonObject }
+                            ?.get("payload")
+                            ?: return@forEach
+                        val assistant = runCatching {
+                            JsonInstant.decodeFromJsonElement(Assistant.serializer(), payload)
+                        }.getOrNull() ?: return@forEach
+                        val idx = assistants.indexOfFirst { it.id.toString() == id }
+                        if (idx >= 0) assistants[idx] = assistant else assistants.add(assistant)
+                        rememberRevision(change.entityType, id, change.revision)
+                        dirty = true
+                    }
+                }
+            }
+            if (dirty) {
+                settingsStore.update(settings.copy(assistants = assistants))
+            }
+        }
+    }
+
+    private suspend fun applyEntityPayload(
+        entityType: String,
+        entityId: String,
+        operation: String,
+        payload: JsonElement,
+        revision: Long?,
+    ) {
+        withRemoteApply {
+            var settings = settingsStore.settingsFlow.value
+            when (entityType) {
+                SettingsDomainSync.ENTITY_SETTING -> {
+                    if (operation != "delete") {
+                        val value = (payload as? JsonObject)?.get("value") ?: return@withRemoteApply
+                        settings = SyncableSettings.applyKey(settings, entityId, value)
+                        settingsStore.update(settings)
+                    }
+                }
+                SettingsDomainSync.ENTITY_ASSISTANT -> {
+                    val list = settings.assistants.toMutableList()
+                    if (operation == "delete") {
+                        list.removeAll { it.id.toString() == entityId }
+                    } else {
+                        val body = (payload as? JsonObject)?.get("payload") ?: return@withRemoteApply
+                        val assistant = runCatching {
+                            JsonInstant.decodeFromJsonElement(Assistant.serializer(), body)
+                        }.getOrNull() ?: return@withRemoteApply
+                        val idx = list.indexOfFirst { it.id.toString() == entityId }
+                        if (idx >= 0) list[idx] = assistant else list.add(assistant)
+                    }
+                    settingsStore.update(settings.copy(assistants = list))
+                }
+            }
+            revision?.let { rememberRevision(entityType, entityId, it) }
+        }
+    }
+
+    private suspend fun rememberRevision(entityType: String, entityId: String, revision: Long) {
+        revisionDao.upsert(
+            SyncEntityRevisionEntity(
+                entityType = entityType,
+                entityId = entityId,
+                revision = revision,
+                updatedAt = System.currentTimeMillis(),
+            )
+        )
     }
 
     private fun backoffMs(retryCount: Int): Long {

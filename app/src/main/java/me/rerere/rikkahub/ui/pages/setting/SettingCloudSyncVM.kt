@@ -94,7 +94,8 @@ class SettingCloudSyncVM(
                     }
                     is CloudSyncOutcome.Retryable -> {
                         CloudSyncWorker.enqueue(context)
-                        _statusText.value = "Retryable: ${outcome.message}"
+                        _statusText.value =
+                            "Temporary sync issue (will retry): ${outcome.message}"
                     }
                     is CloudSyncOutcome.Failed -> _statusText.value = "Failed: ${outcome.message}"
                 }
