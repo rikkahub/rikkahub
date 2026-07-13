@@ -1,0 +1,26 @@
+[Unit]
+Description=Haruhome Perry API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=haruhome
+Group=haruhome
+WorkingDirectory=/opt/haruhome/server
+EnvironmentFile=/opt/haruhome/server/.env
+# Keep data on reliable local disk, not flaky SD/NFS mounts.
+ExecStart=/opt/haruhome/server/.venv/bin/uvicorn perry_server.main:app --host 127.0.0.1 --port 8787 --workers 1
+Restart=on-failure
+RestartSec=5
+# Start-limit avoids tight restart loops on hard failures
+StartLimitIntervalSec=60
+StartLimitBurst=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/haruhome/data /opt/haruhome/server/data
+
+[Install]
+WantedBy=multi-user.target
