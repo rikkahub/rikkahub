@@ -6,6 +6,7 @@ import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.FolderDAO
 import me.rerere.rikkahub.data.db.entity.FolderEntity
 import me.rerere.rikkahub.data.model.Folder
+import me.rerere.rikkahub.data.sync.cloud.FolderDomainSync
 import java.time.Instant
 import kotlin.uuid.Uuid
 
@@ -13,6 +14,7 @@ class FolderRepository(
     private val folderDAO: FolderDAO,
     private val conversationDAO: ConversationDAO,
 ) {
+    var folderDomainSync: FolderDomainSync? = null
     fun getFoldersOfAssistant(assistantId: Uuid): Flow<List<Folder>> {
         return folderDAO.getFoldersOfAssistant(assistantId.toString())
             .map { list -> list.map { it.toFolder() } }
@@ -28,12 +30,15 @@ class FolderRepository(
             name = name,
             createAt = Instant.now(),
         )
-        folderDAO.insert(folder.toEntity())
+        val entity = folder.toEntity()
+        folderDAO.insert(entity)
+        folderDomainSync?.enqueueUpsert(entity)
         return folder
     }
 
     suspend fun renameFolder(id: Uuid, name: String) {
         folderDAO.rename(id.toString(), name)
+        folderDAO.getFolderById(id.toString())?.let { folderDomainSync?.enqueueUpsert(it) }
     }
 
     /**
@@ -42,6 +47,7 @@ class FolderRepository(
     suspend fun deleteFolder(id: Uuid) {
         conversationDAO.clearFolder(id.toString())
         folderDAO.deleteById(id.toString())
+        folderDomainSync?.enqueueDelete(id.toString())
     }
 }
 

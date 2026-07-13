@@ -11,6 +11,9 @@ import androidx.compose.runtime.tooling.ComposeStackTraceMode
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -30,6 +33,7 @@ import me.rerere.rikkahub.di.repositoryModule
 import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.sync.cloud.CloudSyncRepository
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
@@ -88,7 +92,28 @@ class RikkaHubApp : Application() {
         // Increment launch count
         incrementLaunchCount()
 
+        // Pull cloud changes when app returns to foreground (AUTO mode).
+        registerCloudSyncOnForeground()
+
         // Composer.setDiagnosticStackTraceMode(ComposeStackTraceMode.Auto)
+    }
+
+    private fun registerCloudSyncOnForeground() {
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_START) {
+                    get<AppScope>().launch {
+                        runCatching {
+                            // Let Settings/DataStore settle briefly after process start.
+                            delay(400)
+                            get<CloudSyncRepository>().requestSync()
+                        }.onFailure {
+                            Log.e(TAG, "foreground cloud sync failed", it)
+                        }
+                    }
+                }
+            }
+        )
     }
 
     private fun incrementLaunchCount() {

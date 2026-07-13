@@ -56,3 +56,6 @@ class BootstrapResponse(BaseModel):
     server_time: str
     settings: list[dict[str, Any]] = Field(default_factory=list)
     assistants: list[dict[str, Any]] = Field(default_factory=list)
+    # Phase 5: first page of conversation summaries (full history via list API + changes).
+    conversations: list[dict[str, Any]] = Field(default_factory=list)
+    conversation_folders: list[dict[str, Any]] = Field(default_factory=list)

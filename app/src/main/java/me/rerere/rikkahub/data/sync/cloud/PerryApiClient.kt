@@ -186,6 +186,8 @@ data class SyncBootstrapResponse(
     @SerialName("server_time") val serverTime: String,
     val settings: List<JsonElement> = emptyList(),
     val assistants: List<JsonElement> = emptyList(),
+    val conversations: List<JsonElement> = emptyList(),
+    @SerialName("conversation_folders") val conversationFolders: List<JsonElement> = emptyList(),
 )
 
 @Serializable

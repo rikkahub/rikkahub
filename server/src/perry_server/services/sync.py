@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from perry_server.models.assistant import Assistant
 from perry_server.models.change_log import ChangeLog
+from perry_server.models.conversation import Conversation
+from perry_server.models.conversation_folder import ConversationFolder
 from perry_server.models.mutation_receipt import MutationReceipt
 from perry_server.models.setting import Setting
 from perry_server.schemas.sync import (
@@ -21,7 +23,8 @@ from perry_server.schemas.sync import (
     MutationsResponse,
 )
 
-SUPPORTED_ENTITY_TYPES = {"setting", "assistant"}
+SUPPORTED_ENTITY_TYPES = {"setting", "assistant", "conversation", "conversation_folder"}
+BOOTSTRAP_CONVERSATION_LIMIT = 200
 
 
 def _now() -> datetime:
@@ -56,6 +59,112 @@ def _assistant_payload(assistant: Assistant) -> dict[str, Any]:
     }
 
 
+def _conversation_payload(conversation: Conversation) -> dict[str, Any]:
+    return {
+        "id": str(conversation.id),
+        "assistant_id": str(conversation.assistant_id),
+        "title": conversation.title,
+        "create_at_ms": conversation.create_at_ms,
+        "update_at_ms": conversation.update_at_ms,
+        "is_pinned": conversation.is_pinned,
+        "folder_id": conversation.folder_id or "",
+        "sync_enabled": conversation.sync_enabled,
+        "payload": json.loads(conversation.payload_json),
+        "revision": conversation.revision,
+        "payload_schema_version": conversation.payload_schema_version,
+        "updated_at": conversation.updated_at.isoformat() if conversation.updated_at else None,
+        "deleted_at": conversation.deleted_at.isoformat() if conversation.deleted_at else None,
+        "updated_by_device": (
+            str(conversation.updated_by_device) if conversation.updated_by_device else None
+        ),
+    }
+
+
+def _folder_payload(folder: ConversationFolder) -> dict[str, Any]:
+    return {
+        "id": str(folder.id),
+        "assistant_id": str(folder.assistant_id),
+        "name": folder.name,
+        "sort_index": folder.sort_index,
+        "create_at_ms": folder.create_at_ms,
+        "revision": folder.revision,
+        "payload_schema_version": folder.payload_schema_version,
+        "updated_at": folder.updated_at.isoformat() if folder.updated_at else None,
+        "deleted_at": folder.deleted_at.isoformat() if folder.deleted_at else None,
+        "updated_by_device": str(folder.updated_by_device) if folder.updated_by_device else None,
+    }
+
+
+def _extract_folder_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    body = payload.get("payload")
+    if not isinstance(body, dict):
+        body = {}
+    src = {**body, **{k: v for k, v in payload.items() if k != "payload"}}
+    assistant_raw = src.get("assistant_id") or src.get("assistantId")
+    if assistant_raw is None or assistant_raw == "":
+        raise ValueError("assistant_id is required")
+    return {
+        "assistant_id": UUID(str(assistant_raw)),
+        "name": str(src.get("name") or ""),
+        "sort_index": int(src.get("sort_index") if "sort_index" in src else src.get("sortIndex") or 0),
+        "create_at_ms": int(src.get("create_at_ms") or src.get("createAt") or 0),
+    }
+
+
+def _extract_conversation_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize client mutation payload into column values + stored JSON body."""
+    body = payload.get("payload")
+    if not isinstance(body, dict):
+        body = {}
+    # Allow flat payload or nested under "payload"
+    src = {**body, **{k: v for k, v in payload.items() if k != "payload"}}
+
+    def as_uuid_str(value: Any, field: str) -> str:
+        if value is None or value == "":
+            raise ValueError(f"{field} is required")
+        return str(UUID(str(value)))
+
+    assistant_id = as_uuid_str(src.get("assistant_id") or src.get("assistantId"), "assistant_id")
+    title = str(src.get("title") or "")
+    create_at_ms = int(src.get("create_at_ms") or src.get("createAt") or 0)
+    update_at_ms = int(src.get("update_at_ms") or src.get("updateAt") or create_at_ms or 0)
+    is_pinned = bool(src.get("is_pinned") if "is_pinned" in src else src.get("isPinned", False))
+    folder_raw = src.get("folder_id") if "folder_id" in src else src.get("folderId", "")
+    folder_id = "" if folder_raw in (None, "") else str(folder_raw)
+    sync_enabled = bool(
+        src.get("sync_enabled") if "sync_enabled" in src else src.get("syncEnabled", True)
+    )
+    stored = {
+        "assistant_id": assistant_id,
+        "title": title,
+        "create_at_ms": create_at_ms,
+        "update_at_ms": update_at_ms,
+        "is_pinned": is_pinned,
+        "folder_id": folder_id,
+        "sync_enabled": sync_enabled,
+        "chat_suggestions": src.get("chat_suggestions") or src.get("chatSuggestions") or [],
+        "custom_system_prompt": src.get("custom_system_prompt")
+        if "custom_system_prompt" in src
+        else src.get("customSystemPrompt"),
+        "mode_injection_ids": src.get("mode_injection_ids")
+        if "mode_injection_ids" in src
+        else src.get("modeInjectionIds") or [],
+        "lorebook_ids": src.get("lorebook_ids")
+        if "lorebook_ids" in src
+        else src.get("lorebookIds") or [],
+    }
+    return {
+        "assistant_id": UUID(assistant_id),
+        "title": title,
+        "create_at_ms": create_at_ms,
+        "update_at_ms": update_at_ms,
+        "is_pinned": is_pinned,
+        "folder_id": folder_id,
+        "sync_enabled": sync_enabled,
+        "payload_json": json.dumps(stored, ensure_ascii=False, separators=(",", ":")),
+    }
+
+
 async def get_current_cursor(session: AsyncSession, user_id: UUID) -> int:
     result = await session.execute(
         select(ChangeLog.seq)
@@ -75,11 +184,31 @@ async def bootstrap(session: AsyncSession, *, user_id: UUID) -> BootstrapRespons
     assistants_result = await session.execute(
         select(Assistant).where(Assistant.user_id == user_id, Assistant.deleted_at.is_(None))
     )
+    conversations_result = await session.execute(
+        select(Conversation)
+        .where(Conversation.user_id == user_id, Conversation.deleted_at.is_(None))
+        .order_by(
+            Conversation.is_pinned.desc(),
+            Conversation.update_at_ms.desc(),
+            Conversation.id.desc(),
+        )
+        .limit(BOOTSTRAP_CONVERSATION_LIMIT)
+    )
+    folders_result = await session.execute(
+        select(ConversationFolder).where(
+            ConversationFolder.user_id == user_id,
+            ConversationFolder.deleted_at.is_(None),
+        )
+    )
     return BootstrapResponse(
         cursor=cursor,
         server_time=_now().isoformat(),
         settings=[_setting_payload(row) for row in settings_result.scalars().all()],
         assistants=[_assistant_payload(row) for row in assistants_result.scalars().all()],
+        conversations=[
+            _conversation_payload(row) for row in conversations_result.scalars().all()
+        ],
+        conversation_folders=[_folder_payload(row) for row in folders_result.scalars().all()],
     )
 
 
@@ -165,6 +294,14 @@ async def _apply_one(
         )
     elif item.entity_type == "assistant":
         result = await _apply_assistant_mutation(
+            session, user_id=user_id, device_id=device_id, item=item
+        )
+    elif item.entity_type == "conversation":
+        result = await _apply_conversation_mutation(
+            session, user_id=user_id, device_id=device_id, item=item
+        )
+    elif item.entity_type == "conversation_folder":
+        result = await _apply_folder_mutation(
             session, user_id=user_id, device_id=device_id, item=item
         )
     else:  # pragma: no cover
@@ -516,6 +653,344 @@ async def _apply_assistant_mutation(
         entity_id=item.entity_id,
         revision=assistant.revision,
         server_payload=_assistant_payload(assistant),
+    )
+
+
+async def _apply_folder_mutation(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    device_id: UUID,
+    item: MutationItem,
+) -> MutationResult:
+    try:
+        folder_id = UUID(item.entity_id)
+    except ValueError:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message="entity_id must be a UUID for conversation_folder",
+        )
+
+    result = await session.execute(
+        select(ConversationFolder).where(
+            ConversationFolder.user_id == user_id, ConversationFolder.id == folder_id
+        )
+    )
+    folder = result.scalar_one_or_none()
+
+    if item.operation == "delete":
+        if folder is None or folder.deleted_at is not None:
+            rev = folder.revision if folder is not None else 0
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="applied",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=rev,
+                server_payload=_folder_payload(folder) if folder else None,
+            )
+        if item.base_revision != 0 and item.base_revision != folder.revision:
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="conflict",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=folder.revision,
+                server_payload=_folder_payload(folder),
+                message="base_revision mismatch",
+            )
+        folder.revision += 1
+        folder.deleted_at = _now()
+        folder.updated_at = _now()
+        folder.updated_by_device = device_id
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="conversation_folder",
+            entity_id=str(folder_id),
+            operation="delete",
+            revision=folder.revision,
+            payload=_folder_payload(folder),
+        )
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="applied",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=folder.revision,
+            server_payload=_folder_payload(folder),
+        )
+
+    try:
+        fields = _extract_folder_fields(item.payload or {})
+    except (ValueError, TypeError) as exc:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message=str(exc),
+        )
+
+    if folder is None:
+        if item.base_revision not in (0,):
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="conflict",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=0,
+                message="entity does not exist; base_revision must be 0",
+            )
+        folder = ConversationFolder(
+            id=folder_id,
+            user_id=user_id,
+            assistant_id=fields["assistant_id"],
+            name=fields["name"],
+            sort_index=fields["sort_index"],
+            create_at_ms=fields["create_at_ms"],
+            revision=1,
+            payload_schema_version=item.payload_schema_version,
+            updated_by_device=device_id,
+            deleted_at=None,
+        )
+        session.add(folder)
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="conversation_folder",
+            entity_id=str(folder_id),
+            operation="upsert",
+            revision=folder.revision,
+            payload=_folder_payload(folder),
+        )
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="applied",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=folder.revision,
+            server_payload=_folder_payload(folder),
+        )
+
+    if item.base_revision != folder.revision:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="conflict",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=folder.revision,
+            server_payload=_folder_payload(folder),
+            message="base_revision mismatch",
+        )
+
+    folder.assistant_id = fields["assistant_id"]
+    folder.name = fields["name"]
+    folder.sort_index = fields["sort_index"]
+    folder.create_at_ms = fields["create_at_ms"]
+    folder.revision += 1
+    folder.payload_schema_version = item.payload_schema_version
+    folder.updated_at = _now()
+    folder.updated_by_device = device_id
+    folder.deleted_at = None
+    await session.flush()
+    await _append_change(
+        session,
+        user_id=user_id,
+        device_id=device_id,
+        entity_type="conversation_folder",
+        entity_id=str(folder_id),
+        operation="upsert",
+        revision=folder.revision,
+        payload=_folder_payload(folder),
+    )
+    return MutationResult(
+        mutation_id=item.mutation_id,
+        status="applied",
+        entity_type=item.entity_type,
+        entity_id=item.entity_id,
+        revision=folder.revision,
+        server_payload=_folder_payload(folder),
+    )
+
+
+async def _apply_conversation_mutation(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    device_id: UUID,
+    item: MutationItem,
+) -> MutationResult:
+    try:
+        conversation_id = UUID(item.entity_id)
+    except ValueError:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message="entity_id must be a UUID for conversation",
+        )
+
+    result = await session.execute(
+        select(Conversation).where(
+            Conversation.user_id == user_id, Conversation.id == conversation_id
+        )
+    )
+    conversation = result.scalar_one_or_none()
+
+    if item.operation == "delete":
+        if conversation is None or conversation.deleted_at is not None:
+            rev = conversation.revision if conversation is not None else 0
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="applied",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=rev,
+                server_payload=_conversation_payload(conversation) if conversation else None,
+            )
+        if item.base_revision != 0 and item.base_revision != conversation.revision:
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="conflict",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=conversation.revision,
+                server_payload=_conversation_payload(conversation),
+                message="base_revision mismatch",
+            )
+        conversation.revision += 1
+        conversation.deleted_at = _now()
+        conversation.updated_at = _now()
+        conversation.updated_by_device = device_id
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="conversation",
+            entity_id=str(conversation_id),
+            operation="delete",
+            revision=conversation.revision,
+            payload=_conversation_payload(conversation),
+        )
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="applied",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=conversation.revision,
+            server_payload=_conversation_payload(conversation),
+        )
+
+    try:
+        fields = _extract_conversation_fields(item.payload or {})
+    except (ValueError, TypeError) as exc:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message=str(exc),
+        )
+
+    if conversation is None:
+        if item.base_revision not in (0,):
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="conflict",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=0,
+                message="entity does not exist; base_revision must be 0",
+            )
+        conversation = Conversation(
+            id=conversation_id,
+            user_id=user_id,
+            assistant_id=fields["assistant_id"],
+            title=fields["title"],
+            create_at_ms=fields["create_at_ms"],
+            update_at_ms=fields["update_at_ms"],
+            is_pinned=fields["is_pinned"],
+            folder_id=fields["folder_id"],
+            sync_enabled=fields["sync_enabled"],
+            payload_json=fields["payload_json"],
+            revision=1,
+            payload_schema_version=item.payload_schema_version,
+            updated_by_device=device_id,
+            deleted_at=None,
+        )
+        session.add(conversation)
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="conversation",
+            entity_id=str(conversation_id),
+            operation="upsert",
+            revision=conversation.revision,
+            payload=_conversation_payload(conversation),
+        )
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="applied",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=conversation.revision,
+            server_payload=_conversation_payload(conversation),
+        )
+
+    if item.base_revision != conversation.revision:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="conflict",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=conversation.revision,
+            server_payload=_conversation_payload(conversation),
+            message="base_revision mismatch",
+        )
+
+    conversation.assistant_id = fields["assistant_id"]
+    conversation.title = fields["title"]
+    conversation.create_at_ms = fields["create_at_ms"]
+    conversation.update_at_ms = fields["update_at_ms"]
+    conversation.is_pinned = fields["is_pinned"]
+    conversation.folder_id = fields["folder_id"]
+    conversation.sync_enabled = fields["sync_enabled"]
+    conversation.payload_json = fields["payload_json"]
+    conversation.revision += 1
+    conversation.payload_schema_version = item.payload_schema_version
+    conversation.updated_at = _now()
+    conversation.updated_by_device = device_id
+    conversation.deleted_at = None
+    await session.flush()
+    await _append_change(
+        session,
+        user_id=user_id,
+        device_id=device_id,
+        entity_type="conversation",
+        entity_id=str(conversation_id),
+        operation="upsert",
+        revision=conversation.revision,
+        payload=_conversation_payload(conversation),
+    )
+    return MutationResult(
+        mutation_id=item.mutation_id,
+        status="applied",
+        entity_type=item.entity_type,
+        entity_id=item.entity_id,
+        revision=conversation.revision,
+        server_payload=_conversation_payload(conversation),
     )
 
 

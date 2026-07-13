@@ -32,4 +32,13 @@ data class ConversationEntity(
     val workspaceCwd: String = "",
     @ColumnInfo("folder_id", defaultValue = "")
     val folderId: String = "",
+    /** When false, conversation summary/messages stay local and are not uploaded. */
+    @ColumnInfo("sync_enabled", defaultValue = "1")
+    val syncEnabled: Boolean = true,
+    @ColumnInfo("remote_revision", defaultValue = "0")
+    val remoteRevision: Long = 0,
+    @ColumnInfo("deleted_at")
+    val deletedAt: Long? = null,
+    @ColumnInfo("last_accessed_at", defaultValue = "0")
+    val lastAccessedAt: Long = 0,
 )

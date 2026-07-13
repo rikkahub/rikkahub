@@ -22,6 +22,7 @@ import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.sync.cloud.ConversationDomainSync
 import me.rerere.rikkahub.utils.JsonInstant
 import java.time.Instant
 import kotlin.uuid.Uuid
@@ -34,6 +35,8 @@ class ConversationRepository(
     private val filesManager: FilesManager,
     private val messageFtsManager: MessageFtsManager,
 ) {
+    // Set after Koin creates ConversationDomainSync (avoids ctor cycles).
+    var conversationDomainSync: ConversationDomainSync? = null
     companion object {
         private const val PAGE_SIZE = 20
         private const val INITIAL_LOAD_SIZE = 40
@@ -284,25 +287,25 @@ class ConversationRepository(
     }
 
     suspend fun insertConversation(conversation: Conversation) {
+        val entity = conversationToConversationEntity(conversation)
         database.withTransaction {
-            conversationDAO.insert(
-                conversationToConversationEntity(conversation)
-            )
+            conversationDAO.insert(entity)
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
         messageFtsManager.indexConversation(conversation)
+        conversationDomainSync?.enqueueUpsert(entity)
     }
 
     suspend fun updateConversation(conversation: Conversation) {
+        val entity = conversationToConversationEntity(conversation)
         database.withTransaction {
-            conversationDAO.update(
-                conversationToConversationEntity(conversation)
-            )
+            conversationDAO.update(entity)
             // 删除旧的节点，插入新的节点
             messageNodeDAO.deleteByConversation(conversation.id.toString())
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
         messageFtsManager.indexConversation(conversation)
+        conversationDomainSync?.enqueueUpsert(entity)
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
@@ -312,6 +315,7 @@ class ConversationRepository(
         } else {
             conversation
         }
+        val existing = conversationDAO.getConversationById(conversation.id.toString())
         messageFtsManager.deleteConversation(conversation.id.toString())
         database.withTransaction {
             // message_node 会通过 CASCADE 自动删除
@@ -320,6 +324,12 @@ class ConversationRepository(
             )
         }
         filesManager.deleteChatFiles(fullConversation.files)
+        if (existing?.syncEnabled != false) {
+            conversationDomainSync?.enqueueDelete(
+                conversationId = conversation.id.toString(),
+                baseRevision = existing?.remoteRevision,
+            )
+        }
     }
 
     suspend fun searchMessages(
@@ -346,8 +356,9 @@ class ConversationRepository(
         }
     }
 
-    fun conversationToConversationEntity(conversation: Conversation): ConversationEntity {
+    suspend fun conversationToConversationEntity(conversation: Conversation): ConversationEntity {
         require(conversation.messageNodes.none { it.messages.any { message -> message.hasBase64Part() } })
+        val existing = conversationDAO.getConversationById(conversation.id.toString())
         return ConversationEntity(
             id = conversation.id.toString(),
             title = conversation.title,
@@ -362,6 +373,10 @@ class ConversationRepository(
             lorebookIds = JsonInstant.encodeToString(conversation.lorebookIds),
             workspaceCwd = conversation.workspaceCwd ?: "",
             folderId = conversation.folderId?.toString() ?: "",
+            syncEnabled = conversation.syncEnabled,
+            remoteRevision = existing?.remoteRevision ?: 0L,
+            deletedAt = existing?.deletedAt,
+            lastAccessedAt = existing?.lastAccessedAt ?: 0L,
         )
     }
 
@@ -383,6 +398,7 @@ class ConversationRepository(
             lorebookIds = JsonInstant.decodeFromString(conversationEntity.lorebookIds),
             workspaceCwd = conversationEntity.workspaceCwd.ifEmpty { null },
             folderId = conversationEntity.folderId.ifEmpty { null }?.let { Uuid.parse(it) },
+            syncEnabled = conversationEntity.syncEnabled,
         )
     }
 
@@ -401,6 +417,9 @@ class ConversationRepository(
             id = conversationId.toString(),
             isPinned = !(getConversationById(conversationId)?.isPinned ?: false)
         )
+        conversationDAO.getConversationById(conversationId.toString())?.let {
+            conversationDomainSync?.enqueueUpsert(it)
+        }
     }
 
     /**
@@ -411,6 +430,9 @@ class ConversationRepository(
             id = conversationId.toString(),
             folderId = folderId?.toString() ?: ""
         )
+        conversationDAO.getConversationById(conversationId.toString())?.let {
+            conversationDomainSync?.enqueueUpsert(it)
+        }
     }
 
     private fun conversationSummaryToConversation(entity: LightConversationEntity): Conversation {

@@ -3,17 +3,21 @@ package me.rerere.rikkahub.data.sync.cloud
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.dao.SyncEntityRevisionDAO
 import me.rerere.rikkahub.data.db.dao.SyncOutboxDAO
@@ -46,15 +50,19 @@ data class ConnectionProbeResult(
  */
 class CloudSyncRepository(
     private val appContext: Context,
+    private val appScope: AppScope,
     private val outboxDao: SyncOutboxDAO,
     private val stateDao: SyncStateDAO,
     private val revisionDao: SyncEntityRevisionDAO,
     private val settingsStore: SettingsStore,
     private val okHttpClient: OkHttpClient,
 ) {
-    // Set after Koin creates SettingsDomainSync to avoid ctor cycles.
+    // Set after Koin creates domain sync helpers to avoid ctor cycles.
     var settingsDomainSync: SettingsDomainSync? = null
+    var conversationDomainSync: ConversationDomainSync? = null
+    var folderDomainSync: FolderDomainSync? = null
     private val syncMutex = Mutex()
+    private var pendingSyncJob: Job? = null
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.NOT_CONFIGURED)
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
 
@@ -65,8 +73,31 @@ class CloudSyncRepository(
     var isSuppressingLocalEnqueue: Boolean = false
         private set
 
+    /**
+     * Schedule a sync soon. AUTO mode runs in-process (debounced) so users do not
+     * have to tap "Sync now"; WorkManager remains a process-death / retry backup.
+     */
     fun requestSync() {
-        CloudSyncWorker.enqueue(appContext)
+        pendingSyncJob?.cancel()
+        pendingSyncJob = appScope.launch {
+            // Coalesce rapid setting/conversation writes into one cycle.
+            delay(SYNC_DEBOUNCE_MS)
+            val outcome = runSyncCycle()
+            when (outcome) {
+                is CloudSyncOutcome.Retryable -> {
+                    Log.w(TAG, "in-process sync retryable: ${outcome.message}")
+                    CloudSyncWorker.enqueue(appContext)
+                }
+                is CloudSyncOutcome.Failed -> {
+                    Log.w(TAG, "in-process sync failed: ${outcome.message}")
+                }
+                CloudSyncOutcome.Success -> Log.d(TAG, "in-process sync ok")
+                CloudSyncOutcome.Skipped -> {
+                    // Mode paused/local or already running — still arm WorkManager backup.
+                    CloudSyncWorker.enqueue(appContext)
+                }
+            }
+        }
     }
 
     suspend fun <T> withRemoteApply(block: suspend () -> T): T {
@@ -105,7 +136,7 @@ class CloudSyncRepository(
         when (mode) {
             SyncMode.LOCAL_ONLY -> _connectionStatus.value = ConnectionStatus.LOCAL_MODE
             SyncMode.PAUSED -> _connectionStatus.value = ConnectionStatus.PAUSED
-            SyncMode.AUTO -> Unit
+            SyncMode.AUTO -> requestSync()
         }
     }
 
@@ -369,6 +400,12 @@ class CloudSyncRepository(
                     if (bootstrap.settings.isEmpty() && bootstrap.assistants.isEmpty()) {
                         settingsDomainSync?.seedLocalSnapshot(settingsStore.settingsFlow.value)
                     }
+                    if (bootstrap.conversations.isEmpty()) {
+                        conversationDomainSync?.seedLocalConversations()
+                    }
+                    if (bootstrap.conversationFolders.isEmpty()) {
+                        folderDomainSync?.seedLocalFolders()
+                    }
                 }
                 pushOutbox(client, state.deviceId!!)
                 pullChanges(client)
@@ -523,6 +560,31 @@ class CloudSyncRepository(
                 rememberRevision(SettingsDomainSync.ENTITY_ASSISTANT, id, revision)
             }
             settingsStore.update(settings.copy(assistants = assistants))
+            // Folders first so UI membership resolves when conversation summaries land.
+            bootstrap.conversationFolders.forEach { element ->
+                val obj = element as? JsonObject ?: return@forEach
+                val id = obj["id"]?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return@forEach
+                val revision = obj["revision"]
+                    ?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0L
+                folderDomainSync?.applyRemotePayload(
+                    entityId = id,
+                    operation = "upsert",
+                    payload = obj,
+                    revision = revision,
+                )
+            }
+            bootstrap.conversations.forEach { element ->
+                val obj = element as? JsonObject ?: return@forEach
+                val id = obj["id"]?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return@forEach
+                val revision = obj["revision"]
+                    ?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0L
+                conversationDomainSync?.applyRemotePayload(
+                    entityId = id,
+                    operation = "upsert",
+                    payload = obj,
+                    revision = revision,
+                )
+            }
             val state = ensureState()
             stateDao.upsert(
                 state.copy(
@@ -540,7 +602,17 @@ class CloudSyncRepository(
             var settings = settingsStore.settingsFlow.value
             var assistants = settings.assistants.toMutableList()
             var dirty = false
-            changes.forEach { change ->
+            // Stable order: settings/assistants, then folders, then conversations.
+            val ordered = changes.sortedBy { change ->
+                when (change.entityType) {
+                    SettingsDomainSync.ENTITY_SETTING -> 0
+                    SettingsDomainSync.ENTITY_ASSISTANT -> 1
+                    FolderDomainSync.ENTITY_FOLDER -> 2
+                    ConversationDomainSync.ENTITY_CONVERSATION -> 3
+                    else -> 9
+                }
+            }
+            ordered.forEach { change ->
                 when (change.entityType) {
                     SettingsDomainSync.ENTITY_SETTING -> {
                         val key = change.entityId
@@ -575,6 +647,24 @@ class CloudSyncRepository(
                         if (idx >= 0) assistants[idx] = assistant else assistants.add(assistant)
                         rememberRevision(change.entityType, id, change.revision)
                         dirty = true
+                    }
+                    FolderDomainSync.ENTITY_FOLDER -> {
+                        folderDomainSync?.applyRemotePayload(
+                            entityId = change.entityId,
+                            operation = change.operation,
+                            payload = change.payload,
+                            revision = change.revision,
+                        )
+                        rememberRevision(change.entityType, change.entityId, change.revision)
+                    }
+                    ConversationDomainSync.ENTITY_CONVERSATION -> {
+                        conversationDomainSync?.applyRemotePayload(
+                            entityId = change.entityId,
+                            operation = change.operation,
+                            payload = change.payload,
+                            revision = change.revision,
+                        )
+                        rememberRevision(change.entityType, change.entityId, change.revision)
                     }
                 }
             }
@@ -615,6 +705,22 @@ class CloudSyncRepository(
                     }
                     settingsStore.update(settings.copy(assistants = list))
                 }
+                ConversationDomainSync.ENTITY_CONVERSATION -> {
+                    conversationDomainSync?.applyRemotePayload(
+                        entityId = entityId,
+                        operation = operation,
+                        payload = payload,
+                        revision = revision ?: 0L,
+                    )
+                }
+                FolderDomainSync.ENTITY_FOLDER -> {
+                    folderDomainSync?.applyRemotePayload(
+                        entityId = entityId,
+                        operation = operation,
+                        payload = payload,
+                        revision = revision ?: 0L,
+                    )
+                }
             }
             revision?.let { rememberRevision(entityType, entityId, it) }
         }
@@ -641,5 +747,6 @@ class CloudSyncRepository(
 
     companion object {
         private const val TAG = "CloudSyncRepository"
+        private const val SYNC_DEBOUNCE_MS = 800L
     }
 }
