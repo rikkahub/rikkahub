@@ -71,7 +71,11 @@ jobs:
                   }
                 },
                 "oauth_client": [],
-                "api_key": [],
+                "api_key": [
+                  {
+                    "current_key": "feature-ci-placeholder"
+                  }
+                ],
                 "services": {
                   "appinvite_service": {
                     "other_platform_oauth_client": []
