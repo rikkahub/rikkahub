@@ -147,6 +147,14 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().syncOutboxDao()
+    }
+
+    single {
+        get<AppDatabase>().syncStateDao()
+    }
+
+    single {
         MessageFtsManager(get())
     }
 

@@ -41,6 +41,17 @@ Response includes a one-time `device_token`. Store it on the device; subsequent 
 Authorization: Bearer <device_token>
 ```
 
+## Sync (Phase 2)
+
+```http
+GET  /v1/sync/bootstrap
+GET  /v1/sync/changes?cursor=0&limit=100
+POST /v1/sync/mutations
+```
+
+First supported entity type: `setting` (key = `entity_id`, payload `{ "value": ... }`).
+Mutations are idempotent via `mutation_id` receipts; conflicts use optimistic `base_revision`.
+
 ## Tests / lint
 
 ```bash

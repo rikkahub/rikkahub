@@ -31,7 +31,7 @@ async def server_info(
         min_client_version=settings.perry_min_client_version,
         server_time=datetime.now(UTC).isoformat(),
         features={
-            "sync": False,
+            "sync": True,
             "files": False,
             "monel_facade": False,
         },
