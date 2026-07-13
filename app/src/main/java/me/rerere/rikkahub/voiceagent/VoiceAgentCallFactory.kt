@@ -14,8 +14,8 @@ import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabMobileApi
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabTraceHeaders
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceApi
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceTraceHeaders
 import okhttp3.OkHttpClient
 import java.io.File
 import kotlin.uuid.Uuid
@@ -47,8 +47,8 @@ class DefaultVoiceAgentCallFactory internal constructor(
     private val okHttpClient: OkHttpClient,
     private val observability: VoiceObservability,
     private val metadataEpochNowMs: () -> Long,
-    private val sessionApiFactory: (VoiceLabMobileApi) -> VoiceSessionApi = { VoiceLabVoiceSessionApi(api = it) },
-    private val toolApiFactory: (VoiceLabMobileApi) -> VoiceToolApi = { VoiceLabHermesToolApi(api = it) },
+    private val sessionApiFactory: (HermesVoiceApi) -> VoiceSessionApi = { HermesVoiceSessionApi(api = it) },
+    private val toolApiFactory: (HermesVoiceApi) -> VoiceToolApi = { HermesVoiceToolApi(api = it) },
     private val geminiFactory: () -> GeminiLiveVoiceClient = {
         OkHttpGeminiLiveVoiceClient(httpClient = okHttpClient)
     },
@@ -95,20 +95,20 @@ class DefaultVoiceAgentCallFactory internal constructor(
             observability.withSentryPropagation(baseTraceContext)
         }.getOrDefault(baseTraceContext)
         val (traceContext, traceHeaders) = runCatching {
-            propagatedTraceContext to VoiceLabTraceHeaders.from(propagatedTraceContext)
+            propagatedTraceContext to HermesVoiceTraceHeaders.from(propagatedTraceContext)
         }.getOrElse {
             runCatching {
                 observability.recordEvent(
-                    name = "voicelab.mobile.session.ended",
+                    name = "hermes_voice.mobile.session.ended",
                     trace = propagatedTraceContext,
                     attributes = mapOf("modelId" to config.voiceModelId),
                 )
             }
-            baseTraceContext to VoiceLabTraceHeaders.from(baseTraceContext)
+            baseTraceContext to HermesVoiceTraceHeaders.from(baseTraceContext)
         }
         return runCatching {
-            val mobileApi = VoiceLabMobileApi(
-                baseUrl = config.voiceLabBaseUrl,
+            val mobileApi = HermesVoiceApi(
+                baseUrl = config.hermesVoiceBaseUrl,
                 credentials = config.credentials,
                 traceHeaders = traceHeaders,
             )
@@ -136,7 +136,7 @@ class DefaultVoiceAgentCallFactory internal constructor(
         }.getOrElse { throwable ->
             runCatching {
                 observability.recordEvent(
-                    name = "voicelab.mobile.session.ended",
+                    name = "hermes_voice.mobile.session.ended",
                     trace = traceContext,
                     attributes = mapOf("modelId" to config.voiceModelId),
                 )

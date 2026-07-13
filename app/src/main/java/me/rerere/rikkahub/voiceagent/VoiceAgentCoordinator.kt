@@ -496,7 +496,7 @@ class VoiceAgentCoordinator(
         } else {
             _state.update { it.copy(audio = VoiceAudioStatus.AssistantSpeaking) }
             recordEventSafely(
-                name = "voicelab.mobile.audio.playback_queued",
+                name = "hermes_voice.mobile.audio.playback_queued",
                 attributes = mapOf(
                     "sessionId" to sessionId,
                     "audio.output.base64_chars" to base64Pcm16.length,

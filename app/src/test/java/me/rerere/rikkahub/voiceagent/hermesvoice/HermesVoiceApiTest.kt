@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.voiceagent.voicelab
+package me.rerere.rikkahub.voiceagent.hermesvoice
 
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
@@ -13,7 +13,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class VoiceLabMobileApiTest {
+class HermesVoiceApiTest {
     @Test
     fun `createSession sends mobile credentials and parses response`() = runBlocking {
         var seenRequest: Request? = null
@@ -38,13 +38,9 @@ class VoiceLabMobileApiTest {
             )
         }
 
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(
-                hermesProfileApiKey = "profile-api-key",
-                cloudflareClientId = "cf-id",
-                cloudflareClientSecret = "cf-secret",
-            ),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "device-api-key"),
             transport = transport,
         )
 
@@ -54,9 +50,8 @@ class VoiceLabMobileApiTest {
         assertEquals("POST", request.method)
         assertEquals("/api/mobile/voice/session", request.url.encodedPath)
         assertEquals("application/json; charset=utf-8", request.body?.contentType().toString())
-        assertEquals("Bearer profile-api-key", request.header("Authorization"))
-        assertEquals("cf-id", request.header("CF-Access-Client-Id"))
-        assertEquals("cf-secret", request.header("CF-Access-Client-Secret"))
+        assertEquals("Bearer device-api-key", request.header("Authorization"))
+        assertEquals(setOf("Authorization"), request.headers.names())
         assertTrue(seenBody.contains("\"modelId\":\"gemini-flash\""))
         assertEquals("tok", session.token)
         assertEquals(16000, session.inputSampleRate)
@@ -87,9 +82,9 @@ class VoiceLabMobileApiTest {
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -124,9 +119,9 @@ class VoiceLabMobileApiTest {
             )
         }
 
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test/base",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test/base",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -135,8 +130,7 @@ class VoiceLabMobileApiTest {
         val request = requireNotNull(seenRequest)
         assertEquals("/base/api/mobile/hermes", request.url.encodedPath)
         assertEquals("Bearer profile-api-key", request.header("Authorization"))
-        assertNull(request.header("CF-Access-Client-Id"))
-        assertNull(request.header("CF-Access-Client-Secret"))
+        assertEquals(setOf("Authorization"), request.headers.names())
         assertTrue(seenBody.contains("\"callId\":\"call-1\""))
         assertTrue(seenBody.contains("\"prompt\":\"status\""))
         assertFalse(seenBody.contains("profileId"))
@@ -164,9 +158,9 @@ class VoiceLabMobileApiTest {
             )
         }
 
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -194,11 +188,11 @@ class VoiceLabMobileApiTest {
             )
         }
 
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
-            traceHeaders = VoiceLabTraceHeaders.from(
+            traceHeaders = HermesVoiceTraceHeaders.from(
                 VoiceTraceContext(
                     traceId = "trace-123",
                     voiceSessionId = "session-456",
@@ -226,7 +220,7 @@ class VoiceLabMobileApiTest {
     @Test
     fun `trace headers reject invalid Sentry propagation values`() {
         assertThrows(IllegalArgumentException::class.java) {
-            VoiceLabTraceHeaders(
+            HermesVoiceTraceHeaders(
                 traceId = "trace-123",
                 voiceSessionId = "session-456",
                 sentryTrace = "0123456789abcdef0123456789abcdef\n0123456789abcdef-1",
@@ -234,7 +228,7 @@ class VoiceLabMobileApiTest {
         }
 
         assertThrows(IllegalArgumentException::class.java) {
-            VoiceLabTraceHeaders(
+            HermesVoiceTraceHeaders(
                 traceId = "trace-123",
                 voiceSessionId = "session-456",
                 sentryBaggage = "x".repeat(8193),
@@ -247,7 +241,7 @@ class VoiceLabMobileApiTest {
             "baggage\u00e9bad",
         ).forEach { invalidBaggage ->
             assertThrows(IllegalArgumentException::class.java) {
-                VoiceLabTraceHeaders(
+                HermesVoiceTraceHeaders(
                     traceId = "trace-123",
                     voiceSessionId = "session-456",
                     sentryBaggage = invalidBaggage,
@@ -269,7 +263,7 @@ class VoiceLabMobileApiTest {
             "x".repeat(129),
         ).forEach { invalidTraceId ->
             assertThrows(IllegalArgumentException::class.java) {
-                VoiceLabTraceHeaders(
+                HermesVoiceTraceHeaders(
                     traceId = invalidTraceId,
                     voiceSessionId = "session-456",
                 )
@@ -286,7 +280,7 @@ class VoiceLabMobileApiTest {
             "x".repeat(129),
         ).forEach { invalidVoiceSessionId ->
             assertThrows(IllegalArgumentException::class.java) {
-                VoiceLabTraceHeaders(
+                HermesVoiceTraceHeaders(
                     traceId = "trace-123",
                     voiceSessionId = invalidVoiceSessionId,
                 )
@@ -314,13 +308,9 @@ class VoiceLabMobileApiTest {
             )
         }
 
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test/base",
-            credentials = VoiceLabMobileCredentials(
-                hermesProfileApiKey = "profile-api-key",
-                cloudflareClientId = "cf-id",
-                cloudflareClientSecret = "cf-secret",
-            ),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test/base",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -334,8 +324,7 @@ class VoiceLabMobileApiTest {
         assertEquals("POST", request.method)
         assertEquals("/base/api/mobile/hermes/jobs", request.url.encodedPath)
         assertEquals("Bearer profile-api-key", request.header("Authorization"))
-        assertEquals("cf-id", request.header("CF-Access-Client-Id"))
-        assertEquals("cf-secret", request.header("CF-Access-Client-Secret"))
+        assertEquals(setOf("Authorization"), request.headers.names())
         assertTrue(seenBody.contains("\"callId\":\"call-1\""))
         assertTrue(seenBody.contains("\"prompt\":\"status\""))
         assertTrue(seenBody.contains("\"profileId\":\"research\""))
@@ -394,9 +383,9 @@ class VoiceLabMobileApiTest {
             )
         }
 
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test/base",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test/base",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -435,9 +424,9 @@ class VoiceLabMobileApiTest {
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -471,9 +460,9 @@ class VoiceLabMobileApiTest {
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -484,7 +473,7 @@ class VoiceLabMobileApiTest {
         assertEquals("private prompt", snapshot.prompt)
         assertEquals(HermesJobStatus.Failed, snapshot.status)
         assertEquals(VoiceFailureKind.Internal, snapshot.failure?.kind)
-        assertEquals(VoiceFailureSource.VoiceLab, snapshot.failure?.source)
+        assertEquals(VoiceFailureSource.HermesVoice, snapshot.failure?.source)
         assertEquals("Unknown Hermes job status: mystery", snapshot.failure?.safeMessage)
         assertEquals(false, snapshot.failure?.retryable)
     }
@@ -513,9 +502,9 @@ class VoiceLabMobileApiTest {
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -524,7 +513,7 @@ class VoiceLabMobileApiTest {
         assertEquals("job-unknown-failure", snapshot.jobId)
         assertEquals(HermesJobStatus.Failed, snapshot.status)
         assertEquals(VoiceFailureKind.Internal, snapshot.failure?.kind)
-        assertEquals(VoiceFailureSource.VoiceLab, snapshot.failure?.source)
+        assertEquals(VoiceFailureSource.HermesVoice, snapshot.failure?.source)
         assertEquals("Unknown Hermes job status: mystery", snapshot.failure?.safeMessage)
         assertEquals(false, snapshot.failure?.retryable)
     }
@@ -553,9 +542,9 @@ class VoiceLabMobileApiTest {
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -563,7 +552,7 @@ class VoiceLabMobileApiTest {
 
         assertEquals(HermesJobStatus.Failed, snapshot.status)
         assertEquals(VoiceFailureKind.Internal, snapshot.failure?.kind)
-        assertEquals(VoiceFailureSource.VoiceLab, snapshot.failure?.source)
+        assertEquals(VoiceFailureSource.HermesVoice, snapshot.failure?.source)
         assertEquals("Unknown Hermes job status: mystery", snapshot.failure?.safeMessage)
         assertEquals(false, snapshot.failure?.retryable)
     }
@@ -591,9 +580,9 @@ class VoiceLabMobileApiTest {
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -623,9 +612,9 @@ class VoiceLabMobileApiTest {
                     """.trimIndent(),
                 )
             }
-            val api = VoiceLabMobileApi(
-                baseUrl = "https://voice-lab.example.test",
-                credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+            val api = HermesVoiceApi(
+                baseUrl = "https://hermes-voice.example.test",
+                credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
                 transport = transport,
             )
 
@@ -655,7 +644,7 @@ class VoiceLabMobileApiTest {
                     "safeMessage":"Hermes job canceled",
                     "safeSummary":"Hermes job canceled",
                     "retryable":false,
-                    "source":"voice_lab"
+                    "source":"hermes_voice"
                   },
                   "createdAt":"2026-06-11T00:00:00.000Z",
                   "completedAt":"2026-06-11T00:00:01.000Z"
@@ -663,9 +652,9 @@ class VoiceLabMobileApiTest {
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test/base",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test/base",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -694,15 +683,15 @@ class VoiceLabMobileApiTest {
                     "safeMessage":"Hermes job not found",
                     "safeSummary":"Hermes job not found",
                     "retryable":false,
-                    "source":"voice_lab"
+                    "source":"hermes_voice"
                   }
                 }
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -715,23 +704,23 @@ class VoiceLabMobileApiTest {
 
     @Test
     fun `getHermesJob non successful responses and decode failures use shared error handling`() {
-        val errorApi = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val errorApi = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transportFor { request ->
                 responseFor(request = request, code = 503, message = "Down", body = """{"error":"down"}""")
             },
         )
 
-        val transportError = assertThrows(VoiceLabHttpException::class.java) {
+        val transportError = assertThrows(HermesVoiceHttpException::class.java) {
             runBlocking { errorApi.getHermesJob("hj_down") }
         }
         assertEquals(503, transportError.statusCode)
         assertTrue(transportError.safePreview.contains("down"))
 
-        val decodeApi = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val decodeApi = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transportFor { request ->
                 responseFor(request = request, body = """{"answer":"private answer","token":"secret"}""")
             },
@@ -740,7 +729,7 @@ class VoiceLabMobileApiTest {
         val decodeError = assertThrows(IllegalStateException::class.java) {
             runBlocking { decodeApi.getHermesJob("hj_bad") }
         }
-        assertTrue(decodeError.message.orEmpty().contains("Voice Lab response decode failed"))
+        assertTrue(decodeError.message.orEmpty().contains("Hermes Voice response decode failed"))
         assertFalse(decodeError.message.orEmpty().contains("private answer"))
         assertFalse(decodeError.message.orEmpty().contains("secret"))
     }
@@ -755,13 +744,13 @@ class VoiceLabMobileApiTest {
                 body = """{"error":"down"}""",
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
-        val error = assertThrows(VoiceLabHttpException::class.java) {
+        val error = assertThrows(HermesVoiceHttpException::class.java) {
             runBlocking { api.createSession("gemini-flash") }
         }
 
@@ -782,57 +771,24 @@ class VoiceLabMobileApiTest {
                   "safeMessage":"Slow down",
                   "safeSummary":"Hermes is rate limited",
                   "retryable":true,
-                  "source":"voice_lab"
+                  "source":"hermes_voice"
                 }
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
-        val error = assertThrows(VoiceLabHttpException::class.java) {
+        val error = assertThrows(HermesVoiceHttpException::class.java) {
             runBlocking { api.getHermesJob("hj_rate_limited") }
         }
 
         assertEquals(429, error.statusCode)
         assertEquals(VoiceFailureKind.RateLimited, error.failure?.kind)
         assertEquals(true, error.failure?.retryable)
-    }
-
-    @Test
-    fun `cloudflare access html errors are summarized`() {
-        val transport = transportFor { request ->
-            responseFor(
-                request = request,
-                code = 403,
-                message = "Forbidden",
-                body = """
-                <!DOCTYPE html>
-                <html>
-                <head><title>Error ・ Cloudflare Access</title></head>
-                <body><h1>Access denied</h1></body>
-                </html>
-                """.trimIndent(),
-            )
-        }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
-            transport = transport,
-        )
-
-        val error = assertThrows(IllegalStateException::class.java) {
-            runBlocking { api.createSession("gemini-flash") }
-        }
-
-        val message = error.message.orEmpty()
-        assertTrue(message.contains("Voice Lab request failed 403"))
-        assertTrue(message.contains("Cloudflare Access denied"))
-        assertFalse(message.contains("<!DOCTYPE html>"))
-        assertFalse(message.contains("<body>"))
     }
 
     @Test
@@ -849,9 +805,9 @@ class VoiceLabMobileApiTest {
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -860,7 +816,7 @@ class VoiceLabMobileApiTest {
         }
 
         val message = error.message.orEmpty()
-        assertTrue(message.contains("Voice Lab response decode failed"))
+        assertTrue(message.contains("Hermes Voice response decode failed"))
         assertTrue(message.contains("[redacted]"))
         assertFalse(message.contains("decode-token"))
         assertFalse(message.contains("decode-prompt"))
@@ -875,9 +831,9 @@ class VoiceLabMobileApiTest {
                 body = """{"prompt":"private prompt","answer":"private answer","token":"secret"""",
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -886,7 +842,7 @@ class VoiceLabMobileApiTest {
         }
 
         val message = error.message.orEmpty()
-        assertTrue(message.contains("Voice Lab response decode failed"))
+        assertTrue(message.contains("Hermes Voice response decode failed"))
         assertTrue(message.contains("[redacted]"))
         assertFalse(message.contains("private prompt"))
         assertFalse(message.contains("private answer"))
@@ -904,9 +860,9 @@ class VoiceLabMobileApiTest {
                 body = responseBody,
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -933,11 +889,7 @@ class VoiceLabMobileApiTest {
                   "key":"plain-key-field",
                   "token":"live-token",
                   "apiKey":"server-key",
-                  "CF-Access-Client-Id":"cf-header-id",
-                  "CF-Access-Client-Secret":"cf-header-secret",
-                  "cloudflareClientId":"cf-config-id",
-                  "cloudflareClientSecret":"cf-config-secret",
-                  "hermesProfileApiKey":"hermes-profile-key",
+                  "deviceApiKey":"device-api-key",
                   "websocketUrl":"wss://signed.example.test/live?token=url-token",
                   "liveConnectConfig":{"sessionToken":"config-token"},
                   "prompt":"private prompt",
@@ -952,9 +904,9 @@ class VoiceLabMobileApiTest {
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -968,11 +920,7 @@ class VoiceLabMobileApiTest {
         assertFalse(message.contains("plain-key-field"))
         assertFalse(message.contains("live-token"))
         assertFalse(message.contains("server-key"))
-        assertFalse(message.contains("cf-header-id"))
-        assertFalse(message.contains("cf-header-secret"))
-        assertFalse(message.contains("cf-config-id"))
-        assertFalse(message.contains("cf-config-secret"))
-        assertFalse(message.contains("hermes-profile-key"))
+        assertFalse(message.contains("device-api-key"))
         assertFalse(message.contains("signed.example.test"))
         assertFalse(message.contains("url-token"))
         assertFalse(message.contains("config-token"))
@@ -988,25 +936,22 @@ class VoiceLabMobileApiTest {
     }
 
     @Test
-    fun `plain text response previews redact client credential names`() {
+    fun `plain text response previews redact credential names`() {
         val transport = transportFor { request ->
             responseFor(
                 request = request,
                 code = 500,
                 message = "Error",
                 body = """
-                CF-Access-Client-Id: plain-cf-id
-                CF-Access-Client-Secret: plain-cf-secret
-                cloudflareClientId=plain-config-id
-                cloudflareClientSecret=plain-config-secret
+                deviceApiKey=plain-device-key
                 clientId=plain-client-id
                 clientSecret=plain-client-secret
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -1016,10 +961,7 @@ class VoiceLabMobileApiTest {
 
         val message = error.message.orEmpty()
         assertTrue(message.contains("[redacted]"))
-        assertFalse(message.contains("plain-cf-id"))
-        assertFalse(message.contains("plain-cf-secret"))
-        assertFalse(message.contains("plain-config-id"))
-        assertFalse(message.contains("plain-config-secret"))
+        assertFalse(message.contains("plain-device-key"))
         assertFalse(message.contains("plain-client-id"))
         assertFalse(message.contains("plain-client-secret"))
     }
@@ -1037,9 +979,9 @@ class VoiceLabMobileApiTest {
                 """.trimIndent(),
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -1065,9 +1007,9 @@ class VoiceLabMobileApiTest {
                 body = """{"token":"$secretPrefix${"x".repeat(5000)}""",
             )
         }
-        val api = VoiceLabMobileApi(
-            baseUrl = "https://voice-lab.example.test",
-            credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key"),
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key"),
             transport = transport,
         )
 
@@ -1097,11 +1039,7 @@ class VoiceLabMobileApiTest {
             prompt = "private prompt",
             profileId = "default",
         )
-        val credentials = VoiceLabMobileCredentials(
-            hermesProfileApiKey = "profile-api-key",
-            cloudflareClientId = "cf-id",
-            cloudflareClientSecret = "cf-secret",
-        )
+        val credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key")
         val hermesResponse = MobileHermesResponse(
             callId = "call-1",
             answer = "private answer",
@@ -1131,64 +1069,45 @@ class VoiceLabMobileApiTest {
 
     @Test
     fun `baseUrl must be https unless it is a local development host`() {
-        val credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key")
+        val credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key")
 
         assertThrows(IllegalArgumentException::class.java) {
-            VoiceLabMobileApi(baseUrl = "http://voice-lab.example.test", credentials = credentials)
+            HermesVoiceApi(baseUrl = "http://hermes-voice.example.test", credentials = credentials)
         }
 
-        VoiceLabMobileApi(baseUrl = "http://127.0.0.1:8787", credentials = credentials)
-        VoiceLabMobileApi(baseUrl = "http://10.0.2.2:8787", credentials = credentials)
-        VoiceLabMobileApi(baseUrl = "http://100.83.49.15:8787", credentials = credentials)
+        HermesVoiceApi(baseUrl = "http://127.0.0.1:8787", credentials = credentials)
+        HermesVoiceApi(baseUrl = "http://10.0.2.2:8787", credentials = credentials)
+        HermesVoiceApi(baseUrl = "http://100.83.49.15:8787", credentials = credentials)
     }
 
     @Test
     fun `baseUrl must not include query or fragment`() {
-        val credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-api-key")
+        val credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key")
 
         assertThrows(IllegalArgumentException::class.java) {
-            VoiceLabMobileApi(baseUrl = "https://voice-lab.example.test?x=1", credentials = credentials)
+            HermesVoiceApi(baseUrl = "https://hermes-voice.example.test?x=1", credentials = credentials)
         }
         assertThrows(IllegalArgumentException::class.java) {
-            VoiceLabMobileApi(baseUrl = "https://voice-lab.example.test#voice", credentials = credentials)
+            HermesVoiceApi(baseUrl = "https://hermes-voice.example.test#voice", credentials = credentials)
         }
         assertThrows(IllegalArgumentException::class.java) {
-            VoiceLabMobileApi(baseUrl = "https://user:pass@voice-lab.example.test", credentials = credentials)
+            HermesVoiceApi(baseUrl = "https://user:pass@hermes-voice.example.test", credentials = credentials)
         }
     }
 
     @Test
-    fun `credentials must not be blank or partial`() {
+    fun `device credential must not be blank`() {
         assertThrows(IllegalArgumentException::class.java) {
-            VoiceLabMobileApi(
-                baseUrl = "https://voice-lab.example.test",
-                credentials = VoiceLabMobileCredentials(hermesProfileApiKey = " "),
-            )
-        }
-        assertThrows(IllegalArgumentException::class.java) {
-            VoiceLabMobileApi(
-                baseUrl = "https://voice-lab.example.test",
-                credentials = VoiceLabMobileCredentials(
-                    hermesProfileApiKey = "profile-api-key",
-                    cloudflareClientId = "cf-id",
-                ),
-            )
-        }
-        assertThrows(IllegalArgumentException::class.java) {
-            VoiceLabMobileApi(
-                baseUrl = "https://voice-lab.example.test",
-                credentials = VoiceLabMobileCredentials(
-                    hermesProfileApiKey = "profile-api-key",
-                    cloudflareClientId = "",
-                    cloudflareClientSecret = "cf-secret",
-                ),
+            HermesVoiceApi(
+                baseUrl = "https://hermes-voice.example.test",
+                credentials = HermesVoiceCredentials(deviceApiKey = " "),
             )
         }
     }
 }
 
-private fun transportFor(handler: (Request) -> Response): VoiceLabHttpTransport =
-    object : VoiceLabHttpTransport {
+private fun transportFor(handler: (Request) -> Response): HermesVoiceHttpTransport =
+    object : HermesVoiceHttpTransport {
         override suspend fun execute(request: Request): Response = handler(request)
     }
 

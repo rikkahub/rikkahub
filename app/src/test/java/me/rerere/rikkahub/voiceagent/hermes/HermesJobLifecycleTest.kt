@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
-import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesJobStatus
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

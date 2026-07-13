@@ -5,7 +5,7 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceSpan
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
-import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesJobStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -83,7 +83,7 @@ class HermesJobTelemetryTest {
             HermesJobCompletion(callId = "c1", jobId = "j1", answer = "hi", elapsedMs = 10L, serverElapsedMs = 7L)
         )
         assertEquals(listOf("c1"), completions.map { it.callId })
-        assertEquals("voicelab.mobile.hermes_tool.completed", observability.events.single().first)
+        assertEquals("hermes_voice.mobile.hermes_tool.completed", observability.events.single().first)
         assertEquals("succeeded", observability.events.single().second["hermes_job_status"])
         assertEquals(
             "hermes_job_completed" to "callId=c1, jobId=j1, elapsedMs=10, serverElapsedMs=7, answerChars=2",
@@ -111,7 +111,7 @@ class HermesJobTelemetryTest {
     @Test
     fun `jobFailed emits event, diagnostic, callback, queue event with none jobId`() {
         telemetry().jobFailed(callId = "c1", jobId = null, statusWire = "expired", message = "boom")
-        assertEquals("voicelab.mobile.hermes_tool.failed", observability.events.single().first)
+        assertEquals("hermes_voice.mobile.hermes_tool.failed", observability.events.single().first)
         assertEquals("expired", observability.events.single().second["status"])
         assertEquals("hermes_job_failed" to "callId=c1, message=boom", diagnostics.single())
         assertEquals(listOf("c1"), failures.map { it.callId })
@@ -131,7 +131,7 @@ class HermesJobTelemetryTest {
     fun `jobSubmitted emits the submitted event with prompt payload`() {
         telemetry().jobSubmitted(callId = "c1", prompt = "why")
         val (name, attributes) = observability.events.single()
-        assertEquals("voicelab.mobile.hermes_tool.submitted", name)
+        assertEquals("hermes_voice.mobile.hermes_tool.submitted", name)
         assertEquals("c1", attributes["gemini.tool_call.call_id"])
     }
 
@@ -139,7 +139,7 @@ class HermesJobTelemetryTest {
     fun `followUpSent emits the followup event`() {
         telemetry().followUpSent(callId = "c1", jobId = "j1", prompt = "p", answer = "a")
         val (name, attributes) = observability.events.single()
-        assertEquals("voicelab.mobile.gemini.followup_sent", name)
+        assertEquals("hermes_voice.mobile.gemini.followup_sent", name)
         assertEquals(true, attributes["sent"])
     }
 

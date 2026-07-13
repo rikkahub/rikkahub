@@ -134,14 +134,14 @@ class VoiceTranscriptTurnTrackerTest {
         )
 
         tracker.appendAssistantDelta("hi", suppressed = false)
-        assertEquals(0, events.count { it.first == "voicelab.mobile.transcript.assistant_final" })
-        assertEquals(0, events.count { it.first == "voicelab.mobile.transcript.turn" })
+        assertEquals(0, events.count { it.first == "hermes_voice.mobile.transcript.assistant_final" })
+        assertEquals(0, events.count { it.first == "hermes_voice.mobile.transcript.turn" })
 
         tracker.completeAssistantTurn(suppressed = false)
         tracker.completeAssistantTurn(suppressed = false)
 
-        assertEquals(1, events.count { it.first == "voicelab.mobile.transcript.assistant_final" })
-        assertEquals(1, events.count { it.first == "voicelab.mobile.transcript.turn" })
+        assertEquals(1, events.count { it.first == "hermes_voice.mobile.transcript.assistant_final" })
+        assertEquals(1, events.count { it.first == "hermes_voice.mobile.transcript.turn" })
     }
 
     @Test

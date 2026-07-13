@@ -23,8 +23,8 @@ import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
-import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesJobStatus
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceHttpException
 import java.time.Instant
 
 interface HermesSessionBridge {
@@ -745,12 +745,12 @@ class HermesJobManager(
     }
 
     private fun Throwable.isTerminalHermesPollFailure(): Boolean {
-        if (this !is VoiceLabHttpException) return false
+        if (this !is HermesVoiceHttpException) return false
         failure?.let { return !it.retryable }
-        return statusCode.isTerminalVoiceLabStatusCode()
+        return statusCode.isTerminalHermesVoiceStatusCode()
     }
 
-    private fun Int.isTerminalVoiceLabStatusCode(): Boolean =
+    private fun Int.isTerminalHermesVoiceStatusCode(): Boolean =
         this in 400..499 && this != 408 && this != 429
 
     private fun String?.toEpochMillisOrNull(): Long? {

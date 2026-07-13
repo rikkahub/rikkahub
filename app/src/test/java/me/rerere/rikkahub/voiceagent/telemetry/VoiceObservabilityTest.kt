@@ -90,7 +90,7 @@ class VoiceObservabilityTest {
 
         try {
             SentryVoiceObservability().recordEvent(
-                name = "voicelab.mobile.session.started",
+                name = "hermes_voice.mobile.session.started",
                 trace = trace,
                 attributes = mapOf(
                     "prompt" to "status",
@@ -103,7 +103,7 @@ class VoiceObservabilityTest {
         }
 
         val event = capturedEvents.single()
-        assertEquals("voicelab.mobile.session.started", event.message?.formatted)
+        assertEquals("hermes_voice.mobile.session.started", event.message?.formatted)
         assertEquals(SentryLevel.INFO, event.level)
         assertEquals("android", event.getTag("service"))
         assertEquals("trace-123", event.getTag("voice_trace_id"))
@@ -130,7 +130,7 @@ class VoiceObservabilityTest {
 
         try {
             SentryVoiceObservability().recordEvent(
-                name = "voicelab.mobile.hermes_tool.completed",
+                name = "hermes_voice.mobile.hermes_tool.completed",
                 trace = trace,
                 attributes = mapOf(
                     "conversationId" to "conversation-123",
@@ -140,7 +140,7 @@ class VoiceObservabilityTest {
                 ),
             )
             SentryVoiceObservability().recordEvent(
-                name = "voicelab.mobile.hermes_tool.completed",
+                name = "hermes_voice.mobile.hermes_tool.completed",
                 trace = trace,
                 attributes = mapOf(
                     "conversationId" to "conversation-abc",
@@ -222,7 +222,7 @@ class VoiceObservabilityTest {
             val firstAgain = observability.withSentryPropagation(firstTrace)
             assertEquals(first.sentryTrace, firstAgain.sentryTrace)
 
-            observability.recordEvent("voicelab.mobile.session.ended", firstTrace)
+            observability.recordEvent("hermes_voice.mobile.session.ended", firstTrace)
 
             val firstAfterEnd = observability.withSentryPropagation(firstTrace)
             assertTrue(firstAfterEnd.sentryTrace.orEmpty().isNotBlank())
@@ -257,8 +257,8 @@ class VoiceObservabilityTest {
             )
             observability.withSentryPropagation(endedTrace)
 
-            observability.recordEvent("voicelab.mobile.session.failed", first)
-            observability.recordEvent("voicelab.mobile.session.ended", endedTrace)
+            observability.recordEvent("hermes_voice.mobile.session.failed", first)
+            observability.recordEvent("hermes_voice.mobile.session.ended", endedTrace)
             Sentry.flush(1_000)
 
             val afterFailure = observability.withSentryPropagation(trace)

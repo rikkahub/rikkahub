@@ -18,7 +18,7 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
-import me.rerere.rikkahub.voiceagent.voicelab.MobileVoiceSessionResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileVoiceSessionResponse
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
@@ -119,7 +119,7 @@ class VoiceAgentCallSession internal constructor(
         writeSessionMetadata(status = "started")
         coordinator.removeLegacyVoiceSessionStartedNotes()
         recordEventSafely(
-            name = "voicelab.mobile.session.started",
+            name = "hermes_voice.mobile.session.started",
             attributes = mapOf(
                 "sessionId" to currentSessionId,
                 "modelId" to modelId,
@@ -149,9 +149,9 @@ class VoiceAgentCallSession internal constructor(
         }
         recordEventSafely(
             name = if (muted) {
-                "voicelab.mobile.audio.capture_muted"
+                "hermes_voice.mobile.audio.capture_muted"
             } else {
-                "voicelab.mobile.audio.capture_unmuted"
+                "hermes_voice.mobile.audio.capture_unmuted"
             },
             attributes = mapOf("sessionId" to sessionId),
         )
@@ -487,7 +487,7 @@ class VoiceAgentCallSession internal constructor(
         VoiceAgentLog.d(TAG, "session connected sessionId=$currentSessionId")
         writeSessionMetadata(status = "connected", providerModel = providerModel)
         recordEventSafely(
-            name = "voicelab.mobile.session.connected",
+            name = "hermes_voice.mobile.session.connected",
             attributes = mapOf(
                 "sessionId" to currentSessionId,
                 "modelId" to modelId,
@@ -676,7 +676,7 @@ class VoiceAgentCallSession internal constructor(
                 "maxAttempts=${reconnectPolicy.maxAttempts}, delayMs=${plan.delayMs}",
         )
         recordEventSafely(
-            name = "voicelab.mobile.session.reconnect_scheduled",
+            name = "hermes_voice.mobile.session.reconnect_scheduled",
             attributes = mapOf(
                 "sessionId" to sessionId,
                 "session.reconnect.reason" to plan.reason.diagnosticReason,
@@ -954,7 +954,7 @@ class VoiceAgentCallSession internal constructor(
             },
         )
         recordEventSafely(
-            name = "voicelab.mobile.audio.capture_started",
+            name = "hermes_voice.mobile.audio.capture_started",
             attributes = mapOf(
                 "sessionId" to currentSessionId,
                 "audio.muted" to muted,
@@ -1003,7 +1003,7 @@ class VoiceAgentCallSession internal constructor(
             endedAtEpochMs = metadataEpochNowMs(),
         )
         recordEventSafely(
-            name = "voicelab.mobile.session.ended",
+            name = "hermes_voice.mobile.session.ended",
             attributes = mapOf(
                 "sessionId" to sessionId,
                 "modelId" to modelId,
@@ -1036,7 +1036,7 @@ class VoiceAgentCallSession internal constructor(
             endedAtEpochMs = metadataEpochNowMs(),
         )
         recordEventSafely(
-            name = "voicelab.mobile.session.failed",
+            name = "hermes_voice.mobile.session.failed",
             attributes = mapOf(
                 "sessionId" to sessionId,
                 "modelId" to modelId,

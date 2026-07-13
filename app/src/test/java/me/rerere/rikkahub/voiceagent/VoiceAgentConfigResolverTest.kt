@@ -13,14 +13,13 @@ import kotlin.uuid.Uuid
 
 class VoiceAgentConfigResolverTest {
     @Test
-    fun `resolves Voice Lab config from the conversation chat provider`() {
+    fun `resolves Hermes Voice config from the conversation chat provider`() {
         val assistantId = Uuid.random()
         val modelId = Uuid.random()
         val model = Model(
             id = modelId,
             modelId = "hermes-agent",
             displayName = "Hermes Agent",
-            customHeaders = listOf(CustomHeader("CF-Access-Client-Secret", "cf-secret")),
         )
         val settings = Settings(
             assistantId = assistantId,
@@ -30,14 +29,13 @@ class VoiceAgentConfigResolverTest {
                     id = assistantId,
                     name = "Hermes",
                     chatModelId = modelId,
-                    customHeaders = listOf(CustomHeader("CF-Access-Client-Id", "cf-id")),
                 )
             ),
             providers = listOf(
                 ProviderSetting.OpenAI(
-                    name = "Hermes Mobile API",
+                    name = "RMS Hermes",
                     apiKey = "profile-api-key",
-                    baseUrl = "https://voice-lab.example.test/v1",
+                    baseUrl = "https://hermes.example.test/v1",
                     models = listOf(model),
                 )
             ),
@@ -49,16 +47,14 @@ class VoiceAgentConfigResolverTest {
 
         assertTrue(result is VoiceAgentConfigResult.Available)
         val config = (result as VoiceAgentConfigResult.Available).config
-        assertEquals("https://voice-lab.example.test", config.voiceLabBaseUrl)
-        assertEquals("profile-api-key", config.credentials.hermesProfileApiKey)
-        assertEquals("cf-id", config.credentials.cloudflareClientId)
-        assertEquals("cf-secret", config.credentials.cloudflareClientSecret)
+        assertEquals("https://hermes.example.test", config.hermesVoiceBaseUrl)
+        assertEquals("profile-api-key", config.credentials.deviceApiKey)
         assertEquals("gemini-flash", config.voiceModelId)
         assertEquals("Hermes", config.assistantName)
     }
 
     @Test
-    fun `uses Voice Lab base URL and voice model overrides from custom headers`() {
+    fun `uses Hermes Voice base URL and voice model overrides from custom headers`() {
         val assistantId = Uuid.random()
         val modelId = Uuid.random()
         val model = Model(
@@ -66,7 +62,10 @@ class VoiceAgentConfigResolverTest {
             modelId = "hermes-agent",
             displayName = "Hermes Agent",
             customHeaders = listOf(
-                CustomHeader("X-Voice-Lab-Base-Url", "https://voice-lab.example.test/api/mobile/"),
+                CustomHeader(
+                    "X-Hermes-Voice-Base-Url",
+                    "https://dev-remote-machine-1.tail83108.ts.net:9447/api/mobile/",
+                ),
                 CustomHeader("X-Voice-Agent-Model-Id", "gemini-live-2.5-flash-preview"),
             ),
         )
@@ -76,9 +75,9 @@ class VoiceAgentConfigResolverTest {
             assistants = listOf(Assistant(id = assistantId)),
             providers = listOf(
                 ProviderSetting.OpenAI(
-                    name = "Hermes Mobile API",
+                    name = "RMS Hermes",
                     apiKey = "profile-api-key",
-                    baseUrl = "https://muly-hermes-api.example.test/v1",
+                    baseUrl = "https://dev-remote-machine-1.tail83108.ts.net:8642/v1",
                     models = listOf(model),
                 )
             ),
@@ -90,8 +89,8 @@ class VoiceAgentConfigResolverTest {
 
         assertTrue(result is VoiceAgentConfigResult.Available)
         val config = (result as VoiceAgentConfigResult.Available).config
-        assertEquals("https://voice-lab.example.test", config.voiceLabBaseUrl)
-        assertEquals("profile-api-key", config.credentials.hermesProfileApiKey)
+        assertEquals("https://dev-remote-machine-1.tail83108.ts.net:9447", config.hermesVoiceBaseUrl)
+        assertEquals("profile-api-key", config.credentials.deviceApiKey)
         assertEquals("gemini-live-2.5-flash-preview", config.voiceModelId)
     }
 
@@ -110,7 +109,7 @@ class VoiceAgentConfigResolverTest {
             assistants = listOf(Assistant(id = assistantId)),
             providers = listOf(
                 ProviderSetting.OpenAI(
-                    name = "Hermes Mobile API",
+                    name = "RMS Hermes",
                     apiKey = "profile-api-key",
                     baseUrl = "https://muly-hermes-api.core8.co/v1",
                     models = listOf(model),
@@ -124,11 +123,11 @@ class VoiceAgentConfigResolverTest {
 
         assertTrue(result is VoiceAgentConfigResult.Available)
         val config = (result as VoiceAgentConfigResult.Available).config
-        assertEquals("https://muly-hermes-api.core8.co", config.voiceLabBaseUrl)
+        assertEquals("https://muly-hermes-api.core8.co", config.hermesVoiceBaseUrl)
     }
 
     @Test
-    fun `does not use local Cloudflare defaults when custom headers are absent`() {
+    fun `uses only the provider bearer credential when custom headers are absent`() {
         val assistantId = Uuid.random()
         val modelId = Uuid.random()
         val model = Model(
@@ -142,7 +141,7 @@ class VoiceAgentConfigResolverTest {
             assistants = listOf(Assistant(id = assistantId)),
             providers = listOf(
                 ProviderSetting.OpenAI(
-                    name = "Hermes Mobile API",
+                    name = "RMS Hermes",
                     apiKey = "profile-api-key",
                     baseUrl = "https://muly-hermes-api.example.test/v1",
                     models = listOf(model),
@@ -156,9 +155,8 @@ class VoiceAgentConfigResolverTest {
 
         assertTrue(result is VoiceAgentConfigResult.Available)
         val config = (result as VoiceAgentConfigResult.Available).config
-        assertEquals("https://muly-hermes-api.example.test", config.voiceLabBaseUrl)
-        assertEquals(null, config.credentials.cloudflareClientId)
-        assertEquals(null, config.credentials.cloudflareClientSecret)
+        assertEquals("https://muly-hermes-api.example.test", config.hermesVoiceBaseUrl)
+        assertEquals("profile-api-key", config.credentials.deviceApiKey)
     }
 
     @Test
@@ -176,7 +174,7 @@ class VoiceAgentConfigResolverTest {
             assistants = listOf(Assistant(id = assistantId)),
             providers = listOf(
                 ProviderSetting.OpenAI(
-                    name = "Hermes Mobile API",
+                    name = "RMS Hermes",
                     apiKey = "profile-api-key",
                     baseUrl = "https://muly-hermes-api.example.test/v1",
                     models = listOf(model),
@@ -191,7 +189,7 @@ class VoiceAgentConfigResolverTest {
 
         assertTrue(result is VoiceAgentConfigResult.Available)
         val config = (result as VoiceAgentConfigResult.Available).config
-        assertEquals("http://100.83.49.15:18787", config.voiceLabBaseUrl)
+        assertEquals("http://100.83.49.15:18787", config.hermesVoiceBaseUrl)
     }
 
     @Test
@@ -203,7 +201,7 @@ class VoiceAgentConfigResolverTest {
             modelId = "hermes-agent",
             displayName = "Hermes Agent",
             customHeaders = listOf(
-                CustomHeader("X-Voice-Lab-Base-Url", "https://model-voice-lab.example.test"),
+                CustomHeader("X-Hermes-Voice-Base-Url", "https://model-hermes-voice.example.test"),
                 CustomHeader("X-Voice-Agent-Model-Id", "model-voice"),
             ),
         )
@@ -214,14 +212,14 @@ class VoiceAgentConfigResolverTest {
                 Assistant(
                     id = assistantId,
                     customHeaders = listOf(
-                        CustomHeader("X-Voice-Lab-Base-Url", "https://assistant-voice-lab.example.test"),
+                        CustomHeader("X-Hermes-Voice-Base-Url", "https://assistant-hermes-voice.example.test"),
                         CustomHeader("X-Voice-Agent-Model-Id", "assistant-voice"),
                     ),
                 )
             ),
             providers = listOf(
                 ProviderSetting.OpenAI(
-                    name = "Hermes Mobile API",
+                    name = "RMS Hermes",
                     apiKey = "profile-api-key",
                     baseUrl = "https://muly-hermes-api.example.test/v1",
                     models = listOf(model),
@@ -235,7 +233,7 @@ class VoiceAgentConfigResolverTest {
 
         assertTrue(result is VoiceAgentConfigResult.Available)
         val config = (result as VoiceAgentConfigResult.Available).config
-        assertEquals("https://model-voice-lab.example.test", config.voiceLabBaseUrl)
+        assertEquals("https://model-hermes-voice.example.test", config.hermesVoiceBaseUrl)
         assertEquals("model-voice", config.voiceModelId)
     }
 
@@ -262,5 +260,55 @@ class VoiceAgentConfigResolverTest {
 
         assertTrue(result is VoiceAgentConfigResult.Unavailable)
         assertTrue((result as VoiceAgentConfigResult.Unavailable).message.contains("OpenAI-compatible"))
+    }
+
+    @Test
+    fun `rejects a blank bearer credential`() {
+        val assistantId = Uuid.random()
+        val modelId = Uuid.random()
+        val model = Model(id = modelId, modelId = "hermes-agent", displayName = "Hermes Agent")
+        val settings = Settings(
+            assistantId = assistantId,
+            chatModelId = modelId,
+            assistants = listOf(Assistant(id = assistantId)),
+            providers = listOf(
+                ProviderSetting.OpenAI(
+                    name = "RMS Hermes",
+                    apiKey = " ",
+                    baseUrl = "http://100.83.49.15:8642/v1",
+                    models = listOf(model),
+                )
+            ),
+        )
+
+        val result = VoiceAgentConfigResolver(baseUrlOverride = "")
+            .resolve(settings, Conversation.ofId(Uuid.random(), assistantId))
+
+        assertTrue(result is VoiceAgentConfigResult.Unavailable)
+    }
+
+    @Test
+    fun `rejects a blank Hermes origin`() {
+        val assistantId = Uuid.random()
+        val modelId = Uuid.random()
+        val model = Model(id = modelId, modelId = "hermes-agent", displayName = "Hermes Agent")
+        val settings = Settings(
+            assistantId = assistantId,
+            chatModelId = modelId,
+            assistants = listOf(Assistant(id = assistantId)),
+            providers = listOf(
+                ProviderSetting.OpenAI(
+                    name = "RMS Hermes",
+                    apiKey = "device-key",
+                    baseUrl = " ",
+                    models = listOf(model),
+                )
+            ),
+        )
+
+        val result = VoiceAgentConfigResolver(baseUrlOverride = "")
+            .resolve(settings, Conversation.ofId(Uuid.random(), assistantId))
+
+        assertTrue(result is VoiceAgentConfigResult.Unavailable)
     }
 }

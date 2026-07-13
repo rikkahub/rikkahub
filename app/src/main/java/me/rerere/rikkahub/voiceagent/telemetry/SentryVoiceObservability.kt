@@ -71,8 +71,8 @@ class SentryVoiceObservability : VoiceObservability {
             applyVoiceTrace(scope, trace, activeTransaction, attributes)
         }
         when (name) {
-            "voicelab.mobile.session.ended" -> finishActiveTransaction(trace, SpanStatus.OK)
-            "voicelab.mobile.session.failed" -> finishActiveTransaction(trace, SpanStatus.INTERNAL_ERROR)
+            "hermes_voice.mobile.session.ended" -> finishActiveTransaction(trace, SpanStatus.OK)
+            "hermes_voice.mobile.session.failed" -> finishActiveTransaction(trace, SpanStatus.INTERNAL_ERROR)
         }
     }
 

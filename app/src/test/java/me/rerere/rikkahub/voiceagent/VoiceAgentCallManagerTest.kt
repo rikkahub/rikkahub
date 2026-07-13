@@ -6,7 +6,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabMobileCredentials
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceCredentials
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -246,8 +246,8 @@ private class FakeVoiceAgentCallFactory(
 }
 
 private fun fakeLaunchConfig(voiceModelId: String = "gemini-flash") = VoiceAgentLaunchConfig(
-    voiceLabBaseUrl = "https://voice.test",
-    credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-key"),
+    hermesVoiceBaseUrl = "https://voice.test",
+    credentials = HermesVoiceCredentials(deviceApiKey = "profile-key"),
     voiceModelId = voiceModelId,
     assistantName = "Hermes",
     assistantPrompt = "system",

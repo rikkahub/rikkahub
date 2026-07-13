@@ -36,15 +36,15 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceSpan
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.sha256Hex
-import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
-import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
-import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailure
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureKind
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureSource
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabMobileApi
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabMobileCredentials
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesJobStatus
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesJobPollResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.VoiceFailure
+import me.rerere.rikkahub.voiceagent.hermesvoice.VoiceFailureKind
+import me.rerere.rikkahub.voiceagent.hermesvoice.VoiceFailureSource
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceHttpException
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceApi
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceCredentials
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -586,7 +586,7 @@ class VoiceAgentRuntimeTest {
         coordinator.awaitPersistenceJobsWithTimeout()
         coordinator.closeAndDrain()
 
-        val userFinal = observability.events.single { it.name == "voicelab.mobile.transcript.user_final" }
+        val userFinal = observability.events.single { it.name == "hermes_voice.mobile.transcript.user_final" }
         assertEquals("user", userFinal.attributes["speaker"])
         assertEquals("hello user", userFinal.attributes["voice.user_transcript"])
         assertEquals(10, userFinal.attributes["voice.user_transcript.chars"])
@@ -595,7 +595,7 @@ class VoiceAgentRuntimeTest {
         assertFalse(userFinal.attributes.containsKey("text"))
         assertFalse(userFinal.attributes.containsKey("text.chars"))
 
-        val assistantFinal = observability.events.single { it.name == "voicelab.mobile.transcript.assistant_final" }
+        val assistantFinal = observability.events.single { it.name == "hermes_voice.mobile.transcript.assistant_final" }
         assertEquals("assistant", assistantFinal.attributes["speaker"])
         assertEquals("assistant answer", assistantFinal.attributes["gemini.output_transcript"])
         assertEquals(16, assistantFinal.attributes["gemini.output_transcript.chars"])
@@ -604,7 +604,7 @@ class VoiceAgentRuntimeTest {
         assertFalse(assistantFinal.attributes.containsKey("text"))
         assertFalse(assistantFinal.attributes.containsKey("text.chars"))
 
-        val submitted = observability.events.single { it.name == "voicelab.mobile.hermes_tool.submitted" }
+        val submitted = observability.events.single { it.name == "hermes_voice.mobile.hermes_tool.submitted" }
         assertEquals("call-observe", submitted.attributes["callId"])
         assertEquals("call-observe", submitted.attributes["gemini.tool_call.call_id"])
         assertEquals("private prompt", submitted.attributes["gemini.tool_call.prompt"])
@@ -613,7 +613,7 @@ class VoiceAgentRuntimeTest {
         assertTrue(submitted.attributes["gemini.tool_call.prompt.sha256"].toString().isNotBlank())
         assertFalse(submitted.attributes.containsKey("prompt"))
 
-        val completed = observability.events.single { it.name == "voicelab.mobile.hermes_tool.completed" }
+        val completed = observability.events.single { it.name == "hermes_voice.mobile.hermes_tool.completed" }
         assertEquals("call-observe", completed.attributes["callId"])
         assertEquals("job-1", completed.attributes["jobId"])
         assertEquals("call-observe", completed.attributes["gemini.tool_call.call_id"])
@@ -634,7 +634,7 @@ class VoiceAgentRuntimeTest {
             }
         }
 
-        val followup = observability.events.single { it.name == "voicelab.mobile.gemini.followup_sent" }
+        val followup = observability.events.single { it.name == "hermes_voice.mobile.gemini.followup_sent" }
         assertEquals("call-observe", followup.attributes["callId"])
         assertEquals("job-1", followup.attributes["jobId"])
         assertEquals("call-observe", followup.attributes["gemini.tool_call.call_id"])
@@ -667,7 +667,7 @@ class VoiceAgentRuntimeTest {
         toolApi.failJob(callId = "call-observe-failed", message = "Hermes failed")
         coordinator.awaitToolJobsWithTimeout()
 
-        val failed = observability.events.single { it.name == "voicelab.mobile.hermes_tool.failed" }
+        val failed = observability.events.single { it.name == "hermes_voice.mobile.hermes_tool.failed" }
         assertEquals("call-observe-failed", failed.attributes["callId"])
         assertEquals("job-1", failed.attributes["jobId"])
         assertEquals("call-observe-failed", failed.attributes["gemini.tool_call.call_id"])
@@ -809,7 +809,7 @@ class VoiceAgentRuntimeTest {
             }
         )
         assertFalse(
-            observability.events.any { it.name == "voicelab.mobile.gemini.followup_sent" }
+            observability.events.any { it.name == "hermes_voice.mobile.gemini.followup_sent" }
         )
         assertTrue(assistantTexts().any { it.contains("Hermes finished: slow") && it.contains("fallback answer") })
     }
@@ -822,7 +822,7 @@ class VoiceAgentRuntimeTest {
         val failures = mutableListOf<String>()
         toolApi.failSubmit(
             callId = "call-submit-fails",
-            error = IllegalStateException("Voice Lab request failed 429: private prompt detail"),
+            error = IllegalStateException("Hermes Voice request failed 429: private prompt detail"),
         )
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
@@ -845,13 +845,13 @@ class VoiceAgentRuntimeTest {
         assertEquals(
             VoiceToolStatus.HermesFailed(
                 callId = "call-submit-fails",
-                message = "Voice Lab request failed 429: private prompt detail",
+                message = "Hermes Voice request failed 429: private prompt detail",
             ),
             coordinator.state.value.tool,
         )
         assertEquals(1, failures.size)
         assertTrue(failures.single().contains("callId=call-submit-fails"))
-        assertTrue(failures.single().contains("message=Voice Lab request failed 429"))
+        assertTrue(failures.single().contains("message=Hermes Voice request failed 429"))
         assertFalse(failures.single().contains("private prompt detail"))
         val tool = conversationStore.conversation.value.currentMessages
             .flatMap { it.parts }
@@ -1665,7 +1665,7 @@ class VoiceAgentRuntimeTest {
     fun `thrown cancel hermes tool response records sanitized failure`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient().apply {
             toolResponseErrors["cancel-throws"] = IllegalStateException(
-                "Voice Lab request failed 403: {\"prompt\":\"cancel target\",\"answer\":\"private answer\"}"
+                "Hermes Voice request failed 403: {\"prompt\":\"cancel target\",\"answer\":\"private answer\"}"
             )
         }
         val toolApi = FakeVoiceToolApi()
@@ -1708,7 +1708,7 @@ class VoiceAgentRuntimeTest {
 
         val diagnostic = diagnostics.events.value.single { it.name == "cancel_hermes_tool_response_failed" }
         assertTrue(diagnostic.detail.contains("callId=cancel-throws"))
-        assertTrue(diagnostic.detail.contains("Voice Lab request failed 403"))
+        assertTrue(diagnostic.detail.contains("Hermes Voice request failed 403"))
         assertFalse(diagnostic.detail.contains("cancel target"))
         assertFalse(diagnostic.detail.contains("private answer"))
         assertFalse(diagnostic.detail.contains("\"prompt\""))
@@ -2482,15 +2482,15 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-auth-fail" to "private prompt", toolApi.awaitRequest("call-auth-fail"))
 
         toolApi.fail(
-            VoiceLabHttpException(
+            HermesVoiceHttpException(
                 statusCode = 403,
                 safePreview = "{\"prompt\":\"private prompt\",\"answer\":\"private answer\"}",
                 failure = VoiceFailure(
                     kind = VoiceFailureKind.Auth,
-                    safeMessage = "Voice Lab request failed 403",
-                    safeSummary = "Voice Lab request failed 403",
+                    safeMessage = "Hermes Voice request failed 403",
+                    safeSummary = "Hermes Voice request failed 403",
                     retryable = false,
-                    source = VoiceFailureSource.VoiceLab,
+                    source = VoiceFailureSource.HermesVoice,
                 ),
             )
         )
@@ -2499,7 +2499,7 @@ class VoiceAgentRuntimeTest {
         val failureDetail = capturedFailures.single()
         assertTrue(failureDetail.contains("callId=call-auth-fail"))
         assertTrue(failureDetail.contains("elapsedMs="))
-        assertTrue(failureDetail.contains("Voice Lab request failed 403"))
+        assertTrue(failureDetail.contains("Hermes Voice request failed 403"))
         assertFalse(failureDetail.contains("private prompt"))
         assertFalse(failureDetail.contains("private answer"))
         assertFalse(failureDetail.contains("\"prompt\""))
@@ -3582,7 +3582,7 @@ class VoiceAgentRuntimeTest {
 
         session.start()
 
-        val started = observability.events.single { it.name == "voicelab.mobile.session.started" }
+        val started = observability.events.single { it.name == "hermes_voice.mobile.session.started" }
         assertEquals("conversation-observe", started.attributes["conversationId"])
         assertEquals(1L, started.attributes["sessionId"])
         session.closeNow()
@@ -3602,8 +3602,8 @@ class VoiceAgentRuntimeTest {
             val observability = PropagatingVoiceObservability()
             val gemini = FakeGeminiLiveVoiceClient()
             blockedConnect = gemini.blockNextConnectCompletion()
-            var sessionMobileApi: VoiceLabMobileApi? = null
-            var toolMobileApi: VoiceLabMobileApi? = null
+            var sessionMobileApi: HermesVoiceApi? = null
+            var toolMobileApi: HermesVoiceApi? = null
             val factory = DefaultVoiceAgentCallFactory(
                 context = context,
                 chatService = null,
@@ -5730,8 +5730,8 @@ private fun blockingRuntimeSessionJsonMove(
     }
 
 private fun fakeLaunchConfig(voiceModelId: String = "gemini-flash") = VoiceAgentLaunchConfig(
-    voiceLabBaseUrl = "https://voice.test",
-    credentials = VoiceLabMobileCredentials(hermesProfileApiKey = "profile-key"),
+    hermesVoiceBaseUrl = "https://voice.test",
+    credentials = HermesVoiceCredentials(deviceApiKey = "profile-key"),
     voiceModelId = voiceModelId,
     assistantName = "Hermes",
     assistantPrompt = "system",

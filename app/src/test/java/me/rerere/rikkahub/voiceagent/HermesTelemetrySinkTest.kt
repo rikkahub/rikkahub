@@ -78,10 +78,10 @@ class HermesTelemetrySinkTest {
     @Test
     fun `recordJobFailure sanitizes the message for the e2e log`() {
         sink().recordJobFailure(
-            HermesJobFailure(callId = "c1", jobId = "j1", message = "Voice Lab request failed 500: detail", elapsedMs = 2L)
+            HermesJobFailure(callId = "c1", jobId = "j1", message = "Hermes Voice request failed 500: detail", elapsedMs = 2L)
         )
         assertEquals(
-            listOf("callId=c1, jobId=j1, elapsedMs=2, message=Voice Lab request failed 500"),
+            listOf("callId=c1, jobId=j1, elapsedMs=2, message=Hermes Voice request failed 500"),
             toolFailures,
         )
     }

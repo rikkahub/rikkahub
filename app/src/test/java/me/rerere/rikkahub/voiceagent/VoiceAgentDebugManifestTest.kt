@@ -7,15 +7,18 @@ import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioDebugInjector
 import me.rerere.rikkahub.voiceagent.debug.VoiceAgentDebugSeedReceiver
+import me.rerere.rikkahub.voiceagent.debug.HermesTextDebugReceiver
 
 class VoiceAgentDebugManifestTest {
     @Test
     fun `debug receivers require shell held permission`() {
         val audioReceiver = findReceiver(".voiceagent.debug.VoiceAudioDebugInjectionReceiver")
         val seedReceiver = findReceiver(".voiceagent.debug.VoiceAgentDebugSeedReceiver")
+        val textReceiver = findReceiver(".voiceagent.debug.HermesTextDebugReceiver")
 
         assertEquals("android.permission.DUMP", audioReceiver.getAttribute("android:permission"))
         assertEquals("android.permission.DUMP", seedReceiver.getAttribute("android:permission"))
+        assertEquals("android.permission.DUMP", textReceiver.getAttribute("android:permission"))
         assertEquals("android.permission.DUMP", findService(".voiceagent.VoiceAgentCallService").getAttribute("android:permission"))
     }
 
@@ -23,9 +26,11 @@ class VoiceAgentDebugManifestTest {
     fun `debug receivers remain exported for adb workflows`() {
         val audioReceiver = findReceiver(".voiceagent.debug.VoiceAudioDebugInjectionReceiver")
         val seedReceiver = findReceiver(".voiceagent.debug.VoiceAgentDebugSeedReceiver")
+        val textReceiver = findReceiver(".voiceagent.debug.HermesTextDebugReceiver")
 
         assertEquals("true", audioReceiver.getAttribute("android:exported"))
         assertEquals("true", seedReceiver.getAttribute("android:exported"))
+        assertEquals("true", textReceiver.getAttribute("android:exported"))
         assertEquals("true", findService(".voiceagent.VoiceAgentCallService").getAttribute("android:exported"))
     }
 
@@ -33,6 +38,7 @@ class VoiceAgentDebugManifestTest {
     fun `debug receivers keep expected actions`() {
         val audioReceiver = findReceiver(".voiceagent.debug.VoiceAudioDebugInjectionReceiver")
         val seedReceiver = findReceiver(".voiceagent.debug.VoiceAgentDebugSeedReceiver")
+        val textReceiver = findReceiver(".voiceagent.debug.HermesTextDebugReceiver")
 
         assertEquals(
             listOf(VoiceAudioDebugInjector.ACTION_INJECT_PCM),
@@ -41,6 +47,10 @@ class VoiceAgentDebugManifestTest {
         assertEquals(
             listOf(VoiceAgentDebugSeedReceiver.ACTION_SEED_HERMES_PROVIDER),
             seedReceiver.actionNames(),
+        )
+        assertEquals(
+            listOf(HermesTextDebugReceiver.ACTION_SEND_HERMES_TEXT),
+            textReceiver.actionNames(),
         )
     }
 

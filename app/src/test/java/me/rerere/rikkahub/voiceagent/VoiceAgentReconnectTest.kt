@@ -67,7 +67,7 @@ class VoiceAgentReconnectTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.session.reconnect_scheduled" }
+                .filter { it.name == "hermes_voice.mobile.session.reconnect_scheduled" }
                 .map { it.attributes },
         )
         assertTrue(
@@ -139,7 +139,7 @@ class VoiceAgentReconnectTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.session.reconnect_scheduled" }
+                .filter { it.name == "hermes_voice.mobile.session.reconnect_scheduled" }
                 .map { it.attributes },
         )
         assertFalse(
@@ -240,7 +240,7 @@ class VoiceAgentReconnectTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.session.failed" }
+                .filter { it.name == "hermes_voice.mobile.session.failed" }
                 .map { it.attributes },
         )
         assertEquals(0, diagnostics.events.value.count { it.name == "session_reconnect_scheduled" })
@@ -352,7 +352,7 @@ class VoiceAgentReconnectTest {
         firstCallback(GeminiLiveEvent.WebSocketFailure(message = "first drop"))
         gemini.awaitConnectCount(2)
         withTimeout(500) {
-            while (observability.events.none { it.name == "voicelab.mobile.session.failed" }) {
+            while (observability.events.none { it.name == "hermes_voice.mobile.session.failed" }) {
                 delay(10)
             }
         }
@@ -377,13 +377,13 @@ class VoiceAgentReconnectTest {
                 "session.failure.summary" to "drop during reconnect connect",
             ),
             observability.events
-                .single { it.name == "voicelab.mobile.session.failed" }
+                .single { it.name == "hermes_voice.mobile.session.failed" }
                 .attributes
                 .minus("sessionId"),
         )
         assertTrue(
             (observability.events
-                .single { it.name == "voicelab.mobile.session.failed" }
+                .single { it.name == "hermes_voice.mobile.session.failed" }
                 .attributes["sessionId"] as Long) > 1L
         )
     }
@@ -471,7 +471,7 @@ class VoiceAgentReconnectTest {
         firstCallback(GeminiLiveEvent.WebSocketFailure(message = "first drop"))
         gemini.awaitConnectCount(2)
         withTimeout(500) {
-            while (observability.events.none { it.name == "voicelab.mobile.session.failed" }) {
+            while (observability.events.none { it.name == "hermes_voice.mobile.session.failed" }) {
                 delay(10)
             }
         }
@@ -496,7 +496,7 @@ class VoiceAgentReconnectTest {
                 "session.failure.summary" to "drop during reconnect activation",
             ),
             observability.events
-                .single { it.name == "voicelab.mobile.session.failed" }
+                .single { it.name == "hermes_voice.mobile.session.failed" }
                 .attributes
                 .minus("sessionId"),
         )
@@ -682,7 +682,7 @@ class VoiceAgentReconnectTest {
         assertTrue(audio.playedPcm16.isEmpty())
         assertTrue(
             observability.events
-                .filter { it.name == "voicelab.mobile.audio.playback_queued" }
+                .filter { it.name == "hermes_voice.mobile.audio.playback_queued" }
                 .isEmpty()
         )
 
@@ -702,7 +702,7 @@ class VoiceAgentReconnectTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.audio.playback_queued" }
+                .filter { it.name == "hermes_voice.mobile.audio.playback_queued" }
                 .map { it.attributes },
         )
         assertEquals(VoiceSessionStatus.Connected, session.state.value.session)
@@ -744,7 +744,7 @@ class VoiceAgentReconnectTest {
         assertTrue(audio.playedPcm16.isEmpty())
         assertTrue(
             observability.events
-                .filter { it.name == "voicelab.mobile.audio.playback_queued" }
+                .filter { it.name == "hermes_voice.mobile.audio.playback_queued" }
                 .isEmpty()
         )
     }
@@ -784,7 +784,7 @@ class VoiceAgentReconnectTest {
         assertFalse(session.state.value.audio == VoiceAudioStatus.AssistantSpeaking)
         assertTrue(
             observability.events
-                .filter { it.name == "voicelab.mobile.audio.playback_queued" }
+                .filter { it.name == "hermes_voice.mobile.audio.playback_queued" }
                 .isEmpty()
         )
     }
@@ -823,7 +823,7 @@ class VoiceAgentReconnectTest {
         assertEquals(VoiceAudioStatus.PlaybackSuppressed, session.state.value.audio)
         assertTrue(
             observability.events
-                .filter { it.name == "voicelab.mobile.audio.playback_queued" }
+                .filter { it.name == "hermes_voice.mobile.audio.playback_queued" }
                 .isEmpty()
         )
     }
@@ -891,7 +891,7 @@ class VoiceAgentReconnectTest {
         )
 
     private suspend fun RecordingVoiceObservability.awaitConnectedSessionId(count: Int = 1): Long =
-        awaitEvent(name = "voicelab.mobile.session.connected", count = count).attributes["sessionId"] as Long
+        awaitEvent(name = "hermes_voice.mobile.session.connected", count = count).attributes["sessionId"] as Long
 
     private suspend fun RecordingVoiceObservability.awaitEvent(name: String, count: Int = 1): RecordedVoiceEvent =
         withTimeout(500) {
