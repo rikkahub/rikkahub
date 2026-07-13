@@ -1,0 +1,10 @@
+## Copy to local.properties (gitignored) and fill in local values.
+## storeFile is resolved relative to the app/ module directory.
+
+sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
+
+## Dev-only release signing (do not commit real production keystores/passwords)
+storeFile=perry-dev-release.jks
+storePassword=<dev-store-password>
+keyAlias=perry
+keyPassword=<dev-key-password>

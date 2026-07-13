@@ -70,7 +70,7 @@ Technology stack documentation:
 - [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (JSON serialization)
 
 > [!TIP]
-> You need a `google-services.json` file at `app` folder to build the app.
+> Haruhome builds without Firebase/`google-services.json`. Configure release signing in gitignored `local.properties` (see `local.properties.example`).
 
 > [!IMPORTANT]  
 > The following PRs will be rejected:

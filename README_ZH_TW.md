@@ -63,7 +63,7 @@
 - [kotlinx.serialization](https://github.com/Kotlin/kotlinx.serialization) (Json序列化)
 
 > [!TIP]
-> 你需要在 `app` 資料夾下添加 `google-services.json` 檔案才能構建應用。
+> Haruhome 已移除 Firebase，建置不再需要 `google-services.json`。Release 簽章寫在被 Git 忽略的 `local.properties`（見 `local.properties.example`）。
 
 > [!IMPORTANT]  
 > 以下PR將被拒絕：

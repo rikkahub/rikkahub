@@ -11,3 +11,14 @@ local.properties
 .cursor
 .history
 .kotlin
+
+# Signing / secrets (never commit)
+*.jks
+*.keystore
+app/*.jks
+app/*.keystore
+app/google-services.json
+.env
+.env.*
+!**/.env.example
+!**/local.properties.example
