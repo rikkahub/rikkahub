@@ -48,6 +48,8 @@ data class Assistant(
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
+    val enableCustomInputPlaceholder: Boolean = false, // 是否启用自定义聊天输入框占位符
+    val inputPlaceholder: String = "", // 自定义聊天输入框占位符文本
 )
 
 @Serializable
@@ -91,6 +93,21 @@ private fun compileRegexCached(pattern: String): Regex? {
     val result = runCatching { Regex(pattern) }.onFailure { it.printStackTrace() }
     regexCache.put(pattern, result)
     return result.getOrNull()
+}
+
+/**
+ * 解析当前助手生效的聊天输入框占位符文本。
+ *
+ * - 主开关关闭时，始终返回 [defaultPlaceholder]，忽略已保存的自定义文本。
+ * - 主开关开启且已保存文本为空字符串时，回退为 [defaultPlaceholder]。
+ * - 主开关开启且已保存文本非空（包括仅由空格组成的文本）时，原样返回已保存文本，
+ *   不进行 trim/blank 判断，以支持用户输入空格制造“看起来为空”的占位符效果。
+ *
+ * 返回值始终非空，可直接传入 Compose 的 [androidx.compose.material3.Text] 等非空参数。
+ */
+fun Assistant.resolveInputPlaceholder(defaultPlaceholder: String): String {
+    if (!enableCustomInputPlaceholder) return defaultPlaceholder
+    return inputPlaceholder.ifEmpty { defaultPlaceholder }
 }
 
 fun String.replaceRegexes(
