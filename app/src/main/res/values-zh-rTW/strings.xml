@@ -71,6 +71,8 @@
   <string name="assistant_page_current_assistant">當前助手</string>
   <string name="assistant_page_custom_bodies">自定義 Body</string>
   <string name="assistant_page_custom_headers">自定義 Headers</string>
+  <string name="assistant_page_custom_input_placeholder">自定義輸入框佔位文字</string>
+  <string name="assistant_page_custom_input_placeholder_desc">在聊天輸入框中顯示自定義佔位文字。關閉時不會清除已儲存的文字，但會顯示本地化預設佔位文字。</string>
   <string name="assistant_page_default_assistant">預設助手</string>
   <string name="assistant_page_delete">刪除</string>
   <string name="assistant_page_delete_body">刪除 Body</string>
@@ -82,6 +84,8 @@
   <string name="assistant_page_header_name">Header 名稱</string>
   <string name="assistant_page_header_value">Header 值</string>
   <string name="assistant_page_image_url">圖片URL</string>
+  <string name="assistant_page_input_placeholder">佔位文字</string>
+  <string name="assistant_page_input_placeholder_desc">留空將使用本地化預設佔位文字。輸入的空格會被原樣保留，不會被自動移除。</string>
   <string name="assistant_page_invalid_json">無效的 JSON: %s</string>
   <string name="assistant_page_local_tools_ask_user_desc">允許 AI 向你提問以獲得更多資訊</string>
   <string name="assistant_page_local_tools_ask_user_title">詢問使用者</string>

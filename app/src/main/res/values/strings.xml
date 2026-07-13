@@ -71,6 +71,8 @@
   <string name="assistant_page_current_assistant">Current Assistant</string>
   <string name="assistant_page_custom_bodies">Custom Body</string>
   <string name="assistant_page_custom_headers">Custom Headers</string>
+  <string name="assistant_page_custom_input_placeholder">Custom Input Placeholder</string>
+  <string name="assistant_page_custom_input_placeholder_desc">Show custom placeholder text in the chat input. When off, the saved text is kept but the localized default placeholder is shown instead.</string>
   <string name="assistant_page_default_assistant">Default Assistant</string>
   <string name="assistant_page_delete">Delete</string>
   <string name="assistant_page_delete_body">Delete Body</string>
@@ -82,6 +84,8 @@
   <string name="assistant_page_header_name">Header Name</string>
   <string name="assistant_page_header_value">Header Value</string>
   <string name="assistant_page_image_url">Image URL</string>
+  <string name="assistant_page_input_placeholder">Placeholder Text</string>
+  <string name="assistant_page_input_placeholder_desc">Leave empty to use the localized default placeholder. Spaces you enter are preserved exactly and will not be trimmed.</string>
   <string name="assistant_page_invalid_json">Invalid JSON: %s</string>
   <string name="assistant_page_local_tools_ask_user_desc">Allow the AI to ask you questions for clarification</string>
   <string name="assistant_page_local_tools_ask_user_title">Ask User</string>

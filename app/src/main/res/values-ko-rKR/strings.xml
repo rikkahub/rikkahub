@@ -71,6 +71,8 @@
   <string name="assistant_page_current_assistant">현재 어시스턴트</string>
   <string name="assistant_page_custom_bodies">사용자 정의 본문</string>
   <string name="assistant_page_custom_headers">사용자 정의 헤더</string>
+  <string name="assistant_page_custom_input_placeholder">사용자 지정 입력창 자리표시자</string>
+  <string name="assistant_page_custom_input_placeholder_desc">채팅 입력창에 사용자 지정 자리표시자 텍스트를 표시합니다. 꺼도 저장된 텍스트는 삭제되지 않으며, 현지화된 기본 자리표시자가 표시됩니다.</string>
   <string name="assistant_page_default_assistant">기본 어시스턴트</string>
   <string name="assistant_page_delete">삭제</string>
   <string name="assistant_page_delete_body">본문 삭제</string>
@@ -82,6 +84,8 @@
   <string name="assistant_page_header_name">헤더 이름</string>
   <string name="assistant_page_header_value">헤더 값</string>
   <string name="assistant_page_image_url">이미지 URL</string>
+  <string name="assistant_page_input_placeholder">자리표시자 텍스트</string>
+  <string name="assistant_page_input_placeholder_desc">비워두면 현지화된 기본 자리표시자가 사용됩니다. 입력한 공백은 그대로 유지되며 자동으로 제거되지 않습니다.</string>
   <string name="assistant_page_invalid_json">잘못된 JSON: %s</string>
   <string name="assistant_page_local_tools_ask_user_desc">AI가 명확한 정보를 위해 질문할 수 있도록 허용</string>
   <string name="assistant_page_local_tools_ask_user_title">사용자에게 질문</string>

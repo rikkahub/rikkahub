@@ -230,6 +230,57 @@ internal fun AssistantBasicContent(
                     )
                 }
             )
+
+            HorizontalDivider()
+
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text(stringResource(R.string.assistant_page_custom_input_placeholder))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_custom_input_placeholder_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.enableCustomInputPlaceholder,
+                        onCheckedChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    enableCustomInputPlaceholder = it
+                                )
+                            )
+                        }
+                    )
+                }
+            ) {
+                if (assistant.enableCustomInputPlaceholder) {
+                    Text(
+                        text = stringResource(R.string.assistant_page_input_placeholder),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Text(
+                        text = stringResource(R.string.assistant_page_input_placeholder_desc),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
+                    )
+                    OutlinedTextField(
+                        value = assistant.inputPlaceholder,
+                        onValueChange = { placeholder ->
+                            onUpdate(
+                                assistant.copy(
+                                    inputPlaceholder = placeholder
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = {
+                            Text(stringResource(R.string.chat_input_placeholder))
+                        },
+                        singleLine = true,
+                    )
+                }
+            }
         }
 
         Card(
