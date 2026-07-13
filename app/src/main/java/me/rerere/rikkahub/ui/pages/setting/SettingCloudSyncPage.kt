@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
@@ -19,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
@@ -31,18 +33,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.rikkahub.data.sync.cloud.SyncMode
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -62,6 +68,14 @@ fun SettingCloudSyncPage(
     val mode = SyncMode.fromStorage(syncState?.syncMode)
     var bootstrapVisible by remember { mutableStateOf(false) }
     var tokenVisible by remember { mutableStateOf(false) }
+    val clipboard = LocalClipboardManager.current
+    val toaster = LocalToaster.current
+
+    fun copyText(label: String, text: String) {
+        if (text.isBlank()) return
+        clipboard.setText(AnnotatedString(text))
+        toaster.show("Copied $label")
+    }
 
     Scaffold(
         topBar = {
@@ -81,6 +95,17 @@ fun SettingCloudSyncPage(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
+                val diagnostic = buildString {
+                    appendLine("connection=$connectionStatus")
+                    appendLine("outbox=$outboxCount")
+                    appendLine("mode=$mode")
+                    appendLine("deviceId=${syncState?.deviceId ?: "(none)"}")
+                    appendLine("cursor=${syncState?.changeCursor ?: 0}")
+                    appendLine("lastSuccess=${syncState?.lastSuccessAt ?: "-"}")
+                    appendLine("token=${if (settings.perryDeviceToken.isBlank()) "empty" else "saved(${settings.perryDeviceToken.length})"}")
+                    appendLine("baseUrl=${runCatching { config.normalizedBaseUrl() }.getOrElse { "(invalid)" }}")
+                    append("lastResult=${statusText ?: "(none)"}")
+                }
                 CardGroup(title = { Text("Status") }) {
                     item(
                         headlineContent = { Text("Connection") },
@@ -88,18 +113,50 @@ fun SettingCloudSyncPage(
                             Text("$connectionStatus · outbox=$outboxCount")
                         },
                         leadingContent = { Icon(HugeIcons.ServerStack01, contentDescription = null) },
+                        trailingContent = {
+                            IconButton(onClick = { copyText("diagnostics", diagnostic) }) {
+                                Icon(HugeIcons.Copy01, contentDescription = "Copy diagnostics")
+                            }
+                        },
                     )
-                    if (statusText != null) {
-                        item(
-                            headlineContent = { Text("Last result") },
-                            supportingContent = {
-                                Text(
-                                    text = statusText!!,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            },
-                        )
-                    }
+                    item(
+                        headlineContent = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text("Last result")
+                                    TextButton(
+                                        onClick = { copyText("last result", statusText.orEmpty()) },
+                                        enabled = !statusText.isNullOrBlank(),
+                                    ) {
+                                        Icon(HugeIcons.Copy01, contentDescription = null)
+                                        Text("Copy")
+                                    }
+                                }
+                                SelectionContainer {
+                                    TextField(
+                                        value = statusText ?: "(run Test connection)",
+                                        onValueChange = {},
+                                        readOnly = true,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        minLines = 2,
+                                        maxLines = 8,
+                                        colors = clearFieldColors(),
+                                    )
+                                }
+                                SelectionContainer {
+                                    Text(
+                                        text = diagnostic,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        },
+                    )
                     item(
                         headlineContent = { Text("Device token") },
                         supportingContent = {
@@ -114,7 +171,19 @@ fun SettingCloudSyncPage(
                     )
                     item(
                         headlineContent = { Text("Device ID") },
-                        supportingContent = { Text(syncState?.deviceId ?: "(not registered)") },
+                        supportingContent = {
+                            SelectionContainer {
+                                Text(syncState?.deviceId ?: "(not registered)")
+                            }
+                        },
+                        trailingContent = {
+                            val id = syncState?.deviceId
+                            if (!id.isNullOrBlank()) {
+                                IconButton(onClick = { copyText("device id", id) }) {
+                                    Icon(HugeIcons.Copy01, contentDescription = "Copy device id")
+                                }
+                            }
+                        },
                     )
                     item(
                         headlineContent = { Text("Cursor") },
