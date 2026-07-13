@@ -255,6 +255,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     title = { Text(stringResource(R.string.setting_page_data_settings)) },
                 ) {
                     item(
+                        onClick = { navController.navigate(Screen.SettingCloudSync) },
+                        leadingContent = { Icon(HugeIcons.ServerStack01, null) },
+                        supportingContent = { Text("Perry server, device token, and cloud sync") },
+                        headlineContent = { Text("Cloud & Sync") },
+                    )
+                    item(
                         onClick = { navController.navigate(Screen.Backup) },
                         leadingContent = { Icon(HugeIcons.Database02, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_data_backup_desc)) },

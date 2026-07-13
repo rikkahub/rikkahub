@@ -41,6 +41,7 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
+import me.rerere.rikkahub.data.sync.cloud.PerryServerConfig
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.CustomTheme
 import me.rerere.rikkahub.ui.theme.PresetThemes
@@ -121,6 +122,10 @@ class SettingsStore(
 
         // S3
         val S3_CONFIG = stringPreferencesKey("s3_config")
+
+        // Perry cloud (connection config is device-local; token is never part of cloud sync payload)
+        val PERRY_CONFIG = stringPreferencesKey("perry_config")
+        val PERRY_DEVICE_TOKEN = stringPreferencesKey("perry_device_token")
 
         // TTS
         val TTS_PROVIDERS = stringPreferencesKey("tts_providers")
@@ -215,6 +220,10 @@ class SettingsStore(
                 s3Config = preferences[S3_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: S3Config(),
+                perryConfig = preferences[PERRY_CONFIG]?.let {
+                    JsonInstant.decodeFromString(it)
+                } ?: PerryServerConfig(),
+                perryDeviceToken = preferences[PERRY_DEVICE_TOKEN] ?: "",
                 ttsProviders = preferences[TTS_PROVIDERS]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -392,6 +401,8 @@ class SettingsStore(
             preferences[MCP_SERVERS] = JsonInstant.encodeToString(settings.mcpServers)
             preferences[WEBDAV_CONFIG] = JsonInstant.encodeToString(settings.webDavConfig)
             preferences[S3_CONFIG] = JsonInstant.encodeToString(settings.s3Config)
+            preferences[PERRY_CONFIG] = JsonInstant.encodeToString(settings.perryConfig)
+            preferences[PERRY_DEVICE_TOKEN] = settings.perryDeviceToken
             preferences[TTS_PROVIDERS] = JsonInstant.encodeToString(settings.ttsProviders)
             settings.selectedTTSProviderId?.let {
                 preferences[SELECTED_TTS_PROVIDER] = it.toString()
@@ -526,6 +537,10 @@ data class Settings(
     val mcpServers: List<McpServerConfig> = emptyList(),
     val webDavConfig: WebDavConfig = WebDavConfig(),
     val s3Config: S3Config = S3Config(),
+    val perryConfig: PerryServerConfig = PerryServerConfig(),
+    /** Device token kept device-local; excluded from kotlinx Settings JSON backup via Transient. */
+    @Transient
+    val perryDeviceToken: String = "",
     val ttsProviders: List<TTSProviderSetting> = DEFAULT_TTS_PROVIDERS,
     val selectedTTSProviderId: Uuid = DEFAULT_SYSTEM_TTS_ID,
     val asrProviders: List<ASRProviderSetting> = emptyList(),

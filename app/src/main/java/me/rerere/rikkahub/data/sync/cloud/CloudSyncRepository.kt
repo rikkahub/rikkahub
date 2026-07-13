@@ -2,11 +2,18 @@ package me.rerere.rikkahub.data.sync.cloud
 
 import android.util.Log
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.JsonElement
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.dao.SyncOutboxDAO
 import me.rerere.rikkahub.data.db.dao.SyncStateDAO
 import me.rerere.rikkahub.data.db.entity.SyncOutboxEntity
 import me.rerere.rikkahub.data.db.entity.SyncStateEntity
+import me.rerere.rikkahub.utils.JsonInstant
+import okhttp3.OkHttpClient
 import java.util.UUID
 
 sealed class CloudSyncOutcome {
@@ -16,17 +23,34 @@ sealed class CloudSyncOutcome {
     data class Failed(val message: String) : CloudSyncOutcome()
 }
 
+data class ConnectionProbeResult(
+    val status: ConnectionStatus,
+    val message: String,
+    val latencyMs: Long? = null,
+    val serverInfo: ServerInfoResponse? = null,
+)
+
 /**
- * Local sync state + outbox. Network push/pull is wired when Perry client is configured.
+ * Local outbox + Perry connection/sync cycle.
  */
 class CloudSyncRepository(
     private val outboxDao: SyncOutboxDAO,
     private val stateDao: SyncStateDAO,
+    private val settingsStore: SettingsStore,
+    private val okHttpClient: OkHttpClient,
 ) {
+    private val _connectionStatus = MutableStateFlow(ConnectionStatus.NOT_CONFIGURED)
+    val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
+
+    private val _lastMessage = MutableStateFlow<String?>(null)
+    val lastMessage: StateFlow<String?> = _lastMessage.asStateFlow()
+
     fun observeOutboxCount(): Flow<Int> = outboxDao.observeCount()
 
     fun observeSyncMode(): Flow<SyncMode> =
         stateDao.observe().map { SyncMode.fromStorage(it?.syncMode) }
+
+    fun observeState(): Flow<SyncStateEntity?> = stateDao.observe()
 
     suspend fun ensureState(): SyncStateEntity {
         val existing = stateDao.get()
@@ -45,6 +69,11 @@ class CloudSyncRepository(
                 updatedAt = System.currentTimeMillis(),
             )
         )
+        when (mode) {
+            SyncMode.LOCAL_ONLY -> _connectionStatus.value = ConnectionStatus.LOCAL_MODE
+            SyncMode.PAUSED -> _connectionStatus.value = ConnectionStatus.PAUSED
+            SyncMode.AUTO -> Unit
+        }
     }
 
     suspend fun enqueueMutation(
@@ -79,24 +108,255 @@ class CloudSyncRepository(
         return mutationId
     }
 
+    suspend fun testConnection(): ConnectionProbeResult {
+        val settings = settingsStore.settingsFlow.value
+        val config = settings.perryConfig
+        val mode = SyncMode.fromStorage(ensureState().syncMode)
+        if (mode == SyncMode.LOCAL_ONLY) {
+            val result = ConnectionProbeResult(ConnectionStatus.LOCAL_MODE, "Local-only mode")
+            _connectionStatus.value = result.status
+            _lastMessage.value = result.message
+            return result
+        }
+        if (mode == SyncMode.PAUSED) {
+            val result = ConnectionProbeResult(ConnectionStatus.PAUSED, "Sync paused")
+            _connectionStatus.value = result.status
+            _lastMessage.value = result.message
+            return result
+        }
+        if (!config.isConfigured()) {
+            val result = ConnectionProbeResult(ConnectionStatus.NOT_CONFIGURED, "Server host is empty")
+            _connectionStatus.value = result.status
+            _lastMessage.value = result.message
+            return result
+        }
+
+        _connectionStatus.value = ConnectionStatus.CHECKING
+        val started = System.currentTimeMillis()
+        return try {
+            val baseUrl = config.normalizedBaseUrl()
+            val readyClient = PerryApiClient(okHttpClient, baseUrl, deviceToken = null)
+            readyClient.healthReady()
+            val token = settings.perryDeviceToken
+            if (token.isBlank()) {
+                val result = ConnectionProbeResult(
+                    status = ConnectionStatus.AUTH_REQUIRED,
+                    message = "Device not registered (ready OK)",
+                    latencyMs = System.currentTimeMillis() - started,
+                )
+                _connectionStatus.value = result.status
+                _lastMessage.value = result.message
+                return result
+            }
+            val authed = PerryApiClient(okHttpClient, baseUrl, deviceToken = token)
+            val info = authed.serverInfo()
+            val degraded = info.components.values.any {
+                it.status == "degraded" || it.status == "error"
+            }
+            val status = if (degraded) ConnectionStatus.DEGRADED else ConnectionStatus.ONLINE
+            val result = ConnectionProbeResult(
+                status = status,
+                message = "API ${info.apiVersion}",
+                latencyMs = System.currentTimeMillis() - started,
+                serverInfo = info,
+            )
+            _connectionStatus.value = result.status
+            _lastMessage.value = result.message
+            result
+        } catch (e: PerryApiException) {
+            val status = when (e.httpStatus) {
+                401, 403 -> ConnectionStatus.AUTH_REQUIRED
+                else -> ConnectionStatus.UNREACHABLE
+            }
+            val result = ConnectionProbeResult(status, e.message ?: e.code)
+            _connectionStatus.value = result.status
+            _lastMessage.value = result.message
+            result
+        } catch (e: Exception) {
+            val result = ConnectionProbeResult(
+                ConnectionStatus.UNREACHABLE,
+                e.message ?: "unreachable",
+            )
+            _connectionStatus.value = result.status
+            _lastMessage.value = result.message
+            result
+        }
+    }
+
+    suspend fun registerThisDevice(): Result<DeviceRegisterResponse> {
+        return runCatching {
+            val settings = settingsStore.settingsFlow.value
+            val config = settings.perryConfig
+            require(config.isConfigured()) { "Server host is empty" }
+            require(config.bootstrapToken.isNotBlank()) { "Bootstrap token is empty" }
+            val name = config.deviceName.ifBlank { android.os.Build.MODEL }
+            val client = PerryApiClient(okHttpClient, config.normalizedBaseUrl())
+            val registered = client.registerDevice(name, config.bootstrapToken)
+            val now = System.currentTimeMillis()
+            val state = ensureState()
+            stateDao.upsert(
+                state.copy(
+                    deviceId = registered.deviceId,
+                    serverId = registered.userId,
+                    updatedAt = now,
+                    lastError = null,
+                )
+            )
+            settingsStore.update {
+                it.copy(
+                    perryDeviceToken = registered.deviceToken,
+                    perryConfig = it.perryConfig.copy(
+                        deviceName = name,
+                        // Clear bootstrap token after successful registration
+                        bootstrapToken = "",
+                    ),
+                )
+            }
+            registered
+        }
+    }
+
+    suspend fun clearDeviceCredentials() {
+        val state = ensureState()
+        stateDao.upsert(
+            state.copy(
+                deviceId = null,
+                serverId = null,
+                changeCursor = 0,
+                updatedAt = System.currentTimeMillis(),
+                lastError = null,
+            )
+        )
+        settingsStore.update { it.copy(perryDeviceToken = "") }
+        _connectionStatus.value = ConnectionStatus.AUTH_REQUIRED
+    }
+
+    suspend fun resetCursor() {
+        val state = ensureState()
+        stateDao.upsert(state.copy(changeCursor = 0, updatedAt = System.currentTimeMillis()))
+    }
+
     suspend fun runSyncCycle(): CloudSyncOutcome {
         val state = ensureState()
         val mode = SyncMode.fromStorage(state.syncMode)
         if (mode != SyncMode.AUTO) {
             return CloudSyncOutcome.Skipped
         }
-        if (state.deviceId.isNullOrBlank()) {
+        val settings = settingsStore.settingsFlow.value
+        val config = settings.perryConfig
+        val token = settings.perryDeviceToken
+        if (!config.isConfigured() || token.isBlank() || state.deviceId.isNullOrBlank()) {
             return CloudSyncOutcome.Skipped
         }
-        // Network client is Phase 3+; for now mark success when there is nothing pending
-        // or leave outbox for later push.
-        val pending = outboxDao.listReady(System.currentTimeMillis(), limit = 1)
-        if (pending.isEmpty()) {
-            Log.d(TAG, "sync cycle: nothing to push")
-            return CloudSyncOutcome.Success
+
+        return try {
+            val client = PerryApiClient(
+                okHttpClient,
+                config.normalizedBaseUrl(),
+                deviceToken = token,
+            )
+            pushOutbox(client, state.deviceId!!)
+            pullChanges(client)
+            val now = System.currentTimeMillis()
+            stateDao.updateCursor(
+                cursor = ensureState().changeCursor,
+                lastSuccessAt = now,
+                updatedAt = now,
+            )
+            _connectionStatus.value = ConnectionStatus.ONLINE
+            CloudSyncOutcome.Success
+        } catch (e: PerryApiException) {
+            Log.w(TAG, "sync failed: ${e.code} ${e.message}")
+            stateDao.updateError(e.message, System.currentTimeMillis())
+            when (e.httpStatus) {
+                401, 403 -> {
+                    _connectionStatus.value = ConnectionStatus.AUTH_REQUIRED
+                    CloudSyncOutcome.Failed(e.message ?: e.code)
+                }
+                409 -> CloudSyncOutcome.Failed(e.message ?: "conflict")
+                else -> CloudSyncOutcome.Retryable(e.message ?: e.code)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "sync cycle failed", e)
+            stateDao.updateError(e.message, System.currentTimeMillis())
+            CloudSyncOutcome.Retryable(e.message ?: "network error")
         }
-        Log.i(TAG, "sync cycle: ${pending.size}+ outbox items waiting for Perry client")
-        return CloudSyncOutcome.Skipped
+    }
+
+    private suspend fun pushOutbox(client: PerryApiClient, deviceId: String) {
+        val batch = outboxDao.listReady(System.currentTimeMillis(), limit = 50)
+        if (batch.isEmpty()) return
+        val request = SyncMutationsRequest(
+            deviceId = deviceId,
+            mutations = batch.map { item ->
+                SyncMutationItem(
+                    mutationId = item.mutationId,
+                    entityType = item.entityType,
+                    entityId = item.entityId,
+                    operation = item.operation,
+                    baseRevision = item.baseRevision,
+                    payloadSchemaVersion = item.payloadSchemaVersion,
+                    payload = item.payloadJson?.let {
+                        runCatching { JsonInstant.decodeFromString<JsonElement>(it) }.getOrNull()
+                    },
+                )
+            },
+        )
+        val response = client.mutations(request)
+        val now = System.currentTimeMillis()
+        response.results.forEach { result ->
+            when (result.status) {
+                "applied", "already_applied" -> outboxDao.deleteById(result.mutationId)
+                "conflict", "rejected" -> {
+                    val existing = outboxDao.getById(result.mutationId) ?: return@forEach
+                    outboxDao.update(
+                        existing.copy(
+                            retryCount = existing.retryCount + 1,
+                            nextRetryAt = now + backoffMs(existing.retryCount + 1),
+                            lastError = result.message ?: result.status,
+                            updatedAt = now,
+                        )
+                    )
+                }
+            }
+        }
+        if (response.cursor > 0) {
+            val state = ensureState()
+            if (response.cursor > state.changeCursor) {
+                stateDao.upsert(state.copy(changeCursor = response.cursor, updatedAt = now))
+            }
+        }
+    }
+
+    private suspend fun pullChanges(client: PerryApiClient) {
+        var cursor = ensureState().changeCursor
+        var guard = 0
+        while (guard < 20) {
+            guard++
+            val page = client.changes(cursor = cursor, limit = 200)
+            // Phase 3: cursor advances; entity apply for settings domains comes in Phase 4.
+            if (page.nextCursor > cursor) {
+                cursor = page.nextCursor
+                val state = ensureState()
+                stateDao.upsert(
+                    state.copy(
+                        changeCursor = cursor,
+                        lastSuccessAt = System.currentTimeMillis(),
+                        updatedAt = System.currentTimeMillis(),
+                        lastError = null,
+                    )
+                )
+            }
+            if (!page.hasMore || page.changes.isEmpty()) break
+        }
+    }
+
+    private fun backoffMs(retryCount: Int): Long {
+        val steps = longArrayOf(5_000, 15_000, 60_000, 300_000, 1_800_000)
+        val idx = (retryCount - 1).coerceIn(0, steps.lastIndex)
+        val base = steps[idx]
+        val jitter = (base * 0.2).toLong()
+        return base + (-jitter..jitter).random()
     }
 
     companion object {

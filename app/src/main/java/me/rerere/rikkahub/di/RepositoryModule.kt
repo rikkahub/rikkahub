@@ -88,6 +88,8 @@ val repositoryModule = module {
         CloudSyncRepository(
             outboxDao = get(),
             stateDao = get(),
+            settingsStore = get(),
+            okHttpClient = get(),
         )
     }
 }
