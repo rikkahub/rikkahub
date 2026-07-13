@@ -92,9 +92,26 @@ fun SettingCloudSyncPage(
                     if (statusText != null) {
                         item(
                             headlineContent = { Text("Last result") },
-                            supportingContent = { Text(statusText!!) },
+                            supportingContent = {
+                                Text(
+                                    text = statusText!!,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            },
                         )
                     }
+                    item(
+                        headlineContent = { Text("Device token") },
+                        supportingContent = {
+                            Text(
+                                if (settings.perryDeviceToken.isBlank()) {
+                                    "(empty — register first)"
+                                } else {
+                                    "saved (${settings.perryDeviceToken.length} chars)"
+                                }
+                            )
+                        },
+                    )
                     item(
                         headlineContent = { Text("Device ID") },
                         supportingContent = { Text(syncState?.deviceId ?: "(not registered)") },

@@ -1,11 +1,13 @@
 package me.rerere.rikkahub.data.sync.cloud
 
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.dao.SyncOutboxDAO
@@ -108,79 +110,138 @@ class CloudSyncRepository(
         return mutationId
     }
 
-    suspend fun testConnection(): ConnectionProbeResult {
+    suspend fun testConnection(): ConnectionProbeResult = withContext(Dispatchers.IO) {
         val settings = settingsStore.settingsFlow.value
         val config = settings.perryConfig
         val mode = SyncMode.fromStorage(ensureState().syncMode)
-        if (mode == SyncMode.LOCAL_ONLY) {
-            val result = ConnectionProbeResult(ConnectionStatus.LOCAL_MODE, "Local-only mode")
-            _connectionStatus.value = result.status
-            _lastMessage.value = result.message
-            return result
-        }
-        if (mode == SyncMode.PAUSED) {
-            val result = ConnectionProbeResult(ConnectionStatus.PAUSED, "Sync paused")
-            _connectionStatus.value = result.status
-            _lastMessage.value = result.message
-            return result
-        }
+        // Explicit "Test connection" always probes the network; mode only annotates the result.
         if (!config.isConfigured()) {
-            val result = ConnectionProbeResult(ConnectionStatus.NOT_CONFIGURED, "Server host is empty")
-            _connectionStatus.value = result.status
-            _lastMessage.value = result.message
-            return result
+            return@withContext publishProbe(
+                ConnectionProbeResult(ConnectionStatus.NOT_CONFIGURED, "Server host is empty")
+            )
         }
 
         _connectionStatus.value = ConnectionStatus.CHECKING
         val started = System.currentTimeMillis()
-        return try {
-            val baseUrl = config.normalizedBaseUrl()
-            val readyClient = PerryApiClient(okHttpClient, baseUrl, deviceToken = null)
-            readyClient.healthReady()
+        val baseUrl = try {
+            config.normalizedBaseUrl()
+        } catch (e: Exception) {
+            return@withContext publishProbe(
+                ConnectionProbeResult(
+                    ConnectionStatus.NOT_CONFIGURED,
+                    "Invalid server URL: ${e.message}",
+                )
+            )
+        }
+
+        try {
+            val anon = PerryApiClient(okHttpClient, baseUrl, deviceToken = null)
+            try {
+                anon.healthLive()
+            } catch (e: Exception) {
+                Log.w(TAG, "health/live failed for $baseUrl", e)
+                return@withContext publishProbe(
+                    ConnectionProbeResult(
+                        status = ConnectionStatus.UNREACHABLE,
+                        message = "health/live failed @ $baseUrl: ${describeError(e)}",
+                        latencyMs = System.currentTimeMillis() - started,
+                    )
+                )
+            }
+            try {
+                anon.healthReady()
+            } catch (e: Exception) {
+                Log.w(TAG, "health/ready failed for $baseUrl", e)
+                return@withContext publishProbe(
+                    ConnectionProbeResult(
+                        status = ConnectionStatus.UNREACHABLE,
+                        message = "health/ready failed @ $baseUrl: ${describeError(e)}",
+                        latencyMs = System.currentTimeMillis() - started,
+                    )
+                )
+            }
+
             val token = settings.perryDeviceToken
             if (token.isBlank()) {
-                val result = ConnectionProbeResult(
-                    status = ConnectionStatus.AUTH_REQUIRED,
-                    message = "Device not registered (ready OK)",
-                    latencyMs = System.currentTimeMillis() - started,
+                return@withContext publishProbe(
+                    ConnectionProbeResult(
+                        status = ConnectionStatus.AUTH_REQUIRED,
+                        message = "Server reachable, but device token is empty. Register this device first.",
+                        latencyMs = System.currentTimeMillis() - started,
+                    )
                 )
-                _connectionStatus.value = result.status
-                _lastMessage.value = result.message
-                return result
             }
+
             val authed = PerryApiClient(okHttpClient, baseUrl, deviceToken = token)
-            val info = authed.serverInfo()
+            val info = try {
+                authed.serverInfo()
+            } catch (e: PerryApiException) {
+                Log.w(TAG, "server-info failed for $baseUrl", e)
+                val status = when (e.httpStatus) {
+                    401, 403 -> ConnectionStatus.AUTH_REQUIRED
+                    else -> ConnectionStatus.UNREACHABLE
+                }
+                return@withContext publishProbe(
+                    ConnectionProbeResult(
+                        status = status,
+                        message = "server-info failed @ $baseUrl: ${e.message ?: e.code} (HTTP ${e.httpStatus})",
+                        latencyMs = System.currentTimeMillis() - started,
+                    )
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "server-info parse/network failed for $baseUrl", e)
+                return@withContext publishProbe(
+                    ConnectionProbeResult(
+                        status = ConnectionStatus.UNREACHABLE,
+                        message = "server-info failed @ $baseUrl: ${describeError(e)}",
+                        latencyMs = System.currentTimeMillis() - started,
+                    )
+                )
+            }
+
             val degraded = info.components.values.any {
                 it.status == "degraded" || it.status == "error"
             }
-            val status = if (degraded) ConnectionStatus.DEGRADED else ConnectionStatus.ONLINE
-            val result = ConnectionProbeResult(
-                status = status,
-                message = "API ${info.apiVersion}",
-                latencyMs = System.currentTimeMillis() - started,
-                serverInfo = info,
-            )
-            _connectionStatus.value = result.status
-            _lastMessage.value = result.message
-            result
-        } catch (e: PerryApiException) {
-            val status = when (e.httpStatus) {
-                401, 403 -> ConnectionStatus.AUTH_REQUIRED
-                else -> ConnectionStatus.UNREACHABLE
+            val status = when {
+                mode == SyncMode.LOCAL_ONLY -> ConnectionStatus.LOCAL_MODE
+                mode == SyncMode.PAUSED -> ConnectionStatus.PAUSED
+                degraded -> ConnectionStatus.DEGRADED
+                else -> ConnectionStatus.ONLINE
             }
-            val result = ConnectionProbeResult(status, e.message ?: e.code)
-            _connectionStatus.value = result.status
-            _lastMessage.value = result.message
-            result
-        } catch (e: Exception) {
-            val result = ConnectionProbeResult(
-                ConnectionStatus.UNREACHABLE,
-                e.message ?: "unreachable",
+            val modeNote = when (mode) {
+                SyncMode.AUTO -> ""
+                else -> " (mode=$mode, network OK)"
+            }
+            publishProbe(
+                ConnectionProbeResult(
+                    status = status,
+                    message = "API ${info.apiVersion}$modeNote",
+                    latencyMs = System.currentTimeMillis() - started,
+                    serverInfo = info,
+                )
             )
-            _connectionStatus.value = result.status
-            _lastMessage.value = result.message
-            result
+        } catch (e: Exception) {
+            Log.e(TAG, "testConnection failed for $baseUrl", e)
+            publishProbe(
+                ConnectionProbeResult(
+                    ConnectionStatus.UNREACHABLE,
+                    "probe failed @ $baseUrl: ${describeError(e)}",
+                    latencyMs = System.currentTimeMillis() - started,
+                )
+            )
         }
+    }
+
+    private fun publishProbe(result: ConnectionProbeResult): ConnectionProbeResult {
+        _connectionStatus.value = result.status
+        _lastMessage.value = result.message
+        return result
+    }
+
+    private fun describeError(e: Throwable): String {
+        val base = e.message?.takeIf { it.isNotBlank() } ?: e.javaClass.simpleName
+        val cause = e.cause?.message?.takeIf { it.isNotBlank() }
+        return if (cause != null && cause != base) "$base | cause=$cause" else base
     }
 
     suspend fun registerThisDevice(): Result<DeviceRegisterResponse> {
@@ -194,10 +255,12 @@ class CloudSyncRepository(
             val registered = client.registerDevice(name, config.bootstrapToken)
             val now = System.currentTimeMillis()
             val state = ensureState()
+            // Prefer AUTO after a successful registration so subsequent sync/tests are meaningful.
             stateDao.upsert(
                 state.copy(
                     deviceId = registered.deviceId,
                     serverId = registered.userId,
+                    syncMode = SyncMode.AUTO.name,
                     updatedAt = now,
                     lastError = null,
                 )

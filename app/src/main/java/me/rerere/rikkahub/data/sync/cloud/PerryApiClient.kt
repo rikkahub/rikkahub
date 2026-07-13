@@ -26,11 +26,16 @@ class PerryApiClient(
     private val mediaType = "application/json".toMediaType()
 
     private val probeClient: OkHttpClient = httpClient.newBuilder()
-        .connectTimeout(3, TimeUnit.SECONDS)
-        .readTimeout(5, TimeUnit.SECONDS)
-        .writeTimeout(5, TimeUnit.SECONDS)
-        .callTimeout(5, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
+        // Avoid callTimeout: shared interceptors + LAN jitter can exceed a hard 5s budget.
+        .callTimeout(0, TimeUnit.SECONDS)
         .build()
+
+    suspend fun healthLive(): HealthLiveResponse {
+        return get("/health/live", auth = false, client = probeClient)
+    }
 
     suspend fun healthReady(): HealthReadyResponse {
         return get("/health/ready", auth = false, client = probeClient)
@@ -134,6 +139,11 @@ class PerryApiClient(
         }
     }
 }
+
+@Serializable
+data class HealthLiveResponse(
+    val status: String,
+)
 
 @Serializable
 data class HealthReadyResponse(
