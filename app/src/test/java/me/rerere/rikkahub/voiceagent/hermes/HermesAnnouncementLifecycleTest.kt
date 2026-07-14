@@ -83,6 +83,26 @@ class HermesAnnouncementLifecycleTest {
     }
 
     @Test
+    fun `session retirement clears old turn ownership without releasing on the old bridge`() {
+        var state = attached.copy(geminiTurn = GeminiTurnGate.Active)
+        state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 10L)).state
+
+        val retired = reducer.reduce(state, AnnouncerEvent.GeminiSessionRetired(20L))
+
+        assertEquals(GeminiTurnGate.Idle, retired.state.geminiTurn)
+        assertEquals(PlaybackGate(), retired.state.playback)
+        assertTrue(retired.sends().isEmpty())
+        assertEquals(completion, retired.state.pendingJobs.single().final)
+
+        val replacementAttached = reducer.reduce(
+            retired.state,
+            AnnouncerEvent.BridgeAttached(sessionId = 8L, nowMs = 30L),
+        )
+        assertEquals(listOf(completion), replacementAttached.sends())
+        assertEquals(8L, replacementAttached.effects.filterIsInstance<AnnouncerEffect.Send>().single().sessionId)
+    }
+
+    @Test
     fun `blocked watchdog diagnoses but never sends`() {
         var state = attached
         state = reducer.reduce(state, AnnouncerEvent.GeminiTurnActive(10L)).state

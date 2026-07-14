@@ -672,6 +672,7 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
     private val blockedPlaybacks = mutableListOf<BlockedPlayback>()
     private val blockedAfterAcceptedPlaybacks = mutableListOf<BlockedPlayback>()
     private val blockedSuppressions = mutableListOf<BlockedPlayback>()
+    private val blockedTurnCompletions = mutableListOf<BlockedPlayback>()
 
     override fun setErrorHandler(onError: ((String) -> Unit)?) {
         errorHandler = onError
@@ -756,6 +757,13 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
 
     override fun markPlaybackTurnComplete(sessionId: Long?): Boolean {
         markPlaybackTurnCompleteCalls += 1
+        val blocked = synchronized(blockedTurnCompletions) {
+            blockedTurnCompletions.removeFirstOrNull()
+        }
+        if (blocked != null) {
+            blocked.started.countDown()
+            blocked.release.await(500, TimeUnit.MILLISECONDS)
+        }
         if (sessionId != null && playbackSessionId != sessionId) return false
         val epoch = acceptingPlaybackEpoch ?: return true
         acceptingPlaybackEpoch = null
@@ -819,6 +827,14 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
         return BlockedPlayback().also { blocked ->
             synchronized(blockedSuppressions) {
                 blockedSuppressions += blocked
+            }
+        }
+    }
+
+    fun blockNextPlaybackTurnComplete(): BlockedPlayback {
+        return BlockedPlayback().also { blocked ->
+            synchronized(blockedTurnCompletions) {
+                blockedTurnCompletions += blocked
             }
         }
     }

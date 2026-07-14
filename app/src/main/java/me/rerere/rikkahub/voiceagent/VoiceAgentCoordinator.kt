@@ -234,6 +234,10 @@ class VoiceAgentCoordinator(
         synchronized(toolJobsLock) {
             activeSessionId += 1
             acceptsUnscopedGeminiEvents = false
+            // Posted while holding the same ownership lock used by scoped activity and
+            // TurnComplete. This gives retirement a total order with in-flight callbacks:
+            // an old event is either posted before this reset or rejected after it.
+            hermesJobManager.announcer.onGeminiSessionRetired()
         }
     }
 
@@ -304,8 +308,7 @@ class VoiceAgentCoordinator(
             GeminiLiveEvent.GenerationComplete -> handleGenerationComplete()
             GeminiLiveEvent.TurnComplete -> {
                 diagnostics.record("gemini_turn_complete")
-                audio.markPlaybackTurnComplete(sessionId)
-                hermesJobManager.announcer.onGeminiTurnComplete()
+                handleTurnComplete(sessionId)
             }
             is GeminiLiveEvent.OutputAudio -> playOutputAudio(event.base64Pcm16, sessionId = sessionId)
             is GeminiLiveEvent.Interrupted -> handleInterrupted(event)
@@ -467,7 +470,7 @@ class VoiceAgentCoordinator(
 
     private fun appendInputTranscript(text: String, sessionId: Long?) {
         if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.InputTranscript(text))) return
-        hermesJobManager.announcer.onGeminiTurnActive()
+        if (!markGeminiTurnActive(sessionId, GeminiLiveEvent.InputTranscript(text))) return
         hermesJobManager.announcer.onInputTranscriptDelta()
         suppressionController.clearForNewTurn()
         _state.update { it.copy(inputTranscript = it.inputTranscript + text) }
@@ -477,7 +480,7 @@ class VoiceAgentCoordinator(
 
     private fun appendOutputTranscript(text: String, sessionId: Long?) {
         if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.OutputTranscript(text))) return
-        hermesJobManager.announcer.onGeminiTurnActive()
+        if (!markGeminiTurnActive(sessionId, GeminiLiveEvent.OutputTranscript(text))) return
         if (suppressionController.clearForAssistantTurnAfterInterruption()) {
             diagnostics.record("output_audio_suppression_cleared_after_interruption")
         }
@@ -495,7 +498,7 @@ class VoiceAgentCoordinator(
             return
         }
         if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.OutputAudio(base64Pcm16))) return
-        hermesJobManager.announcer.onGeminiTurnActive()
+        if (!markGeminiTurnActive(sessionId, GeminiLiveEvent.OutputAudio(base64Pcm16))) return
         diagnostics.record(
             name = "output_audio_chunk",
             detail = "sessionId=${sessionId ?: "none"}, base64Chars=${base64Pcm16.length}",
@@ -559,7 +562,7 @@ class VoiceAgentCoordinator(
             diagnostics.record("tool_call_ignored_after_cancellation", "callId=${call.callId}")
             return
         }
-        hermesJobManager.announcer.onGeminiTurnActive()
+        if (!markGeminiTurnActive(sessionId, call)) return
         diagnostics.record(
             "tool_call_received",
             "callId=${call.callId}, name=${call.name}, promptChars=${call.argLength()}",
@@ -624,6 +627,50 @@ class VoiceAgentCoordinator(
         if (sessionId == null || isActiveSession(sessionId)) return false
         diagnostics.record("stale_gemini_event", event.javaClass.simpleName)
         return true
+    }
+
+    /**
+     * Orders scoped Gemini activity against session retirement. Posting while holding
+     * [toolJobsLock] is safe because the announcer tap is a non-blocking channel send and
+     * never calls back into the coordinator.
+     */
+    private fun markGeminiTurnActive(sessionId: Long?, event: GeminiLiveEvent): Boolean {
+        val accepted = synchronized(toolJobsLock) {
+            val ownsTurn = if (sessionId == null) {
+                acceptsUnscopedGeminiEvents && !closed && !closing
+            } else {
+                activeSessionId == sessionId && !closed && !closing
+            }
+            if (ownsTurn) {
+                hermesJobManager.announcer.onGeminiTurnActive()
+            }
+            ownsTurn
+        }
+        if (!accepted) {
+            diagnostics.record("stale_gemini_event", event.javaClass.simpleName)
+        }
+        return accepted
+    }
+
+    private fun handleTurnComplete(sessionId: Long?) {
+        val playbackAccepted = audio.markPlaybackTurnComplete(sessionId)
+        val turnAccepted = synchronized(toolJobsLock) {
+            val ownsTurn = if (sessionId == null) {
+                acceptsUnscopedGeminiEvents && !closed && !closing
+            } else {
+                playbackAccepted && activeSessionId == sessionId && !closed && !closing
+            }
+            if (ownsTurn) {
+                hermesJobManager.announcer.onGeminiTurnComplete()
+            }
+            ownsTurn
+        }
+        if (!turnAccepted) {
+            diagnostics.record(
+                name = "stale_gemini_turn_complete",
+                detail = "sessionId=${sessionId ?: "none"}, playbackAccepted=$playbackAccepted",
+            )
+        }
     }
 
     private fun handleToolCallCancellation(event: GeminiLiveEvent.ToolCallCancellation, sessionId: Long?) {

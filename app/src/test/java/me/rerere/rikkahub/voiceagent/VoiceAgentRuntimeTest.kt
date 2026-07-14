@@ -128,6 +128,63 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `in flight stale turn completion cannot clear replacement session gates`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val audio = FakeVoiceAudioEngine()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = audio,
+            hermesAnnouncementQuietWindowMs = 0L,
+            scope = CoroutineScope(coroutineContext + Dispatchers.Default),
+        )
+        val oldSessionId = coordinator.nextSessionId()
+        audio.activatePlaybackSession(oldSessionId)
+        gemini.activateOutboundSession(oldSessionId)
+        coordinator.attachHermesBridge(
+            coordinator.createHermesSessionBridge(oldSessionId),
+            sessionId = oldSessionId,
+        )
+        coordinator.onGeminiEvent(
+            oldSessionId,
+            voiceToolCall(callId = "call-race", name = "ask_hermes", arg = "race"),
+        )
+        assertEquals("call-race" to "race", toolApi.awaitRequest("call-race"))
+
+        val blockedTurnComplete = audio.blockNextPlaybackTurnComplete()
+        val staleCallback = launch(Dispatchers.Default) {
+            coordinator.onGeminiEvent(oldSessionId, GeminiLiveEvent.TurnComplete)
+        }
+        assertTrue(blockedTurnComplete.started.await(500, TimeUnit.MILLISECONDS))
+
+        coordinator.prepareFor(SessionTransition.Reconnect)
+        audio.invalidatePlaybackSession()
+        val replacementSessionId = coordinator.nextSessionId()
+        audio.activatePlaybackSession(replacementSessionId)
+        gemini.activateOutboundSession(replacementSessionId)
+        coordinator.attachHermesBridge(
+            coordinator.createHermesSessionBridge(replacementSessionId),
+            sessionId = replacementSessionId,
+        )
+        coordinator.onGeminiEvent(
+            replacementSessionId,
+            GeminiLiveEvent.InputTranscript("replacement turn active"),
+        )
+
+        blockedTurnComplete.release.countDown()
+        staleCallback.join()
+        toolApi.complete(response(callId = "call-race", answer = "race answer"))
+        coordinator.awaitToolJobsWithTimeout()
+        delay(20)
+        assertTrue(gemini.textTurns.isEmpty())
+
+        coordinator.onGeminiEvent(replacementSessionId, GeminiLiveEvent.TurnComplete)
+        awaitTextTurnCount(gemini, 1)
+        assertEquals(replacementSessionId, gemini.textTurns.single().first)
+    }
+
+    @Test
     fun `coordinator release preserves the terminal playback drain callback`() = runTest {
         val audio = FakeVoiceAudioEngine()
         val diagnostics = VoiceDiagnostics()
@@ -783,10 +840,11 @@ class VoiceAgentRuntimeTest {
         val conversationStore = FakeVoiceConversationStore()
         val toolApi = FakeVoiceToolApi()
         val diagnostics = VoiceDiagnostics()
+        val audio = FakeVoiceAudioEngine()
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
             toolApi = toolApi,
-            audio = FakeVoiceAudioEngine(),
+            audio = audio,
             conversationStore = conversationStore,
             diagnostics = diagnostics,
             scope = this,
@@ -796,6 +854,7 @@ class VoiceAgentRuntimeTest {
         // be detached without leaving the default bridge auto-reattached underneath it. The
         // session must be marked active first or the scoped tool call below is dropped as stale.
         val sessionId = coordinator.nextSessionId()
+        audio.activatePlaybackSession(sessionId)
         val scopedBridge = coordinator.createHermesSessionBridge(sessionId)
         coordinator.attachHermesBridge(scopedBridge, sessionId = sessionId)
 
@@ -5488,16 +5547,19 @@ class VoiceAgentRuntimeTest {
         val conversationStore = FakeVoiceConversationStore()
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
+        val audio = FakeVoiceAudioEngine()
+        val diagnostics = VoiceDiagnostics()
         val session = VoiceAgentCallSession(
             modelId = "gemini-flash",
             sessionApi = sessionApi,
             toolApi = toolApi,
             gemini = gemini,
-            audio = FakeVoiceAudioEngine(),
+            audio = audio,
             conversationStore = conversationStore,
             contextProvider = FakeVoiceAgentContextProvider(
                 VoiceContext(systemInstruction = "system", turns = emptyList())
             ),
+            diagnostics = diagnostics,
             scope = CoroutineScope(coroutineContext + Dispatchers.Default),
         )
 
@@ -5506,7 +5568,7 @@ class VoiceAgentRuntimeTest {
         val oldCallback = gemini.eventHandlers.single()
         oldCallback(voiceToolCall(callId = "call-detached-complete", name = "ask_hermes", arg = "old"))
         assertEquals("call-detached-complete" to "old", toolApi.awaitRequest("call-detached-complete"))
-        oldCallback(GeminiLiveEvent.TurnComplete)
+        oldCallback(GeminiLiveEvent.OutputAudio("old-session-audio"))
         val blockedNextSession = sessionApi.blockNextSession()
 
         session.reconnect()
@@ -5530,6 +5592,67 @@ class VoiceAgentRuntimeTest {
                 sessionId == 3L &&
                     text.contains("Original request:\nold") &&
                     text.contains("Hermes answer:\ndetached answer")
+            }
+        )
+        assertEquals(1, gemini.textTurns.count { it.second.contains("detached answer") })
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "voice_playback_drained" && it.detail == "generation=1"
+            }
+        )
+    }
+
+    @Test
+    fun `automatic reconnect retires active turn and playback before announcing through replacement`() = runTest {
+        val sessionApi = FakeVoiceSessionApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val audio = FakeVoiceAudioEngine()
+        val diagnostics = VoiceDiagnostics()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = toolApi,
+            gemini = gemini,
+            audio = audio,
+            conversationStore = conversationStore,
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
+            scope = CoroutineScope(coroutineContext + Dispatchers.Default),
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        val oldCallback = gemini.eventHandlers.single()
+        oldCallback(voiceToolCall(callId = "call-auto-complete", name = "ask_hermes", arg = "automatic"))
+        assertEquals("call-auto-complete" to "automatic", toolApi.awaitRequest("call-auto-complete"))
+        oldCallback(GeminiLiveEvent.OutputAudio("old-automatic-audio"))
+        val blockedNextSession = sessionApi.blockNextSession()
+
+        oldCallback(GeminiLiveEvent.WebSocketFailure(message = "network dropped"))
+        withTimeout(500) {
+            blockedNextSession.started.await()
+        }
+        toolApi.complete(response(callId = "call-auto-complete", answer = "automatic answer"))
+        conversationStore.awaitHermesToolStatus("call-auto-complete", "complete")
+        assertTrue(gemini.textTurns.isEmpty())
+
+        blockedNextSession.release.complete(Unit)
+        gemini.awaitConnectCount(2)
+        withTimeout(500) {
+            while (gemini.textTurns.none { it.first == 3L && it.second.contains("automatic answer") }) {
+                delay(10)
+            }
+        }
+
+        assertEquals(1, gemini.textTurns.count { it.second.contains("automatic answer") })
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "voice_playback_drained" && it.detail == "generation=1"
             }
         )
     }

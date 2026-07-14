@@ -231,6 +231,10 @@ class HermesAnnouncer(
         events.trySend(AnnouncerEvent.GeminiTurnComplete(nowMs()))
     }
 
+    fun onGeminiSessionRetired() {
+        events.trySend(AnnouncerEvent.GeminiSessionRetired(nowMs()))
+    }
+
     fun onPlaybackActive(generation: Long) {
         events.trySend(AnnouncerEvent.PlaybackActive(generation, nowMs()))
     }

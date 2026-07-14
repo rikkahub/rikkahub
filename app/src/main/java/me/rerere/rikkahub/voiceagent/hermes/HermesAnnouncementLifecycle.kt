@@ -85,6 +85,7 @@ sealed interface AnnouncerEvent {
     data class BridgeDetached(val nowMs: Long) : AnnouncerEvent
     data class GeminiTurnActive(val nowMs: Long) : AnnouncerEvent
     data class GeminiTurnComplete(val nowMs: Long) : AnnouncerEvent
+    data class GeminiSessionRetired(val nowMs: Long) : AnnouncerEvent
     data class PlaybackActive(val generation: Long, val nowMs: Long) : AnnouncerEvent
     data class PlaybackDrainStarted(val generation: Long, val nowMs: Long) : AnnouncerEvent
     data class PlaybackDrained(val generation: Long, val nowMs: Long) : AnnouncerEvent
@@ -151,6 +152,17 @@ class AnnouncerReducer(
         is AnnouncerEvent.GeminiTurnComplete -> when {
             state.closed -> noChange(state)
             else -> settle(state.copy(geminiTurn = state.geminiTurn.onComplete()), event.nowMs)
+        }
+
+        is AnnouncerEvent.GeminiSessionRetired -> when {
+            state.closed -> noChange(state)
+            // Session retirement revokes the old socket's turn ownership, but it is not a
+            // speaking boundary. In particular, automatic reconnect may retire the session
+            // before its bridge is detached. A later bridge/playback event performs settle().
+            else -> AnnouncerTransition(
+                state.copy(geminiTurn = GeminiTurnGate.Idle),
+                emptyList(),
+            )
         }
 
         is AnnouncerEvent.PlaybackActive -> reducePlaybackEvent(
