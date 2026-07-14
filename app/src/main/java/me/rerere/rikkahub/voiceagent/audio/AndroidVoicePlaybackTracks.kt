@@ -130,10 +130,14 @@ internal class AndroidVoicePlaybackTracks(
         private val track: AudioTrack,
     ) : VoicePcm16Sink {
         private val interrupted = AtomicBoolean(false)
+        private var headProgress: PlaybackHeadProgress? = null
+        private var writtenFrames = 0L
 
         override fun start(): VoicePcm16Sink.StartResult {
             interrupted.set(false)
             return if (track.playSafely()) {
+                headProgress = PlaybackHeadProgress(track.playbackHeadPosition)
+                writtenFrames = 0L
                 VoicePcm16Sink.StartResult.Started
             } else {
                 VoicePcm16Sink.StartResult.Failed("AudioTrack play failed")
@@ -193,12 +197,27 @@ internal class AndroidVoicePlaybackTracks(
             }
 
             return when {
-                offset == pcm16.size -> VoicePcm16Sink.WriteResult.Written(offset)
+                offset == pcm16.size -> {
+                    writtenFrames += offset / PCM16_MONO_FRAME_BYTES
+                    VoicePcm16Sink.WriteResult.Written(offset)
+                }
                 interrupted.get() -> VoicePcm16Sink.WriteResult.Interrupted
                 else -> VoicePcm16Sink.WriteResult.Failed(
                     "AudioTrack write interrupted after $offset of ${pcm16.size} bytes",
                 )
             }
+        }
+
+        override fun awaitDrained(): VoicePcm16Sink.DrainResult {
+            val progress = headProgress
+                ?: return VoicePcm16Sink.DrainResult.Failed("Playback head was not initialized")
+            while (!interrupted.get() && currentPlaybackTrack(track) != null) {
+                if (progress.framesPlayed(track.playbackHeadPosition) >= writtenFrames) {
+                    return VoicePcm16Sink.DrainResult.Drained
+                }
+                Thread.sleep(PLAYBACK_DRAIN_POLL_MS)
+            }
+            return VoicePcm16Sink.DrainResult.Interrupted
         }
 
         override fun pauseAndFlush() {
@@ -220,6 +239,8 @@ internal class AndroidVoicePlaybackTracks(
         const val PLAYBACK_SAMPLE_RATE = 24_000
         const val MIN_PLAYBACK_BUFFER_BYTES = 4_800
         const val MAX_BLOCKING_ZERO_WRITES = 16
+        const val PCM16_MONO_FRAME_BYTES = 2
+        const val PLAYBACK_DRAIN_POLL_MS = 10L
 
         fun playbackBufferSizeOrNull(): Int? {
             val bufferSize = AudioTrack.getMinBufferSize(

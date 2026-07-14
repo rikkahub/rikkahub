@@ -38,6 +38,14 @@ internal object VoicePcm16SinkLifecycle {
         }
     }
 
+    fun awaitDrained(sink: VoicePcm16Sink): VoicePcm16Sink.DrainResult {
+        return try {
+            sink.awaitDrained()
+        } catch (e: Exception) {
+            VoicePcm16Sink.DrainResult.Failed(e.failureMessage())
+        }
+    }
+
     fun pauseAndFlushSafely(sink: VoicePcm16Sink?) {
         try {
             sink?.pauseAndFlush()

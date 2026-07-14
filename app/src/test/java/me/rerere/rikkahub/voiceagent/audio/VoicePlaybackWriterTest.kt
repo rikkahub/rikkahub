@@ -450,6 +450,9 @@ class VoicePlaybackWriterTest {
             return result
         }
 
+        override fun awaitDrained(): VoicePcm16Sink.DrainResult =
+            VoicePcm16Sink.DrainResult.Drained
+
         override fun pauseAndFlush() {
             pauseAndFlushCallCount.incrementAndGet()
         }

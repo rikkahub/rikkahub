@@ -142,6 +142,30 @@ class VoicePcm16SinkLifecycleTest {
     }
 
     @Test
+    fun `awaitDrained returns the sink drain result`() {
+        val sink = FakeVoicePcm16Sink(
+            drainResult = VoicePcm16Sink.DrainResult.Drained,
+        )
+
+        assertEquals(
+            VoicePcm16Sink.DrainResult.Drained,
+            VoicePcm16SinkLifecycle.awaitDrained(sink),
+        )
+    }
+
+    @Test
+    fun `awaitDrained contains a thrown sink exception`() {
+        val sink = FakeVoicePcm16Sink(
+            drainException = IllegalStateException("drain exploded"),
+        )
+
+        assertEquals(
+            VoicePcm16Sink.DrainResult.Failed("drain exploded"),
+            VoicePcm16SinkLifecycle.awaitDrained(sink),
+        )
+    }
+
+    @Test
     fun `release helpers ignore sink exceptions and null sinks`() {
         val sink = FakeVoicePcm16Sink(
             pauseException = IllegalStateException("pause exploded"),
@@ -160,8 +184,10 @@ class VoicePcm16SinkLifecycleTest {
     private class FakeVoicePcm16Sink(
         private val startResult: VoicePcm16Sink.StartResult = VoicePcm16Sink.StartResult.Started,
         private val writeResult: VoicePcm16Sink.WriteResult? = null,
+        private val drainResult: VoicePcm16Sink.DrainResult = VoicePcm16Sink.DrainResult.Drained,
         private val startException: RuntimeException? = null,
         private val writeException: RuntimeException? = null,
+        private val drainException: RuntimeException? = null,
         private val pauseException: RuntimeException? = null,
         private val releaseException: RuntimeException? = null,
     ) : VoicePcm16Sink {
@@ -181,6 +207,11 @@ class VoicePcm16SinkLifecycleTest {
         override fun writeFully(pcm16: ByteArray): VoicePcm16Sink.WriteResult {
             writeException?.let { throw it }
             return writeResult ?: VoicePcm16Sink.WriteResult.Written(pcm16.size)
+        }
+
+        override fun awaitDrained(): VoicePcm16Sink.DrainResult {
+            drainException?.let { throw it }
+            return drainResult
         }
 
         override fun pauseAndFlush() {
