@@ -31,10 +31,9 @@ internal class AndroidVoicePlaybackTracks(
         synchronized(lock) {
             released = true
             assistant = assistantAudioTrack
-            assistantAudioTrack = null
         }
         assistant?.stopSafely()
-        assistant?.releaseSafely()
+        assistant?.let(::releaseTrackSafely)
     }
 
     private fun getOrCreatePlaybackTrack(): AudioTrack? {
@@ -112,6 +111,12 @@ internal class AndroidVoicePlaybackTracks(
         }
     }
 
+    private fun releaseTrackSafely(track: AudioTrack) {
+        if (track.releaseSafely()) {
+            removeTrack(track)
+        }
+    }
+
     private fun AudioTrack.playSafely(): Boolean {
         return runCatching {
             if (playState != AudioTrack.PLAYSTATE_PLAYING) {
@@ -121,8 +126,7 @@ internal class AndroidVoicePlaybackTracks(
         }.onFailure {
             Log.w(TAG, "AudioTrack play failed", it)
             onAssistantPlaybackError("AudioTrack play failed: ${it.message ?: it.javaClass.simpleName}")
-            removeTrack(this)
-            releaseSafely()
+            releaseTrackSafely(this)
         }.getOrDefault(false)
     }
 
@@ -135,6 +139,13 @@ internal class AndroidVoicePlaybackTracks(
             isInterrupted = interrupted::get,
             isPlaybackTrackCurrent = { currentPlaybackTrack(track) != null },
             poll = { Thread.sleep(PLAYBACK_DRAIN_POLL_MS) },
+        )
+        private val retirement = AudioTrackRetirement(
+            pause = track::pauseSafely,
+            flush = track::flushSafely,
+            stop = track::stopSafely,
+            release = track::releaseSafely,
+            removeTrack = { removeTrack(track) },
         )
 
         override fun start(): VoicePcm16Sink.StartResult {
@@ -166,8 +177,7 @@ internal class AndroidVoicePlaybackTracks(
                         return VoicePcm16Sink.WriteResult.Interrupted
                     }
                     Log.w(TAG, "AudioTrack write failed", e)
-                    removeTrack(track)
-                    track.releaseSafely()
+                    releaseTrackSafely(track)
                     return VoicePcm16Sink.WriteResult.Failed(e.message ?: e.javaClass.simpleName)
                 }
 
@@ -177,15 +187,13 @@ internal class AndroidVoicePlaybackTracks(
                     }
                     writeResult < 0 -> {
                         Log.w(TAG, "AudioTrack write error: $writeResult")
-                        removeTrack(track)
-                        track.releaseSafely()
+                        releaseTrackSafely(track)
                         return VoicePcm16Sink.WriteResult.Failed("AudioTrack write error: $writeResult")
                     }
                     writeResult == 0 -> {
                         zeroWrites += 1
                         if (zeroWrites >= MAX_BLOCKING_ZERO_WRITES) {
-                            removeTrack(track)
-                            track.releaseSafely()
+                            releaseTrackSafely(track)
                             return VoicePcm16Sink.WriteResult.Failed(
                                 "AudioTrack write made no progress after $zeroWrites attempts",
                             )
@@ -215,15 +223,12 @@ internal class AndroidVoicePlaybackTracks(
 
         override fun pauseAndFlush() {
             interrupted.set(true)
-            track.pauseSafely()
-            track.flushSafely()
+            retirement.pauseAndFlush()
         }
 
         override fun stopAndRelease() {
             interrupted.set(true)
-            track.stopSafely()
-            track.releaseSafely()
-            removeTrack(track)
+            retirement.stopAndRelease()
         }
     }
 
@@ -249,18 +254,10 @@ internal class AndroidVoicePlaybackTracks(
     }
 }
 
-private fun AudioTrack.pauseSafely() {
-    runCatching { pause() }
-}
+private fun AudioTrack.pauseSafely(): Boolean = runCatching { pause() }.isSuccess
 
-private fun AudioTrack.flushSafely() {
-    runCatching { flush() }
-}
+private fun AudioTrack.flushSafely(): Boolean = runCatching { flush() }.isSuccess
 
-private fun AudioTrack.stopSafely() {
-    runCatching { stop() }
-}
+private fun AudioTrack.stopSafely(): Boolean = runCatching { stop() }.isSuccess
 
-private fun AudioTrack.releaseSafely() {
-    runCatching { release() }
-}
+private fun AudioTrack.releaseSafely(): Boolean = runCatching { release() }.isSuccess
