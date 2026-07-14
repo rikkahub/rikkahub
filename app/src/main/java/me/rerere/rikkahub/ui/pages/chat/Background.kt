@@ -9,9 +9,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
-import coil3.compose.AsyncImage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.ui.components.ui.ResolvedAsyncImage
 
 @Composable
 fun AssistantBackground(setting: Settings, modifier: Modifier) {
@@ -24,7 +24,7 @@ fun AssistantBackground(setting: Settings, modifier: Modifier) {
         val backgroundColor = MaterialTheme.colorScheme.background
         val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
         Box(modifier = modifier) {
-            AsyncImage(
+            ResolvedAsyncImage(
                 model = assistant.background,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,

@@ -131,7 +131,9 @@ class FilesManager(
                     displayName = sourceName,
                     mimeType = guessedMime
                 )
-                newUris.add(file.toUri())
+                // Prefer portable scheme for cloud-friendly references; local file still exists.
+                val id = fileIdFromDiskName(file)
+                newUris.add("perry-file://$id".toUri())
             }.onFailure {
                 it.printStackTrace()
                 Log.e(TAG, "createChatFilesByContents: Failed to save file from $uri", it)
@@ -156,7 +158,6 @@ class FilesManager(
             if (!file.exists()) {
                 file.createNewFile()
             }
-            val newUri = file.toUri()
             file.outputStream().use { outputStream ->
                 outputStream.write(byteArray)
             }
@@ -166,7 +167,8 @@ class FilesManager(
                 displayName = "image.png",
                 mimeType = "image/png"
             )
-            newUris.add(newUri)
+            val id = fileIdFromDiskName(file)
+            newUris.add("perry-file://$id".toUri())
         }
         return newUris
     }

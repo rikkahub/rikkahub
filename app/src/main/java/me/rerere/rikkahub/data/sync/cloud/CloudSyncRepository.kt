@@ -445,6 +445,8 @@ class CloudSyncRepository(
                 }
                 pushOutbox(client, state.deviceId!!)
                 pullChanges(client)
+                // Only push local pending uploads / explicit on-demand downloads.
+                // Do not bulk-download every remote file after each sync.
                 requestFileTransfer()
                 val now = System.currentTimeMillis()
                 stateDao.updateCursor(

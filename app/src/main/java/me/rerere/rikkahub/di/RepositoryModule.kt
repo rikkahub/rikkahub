@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.di
 
 import android.content.Context
+import me.rerere.rikkahub.data.files.CloudMediaResolver
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
@@ -85,6 +86,14 @@ val repositoryModule = module {
 
     single {
         FilesManager(get(), get(), get())
+    }
+
+    single {
+        CloudMediaResolver(
+            context = get(),
+            filesRepository = get(),
+            cloudSyncRepository = get(),
+        )
     }
 
     single {

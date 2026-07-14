@@ -1,6 +1,5 @@
-package me.rerere.rikkahub.ui.components.richtext
+package me.rerere.rikkahub.ui.components.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,76 +18,62 @@ import coil3.request.crossfade
 import coil3.request.placeholder
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.CloudMediaResolver
-import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
-import me.rerere.rikkahub.ui.components.ui.LocalExportContext
-import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import org.koin.compose.koinInject
 
+/**
+ * Local-first image: resolve managed/cloud files before Coil load.
+ * Missing remote bytes trigger a single-file download, then re-resolve.
+ */
 @Composable
-fun ZoomableAsyncImage(
-    model: String?,
+fun ResolvedAsyncImage(
+    model: Any?,
     contentDescription: String?,
     modifier: Modifier = Modifier,
     alignment: Alignment = Alignment.Center,
     contentScale: ContentScale = ContentScale.Fit,
     alpha: Float = DefaultAlpha,
+    crossfade: Boolean = true,
+    onResolved: ((Any?) -> Unit)? = null,
 ) {
-    var showImageViewer by remember { mutableStateOf(false) }
-    val context = LocalContext.current
     val resolver: CloudMediaResolver = koinInject()
+    val context = LocalContext.current
     val placeholder = if (LocalDarkMode.current) R.drawable.placeholder_dark else R.drawable.placeholder
     val export = LocalExportContext.current
     var resolved by remember(model) { mutableStateOf<Any?>(model) }
     var tick by remember(model) { mutableStateOf(0) }
+
     LaunchedEffect(model, tick) {
-        resolved = resolver.resolveForDisplay(model)
-        // Poll briefly while on-demand download runs.
-        val fileReady = when (val r = resolved) {
-            is java.io.File -> r.exists() && r.length() > 0L
-            else -> false
-        }
-        if (!fileReady && model != null && !model.startsWith("http") && !model.startsWith("data:") && tick < 10) {
-            kotlinx.coroutines.delay(700)
-            tick += 1
+        val next = resolver.resolveForDisplay(model)
+        resolved = next
+        onResolved?.invoke(next)
+        // If still only a remote reference, poll a few times while worker downloads.
+        if (next == null || (next is String && next.startsWith("perry-file://"))) {
+            kotlinx.coroutines.delay(800)
+            if (tick < 8) tick += 1
+        } else if (next is String && (next.startsWith("file:") || next.startsWith("/"))) {
+            // foreign path waiting for download
+            val again = resolver.resolveForDisplay(model)
+            if (again != next && tick < 8) {
+                kotlinx.coroutines.delay(800)
+                tick += 1
+            }
         }
     }
+
     val coilModel = ImageRequest.Builder(context)
         .data(resolved ?: model)
         .placeholder(placeholder)
-        .crossfade(false)
+        .crossfade(crossfade)
         .allowHardware(!export)
         .build()
-    var loading by remember { mutableStateOf(false) }
+
     AsyncImage(
         model = coilModel,
         contentDescription = contentDescription,
-        modifier = modifier
-            .shimmer(isLoading = loading)
-            .clickable {
-                showImageViewer = true
-            },
+        modifier = modifier,
         contentScale = contentScale,
         alpha = alpha,
         alignment = alignment,
-        onLoading = {
-            loading = true
-        },
-        onSuccess = {
-            loading = false
-        },
-        onError = {
-            loading = false
-        },
     )
-    if (showImageViewer) {
-        val preview = when (val r = resolved) {
-            is java.io.File -> r.toURI().toString()
-            is String -> r
-            else -> model ?: ""
-        }
-        ImagePreviewDialog(images = listOf(preview)) {
-            showImageViewer = false
-        }
-    }
 }

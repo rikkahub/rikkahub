@@ -35,7 +35,10 @@ data class ManagedFileEntity(
     @ColumnInfo("object_key", defaultValue = "''")
     val objectKey: String = "",
     /**
-     * local_only | pending_upload | uploading | ready | pending_download | failed | deleted
+     * local_only | pending_upload | uploading | ready | remote_only | pending_download | failed | deleted
+     *
+     * remote_only = metadata known, bytes not downloaded (lazy).
+     * pending_download = user/UI requested bytes; worker will fetch.
      */
     @ColumnInfo("upload_status", defaultValue = "'local_only'")
     val uploadStatus: String = UPLOAD_LOCAL_ONLY,
@@ -49,6 +52,8 @@ data class ManagedFileEntity(
         const val UPLOAD_PENDING = "pending_upload"
         const val UPLOAD_UPLOADING = "uploading"
         const val UPLOAD_READY = "ready"
+        /** Cloud metadata only; wait for on-demand download. */
+        const val UPLOAD_REMOTE_ONLY = "remote_only"
         const val UPLOAD_PENDING_DOWNLOAD = "pending_download"
         const val UPLOAD_FAILED = "failed"
         const val UPLOAD_DELETED = "deleted"

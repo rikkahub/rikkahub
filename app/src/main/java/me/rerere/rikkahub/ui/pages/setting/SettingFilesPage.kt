@@ -47,7 +47,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.R
@@ -58,7 +57,6 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.fileSizeToString
 import org.koin.compose.koinInject
-import java.io.File
 
 @Composable
 fun SettingFilesPage(
@@ -162,7 +160,6 @@ fun SettingFilesPage(
                     items(files, key = { it.id }) { file ->
                         FileItem(
                             file = file,
-                            fileOnDisk = filesManager.getFile(file),
                             onDelete = { pendingDelete = file }
                         )
                     }
@@ -197,6 +194,7 @@ private fun FolderRow(
 
 @Composable
 private fun folderDisplayName(folder: String): String = when (folder) {
+    // Folder name only (not an upload action).
     FileFolders.UPLOAD -> stringResource(R.string.setting_files_page_folder_upload)
     else -> folder
 }
@@ -204,7 +202,6 @@ private fun folderDisplayName(folder: String): String = when (folder) {
 @Composable
 private fun FileItem(
     file: ManagedFileEntity,
-    fileOnDisk: File,
     onDelete: () -> Unit,
 ) {
     Card(
@@ -216,8 +213,9 @@ private fun FileItem(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 if (file.mimeType.startsWith("image/")) {
-                    AsyncImage(
-                        model = fileOnDisk,
+                    // Local-first; downloads only when this grid item is composed.
+                    me.rerere.rikkahub.ui.components.ui.ResolvedAsyncImage(
+                        model = "perry-file://${file.id}",
                         contentDescription = file.displayName,
                         modifier = Modifier
                             .fillMaxWidth()

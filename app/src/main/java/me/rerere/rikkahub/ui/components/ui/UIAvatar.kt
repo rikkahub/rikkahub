@@ -162,11 +162,12 @@ fun UIAvatar(
             ) {
                 when (value) {
                     is Avatar.Image -> {
-                        AsyncImage(
+                        me.rerere.rikkahub.ui.components.ui.ResolvedAsyncImage(
                             model = value.url,
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
+                            crossfade = true,
                         )
                     }
 

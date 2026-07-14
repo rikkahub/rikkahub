@@ -172,13 +172,13 @@ class FileDomainSync(
         val existing = filesRepository.getById(entityId)
         val now = System.currentTimeMillis()
         val id = runCatching { UUID.fromString(entityId).toString() }.getOrElse { entityId }
-        val localPath = existing?.relativePath
-            ?: "$folder/${id}.${displayName.substringAfterLast('.', "bin")}"
-        val needsDownload = remoteStatus == "ready" && (
-            existing == null ||
-                existing.uploadStatus != ManagedFileEntity.UPLOAD_READY ||
-                existing.sha256 != sha256
-            )
+        val ext = displayName.substringAfterLast('.', missingDelimiterValue = "bin")
+            .ifBlank { "bin" }
+        val localPath = existing?.relativePath ?: "$folder/$id.$ext"
+        // Lazy: keep remote metadata only; download when UI asks (CloudMediaResolver).
+        val hadLocalBytes = existing?.uploadStatus == ManagedFileEntity.UPLOAD_READY
+        val keepPendingDownload =
+            existing?.uploadStatus == ManagedFileEntity.UPLOAD_PENDING_DOWNLOAD
         val entity = ManagedFileEntity(
             id = id,
             folder = folder,
@@ -191,8 +191,9 @@ class FileDomainSync(
             sha256 = sha256,
             objectKey = objectKey,
             uploadStatus = when {
-                needsDownload -> ManagedFileEntity.UPLOAD_PENDING_DOWNLOAD
-                remoteStatus == "ready" -> ManagedFileEntity.UPLOAD_READY
+                keepPendingDownload -> ManagedFileEntity.UPLOAD_PENDING_DOWNLOAD
+                hadLocalBytes && remoteStatus == "ready" -> ManagedFileEntity.UPLOAD_READY
+                remoteStatus == "ready" -> ManagedFileEntity.UPLOAD_REMOTE_ONLY
                 remoteStatus == "failed" -> ManagedFileEntity.UPLOAD_FAILED
                 else -> ManagedFileEntity.UPLOAD_PENDING
             },
@@ -201,9 +202,7 @@ class FileDomainSync(
         )
         filesRepository.upsertQuiet(entity)
         rememberRevision(entityId, revision)
-        if (needsDownload) {
-            cloudSyncRepository.requestFileTransfer()
-        }
+        // Do not auto-download all remote files after bootstrap/sync.
     }
 
     private suspend fun rememberRevision(entityId: String, revision: Long) {
