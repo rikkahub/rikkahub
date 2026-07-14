@@ -90,7 +90,7 @@ class HermesJobManager(
     private val stillWorkingThresholdMs: Long = DEFAULT_STILL_WORKING_THRESHOLD_MS,
     private val defaultBridge: (() -> HermesSessionBridge)? = null,
     private val announcementQuietWindowMs: Long = HermesAnnouncer.DEFAULT_QUIET_WINDOW_MS,
-    private val announcementMaxHoldMs: Long = HermesAnnouncer.DEFAULT_MAX_HOLD_MS,
+    private val announcementBlockedWatchdogMs: Long = HermesAnnouncer.DEFAULT_BLOCKED_WATCHDOG_MS,
     private val announcementNowMs: () -> Long = System::currentTimeMillis,
     private val updateToolStatus: (VoiceToolStatus) -> Unit = {},
     private val recordDiagnostic: (String, String) -> Unit = { _, _ -> },
@@ -129,7 +129,7 @@ class HermesJobManager(
         defaultBridge = defaultBridge,
         bridgeSendTimeoutMs = bridgeSendTimeoutMs,
         quietWindowMs = announcementQuietWindowMs,
-        maxHoldMs = announcementMaxHoldMs,
+        blockedWatchdogMs = announcementBlockedWatchdogMs,
         nowMs = announcementNowMs,
     )
     private val reducer = HermesJobReducer(

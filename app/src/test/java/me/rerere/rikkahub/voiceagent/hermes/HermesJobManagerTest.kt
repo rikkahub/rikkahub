@@ -50,6 +50,13 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
 
+private const val MANAGER_TEST_PLAYBACK_EPOCH = 1L
+
+private fun HermesJobManager.completeAnnouncementTurnForTest() {
+    announcer.onGeminiTurnComplete()
+    announcer.onPlaybackDrained(MANAGER_TEST_PLAYBACK_EPOCH)
+}
+
 /**
  * Thin manager suite: shell wiring + end-to-end journeys.
  *
@@ -430,17 +437,14 @@ class HermesJobManagerTest {
         manager.submit(callId = "call-submit-expired", prompt = "submit expired")
         manager.submit(callId = "call-submit-timeout", prompt = "submit timeout")
         manager.submit(callId = "call-submit-canceled", prompt = "submit canceled")
-        conversationStore.awaitHermesRecord("call-submit-failed") {
-            it.status == HermesQueueStatus.Failed && it.resultAnnounced
+        withTimeout(500) {
+            while (bridge.terminalFollowUps.size < 1) delay(10)
         }
-        conversationStore.awaitHermesRecord("call-submit-expired") {
-            it.status == HermesQueueStatus.Expired && it.resultAnnounced
-        }
-        conversationStore.awaitHermesRecord("call-submit-timeout") {
-            it.status == HermesQueueStatus.Expired && it.resultAnnounced
-        }
-        conversationStore.awaitHermesRecord("call-submit-canceled") {
-            it.status == HermesQueueStatus.Canceled && it.resultAnnounced
+        for (expectedCount in 2..4) {
+            manager.completeAnnouncementTurnForTest()
+            withTimeout(500) {
+                while (bridge.terminalFollowUps.size < expectedCount) delay(10)
+            }
         }
 
         assertEquals(0, toolApi.pollCount("call-submit-failed"))
@@ -1185,6 +1189,7 @@ class HermesJobManagerTest {
         assertEquals(1, bridge.stillWorkingUpdates.size)
 
         toolApi.complete(response(callId = "call-still-working", answer = "long answer"))
+        manager.completeAnnouncementTurnForTest()
         withTimeout(500) {
             while (bridge.completionFollowUps.isEmpty()) {
                 delay(10)
@@ -2183,12 +2188,10 @@ class HermesJobManagerTest {
         remoteCancelTimeoutMs: Long = 50L,
         bridgeSendTimeoutMs: Long = 200L,
         stillWorkingThresholdMs: Long = 45_000L,
-        // The announcer's quiet-window/hold pacing (proven in HermesAnnouncerTest) is
-        // switched off here so the manager-shell suite exercises announcement *delivery*
-        // and *ordering* without racing the pacing clock: quiet window 0 sends the head
-        // immediately and max hold 0 releases each paced follow-up on the next tick.
+        // Quiet-window pacing is disabled so this suite focuses on manager delivery and
+        // ordering. Every second or later proactive send gets an explicit safe boundary.
         announcementQuietWindowMs: Long = 0L,
-        announcementMaxHoldMs: Long = 0L,
+        announcementBlockedWatchdogMs: Long = 15_000L,
         observability: VoiceObservability = NoOpVoiceObservability,
         traceContext: VoiceTraceContext = VoiceTraceContext(
             traceId = "trace-test",
@@ -2207,7 +2210,7 @@ class HermesJobManagerTest {
         bridgeSendTimeoutMs = bridgeSendTimeoutMs,
         stillWorkingThresholdMs = stillWorkingThresholdMs,
         announcementQuietWindowMs = announcementQuietWindowMs,
-        announcementMaxHoldMs = announcementMaxHoldMs,
+        announcementBlockedWatchdogMs = announcementBlockedWatchdogMs,
         updateToolStatus = updateToolStatus,
         recordDiagnostic = recordDiagnostic,
         writeQueueEvent = writeQueueEvent,

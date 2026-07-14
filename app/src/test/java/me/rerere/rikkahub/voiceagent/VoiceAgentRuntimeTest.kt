@@ -435,18 +435,16 @@ class VoiceAgentRuntimeTest {
         val toolApi = FakeVoiceToolApi()
         val audio = FakeVoiceAudioEngine()
         val diagnostics = VoiceDiagnostics()
-        // Injected maxHoldMs is deliberately large so the deadline fallback cannot mask a
-        // broken pause-release: the pause-driven release below fires immediately on the
-        // interrupt. If onAssistantAudioActive(false) stopped releasing the gate, the send
-        // could only happen at the deadline — flagged by the
-        // hermes_announcement_released_at_deadline diagnostic asserted absent below.
+        // The injected watchdog interval is deliberately large so a broken pause-release
+        // cannot emit a diagnostic during this test. The watchdog is diagnostic-only and
+        // can never mask a missing safe boundary by sending.
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
             toolApi = toolApi,
             audio = audio,
             conversationStore = conversationStore,
             diagnostics = diagnostics,
-            hermesAnnouncementMaxHoldMs = 60_000L,
+            hermesAnnouncementBlockedWatchdogMs = 60_000L,
             scope = this,
         )
 
@@ -488,8 +486,8 @@ class VoiceAgentRuntimeTest {
         assertTrue(followUp.second.contains("Original request:\npause prompt"))
         assertTrue(followUp.second.contains("Hermes answer:\npaused answer"))
         assertFalse(
-            "Release must be pause-driven, not the max-hold deadline",
-            diagnostics.events.value.any { it.name == "hermes_announcement_released_at_deadline" },
+            "A healthy pause-driven release must not reach the blocked watchdog",
+            diagnostics.events.value.any { it.name == "hermes_announcement_blocked_watchdog" },
         )
     }
 
@@ -500,8 +498,7 @@ class VoiceAgentRuntimeTest {
         val toolApi = FakeVoiceToolApi()
         val diagnostics = VoiceDiagnostics()
         // Small injected quiet window (real wall time, measured from the last input transcript
-        // delta) so the test releases quickly. The injected maxHoldMs keeps the deadline
-        // unreachable before the window elapses.
+        // delta) so the test releases quickly. The watchdog remains unreachable while it waits.
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
             toolApi = toolApi,
@@ -509,7 +506,7 @@ class VoiceAgentRuntimeTest {
             conversationStore = conversationStore,
             diagnostics = diagnostics,
             hermesAnnouncementQuietWindowMs = 500L,
-            hermesAnnouncementMaxHoldMs = 100_000L,
+            hermesAnnouncementBlockedWatchdogMs = 100_000L,
             scope = this,
         )
 
@@ -535,8 +532,8 @@ class VoiceAgentRuntimeTest {
             gemini.textTurns.isEmpty(),
         )
 
-        // No further input arrives, so the quiet window elapses and the announcement is
-        // released — well before the (injected, unreachable-first) max-hold deadline.
+        // No further input arrives, so the quiet window elapses and releases the announcement
+        // without reaching the diagnostic watchdog.
         withTimeout(2_000) {
             while (gemini.textTurns.isEmpty()) {
                 delay(10)
@@ -549,8 +546,8 @@ class VoiceAgentRuntimeTest {
         assertTrue(followUp.second.contains("Original request:\nquiet prompt"))
         assertTrue(followUp.second.contains("Hermes answer:\nquiet answer"))
         assertFalse(
-            "Release must be quiet-window-driven, not the max-hold deadline",
-            diagnostics.events.value.any { it.name == "hermes_announcement_released_at_deadline" },
+            "Release must be quiet-window-driven before the blocked watchdog",
+            diagnostics.events.value.any { it.name == "hermes_announcement_blocked_watchdog" },
         )
     }
 
@@ -2086,8 +2083,8 @@ class VoiceAgentRuntimeTest {
         toolApi.complete(response(callId = "call-b", answer = "Second answer"))
         coordinator.awaitToolJobsWithTimeout()
         // call-b's completion follow-up (and its late_text_turn_sent artifact row) is delivered
-        // asynchronously by HermesAnnouncer once generation-complete pacing releases it; wait for
-        // both announcements to land before inspecting the artifacts.
+        // asynchronously after the temporary generation-complete adapter supplies the safe
+        // boundary; wait for both announcements before inspecting the artifacts.
         withTimeout(2_000) {
             while (
                 gemini.textTurns.size < 2 ||

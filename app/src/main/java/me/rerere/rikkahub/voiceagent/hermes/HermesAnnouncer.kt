@@ -42,10 +42,13 @@ class HermesAnnouncer(
     private val defaultBridge: (() -> HermesSessionBridge)? = null,
     private val bridgeSendTimeoutMs: Long = DEFAULT_BRIDGE_SEND_TIMEOUT_MS,
     quietWindowMs: Long = DEFAULT_QUIET_WINDOW_MS,
-    maxHoldMs: Long = DEFAULT_MAX_HOLD_MS,
+    blockedWatchdogMs: Long = DEFAULT_BLOCKED_WATCHDOG_MS,
     private val nowMs: () -> Long = System::currentTimeMillis,
 ) {
-    private val reducer = AnnouncerReducer(quietWindowMs = quietWindowMs, maxHoldMs = maxHoldMs)
+    private val reducer = AnnouncerReducer(
+        quietWindowMs = quietWindowMs,
+        blockedWatchdogMs = blockedWatchdogMs,
+    )
     private val events = Channel<AnnouncerEvent>(Channel.UNLIMITED)
     private val lock = Any()
     private var attachment: HermesBridgeAttachment? = null
@@ -64,7 +67,7 @@ class HermesAnnouncer(
 
     private var state = AnnouncerState()
     private var quietTimer: Job? = null
-    private var holdTimer: Job? = null
+    private var blockedWatchdogTimer: Job? = null
 
     // @Volatile for the same reason as JobActor.consumer: drain helpers may read it
     // from another thread right after construction.
@@ -220,12 +223,36 @@ class HermesAnnouncer(
         events.trySend(AnnouncerEvent.InputDelta(nowMs()))
     }
 
-    fun onGenerationComplete() {
-        events.trySend(AnnouncerEvent.GenerationComplete(nowMs()))
+    fun onGeminiTurnActive() {
+        events.trySend(AnnouncerEvent.GeminiTurnActive(nowMs()))
     }
 
-    fun onAssistantAudioActive(active: Boolean) {
-        events.trySend(AnnouncerEvent.AudioActiveChanged(active, nowMs()))
+    fun onGeminiTurnComplete() {
+        events.trySend(AnnouncerEvent.GeminiTurnComplete(nowMs()))
+    }
+
+    fun onPlaybackActive(generation: Long) {
+        events.trySend(AnnouncerEvent.PlaybackActive(generation, nowMs()))
+    }
+
+    fun onPlaybackDrainStarted(generation: Long) {
+        events.trySend(AnnouncerEvent.PlaybackDrainStarted(generation, nowMs()))
+    }
+
+    fun onPlaybackDrained(generation: Long) {
+        events.trySend(AnnouncerEvent.PlaybackDrained(generation, nowMs()))
+    }
+
+    // Removed in Task 4: temporary adapters for the coordinator's legacy taps.
+    internal fun onGenerationComplete() {
+        onGeminiTurnComplete()
+        onPlaybackDrained(LEGACY_PLAYBACK_GENERATION)
+    }
+
+    // Removed in Task 4: temporary adapters for the coordinator's legacy taps.
+    internal fun onAssistantAudioActive(active: Boolean) {
+        if (active) onPlaybackActive(LEGACY_PLAYBACK_GENERATION)
+        else onPlaybackDrained(LEGACY_PLAYBACK_GENERATION)
     }
 
     fun close() {
@@ -283,15 +310,15 @@ class HermesAnnouncer(
 
             AnnouncerEffect.CancelQuietTimer -> quietTimer?.cancel()
 
-            is AnnouncerEffect.StartHoldDeadline -> {
-                holdTimer?.cancel()
-                holdTimer = scope.launch(dispatcher) {
+            is AnnouncerEffect.StartBlockedWatchdog -> {
+                blockedWatchdogTimer?.cancel()
+                blockedWatchdogTimer = scope.launch(dispatcher) {
                     delay(effect.delayMs)
-                    events.trySend(AnnouncerEvent.HoldDeadlineFired(nowMs()))
+                    events.trySend(AnnouncerEvent.BlockedWatchdogFired(nowMs()))
                 }
             }
 
-            AnnouncerEffect.CancelHoldDeadline -> holdTimer?.cancel()
+            AnnouncerEffect.CancelBlockedWatchdog -> blockedWatchdogTimer?.cancel()
 
             is AnnouncerEffect.Send -> executeSend(effect.intent)
 
@@ -424,7 +451,11 @@ class HermesAnnouncer(
         current: HermesBridgeAttachment,
     ): AnnouncementSendOutcome {
         val record = queueStore.latestRecord(callId = intent.callId, jobId = intent.jobId)
-        if (record == null || record.status.isTerminal || record.stillWorkingAnnounced) {
+        if (
+            record == null ||
+            (record.status.isTerminal && !intent.allowTerminalRecord) ||
+            record.stillWorkingAnnounced
+        ) {
             return AnnouncementSendOutcome.Skipped
         }
         if (!isCurrent(current)) return AnnouncementSendOutcome.Skipped
@@ -465,8 +496,9 @@ class HermesAnnouncer(
     }
 
     companion object {
+        private const val LEGACY_PLAYBACK_GENERATION = 0L
         const val DEFAULT_BRIDGE_SEND_TIMEOUT_MS = 5_000L
         const val DEFAULT_QUIET_WINDOW_MS = 2_000L
-        const val DEFAULT_MAX_HOLD_MS = 15_000L
+        const val DEFAULT_BLOCKED_WATCHDOG_MS = 15_000L
     }
 }

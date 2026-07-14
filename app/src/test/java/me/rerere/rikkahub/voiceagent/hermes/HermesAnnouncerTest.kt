@@ -29,7 +29,7 @@ import kotlin.uuid.Uuid
  * Actor-shell suite for [HermesAnnouncer]. The pure sequencing (which effect in which
  * state, in which order) is covered by the reducer's own transition tests; this suite
  * proves the shell — bridge registry, replay, effect execution against a real
- * [HermesQueueStore], failure containment, and the quiet/hold/pacing timers driven by
+ * [HermesQueueStore], failure containment, and the quiet/watchdog/pacing timers driven by
  * virtual time.
  */
 class HermesAnnouncerTest {
@@ -97,13 +97,15 @@ class HermesAnnouncerTest {
         val bridge = RecordingBridge()
         val announcer = announcer(queueStore = store)
 
-        // Both terminal records replay as intents; the completion goes first, then
-        // generation-complete pacing releases the terminal follow-up.
+        // Both terminal records replay as intents; the completion goes first, then an
+        // explicit turn-plus-playback boundary releases the terminal follow-up.
         announcer.attachScoped(bridge, sessionId = 7L)
         runCurrent()
         assertEquals(listOf("call-complete"), bridge.completions)
 
-        announcer.onGenerationComplete()
+        announcer.onPlaybackActive(1L)
+        announcer.onGeminiTurnComplete()
+        announcer.onPlaybackDrained(1L)
         runCurrent()
 
         assertEquals(listOf("call-complete"), bridge.completions)
@@ -125,6 +127,32 @@ class HermesAnnouncerTest {
         assertEquals(listOf("call-run"), bridge.stillWorking)
         assertTrue(store.latestRecord(callId = "call-run", jobId = "job-run")!!.stillWorkingAnnounced)
         assertTrue(diagnostics.any { it.first == "hermes_still_working_announced" })
+    }
+
+    @Test
+    fun `queued progress is skipped when cancellation has no correcting final intent`() = runTest {
+        val store = store(emptyConversation().withRunning(callId = "call-run", jobId = "job-run"))
+        val bridge = RecordingBridge()
+        val announcer = announcer(queueStore = store)
+
+        announcer.onGeminiTurnActive()
+        announcer.attachScoped(bridge, sessionId = 7L)
+        announcer.enqueueStillWorking(callId = "call-run", jobId = "job-run")
+        runCurrent()
+        assertTrue(bridge.stillWorking.isEmpty())
+
+        store.persistTerminal(
+            callId = "call-run",
+            prompt = "prompt-call-run",
+            status = VoiceToolRecordStatus.Canceled("canceled"),
+            jobId = "job-run",
+            announced = false,
+        )
+        announcer.onGeminiTurnComplete()
+        runCurrent()
+
+        assertTrue(bridge.stillWorking.isEmpty())
+        assertFalse(store.latestRecord(callId = "call-run", jobId = "job-run")!!.stillWorkingAnnounced)
     }
 
     // 6
@@ -254,9 +282,8 @@ class HermesAnnouncerTest {
         assertTrue(store.latestRecord(callId = "call-1", jobId = "job-1")!!.messageWritten)
     }
 
-    // Pins PR-2 delta 1 (docs/voiceagent/phase4-announcement-deltas.md row 1) against a
-    // silent revert to the old 30_000L hold-papering constant: the behavioral timeout path
-    // is pinned separately with an overridden short timeout (HermesJobManagerTest
+    // Pins PR-2 delta 1 (docs/voiceagent/phase4-announcement-deltas.md row 1). The behavioral
+    // timeout path is pinned separately with an overridden short timeout (HermesJobManagerTest
     // `handleCancelHermesCall records send_timeout when the bridge send exceeds the timeout`),
     // so only this constant assert notices the default value itself changing.
     @Test
@@ -289,9 +316,11 @@ class HermesAnnouncerTest {
         assertFalse(record1.messageWritten)
         assertFalse(record1.resultAnnounced)
 
-        // The Sent outcome engages generation-complete pacing; releasing it proves the
-        // queue was never wedged by the contained mark failure.
-        announcer.onGenerationComplete()
+        // The Sent outcome reserves a turn; an explicit safe boundary proves the queue
+        // was never wedged by the contained mark failure.
+        announcer.onPlaybackActive(1L)
+        announcer.onGeminiTurnComplete()
+        announcer.onPlaybackDrained(1L)
         runCurrent()
         assertTrue(bridge.completions.contains("call-2"))
         assertTrue(store.latestRecord(callId = "call-2", jobId = "job-2")!!.resultAnnounced)
@@ -388,26 +417,36 @@ class HermesAnnouncerTest {
 
     // 13
     @Test
-    fun `hold deadline releases a send blocked by audio`() = runTest {
+    fun `blocked watchdog diagnoses without sending until turn and playback are safe`() = runTest {
         val diagnostics = mutableListOf<Pair<String, String>>()
         val store = store(emptyConversation().withComplete(callId = "call-1", jobId = "job-1", answer = "the answer"))
         val bridge = RecordingBridge()
-        val announcer = announcer(queueStore = store, telemetry = telemetry(diagnostics), maxHoldMs = 15_000L)
+        val announcer = announcer(
+            queueStore = store,
+            telemetry = telemetry(diagnostics),
+            blockedWatchdogMs = 15_000L,
+        )
 
-        announcer.onAssistantAudioActive(active = true)
+        announcer.onGeminiTurnActive()
+        announcer.onPlaybackActive(1L)
         announcer.attachScoped(bridge, sessionId = 7L)
         runCurrent()
         assertTrue(bridge.completions.isEmpty())
 
         advanceTimeBy(15_001)
         runCurrent()
+        assertTrue(bridge.completions.isEmpty())
+        assertTrue(diagnostics.any { it.first == "hermes_announcement_blocked_watchdog" })
+
+        announcer.onGeminiTurnComplete()
+        announcer.onPlaybackDrained(1L)
+        runCurrent()
         assertEquals(listOf("call-1"), bridge.completions)
-        assertTrue(diagnostics.any { it.first == "hermes_announcement_released_at_deadline" })
     }
 
     // 14
     @Test
-    fun `generation-complete pacing holds the second announcement`() = runTest {
+    fun `turn complete plus playback drain pace the second announcement`() = runTest {
         val store = store(
             emptyConversation()
                 .withComplete(callId = "call-a", jobId = "job-a", answer = "answer a")
@@ -420,7 +459,12 @@ class HermesAnnouncerTest {
         runCurrent()
         assertEquals(listOf("call-a"), bridge.completions)
 
-        announcer.onGenerationComplete()
+        announcer.onPlaybackActive(1L)
+        announcer.onGeminiTurnComplete()
+        runCurrent()
+        assertEquals(listOf("call-a"), bridge.completions)
+
+        announcer.onPlaybackDrained(1L)
         runCurrent()
         assertEquals(listOf("call-a", "call-b"), bridge.completions)
     }
@@ -576,7 +620,7 @@ class HermesAnnouncerTest {
         defaultBridge: (() -> HermesSessionBridge)? = null,
         bridgeSendTimeoutMs: Long = HermesAnnouncer.DEFAULT_BRIDGE_SEND_TIMEOUT_MS,
         quietWindowMs: Long = 0L,
-        maxHoldMs: Long = HermesAnnouncer.DEFAULT_MAX_HOLD_MS,
+        blockedWatchdogMs: Long = HermesAnnouncer.DEFAULT_BLOCKED_WATCHDOG_MS,
     ): HermesAnnouncer = HermesAnnouncer(
         scope = backgroundScope,
         dispatcher = StandardTestDispatcher(testScheduler),
@@ -585,7 +629,7 @@ class HermesAnnouncerTest {
         defaultBridge = defaultBridge,
         bridgeSendTimeoutMs = bridgeSendTimeoutMs,
         quietWindowMs = quietWindowMs,
-        maxHoldMs = maxHoldMs,
+        blockedWatchdogMs = blockedWatchdogMs,
         nowMs = { testScheduler.currentTime },
     )
 
