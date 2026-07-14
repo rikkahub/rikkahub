@@ -4,9 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -501,32 +499,36 @@ class HermesAnnouncer(
     }
 
     /**
-     * Atomically defines proactive bridge entry against session retirement. The undispatched
-     * child enters the bridge method while [lock] is still held. Once that method suspends or
-     * returns, retirement may proceed; that call was admitted before retirement and may finish.
-     * A call still outside this boundary observes revocation and never enters the bridge.
+     * Atomically commits proactive bridge admission against session retirement. The immutable
+     * lease is created while [lock] is held, but invokes externally supplied bridge code only
+     * after the lock is released. Retirement before lease creation rejects the call; retirement
+     * after lease creation cannot recall that one admitted, timeout-bounded send.
      */
     private suspend fun enterAnnouncementBridge(
         current: HermesBridgeAttachment,
         send: suspend () -> Boolean,
     ): AnnouncementBridgeAdmission {
         beforeAnnouncementAdmission()
+        val lease = synchronized(lock) {
+            if (isCurrentForAnnouncementLocked(current)) {
+                AnnouncementBridgeLease(send)
+            } else {
+                null
+            }
+        } ?: return AnnouncementBridgeAdmission.Invalidated
         return try {
-            withTimeoutOrNull(bridgeSendTimeoutMs) {
-                val entered = synchronized(lock) {
-                    if (!isCurrentForAnnouncementLocked(current)) {
-                        return@withTimeoutOrNull AnnouncementBridgeAdmission.Invalidated
-                    }
-                    async(start = CoroutineStart.UNDISPATCHED) { send() }
-                }
-                AnnouncementBridgeAdmission.Entered(entered.await())
-            } ?: AnnouncementBridgeAdmission.Entered(sent = false)
+            val sent = withTimeoutOrNull(bridgeSendTimeoutMs) { lease.send() } ?: false
+            AnnouncementBridgeAdmission.Entered(sent)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Throwable) {
             AnnouncementBridgeAdmission.Entered(sent = false)
         }
     }
+
+    private class AnnouncementBridgeLease(
+        val send: suspend () -> Boolean,
+    )
 
     private sealed interface AnnouncementBridgeAdmission {
         data object Invalidated : AnnouncementBridgeAdmission

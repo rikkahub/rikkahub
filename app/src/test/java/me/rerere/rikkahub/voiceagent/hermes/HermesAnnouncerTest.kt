@@ -204,15 +204,7 @@ class HermesAnnouncerTest {
         ProactiveSendKind.entries.forEach { kind ->
             val selected = CompletableDeferred<Unit>()
             val releaseEntry = CompletableDeferred<Unit>()
-            val conversation = when (kind) {
-                ProactiveSendKind.Completion ->
-                    emptyConversation().withComplete("call-admission", "job-admission", "answer")
-                ProactiveSendKind.Terminal ->
-                    emptyConversation().withFailed("call-admission", "job-admission", "failed")
-                ProactiveSendKind.Progress ->
-                    emptyConversation().withRunning("call-admission", "job-admission")
-            }
-            val store = store(conversation)
+            val store = store(conversationFor(kind))
             val bridge = RecordingBridge()
             val announcer = announcer(
                 queueStore = store,
@@ -222,11 +214,7 @@ class HermesAnnouncerTest {
                 },
             )
 
-            announcer.onGeminiTurnActive()
-            announcer.attachScoped(bridge, sessionId = 7L)
-            if (kind == ProactiveSendKind.Progress) {
-                announcer.enqueueStillWorking("call-admission", "job-admission")
-            }
+            announcer.prepareProactiveSend(kind, bridge)
             runCurrent()
 
             announcer.onGeminiTurnComplete()
@@ -246,6 +234,56 @@ class HermesAnnouncerTest {
             } else {
                 assertTrue(record.messageWritten)
             }
+        }
+    }
+
+    @Test
+    fun `proactive bridge code runs outside the announcer registry lock`() = runTest {
+        ProactiveSendKind.entries.forEach { kind ->
+            val store = store(conversationFor(kind))
+            lateinit var subject: HermesAnnouncer
+            var registryLockHeld: Boolean? = null
+            val bridge = RecordingBridge(
+                beforeSend = {
+                    registryLockHeld = Thread.holdsLock(registryLock(subject))
+                },
+            )
+            subject = announcer(queueStore = store)
+
+            subject.prepareProactiveSend(kind, bridge)
+            runCurrent()
+            subject.onGeminiTurnComplete()
+            runCurrent()
+
+            assertEquals("$kind bridge code ran under the registry lock", false, registryLockHeld)
+        }
+    }
+
+    @Test
+    fun `admitted proactive send runs exactly once when retirement follows admission`() = runTest {
+        ProactiveSendKind.entries.forEach { kind ->
+            val entered = CompletableDeferred<Unit>()
+            val releaseSend = CompletableDeferred<Unit>()
+            val store = store(conversationFor(kind))
+            val bridge = RecordingBridge(
+                beforeSend = {
+                    entered.complete(Unit)
+                    releaseSend.await()
+                },
+            )
+            val announcer = announcer(queueStore = store)
+
+            announcer.prepareProactiveSend(kind, bridge)
+            runCurrent()
+            announcer.onGeminiTurnComplete()
+            runCurrent()
+            entered.await()
+
+            announcer.onGeminiSessionRetired()
+            releaseSend.complete(Unit)
+            runCurrent()
+
+            bridge.assertEnteredExactlyOnce(kind)
         }
     }
 
@@ -806,6 +844,32 @@ class HermesAnnouncerTest {
 
     private enum class ProactiveSendKind { Completion, Terminal, Progress }
 
+    private fun conversationFor(kind: ProactiveSendKind): Conversation = when (kind) {
+        ProactiveSendKind.Completion ->
+            emptyConversation().withComplete("call-admission", "job-admission", "answer")
+        ProactiveSendKind.Terminal ->
+            emptyConversation().withFailed("call-admission", "job-admission", "failed")
+        ProactiveSendKind.Progress ->
+            emptyConversation().withRunning("call-admission", "job-admission")
+    }
+
+    private fun HermesAnnouncer.prepareProactiveSend(
+        kind: ProactiveSendKind,
+        bridge: HermesSessionBridge,
+    ) {
+        onGeminiTurnActive()
+        attachScoped(bridge, sessionId = 7L)
+        if (kind == ProactiveSendKind.Progress) {
+            enqueueStillWorking("call-admission", "job-admission")
+        }
+    }
+
+    private fun registryLock(announcer: HermesAnnouncer): Any =
+        HermesAnnouncer::class.java.getDeclaredField("lock").run {
+            isAccessible = true
+            requireNotNull(get(announcer))
+        }
+
     /** A conversation store whose [update] suspends (yields) first, like the production store. */
     private class YieldingStore(
         private val delegate: VoiceConversationStore,
@@ -881,23 +945,42 @@ class HermesAnnouncerTest {
         var terminalResult: Boolean = true,
         var stillWorkingResult: Boolean = true,
         var completionDelayMs: Long = 0L,
+        val beforeSend: suspend (ProactiveSendKind) -> Unit = {},
     ) : HermesSessionBridge {
         val completions = mutableListOf<String>()
         val terminals = mutableListOf<String>()
         val stillWorking = mutableListOf<String>()
         override suspend fun sendQueuedAcknowledgement(callId: String, sessionId: Long) = true
         override suspend fun sendCompletionFollowUp(callId: String, prompt: String, answer: String, sessionId: Long): Boolean {
+            beforeSend(ProactiveSendKind.Completion)
             completions += callId
             if (completionDelayMs > 0L) delay(completionDelayMs)
             return completionResult
         }
         override suspend fun sendTerminalFollowUp(callId: String, prompt: String, status: HermesQueueStatus, reason: String, sessionId: Long): Boolean {
+            beforeSend(ProactiveSendKind.Terminal)
             terminals += callId; return terminalResult
         }
         override suspend fun sendStillWorkingUpdate(callId: String, prompt: String, sessionId: Long): Boolean {
+            beforeSend(ProactiveSendKind.Progress)
             stillWorking += callId; return stillWorkingResult
         }
         override suspend fun sendCancelResponse(callId: String, outcome: CancelHermesOutcome, sessionId: Long) = true
+
+        fun assertEnteredExactlyOnce(kind: ProactiveSendKind) {
+            assertEquals(
+                if (kind == ProactiveSendKind.Completion) listOf("call-admission") else emptyList(),
+                completions,
+            )
+            assertEquals(
+                if (kind == ProactiveSendKind.Terminal) listOf("call-admission") else emptyList(),
+                terminals,
+            )
+            assertEquals(
+                if (kind == ProactiveSendKind.Progress) listOf("call-admission") else emptyList(),
+                stillWorking,
+            )
+        }
     }
 
     private fun Conversation.visibleHermesResults(prefix: String): Int = currentMessages
