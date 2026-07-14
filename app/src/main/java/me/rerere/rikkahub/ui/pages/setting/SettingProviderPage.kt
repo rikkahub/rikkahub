@@ -9,6 +9,7 @@ import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Sparkles
+import me.rerere.hugeicons.stroke.ServerStack01
 import me.rerere.hugeicons.stroke.Cancel01
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,6 +73,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.RECOMMENDED_PROVIDERS
+import me.rerere.rikkahub.data.sync.cloud.PerryCatalog
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -92,7 +94,10 @@ import kotlin.uuid.Uuid
 @Composable
 fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val monelBusy by vm.monelBusy.collectAsStateWithLifecycle()
+    val monelStatus by vm.monelStatus.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
+    val toaster = LocalToaster.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var searchQuery by remember { mutableStateOf("") }
     val lazyListState = rememberLazyListState()
@@ -123,6 +128,39 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     BackButton()
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            if (settings.perryDeviceToken.isBlank() || !settings.perryConfig.isConfigured()) {
+                                toaster.show(
+                                    "Configure Cloud & Sync and register this device first",
+                                    type = ToastType.Error,
+                                )
+                                return@IconButton
+                            }
+                            vm.importMonelProviders { result ->
+                                result.fold(
+                                    onSuccess = {
+                                        toaster.show(
+                                            "Imported $it Monel provider(s). Open → Models → add models for chat.",
+                                            type = ToastType.Success,
+                                        )
+                                    },
+                                    onFailure = {
+                                        toaster.show(
+                                            it.message ?: "Import failed",
+                                            type = ToastType.Error,
+                                        )
+                                    },
+                                )
+                            }
+                        },
+                        enabled = !monelBusy,
+                    ) {
+                        Icon(
+                            HugeIcons.ServerStack01,
+                            contentDescription = "Import Monel providers from Perry",
+                        )
+                    }
                     RecommendProviderButton { provider ->
                         vm.updateSettings(
                             settings.copy(
@@ -180,6 +218,15 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
             )
 
 
+            if (!monelStatus.isNullOrBlank()) {
+                Text(
+                    text = monelStatus.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
+
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -200,6 +247,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                                 .scale(if (isDragging) 0.95f else 1f)
                                 .fillMaxWidth(),
                             provider = provider,
+                            isPerryGateway = PerryCatalog.isPerryGateway(provider),
                             dragHandle = {
                                 val haptic = LocalHapticFeedback.current
                                 IconButton(
@@ -588,6 +636,7 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
 private fun ProviderItem(
     provider: ProviderSetting,
     modifier: Modifier = Modifier,
+    isPerryGateway: Boolean = false,
     dragHandle: @Composable () -> Unit,
     onClick: () -> Unit
 ) {
@@ -640,6 +689,11 @@ private fun ProviderItem(
                                 provider.models.size
                             )
                         )
+                    }
+                    if (isPerryGateway) {
+                        Tag(type = TagType.INFO) {
+                            Text("Perry")
+                        }
                     }
                     if (provider.name == "AiHubMix") {
                         Tag(type = TagType.INFO) {

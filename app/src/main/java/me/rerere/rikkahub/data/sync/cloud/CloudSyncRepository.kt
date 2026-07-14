@@ -17,6 +17,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.dao.SyncEntityRevisionDAO
@@ -355,6 +356,14 @@ class CloudSyncRepository(
                 )
             )
             settingsStore.update {
+                val refreshed = PerryCatalog.refreshPerryCredentials(
+                    providers = it.providers,
+                    resolveBaseUrl = { monelId ->
+                        PerryApiClient(okHttpClient, it.perryConfig.normalizedBaseUrl())
+                            .aiProviderBaseUrl(monelId)
+                    },
+                    deviceToken = registered.deviceToken,
+                )
                 it.copy(
                     perryDeviceToken = registered.deviceToken,
                     perryConfig = it.perryConfig.copy(
@@ -362,9 +371,86 @@ class CloudSyncRepository(
                         // Clear bootstrap token after successful registration
                         bootstrapToken = "",
                     ),
+                    providers = refreshed,
                 )
             }
             registered
+        }
+    }
+
+    /**
+     * Materialize one OpenAI-compatible provider shell per Monel provider.
+     * Models stay empty until the user adds them on the Models tab (chat switcher only shows added models).
+     */
+    suspend fun importMonelProviders(): Result<Int> {
+        return runCatching {
+            withContext(Dispatchers.IO) {
+                val settings = settingsStore.settingsFlow.value
+                val client = createAuthenticatedClient()
+                    ?: error("Perry not configured or device token missing")
+                val catalog = client.catalogProviders()
+                require(catalog.isNotEmpty()) { "Monel catalog returned no providers" }
+                val token = settings.perryDeviceToken
+                val existingOpenAi = settings.providers.filterIsInstance<ProviderSetting.OpenAI>()
+                    .associateBy { it.id }
+                val imported = catalog.map { dto ->
+                    val id = PerryCatalog.providerUuid(dto.id)
+                    PerryCatalog.toOpenAIProvider(
+                        dto = dto,
+                        perryBaseUrlForProvider = client.aiProviderBaseUrl(dto.id),
+                        deviceToken = token,
+                        existing = existingOpenAi[id],
+                    )
+                }
+                val merged = PerryCatalog.mergeProviders(settings.providers, imported)
+                settingsStore.update { it.copy(providers = merged) }
+                imported.size
+            }
+        }
+    }
+
+    /** Browse remote Monel models for a Perry-backed provider (does not auto-add to chat). */
+    suspend fun listMonelCatalogModels(provider: ProviderSetting): List<me.rerere.ai.provider.Model> {
+        return withContext(Dispatchers.IO) {
+            if (!PerryCatalog.isPerryGateway(provider)) return@withContext emptyList()
+            val monelId = when (provider) {
+                is ProviderSetting.OpenAI -> PerryCatalog.monelProviderIdFromBaseUrl(provider.baseUrl)
+                else -> null
+            } ?: return@withContext emptyList()
+            val client = createAuthenticatedClient()
+                ?: error("Perry not configured or device token missing")
+            // Keep credentials in sync with current Perry host/token before browsing.
+            refreshPerryProviderCredentialsInPlace()
+            runCatching {
+                val grouped = client.catalogModelsForProvider(monelId)
+                PerryCatalog.toBrowseModels(
+                    monelProviderId = monelId,
+                    entries = grouped.modelEntries,
+                    fallbackIds = grouped.models,
+                )
+            }.getOrElse {
+                val flat = client.catalogModels()
+                PerryCatalog.toBrowseModelsFromFlat(monelId, flat)
+            }
+        }
+    }
+
+    suspend fun refreshPerryProviderCredentialsInPlace() {
+        val settings = settingsStore.settingsFlow.value
+        val token = settings.perryDeviceToken
+        if (!settings.perryConfig.isConfigured() || token.isBlank()) return
+        val client = PerryApiClient(
+            okHttpClient,
+            settings.perryConfig.normalizedBaseUrl(),
+            deviceToken = token,
+        )
+        val refreshed = PerryCatalog.refreshPerryCredentials(
+            providers = settings.providers,
+            resolveBaseUrl = { monelId -> client.aiProviderBaseUrl(monelId) },
+            deviceToken = token,
+        )
+        if (refreshed != settings.providers) {
+            settingsStore.update { it.copy(providers = refreshed) }
         }
     }
 

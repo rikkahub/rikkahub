@@ -105,6 +105,23 @@ class SettingCloudSyncVM(
         }
     }
 
+    fun importMonelProviders() {
+        viewModelScope.launch {
+            _busy.value = true
+            try {
+                val result = cloudSyncRepository.importMonelProviders()
+                _statusText.value = result.fold(
+                    onSuccess = {
+                        "Imported $it Monel provider shell(s). Open Settings → Providers → Models to add models for chat."
+                    },
+                    onFailure = { it.message ?: "Import Monel providers failed" },
+                )
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
     fun clearCredentials() {
         viewModelScope.launch {
             cloudSyncRepository.clearDeviceCredentials()

@@ -119,6 +119,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomBodies
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomHeaders
+import me.rerere.rikkahub.data.sync.cloud.PerryCatalog
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConnectionTester
 import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderBalanceOption
@@ -247,7 +248,8 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 1 -> {
                     SettingProviderModelPage(
                         provider = provider,
-                        onEdit = onEdit
+                        onEdit = onEdit,
+                        vm = vm,
                     )
                 }
             }
@@ -372,29 +374,38 @@ private fun SettingProviderConfigPage(
 @Composable
 private fun SettingProviderModelPage(
     provider: ProviderSetting,
-    onEdit: (ProviderSetting) -> Unit
+    onEdit: (ProviderSetting) -> Unit,
+    vm: SettingVM,
 ) {
     ModelList(
         providerSetting = provider,
-        onUpdateProvider = onEdit
+        onUpdateProvider = onEdit,
+        vm = vm,
     )
 }
 
 @Composable
 private fun ModelList(
     providerSetting: ProviderSetting,
-    onUpdateProvider: (ProviderSetting) -> Unit
+    onUpdateProvider: (ProviderSetting) -> Unit,
+    vm: SettingVM,
 ) {
     val providerManager = koinInject<ProviderManager>()
-    val modelList by produceState(emptyList(), providerSetting) {
+    val isPerry = PerryCatalog.isPerryGateway(providerSetting)
+    val modelList by produceState(emptyList(), providerSetting, isPerry) {
         runCatching {
-            println("loading models...")
-            value = providerManager.getProviderByType(providerSetting)
-                .listModels(providerSetting)
-                .sortedBy { it.modelId }
-                .toList()
+            value = if (isPerry) {
+                // Browse Monel catalog via Perry; does NOT auto-add to chat switcher.
+                vm.listBrowseModels(providerSetting)
+            } else {
+                providerManager.getProviderByType(providerSetting)
+                    .listModels(providerSetting)
+                    .sortedBy { it.modelId }
+                    .toList()
+            }
         }.onFailure {
             it.printStackTrace()
+            value = emptyList()
         }
     }
     var expanded by rememberSaveable { mutableStateOf(true) }
@@ -433,7 +444,11 @@ private fun ModelList(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = stringResource(R.string.setting_provider_page_add_models_hint),
+                            text = if (isPerry) {
+                                "Open the package icon to browse Monel catalog, then add models. Only added models appear in chat."
+                            } else {
+                                stringResource(R.string.setting_provider_page_add_models_hint)
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )

@@ -123,16 +123,20 @@ class PerryApiClient(
     }
 
     /** Phase 8: Monel catalog via Perry (no Monel auth key on device). */
-    suspend fun catalogProviders(): List<JsonElement> {
+    suspend fun catalogProviders(): List<CatalogProviderDto> {
         return get("/v1/catalog/providers", auth = true)
     }
 
-    suspend fun catalogModels(): List<JsonElement> {
+    suspend fun catalogModels(): List<CatalogModelDto> {
         return get("/v1/catalog/models", auth = true)
     }
 
-    suspend fun catalogModelsByProvider(): List<JsonElement> {
+    suspend fun catalogModelsByProvider(): List<CatalogProviderModelsDto> {
         return get("/v1/catalog/models/by-provider", auth = true)
+    }
+
+    suspend fun catalogModelsForProvider(providerId: String): CatalogProviderModelsDto {
+        return get("/v1/catalog/models/by-provider/$providerId", auth = true)
     }
 
     /**

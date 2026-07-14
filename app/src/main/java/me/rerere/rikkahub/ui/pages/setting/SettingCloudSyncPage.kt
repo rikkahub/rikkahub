@@ -355,6 +355,11 @@ fun SettingCloudSyncPage(
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Sync now") }
                     OutlinedButton(
+                        onClick = { vm.importMonelProviders() },
+                        enabled = !busy && settings.perryDeviceToken.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Import Monel providers") }
+                    OutlinedButton(
                         onClick = { vm.resetCursor() },
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth(),
