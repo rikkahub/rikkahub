@@ -61,6 +61,7 @@ class CloudSyncRepository(
     var settingsDomainSync: SettingsDomainSync? = null
     var conversationDomainSync: ConversationDomainSync? = null
     var folderDomainSync: FolderDomainSync? = null
+    var messageNodeDomainSync: MessageNodeDomainSync? = null
     private val syncMutex = Mutex()
     private var pendingSyncJob: Job? = null
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.NOT_CONFIGURED)
@@ -444,9 +445,14 @@ class CloudSyncRepository(
     private suspend fun pushOutbox(client: PerryApiClient, deviceId: String) {
         val batch = outboxDao.listReady(System.currentTimeMillis(), limit = 50)
         if (batch.isEmpty()) return
+        // Parents first so message_node mutations find conversation on server.
+        val orderedBatch = batch.sortedWith(
+            compareBy<SyncOutboxEntity> { outboxPushPriority(it.entityType) }
+                .thenBy { it.createdAt },
+        )
         val request = SyncMutationsRequest(
             deviceId = deviceId,
-            mutations = batch.map { item ->
+            mutations = orderedBatch.map { item ->
                 SyncMutationItem(
                     mutationId = item.mutationId,
                     entityType = item.entityType,
@@ -602,13 +608,14 @@ class CloudSyncRepository(
             var settings = settingsStore.settingsFlow.value
             var assistants = settings.assistants.toMutableList()
             var dirty = false
-            // Stable order: settings/assistants, then folders, then conversations.
+            // Stable order: settings/assistants, folders, conversations, then nodes.
             val ordered = changes.sortedBy { change ->
                 when (change.entityType) {
                     SettingsDomainSync.ENTITY_SETTING -> 0
                     SettingsDomainSync.ENTITY_ASSISTANT -> 1
                     FolderDomainSync.ENTITY_FOLDER -> 2
                     ConversationDomainSync.ENTITY_CONVERSATION -> 3
+                    MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> 4
                     else -> 9
                 }
             }
@@ -659,6 +666,15 @@ class CloudSyncRepository(
                     }
                     ConversationDomainSync.ENTITY_CONVERSATION -> {
                         conversationDomainSync?.applyRemotePayload(
+                            entityId = change.entityId,
+                            operation = change.operation,
+                            payload = change.payload,
+                            revision = change.revision,
+                        )
+                        rememberRevision(change.entityType, change.entityId, change.revision)
+                    }
+                    MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> {
+                        messageNodeDomainSync?.applyRemotePayload(
                             entityId = change.entityId,
                             operation = change.operation,
                             payload = change.payload,
@@ -721,6 +737,14 @@ class CloudSyncRepository(
                         revision = revision ?: 0L,
                     )
                 }
+                MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> {
+                    messageNodeDomainSync?.applyRemotePayload(
+                        entityId = entityId,
+                        operation = operation,
+                        payload = payload,
+                        revision = revision ?: 0L,
+                    )
+                }
             }
             revision?.let { rememberRevision(entityType, entityId, it) }
         }
@@ -743,6 +767,15 @@ class CloudSyncRepository(
         val base = steps[idx]
         val jitter = (base * 0.2).toLong()
         return base + (-jitter..jitter).random()
+    }
+
+    private fun outboxPushPriority(entityType: String): Int = when (entityType) {
+        SettingsDomainSync.ENTITY_SETTING -> 0
+        SettingsDomainSync.ENTITY_ASSISTANT -> 1
+        FolderDomainSync.ENTITY_FOLDER -> 2
+        ConversationDomainSync.ENTITY_CONVERSATION -> 3
+        MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> 4
+        else -> 9
     }
 
     companion object {

@@ -40,6 +40,12 @@ interface MessageNodeDAO {
     @Query("DELETE FROM message_node WHERE id = :nodeId")
     suspend fun deleteById(nodeId: String)
 
+    @Query(
+        "DELETE FROM message_node WHERE conversation_id = :conversationId " +
+            "AND node_index = :nodeIndex AND id != :keepId"
+    )
+    suspend fun deleteOthersAtIndex(conversationId: String, nodeIndex: Int, keepId: String)
+
     // 使用 @RawQuery 绕过 Room 编译期校验，以便使用 json_each() 虚拟表
     @RawQuery
     suspend fun getTokenStatsRaw(query: SupportSQLiteQuery): MessageTokenStats

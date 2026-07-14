@@ -23,6 +23,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.sync.cloud.ConversationDomainSync
+import me.rerere.rikkahub.data.sync.cloud.MessageNodeDomainSync
 import me.rerere.rikkahub.utils.JsonInstant
 import java.time.Instant
 import kotlin.uuid.Uuid
@@ -35,8 +36,9 @@ class ConversationRepository(
     private val filesManager: FilesManager,
     private val messageFtsManager: MessageFtsManager,
 ) {
-    // Set after Koin creates ConversationDomainSync (avoids ctor cycles).
+    // Set after Koin creates domain sync helpers (avoids ctor cycles).
     var conversationDomainSync: ConversationDomainSync? = null
+    var messageNodeDomainSync: MessageNodeDomainSync? = null
     companion object {
         private const val PAGE_SIZE = 20
         private const val INITIAL_LOAD_SIZE = 40
@@ -294,6 +296,11 @@ class ConversationRepository(
         }
         messageFtsManager.indexConversation(conversation)
         conversationDomainSync?.enqueueUpsert(entity)
+        messageNodeDomainSync?.enqueueConversationNodes(
+            conversationId = conversation.id.toString(),
+            nodes = conversation.messageNodes,
+            syncEnabled = entity.syncEnabled,
+        )
     }
 
     suspend fun updateConversation(conversation: Conversation) {
@@ -306,6 +313,12 @@ class ConversationRepository(
         }
         messageFtsManager.indexConversation(conversation)
         conversationDomainSync?.enqueueUpsert(entity)
+        // Stable save point: enqueue full node set (includes branches).
+        messageNodeDomainSync?.enqueueConversationNodes(
+            conversationId = conversation.id.toString(),
+            nodes = conversation.messageNodes,
+            syncEnabled = entity.syncEnabled,
+        )
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
