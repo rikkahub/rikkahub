@@ -32,6 +32,8 @@ private fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (t
     is VoicePlaybackDiagnostic.MalformedChunk -> "Malformed playback chunk: $message"
     is VoicePlaybackDiagnostic.SinkStartFailed -> "AudioTrack start failed: $message"
     is VoicePlaybackDiagnostic.SinkWriteFailed -> "AudioTrack write failed: $message"
+    is VoicePlaybackDiagnostic.SinkDrainFailed -> "AudioTrack drain failed: $message"
+    is VoicePlaybackDiagnostic.SinkRetirementFailed -> "AudioTrack retirement failed: $message"
     is VoicePlaybackDiagnostic.ChunkQueued,
     is VoicePlaybackDiagnostic.ChunkWritten,
     is VoicePlaybackDiagnostic.StaleChunkRejected,
@@ -55,6 +57,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         scope = scope,
         createSink = playbackTracks::createAssistantSinkOrNull,
         onDiagnostic = ::handlePlaybackDiagnostic,
+        onPlaybackEvent = ::notifyPlaybackEvent,
     )
     private var captureJob: Job? = null
     private var audioRecord: AudioRecord? = null
@@ -71,6 +74,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     private var hasAudioFocus = false
     private var captureGeneration = 0L
     private var errorHandler: ((String) -> Unit)? = null
+    private var playbackEventHandler: ((VoicePlaybackEvent) -> Unit)? = null
     private var released = false
     private val bluetoothProfileListener = object : BluetoothProfile.ServiceListener {
         override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
@@ -100,6 +104,12 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     override fun setErrorHandler(onError: ((String) -> Unit)?) {
         synchronized(lock) {
             errorHandler = onError
+        }
+    }
+
+    override fun setPlaybackEventHandler(onEvent: ((VoicePlaybackEvent) -> Unit)?) {
+        synchronized(lock) {
+            playbackEventHandler = onEvent
         }
     }
 
@@ -272,6 +282,9 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         playbackWriter.activateSession(sessionId)
     }
 
+    override fun markPlaybackTurnComplete(sessionId: Long?): Boolean =
+        playbackWriter.markTurnComplete(sessionId)
+
     override fun invalidatePlaybackSession() {
         playbackWriter.invalidateSession()
     }
@@ -299,6 +312,9 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         job?.cancel()
         recorder?.let(::stopAndReleaseRecorder)
         playbackWriter.release()
+        synchronized(lock) {
+            playbackEventHandler = null
+        }
         playbackTracks.releaseAll()
         clearVoiceCommunicationRoutingBestEffort()
         closeBluetoothHeadsetProxy()
@@ -733,6 +749,19 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         handler?.invoke(message)
     }
 
+    private fun notifyPlaybackEvent(event: VoicePlaybackEvent) {
+        when (event) {
+            is VoicePlaybackEvent.Active ->
+                Log.d(TAG, "Voice playback active: generation=${event.generation}")
+            is VoicePlaybackEvent.DrainStarted ->
+                Log.d(TAG, "Voice playback drain started: generation=${event.generation}")
+            is VoicePlaybackEvent.Drained ->
+                Log.d(TAG, "Voice playback drained: generation=${event.generation}")
+        }
+        val handler = synchronized(lock) { playbackEventHandler }
+        handler?.invoke(event)
+    }
+
     private fun logCaptureLevelIfNeeded(chunk: Int, pcm16: ByteArray) {
         if (chunk != 1 && chunk % CAPTURE_LEVEL_LOG_INTERVAL_CHUNKS != 0) {
             return
@@ -771,6 +800,14 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             }
             is VoicePlaybackDiagnostic.SinkWriteFailed -> {
                 Log.w(TAG, "Voice playback write failed: ${diagnostic.message}")
+                diagnostic.audioErrorMessageOrNull()?.let(::notifyAudioError)
+            }
+            is VoicePlaybackDiagnostic.SinkDrainFailed -> {
+                Log.w(TAG, "AudioTrack drain failed: ${diagnostic.message}")
+                diagnostic.audioErrorMessageOrNull()?.let(::notifyAudioError)
+            }
+            is VoicePlaybackDiagnostic.SinkRetirementFailed -> {
+                Log.w(TAG, "AudioTrack retirement failed: ${diagnostic.message}")
                 diagnostic.audioErrorMessageOrNull()?.let(::notifyAudioError)
             }
             is VoicePlaybackDiagnostic.PlaybackSuppressed -> {

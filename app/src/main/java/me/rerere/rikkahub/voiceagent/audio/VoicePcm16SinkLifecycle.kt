@@ -3,7 +3,10 @@ package me.rerere.rikkahub.voiceagent.audio
 internal object VoicePcm16SinkLifecycle {
     sealed interface StartOutcome {
         data class Started(val sink: VoicePcm16Sink) : StartOutcome
-        data class Failed(val message: String) : StartOutcome
+        data class Failed(
+            val message: String,
+            val sinkRequiringRetirement: VoicePcm16Sink? = null,
+        ) : StartOutcome
     }
 
     fun createStarted(
@@ -20,13 +23,11 @@ internal object VoicePcm16SinkLifecycle {
             when (val result = sink.start()) {
                 VoicePcm16Sink.StartResult.Started -> StartOutcome.Started(sink)
                 is VoicePcm16Sink.StartResult.Failed -> {
-                    stopAndReleaseSafely(sink)
-                    StartOutcome.Failed(result.message)
+                    retireAfterStartFailure(sink, result.message)
                 }
             }
         } catch (e: Exception) {
-            stopAndReleaseSafely(sink)
-            StartOutcome.Failed(e.failureMessage())
+            retireAfterStartFailure(sink, e.failureMessage())
         }
     }
 
@@ -46,6 +47,21 @@ internal object VoicePcm16SinkLifecycle {
         }
     }
 
+    fun retireForSafety(sink: VoicePcm16Sink?): Boolean {
+        if (sink == null) return true
+        return try {
+            sink.pauseAndFlush()
+            true
+        } catch (_: Exception) {
+            try {
+                sink.stopAndRelease()
+                true
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
     fun pauseAndFlushSafely(sink: VoicePcm16Sink?) {
         try {
             sink?.pauseAndFlush()
@@ -57,6 +73,15 @@ internal object VoicePcm16SinkLifecycle {
         try {
             sink?.stopAndRelease()
         } catch (_: Exception) {
+        }
+    }
+
+    private fun retireAfterStartFailure(sink: VoicePcm16Sink, message: String): StartOutcome.Failed {
+        return if (retireForSafety(sink)) {
+            stopAndReleaseSafely(sink)
+            StartOutcome.Failed(message)
+        } else {
+            StartOutcome.Failed(message, sinkRequiringRetirement = sink)
         }
     }
 

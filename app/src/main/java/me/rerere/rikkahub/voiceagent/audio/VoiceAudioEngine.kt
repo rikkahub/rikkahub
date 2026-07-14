@@ -2,10 +2,12 @@ package me.rerere.rikkahub.voiceagent.audio
 
 interface VoiceAudioEngine {
     fun setErrorHandler(onError: ((String) -> Unit)?) = Unit
+    fun setPlaybackEventHandler(onEvent: ((VoicePlaybackEvent) -> Unit)?) = Unit
     fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit = {})
     fun stopCapture()
     fun playPcm16(base64Pcm16: String, sessionId: Long? = null): Boolean
     fun activatePlaybackSession(sessionId: Long) = Unit
+    fun markPlaybackTurnComplete(sessionId: Long? = null): Boolean = false
     fun invalidatePlaybackSession() = Unit
     fun suppressPlayback()
     fun release()

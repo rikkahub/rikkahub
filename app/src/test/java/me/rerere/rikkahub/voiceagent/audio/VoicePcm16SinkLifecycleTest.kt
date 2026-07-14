@@ -1,7 +1,9 @@
 package me.rerere.rikkahub.voiceagent.audio
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VoicePcm16SinkLifecycleTest {
@@ -177,6 +179,34 @@ class VoicePcm16SinkLifecycleTest {
         VoicePcm16SinkLifecycle.pauseAndFlushSafely(null)
         VoicePcm16SinkLifecycle.stopAndReleaseSafely(null)
 
+        assertEquals(1, sink.pauseAndFlushCalls)
+        assertEquals(1, sink.stopAndReleaseCalls)
+    }
+
+    @Test
+    fun `retire for safety succeeds only after flush or release succeeds`() {
+        val flushed = FakeVoicePcm16Sink()
+        val released = FakeVoicePcm16Sink(
+            pauseException = IllegalStateException("flush failed"),
+        )
+
+        assertTrue(VoicePcm16SinkLifecycle.retireForSafety(flushed))
+        assertEquals(1, flushed.pauseAndFlushCalls)
+        assertEquals(0, flushed.stopAndReleaseCalls)
+
+        assertTrue(VoicePcm16SinkLifecycle.retireForSafety(released))
+        assertEquals(1, released.pauseAndFlushCalls)
+        assertEquals(1, released.stopAndReleaseCalls)
+    }
+
+    @Test
+    fun `retire for safety fails when neither flush nor release succeeds`() {
+        val sink = FakeVoicePcm16Sink(
+            pauseException = IllegalStateException("flush failed"),
+            releaseException = IllegalStateException("release failed"),
+        )
+
+        assertFalse(VoicePcm16SinkLifecycle.retireForSafety(sink))
         assertEquals(1, sink.pauseAndFlushCalls)
         assertEquals(1, sink.stopAndReleaseCalls)
     }
