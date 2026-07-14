@@ -9,14 +9,11 @@ import org.junit.Test
 class PlaybackSuppressionControllerTest {
 
     @Test
-    fun `suppress sets suppressed and deactivates assistant audio`() {
-        val activeChanges = mutableListOf<Boolean>()
-        val controller = controller(onAssistantAudioActiveChanged = { activeChanges += it })
-
+    fun `suppress sets suppressed`() {
+        val controller = controller()
         controller.suppress()
 
         assertTrue(controller.isSuppressed())
-        assertEquals(listOf(false), activeChanges)
     }
 
     @Test
@@ -59,9 +56,8 @@ class PlaybackSuppressionControllerTest {
     }
 
     @Test
-    fun `tryActivatePlayback suppressed diagnostic, stale diagnostic, otherwise activates audio`() {
-        val suppressedActiveChanges = mutableListOf<Boolean>()
-        val suppressedController = controller(onAssistantAudioActiveChanged = { suppressedActiveChanges += it })
+    fun `tryActivatePlayback returns suppressed stale or accepted decisions`() {
+        val suppressedController = controller()
         suppressedController.suppress()
         assertEquals(
             "output_audio_state_suppressed_after_interruption",
@@ -74,10 +70,8 @@ class PlaybackSuppressionControllerTest {
             staleController.tryActivatePlayback(isStale = { true }),
         )
 
-        val activatingActiveChanges = mutableListOf<Boolean>()
-        val activatingController = controller(onAssistantAudioActiveChanged = { activatingActiveChanges += it })
+        val activatingController = controller()
         assertNull(activatingController.tryActivatePlayback(isStale = { false }))
-        assertEquals(listOf(true), activatingActiveChanges)
     }
 
     @Test
@@ -94,9 +88,5 @@ class PlaybackSuppressionControllerTest {
         assertFalse(controller.clearForAssistantTurnAfterInterruption())
     }
 
-    private fun controller(
-        onAssistantAudioActiveChanged: (Boolean) -> Unit = {},
-    ): PlaybackSuppressionController = PlaybackSuppressionController(
-        onAssistantAudioActiveChanged = onAssistantAudioActiveChanged,
-    )
+    private fun controller(): PlaybackSuppressionController = PlaybackSuppressionController()
 }

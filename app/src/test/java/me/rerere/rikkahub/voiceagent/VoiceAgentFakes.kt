@@ -10,6 +10,7 @@ import kotlinx.serialization.json.buildJsonObject
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
+import me.rerere.rikkahub.voiceagent.audio.VoicePlaybackEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
@@ -658,6 +659,12 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
     var startCaptureError: Throwable? = null
     private var errorHandler: ((String) -> Unit)? = null
     private var playbackSessionId: Long? = null
+    private var playbackEventHandler: ((VoicePlaybackEvent) -> Unit)? = null
+    private var nextPlaybackEpoch = 0L
+    private var acceptingPlaybackEpoch: Long? = null
+    private val pendingDrainEpochs = ArrayDeque<Long>()
+    var markPlaybackTurnCompleteCalls = 0
+        private set
     private var captureCallback: ((ByteArray) -> Unit)? = null
     private var debugInjectionCompleteCallback: (() -> Unit)? = null
     private val blockedStartCaptures = mutableListOf<BlockedPlayback>()
@@ -668,6 +675,10 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
 
     override fun setErrorHandler(onError: ((String) -> Unit)?) {
         errorHandler = onError
+    }
+
+    override fun setPlaybackEventHandler(onEvent: ((VoicePlaybackEvent) -> Unit)?) {
+        playbackEventHandler = onEvent
     }
 
     override fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) {
@@ -706,6 +717,11 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
             return false
         }
         playedPcm16 += base64Pcm16
+        if (acceptingPlaybackEpoch == null) {
+            nextPlaybackEpoch += 1
+            acceptingPlaybackEpoch = nextPlaybackEpoch
+            playbackEventHandler?.invoke(VoicePlaybackEvent.Active(nextPlaybackEpoch))
+        }
         val blockedAfterAccepted = synchronized(blockedAfterAcceptedPlaybacks) {
             blockedAfterAcceptedPlaybacks.removeFirstOrNull()
         }
@@ -717,11 +733,15 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
     }
 
     override fun activatePlaybackSession(sessionId: Long) {
+        val retiredEpochs = retirePlaybackEpochs()
         playbackSessionId = sessionId
+        retiredEpochs.forEach { playbackEventHandler?.invoke(VoicePlaybackEvent.Drained(it)) }
     }
 
     override fun invalidatePlaybackSession() {
+        val retiredEpochs = retirePlaybackEpochs()
         playbackSessionId = null
+        retiredEpochs.forEach { playbackEventHandler?.invoke(VoicePlaybackEvent.Drained(it)) }
     }
 
     override fun suppressPlayback() {
@@ -731,10 +751,36 @@ class FakeVoiceAudioEngine : VoiceAudioEngine {
             blocked.release.await(500, TimeUnit.MILLISECONDS)
         }
         suppressPlaybackCalls += 1
+        retirePlaybackEpochs().forEach { playbackEventHandler?.invoke(VoicePlaybackEvent.Drained(it)) }
+    }
+
+    override fun markPlaybackTurnComplete(sessionId: Long?): Boolean {
+        markPlaybackTurnCompleteCalls += 1
+        if (sessionId != null && playbackSessionId != sessionId) return false
+        val epoch = acceptingPlaybackEpoch ?: return true
+        acceptingPlaybackEpoch = null
+        pendingDrainEpochs.addLast(epoch)
+        playbackEventHandler?.invoke(VoicePlaybackEvent.DrainStarted(epoch))
+        return true
     }
 
     override fun release() {
+        val retiredEpochs = retirePlaybackEpochs()
         releaseCalls += 1
+        retiredEpochs.forEach { playbackEventHandler?.invoke(VoicePlaybackEvent.Drained(it)) }
+        playbackEventHandler = null
+    }
+
+    fun completePlaybackDrain() {
+        val epoch = pendingDrainEpochs.removeFirstOrNull() ?: return
+        playbackEventHandler?.invoke(VoicePlaybackEvent.Drained(epoch))
+    }
+
+    private fun retirePlaybackEpochs(): List<Long> = buildList {
+        acceptingPlaybackEpoch?.let(::add)
+        addAll(pendingDrainEpochs)
+        acceptingPlaybackEpoch = null
+        pendingDrainEpochs.clear()
     }
 
     fun blockNextPlayback(): BlockedPlayback {

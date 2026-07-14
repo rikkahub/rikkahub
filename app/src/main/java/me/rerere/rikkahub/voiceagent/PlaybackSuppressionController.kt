@@ -1,13 +1,11 @@
 package me.rerere.rikkahub.voiceagent
 
 /**
- * Owns the playback-suppression flags and assistant-audio-active state. Suppression
- * is set on user/Gemini interruption and cleared when a new turn starts; audio-active
- * changes are forwarded to the announcement pipeline via the constructor callback.
+ * Owns the playback-suppression flags. Suppression is set on user/Gemini interruption
+ * and cleared when a new turn starts. Physical playback state is owned by the audio
+ * engine and reported independently through [me.rerere.rikkahub.voiceagent.audio.VoicePlaybackEvent].
  */
-internal class PlaybackSuppressionController(
-    private val onAssistantAudioActiveChanged: (Boolean) -> Unit,
-) {
+internal class PlaybackSuppressionController {
     private val lock = Any()
     private var suppressed = false
     private var suppressedByGeminiInterruption = false
@@ -15,7 +13,6 @@ internal class PlaybackSuppressionController(
     fun isSuppressed(): Boolean = synchronized(lock) { suppressed }
 
     fun suppress() {
-        setAssistantAudioActive(false)
         synchronized(lock) { suppressed = true }
     }
 
@@ -28,7 +25,6 @@ internal class PlaybackSuppressionController(
             suppressed = false
             suppressedByGeminiInterruption = false
         }
-        setAssistantAudioActive(false)
     }
 
     fun clearSuppressionOnly() {
@@ -46,23 +42,15 @@ internal class PlaybackSuppressionController(
         }
     }
 
-    fun setAssistantAudioActive(active: Boolean) {
-        onAssistantAudioActiveChanged(active)
-    }
-
     /**
-     * The queued-audio decision: atomically re-check suppression and staleness and
-     * mark assistant audio active when playback may proceed. Returns null to proceed,
-     * or the skip-diagnostic name.
+     * The queued-audio decision: atomically re-check suppression and staleness.
+     * Returns null to proceed, or the skip-diagnostic name.
      */
     fun tryActivatePlayback(isStale: () -> Boolean): String? = synchronized(lock) {
         when {
             suppressed -> "output_audio_state_suppressed_after_interruption"
             isStale() -> "stale_output_audio_state_suppressed"
-            else -> {
-                setAssistantAudioActive(true)
-                null
-            }
+            else -> null
         }
     }
 }

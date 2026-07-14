@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
+import me.rerere.rikkahub.voiceagent.audio.VoicePlaybackEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncer
@@ -123,9 +124,7 @@ class VoiceAgentCoordinator(
         observability = observability,
         traceContext = traceContext,
     )
-    private val suppressionController = PlaybackSuppressionController(
-        onAssistantAudioActiveChanged = { active -> hermesJobManager.announcer.onAssistantAudioActive(active) },
-    )
+    private val suppressionController = PlaybackSuppressionController()
     private val hermesBridgeFactory = VoiceHermesSessionBridgeFactory(
         gemini = gemini,
         diagnostics = diagnostics,
@@ -156,6 +155,7 @@ class VoiceAgentCoordinator(
 
     init {
         audio.setErrorHandler(::handleAudioEngineError)
+        audio.setPlaybackEventHandler(::handlePlaybackEvent)
         _state.update { it.copy(diagnostics = diagnostics.events.value.toUiDiagnostics()) }
         removeDiagnosticsListener = diagnostics.addListener { event ->
             _state.update { current ->
@@ -181,6 +181,29 @@ class VoiceAgentCoordinator(
     private fun handleAudioEngineError(message: String) {
         diagnostics.record("audio_error", message)
         _state.update { it.reduce(VoiceAgentEvent.SessionError(message)) }
+    }
+
+    private fun handlePlaybackEvent(event: VoicePlaybackEvent) {
+        when (event) {
+            is VoicePlaybackEvent.Active -> {
+                hermesJobManager.announcer.onPlaybackActive(event.generation)
+                recordPlaybackDiagnosticSafely("voice_playback_active", event.generation)
+            }
+            is VoicePlaybackEvent.DrainStarted -> {
+                hermesJobManager.announcer.onPlaybackDrainStarted(event.generation)
+                recordPlaybackDiagnosticSafely("voice_playback_drain_started", event.generation)
+            }
+            is VoicePlaybackEvent.Drained -> {
+                hermesJobManager.announcer.onPlaybackDrained(event.generation)
+                recordPlaybackDiagnosticSafely("voice_playback_drained", event.generation)
+            }
+        }
+    }
+
+    private fun recordPlaybackDiagnosticSafely(name: String, generation: Long) {
+        runCatching {
+            diagnostics.record(name, "generation=$generation")
+        }
     }
 
     fun updateSessionStatus(status: VoiceSessionStatus) {
@@ -279,7 +302,11 @@ class VoiceAgentCoordinator(
                 appendOutputTranscript(event.text, sessionId = sessionId)
             }
             GeminiLiveEvent.GenerationComplete -> handleGenerationComplete()
-            GeminiLiveEvent.TurnComplete -> diagnostics.record("gemini_turn_complete")
+            GeminiLiveEvent.TurnComplete -> {
+                diagnostics.record("gemini_turn_complete")
+                audio.markPlaybackTurnComplete(sessionId)
+                hermesJobManager.announcer.onGeminiTurnComplete()
+            }
             is GeminiLiveEvent.OutputAudio -> playOutputAudio(event.base64Pcm16, sessionId = sessionId)
             is GeminiLiveEvent.Interrupted -> handleInterrupted(event)
             is GeminiLiveEvent.SessionResumptionUpdate -> diagnostics.record(
@@ -382,12 +409,11 @@ class VoiceAgentCoordinator(
                     toolCalls = emptyMap(),
                 )
             }
-            suppressionController.setAssistantAudioActive(false)
             hermesQueueStatusProjectionJob?.cancel()
             hermesQueueStatusProjectionJob = null
+            audio.release()
             hermesJobManager.announcer.close()
             gemini.close()
-            audio.release()
             audio.setErrorHandler(null)
             if (ownsSessionScope) {
                 sessionScope.cancel()
@@ -397,7 +423,6 @@ class VoiceAgentCoordinator(
     }
 
     fun prepareFor(transition: SessionTransition) {
-        suppressionController.setAssistantAudioActive(false)
         diagnostics.record(
             when (transition) {
                 SessionTransition.Reconnect -> "prepare_for_reconnect"
@@ -442,6 +467,7 @@ class VoiceAgentCoordinator(
 
     private fun appendInputTranscript(text: String, sessionId: Long?) {
         if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.InputTranscript(text))) return
+        hermesJobManager.announcer.onGeminiTurnActive()
         hermesJobManager.announcer.onInputTranscriptDelta()
         suppressionController.clearForNewTurn()
         _state.update { it.copy(inputTranscript = it.inputTranscript + text) }
@@ -451,6 +477,7 @@ class VoiceAgentCoordinator(
 
     private fun appendOutputTranscript(text: String, sessionId: Long?) {
         if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.OutputTranscript(text))) return
+        hermesJobManager.announcer.onGeminiTurnActive()
         if (suppressionController.clearForAssistantTurnAfterInterruption()) {
             diagnostics.record("output_audio_suppression_cleared_after_interruption")
         }
@@ -468,6 +495,7 @@ class VoiceAgentCoordinator(
             return
         }
         if (shouldIgnoreStaleSession(sessionId, GeminiLiveEvent.OutputAudio(base64Pcm16))) return
+        hermesJobManager.announcer.onGeminiTurnActive()
         diagnostics.record(
             name = "output_audio_chunk",
             detail = "sessionId=${sessionId ?: "none"}, base64Chars=${base64Pcm16.length}",
@@ -513,7 +541,6 @@ class VoiceAgentCoordinator(
 
     private fun handleGenerationComplete() {
         diagnostics.record("gemini_generation_complete")
-        hermesJobManager.announcer.onGenerationComplete()
         turnTracker.completeAssistantTurn(
             suppressed = suppressionController.isSuppressed(),
         )
@@ -532,6 +559,7 @@ class VoiceAgentCoordinator(
             diagnostics.record("tool_call_ignored_after_cancellation", "callId=${call.callId}")
             return
         }
+        hermesJobManager.announcer.onGeminiTurnActive()
         diagnostics.record(
             "tool_call_received",
             "callId=${call.callId}, name=${call.name}, promptChars=${call.argLength()}",

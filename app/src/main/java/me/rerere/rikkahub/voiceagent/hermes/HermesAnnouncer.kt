@@ -243,18 +243,6 @@ class HermesAnnouncer(
         events.trySend(AnnouncerEvent.PlaybackDrained(generation, nowMs()))
     }
 
-    // Removed in Task 4: temporary adapters for the coordinator's legacy taps.
-    internal fun onGenerationComplete() {
-        onGeminiTurnComplete()
-        onPlaybackDrained(LEGACY_PLAYBACK_GENERATION)
-    }
-
-    // Removed in Task 4: temporary adapters for the coordinator's legacy taps.
-    internal fun onAssistantAudioActive(active: Boolean) {
-        if (active) onPlaybackActive(LEGACY_PLAYBACK_GENERATION)
-        else onPlaybackDrained(LEGACY_PLAYBACK_GENERATION)
-    }
-
     fun close() {
         synchronized(lock) {
             closed = true
@@ -455,8 +443,8 @@ class HermesAnnouncer(
         val record = queueStore.latestRecord(callId = intent.callId, jobId = intent.jobId)
         if (
             record == null ||
-            (record.status.isTerminal && !intent.allowTerminalRecord) ||
-            record.stillWorkingAnnounced
+            record.stillWorkingAnnounced ||
+            (record.status.isTerminal && !intent.allowTerminalRecord)
         ) {
             return AnnouncementSendOutcome.Skipped
         }
@@ -498,7 +486,6 @@ class HermesAnnouncer(
     }
 
     companion object {
-        private const val LEGACY_PLAYBACK_GENERATION = 0L
         const val DEFAULT_BRIDGE_SEND_TIMEOUT_MS = 5_000L
         const val DEFAULT_QUIET_WINDOW_MS = 2_000L
         const val DEFAULT_BLOCKED_WATCHDOG_MS = 15_000L

@@ -199,12 +199,13 @@ class HermesAnnouncerTest {
     }
 
     @Test
-    fun `queued progress is skipped when cancellation has no correcting final intent`() = runTest {
+    fun `queued progress is skipped when cancellation has no final intent`() = runTest {
         val store = store(emptyConversation().withRunning(callId = "call-run", jobId = "job-run"))
         val bridge = RecordingBridge()
         val announcer = announcer(queueStore = store)
 
         announcer.onGeminiTurnActive()
+        announcer.onPlaybackActive(3L)
         announcer.attachScoped(bridge, sessionId = 7L)
         announcer.enqueueStillWorking(callId = "call-run", jobId = "job-run")
         runCurrent()
@@ -218,6 +219,7 @@ class HermesAnnouncerTest {
             announced = false,
         )
         announcer.onGeminiTurnComplete()
+        announcer.onPlaybackDrained(3L)
         runCurrent()
 
         assertTrue(bridge.stillWorking.isEmpty())
@@ -225,7 +227,7 @@ class HermesAnnouncerTest {
     }
 
     @Test
-    fun `progress paired with a correcting completion sends before the final`() = runTest {
+    fun `latest progress is followed by final on separate safe boundaries`() = runTest {
         val store = store(emptyConversation().withRunning(callId = "call-paired", jobId = "job-paired"))
         val bridge = RecordingBridge()
         val announcer = announcer(queueStore = store)
@@ -280,7 +282,7 @@ class HermesAnnouncerTest {
 
         // Audio active before the completion is enqueued, so it holds instead of sending;
         // detaching with no default then drains it to the visible-text fallback.
-        announcer.onAssistantAudioActive(active = true)
+        announcer.onPlaybackActive(1L)
         announcer.attachScoped(bridge, sessionId = 7L)
         announcer.enqueueCompletion(callId = "call-1", jobId = "job-1")
         announcer.detachScoped(bridge)
@@ -503,7 +505,7 @@ class HermesAnnouncerTest {
         val bridge = RecordingBridge()
         val announcer = announcer(queueStore = store)
 
-        announcer.onAssistantAudioActive(active = true)
+        announcer.onPlaybackActive(1L)
         announcer.attachScoped(bridge, sessionId = 7L)
         announcer.enqueueCompletion(callId = "call-1", jobId = "job-1")
         announcer.close()
@@ -595,7 +597,7 @@ class HermesAnnouncerTest {
         // Audio active holds the completion instead of sending it. close()+awaitClosed() must
         // drain the held intent to the visible-text fallback before the barrier returns — no
         // runCurrent() here, awaitClosed() is itself the drain point.
-        announcer.onAssistantAudioActive(active = true)
+        announcer.onPlaybackActive(1L)
         announcer.attachScoped(bridge, sessionId = 7L)
         announcer.enqueueCompletion(callId = "call-1", jobId = "job-1")
         announcer.close()
