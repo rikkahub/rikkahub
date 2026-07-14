@@ -20,7 +20,15 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
-# keep kotlinx serializable classes
+# RaTeX FontCache — 反射访问私有字段，需保留原始类/字段名
+-keep class io.ratex.FontCache {
+    private *;
+}
+-keepclassmembers class io.ratex.FontCache {
+    private *;
+}
+
+# kotlinx serialization
 -keep @kotlinx.serialization.Serializable class * {*;}
 
 -dontwarn com.google.re2j.**

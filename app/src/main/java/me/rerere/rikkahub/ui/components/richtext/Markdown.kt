@@ -10,6 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -794,40 +795,52 @@ private fun Paragraph(
     val textStyle = LocalTextStyle.current
     val density = LocalDensity.current
     val latexColorArgb = LocalContentColor.current.toArgb()
-    FlowRow(
-        modifier = modifier.then(
-            if (node.nextSibling() != null) Modifier.padding(bottom = LocalTextStyle.current.fontSize.toDp())
-            else Modifier
-        )
-    ) {
-        val annotatedString = remember(content, enableLatexRendering, latexColorArgb) {
-            buildAnnotatedString {
-                node.children.fastForEach { child ->
-                    appendMarkdownNodeContent(
-                        node = child,
-                        content = content,
-                        inlineContents = inlineContents,
-                        colorScheme = colorScheme,
-                        onClickCitation = onClickCitation,
-                        style = textStyle,
-                        density = density,
-                        trim = trim,
-                        enableLatexRendering = enableLatexRendering,
-                        latexColorArgb = latexColorArgb,
-                    )
-                }
-            }
-        }
-        Text(
-            text = annotatedString,
-            modifier = Modifier,
-            inlineContent = inlineContents,
-            softWrap = true,
-            overflow = TextOverflow.Visible,
-            style = LocalTextStyle.current.copy(
-                lineHeight = if (hasInlineMath && enableLatexRendering) TextUnit.Unspecified else LocalTextStyle.current.lineHeight
+    val fontSizePx = with(density) {
+        if (textStyle.fontSize != TextUnit.Unspecified) textStyle.fontSize.toPx()
+        else MaterialTheme.typography.bodyMedium.fontSize.toPx()
+    }
+    BoxWithConstraints(
+        Modifier.fillMaxWidth().then(
+            modifier.then(
+                if (node.nextSibling() != null) Modifier.padding(bottom = LocalTextStyle.current.fontSize.toDp())
+                else Modifier
             )
         )
+    ) {
+        val maxWidthPx = with(density) { maxWidth.toPx() }
+
+        FlowRow {
+            val annotatedString = remember(content, enableLatexRendering, latexColorArgb, maxWidthPx) {
+                buildAnnotatedString {
+                    node.children.fastForEach { child ->
+                        appendMarkdownNodeContent(
+                            node = child,
+                            content = content,
+                            inlineContents = inlineContents,
+                            colorScheme = colorScheme,
+                            onClickCitation = onClickCitation,
+                            style = textStyle,
+                            density = density,
+                            trim = trim,
+                            enableLatexRendering = enableLatexRendering,
+                            latexColorArgb = latexColorArgb,
+                            maxWidthPx = maxWidthPx,
+                            fontSizePx = fontSizePx,
+                        )
+                    }
+                }
+            }
+            Text(
+                text = annotatedString,
+                modifier = Modifier,
+                inlineContent = inlineContents,
+                softWrap = true,
+                overflow = TextOverflow.Visible,
+                style = LocalTextStyle.current.copy(
+                    lineHeight = if (hasInlineMath && enableLatexRendering) TextUnit.Unspecified else LocalTextStyle.current.lineHeight
+                )
+            )
+        }
     }
 }
 
@@ -999,6 +1012,8 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
     enableLatexRendering: Boolean = true,
     latexColorArgb: Int = 0,
     onClickCitation: (String) -> Unit = {},
+    maxWidthPx: Float = Float.MAX_VALUE,
+    fontSizePx: Float = Float.MAX_VALUE,
 ) {
     when {
         node.type == MarkdownTokenTypes.BLOCK_QUOTE -> {}
@@ -1164,27 +1179,36 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
             val rawFormula = node.getTextInNode(content)
             val formula = rawFormula.trimStart('$').trimEnd('$').trim()
             if (enableLatexRendering) {
-                appendInlineContent(formula, "[Latex]")
-                val metrics = with(density) {
-                    assumeLatexSize(
-                        latex = formula, fontSizePx = style.fontSize.toPx()
+                // 在顶层运算符处分段，段间插 ZWSP 允许换行
+                val segments = splitLatex(
+                    latex = formula,
+                    maxWidthPx = maxWidthPx,
+                    fontSizePx = fontSizePx,
+                )
+
+                segments.forEachIndexed { index, segment ->
+                    if (index > 0) append("​")
+                    val key = "${formula}_$index"
+                    appendInlineContent(key, "[Latex]")
+                    val metrics = with(density) {
+                        assumeLatexSize(latex = segment, fontSizePx = fontSizePx)
+                    }
+                    val placeholderWidth = metrics?.let { with(density) { it.widthPx.toSp() } } ?: 0.sp
+                    val placeholderHeight = metrics?.let { with(density) { (it.heightPx + it.depthPx).toSp() } } ?: 0.sp
+                    inlineContents.putIfAbsent(
+                        key,
+                        InlineTextContent(
+                            placeholder = Placeholder(
+                                width = placeholderWidth,
+                                height = placeholderHeight,
+                                placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
+                            ),
+                            children = {
+                                MathInline(latex = segment, modifier = Modifier)
+                            }
+                        )
                     )
                 }
-                val placeholderWidth = metrics?.let { with(density) { it.widthPx.toSp() } }
-                val placeholderHeight = metrics?.let { with(density) { (it.heightPx + it.depthPx).toSp() } }
-                inlineContents.putIfAbsent(
-                    formula,
-                    InlineTextContent(
-                        placeholder = Placeholder(
-                            width = placeholderWidth ?: 0.sp,
-                            height = placeholderHeight ?: 0.sp,
-                            placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
-                        ),
-                        children = {
-                            MathInline(latex = formula, modifier = Modifier)
-                        }
-                    )
-                )
             } else {
                 // 禁用 LaTeX 渲染时，以等宽字体显示原始公式
                 withStyle(
