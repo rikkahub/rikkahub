@@ -122,19 +122,19 @@ class PlaybackDrainStateTest {
             isPlaybackTrackCurrent = { true },
             poll = {
                 pollCalls += 1
-                nowNanos += 6_000L
-                rawPlaybackHead += 1
+                nowNanos = pollCalls * 6_000L
+                if (pollCalls != 2) rawPlaybackHead += 1
             },
             monotonicTimeNanos = { nowNanos },
             noProgressTimeoutNanos = 10_000L,
         )
 
         state.onStarted()
-        state.onBytesWritten(8)
+        state.onBytesWritten(4)
 
         assertEquals(VoicePcm16Sink.DrainResult.Drained, state.awaitDrained())
-        assertEquals(4, pollCalls)
-        assertEquals(24_000L, nowNanos)
+        assertEquals(3, pollCalls)
+        assertEquals(18_000L, nowNanos)
     }
 
     @Test
