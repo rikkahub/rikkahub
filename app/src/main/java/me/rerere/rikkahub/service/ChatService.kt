@@ -7,9 +7,6 @@ import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +36,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.canResumeToolExecution
 import me.rerere.ai.ui.finishPendingTools
 import me.rerere.ai.ui.finishReasoning
+import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
@@ -830,12 +828,35 @@ class ChatService(
 
     // ---- 压缩对话历史 ----
 
+    /**
+     * Progress for compress UI: bar length = targetTokens + fixed headroom percent.
+     * progress = cumulative output tokens / that length.
+     */
+    data class CompressProgress(
+        val outputTokens: Int,
+        val targetTokens: Int,
+        val completedChunks: Int,
+        val totalChunks: Int,
+    ) {
+        /** Fixed overhead on top of target tokens (15%). */
+        val progressMaxTokens: Int
+            get() = (targetTokens + (targetTokens * FIXED_PROGRESS_PERCENT / 100f)).toInt().coerceAtLeast(1)
+
+        val fraction: Float
+            get() = (outputTokens.toFloat() / progressMaxTokens.toFloat()).coerceIn(0f, 0.99f)
+
+        companion object {
+            const val FIXED_PROGRESS_PERCENT = 15
+        }
+    }
+
     suspend fun compressConversation(
         conversationId: Uuid,
         conversation: Conversation,
         additionalPrompt: String,
         targetTokens: Int,
-        keepRecentMessages: Int = 32
+        keepRecentMessages: Int = 32,
+        onProgress: ((CompressProgress) -> Unit)? = null,
     ): Result<Unit> = runCatching {
         val settings = settingsStore.settingsFlow.first()
         val model = settings.findModelById(settings.compressModelId)
@@ -872,6 +893,23 @@ class ChatService(
             return left + right
         }
 
+        val chunks = splitMessages(messagesToCompress)
+        val totalChunks = chunks.size
+        var cumulativeOutputTokens = 0
+        var completedChunks = 0
+
+        fun emitProgress() {
+            onProgress?.invoke(
+                CompressProgress(
+                    outputTokens = cumulativeOutputTokens,
+                    targetTokens = targetTokens,
+                    completedChunks = completedChunks,
+                    totalChunks = totalChunks,
+                )
+            )
+        }
+        emitProgress()
+
         suspend fun compressMessages(messages: List<UIMessage>): String {
             val contentToCompress = messages.joinToString("\n\n") { it.summaryAsText(maxLength = 2000) }
             val prompt = settings.compressPrompt.applyPlaceholders(
@@ -882,22 +920,74 @@ class ChatService(
                 } else "",
                 "locale" to Locale.getDefault().displayName
             )
+            val requestMessages = listOf(UIMessage.user(prompt))
+            val params = backgroundTextGenerationParams(model)
 
-            val result = providerHandler.generateText(
-                providerSetting = provider,
-                messages = listOf(UIMessage.user(prompt)),
-                params = backgroundTextGenerationParams(model),
-            )
+            // Prefer streaming for live token progress; fall back to generateText if stream fails.
+            val summary = runCatching {
+                var streamMessages = requestMessages
+                var lastUsageCompletion = 0
+                providerHandler.streamText(
+                    providerSetting = provider,
+                    messages = requestMessages,
+                    params = params,
+                ).collect { chunk ->
+                    if (chunk.choices.isNotEmpty()) {
+                        streamMessages = runCatching {
+                            streamMessages.handleMessageChunk(chunk = chunk, model = model)
+                        }.getOrDefault(streamMessages)
+                    }
+                    val usage = chunk.usage
+                    if (usage != null && usage.completionTokens > 0) {
+                        val delta = (usage.completionTokens - lastUsageCompletion).coerceAtLeast(0)
+                        lastUsageCompletion = usage.completionTokens
+                        if (delta > 0) {
+                            cumulativeOutputTokens += delta
+                            emitProgress()
+                        }
+                    } else {
+                        val textLen = streamMessages
+                            .lastOrNull { it.role == MessageRole.ASSISTANT }
+                            ?.toText()
+                            ?.length
+                            ?: 0
+                        val approx = (textLen / 4).coerceAtLeast(0)
+                        if (approx > lastUsageCompletion) {
+                            cumulativeOutputTokens += approx - lastUsageCompletion
+                            lastUsageCompletion = approx
+                            emitProgress()
+                        }
+                    }
+                }
+                streamMessages.lastOrNull { it.role == MessageRole.ASSISTANT }?.toText()?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?: error("empty stream summary")
+            }.getOrElse { streamError ->
+                Log.w(TAG, "compress stream failed, fallback to generateText: ${streamError.message}")
+                val result = providerHandler.generateText(
+                    providerSetting = provider,
+                    messages = requestMessages,
+                    params = params,
+                )
+                val text = result.choices.getOrNull(0)?.message?.toText()?.trim()
+                    ?: throw IllegalStateException(
+                        streamError.message?.takeIf { it.isNotBlank() && it != "{}" && it != "null" }
+                            ?: "Failed to generate compressed summary"
+                    )
+                val tokens = result.usage?.completionTokens
+                    ?: (text.length / 4).coerceAtLeast(1)
+                cumulativeOutputTokens += tokens
+                emitProgress()
+                text
+            }
 
-            return result.choices[0].message?.toText()?.trim()
-                ?: throw IllegalStateException("Failed to generate compressed summary")
+            completedChunks += 1
+            emitProgress()
+            return summary
         }
 
-        val compressedSummaries = coroutineScope {
-            splitMessages(messagesToCompress)
-                .map { chunk -> async { compressMessages(chunk) } }
-                .awaitAll()
-        }
+        // Sequential chunks: stabler progress + fewer concurrent provider errors.
+        val compressedSummaries = chunks.map { chunk -> compressMessages(chunk) }
 
         // Create new conversation with compressed history as multiple user messages + kept messages
         val newMessageNodes = buildList {

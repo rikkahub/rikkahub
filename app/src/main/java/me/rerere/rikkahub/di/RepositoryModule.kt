@@ -20,6 +20,7 @@ import me.rerere.rikkahub.data.sync.cloud.FolderDomainSync
 import me.rerere.rikkahub.data.sync.cloud.MemoryDomainSync
 import me.rerere.rikkahub.data.sync.cloud.MessageNodeDomainSync
 import me.rerere.rikkahub.data.sync.cloud.SettingsDomainSync
+import me.rerere.rikkahub.data.sync.cloud.UploadProgressTracker
 import me.rerere.workspace.ProotShellRunner
 import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceBindMount
@@ -111,6 +112,8 @@ val repositoryModule = module {
             okHttpClient = get(),
         )
     }
+
+    single { UploadProgressTracker() }
 
     // createdAtStart: observe Settings changes into outbox as soon as process starts
     single(createdAtStart = true) {

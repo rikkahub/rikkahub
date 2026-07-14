@@ -40,6 +40,7 @@ val appModule = module {
             memoryRepository = get(),
             filesRepository = get(),
             cloudSyncRepository = get(),
+            settingsDomainSync = get(),
         )
     }
 

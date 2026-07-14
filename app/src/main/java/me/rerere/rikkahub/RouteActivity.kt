@@ -66,7 +66,9 @@ import me.rerere.rikkahub.data.db.MigrationState
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.ui.activity.SafeModeActivity
+import me.rerere.rikkahub.data.sync.cloud.UploadProgressTracker
 import me.rerere.rikkahub.ui.components.ui.TTSController
+import me.rerere.rikkahub.ui.components.ui.TaskProgressDialog
 import me.rerere.rikkahub.ui.context.LocalASRState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -290,6 +292,7 @@ class RouteActivity : ComponentActivity() {
                     showCloseButton = true,
                 )
                 TTSController()
+                GlobalFileTransferProgressHost()
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -723,4 +726,35 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Stats : Screen
+}
+
+@Composable
+private fun GlobalFileTransferProgressHost() {
+    val tracker: UploadProgressTracker = koinInject()
+    val state by tracker.state.collectAsStateWithLifecycle()
+    val title = if (state.isDownload) {
+        stringResource(R.string.file_transfer_downloading)
+    } else {
+        stringResource(R.string.file_transfer_uploading)
+    }
+    val detail = when {
+        state.displayName.isNotBlank() && state.total > 0 -> {
+            stringResource(
+                R.string.file_transfer_progress_detail,
+                state.displayName,
+                state.index.coerceAtLeast(1),
+                state.total.coerceAtLeast(state.index),
+            )
+        }
+        state.displayName.isNotBlank() -> state.displayName
+        else -> null
+    }
+    TaskProgressDialog(
+        visible = state.active,
+        title = title,
+        message = null,
+        progress = state.fraction,
+        detail = detail,
+        cancellable = false,
+    )
 }

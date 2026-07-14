@@ -11,6 +11,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -184,16 +185,34 @@ class ChatVM(
         }
     }
 
-    fun handleCompressContext(additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int): Job {
+    fun handleCompressContext(
+        additionalPrompt: String,
+        targetTokens: Int,
+        keepRecentMessages: Int,
+        onProgress: ((ChatService.CompressProgress) -> Unit)? = null,
+    ): Job {
         return viewModelScope.launch {
             chatService.compressConversation(
-                _conversationId,
-                conversation.value,
-                additionalPrompt,
-                targetTokens,
-                keepRecentMessages
-            ).onFailure {
-                chatService.addError(it, title = context.getString(R.string.error_title_compress_conversation))
+                conversationId = _conversationId,
+                conversation = conversation.value,
+                additionalPrompt = additionalPrompt,
+                targetTokens = targetTokens,
+                keepRecentMessages = keepRecentMessages,
+                onProgress = { progress ->
+                    // UI state updates must hop to main; stream callbacks may be off-main.
+                    viewModelScope.launch(Dispatchers.Main.immediate) {
+                        onProgress?.invoke(progress)
+                    }
+                },
+            ).onFailure { error ->
+                val message = error.message
+                    ?.takeIf { it.isNotBlank() && it != "{}" && it != "null" }
+                    ?: error::class.simpleName
+                    ?: "Unknown error"
+                chatService.addError(
+                    IllegalStateException(message, error),
+                    title = context.getString(R.string.error_title_compress_conversation),
+                )
             }
         }
     }

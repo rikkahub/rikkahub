@@ -26,11 +26,20 @@ class FileTransferWorker(
     private val filesRepository: FilesRepository by inject()
     private val filesManager: FilesManager by inject()
     private val cloudSyncRepository: CloudSyncRepository by inject()
+    private val uploadProgressTracker: UploadProgressTracker by inject()
 
     override suspend fun doWork(): Result {
         return try {
-            processUploads()
-            processDownloads()
+            // Drain all pending transfers in one worker run so the progress dialog
+            // does not flicker between 8-file batches.
+            var guard = 0
+            while (guard < MAX_BATCHES) {
+                guard++
+                val moreUploads = processUploadBatch()
+                val moreDownloads = processDownloadBatch()
+                if (!moreUploads && !moreDownloads) break
+            }
+            uploadProgressTracker.clear()
             Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "file transfer failed", e)
@@ -38,28 +47,38 @@ class FileTransferWorker(
         }
     }
 
-    private suspend fun processUploads() {
-        val pending = filesRepository.listByStatuses(
-            listOf(
-                ManagedFileEntity.UPLOAD_LOCAL_ONLY,
-                ManagedFileEntity.UPLOAD_PENDING,
-                ManagedFileEntity.UPLOAD_FAILED,
-            ),
-            limit = 8,
+    /** @return true if more uploads remain after this batch */
+    private suspend fun processUploadBatch(): Boolean {
+        val statuses = listOf(
+            ManagedFileEntity.UPLOAD_LOCAL_ONLY,
+            ManagedFileEntity.UPLOAD_PENDING,
+            ManagedFileEntity.UPLOAD_FAILED,
         )
+        val pending = filesRepository.listByStatuses(statuses, limit = BATCH_LIMIT)
+        if (pending.isEmpty()) return false
+
+        val remainingHint = filesRepository.listByStatuses(statuses, limit = 500).size
+        uploadProgressTracker.setQueue(remaining = remainingHint, isDownload = false)
+
         for (entity in pending) {
             uploadOne(entity)
         }
+        return filesRepository.listByStatuses(statuses, limit = 1).isNotEmpty()
     }
 
-    private suspend fun processDownloads() {
-        val pending = filesRepository.listByStatuses(
-            listOf(ManagedFileEntity.UPLOAD_PENDING_DOWNLOAD),
-            limit = 8,
-        )
+    /** @return true if more downloads remain after this batch */
+    private suspend fun processDownloadBatch(): Boolean {
+        val statuses = listOf(ManagedFileEntity.UPLOAD_PENDING_DOWNLOAD)
+        val pending = filesRepository.listByStatuses(statuses, limit = BATCH_LIMIT)
+        if (pending.isEmpty()) return false
+
+        val remainingHint = filesRepository.listByStatuses(statuses, limit = 500).size
+        uploadProgressTracker.setQueue(remaining = remainingHint, isDownload = true)
+
         for (entity in pending) {
             downloadOne(entity)
         }
+        return filesRepository.listByStatuses(statuses, limit = 1).isNotEmpty()
     }
 
     private suspend fun uploadOne(entity: ManagedFileEntity) {
@@ -71,6 +90,11 @@ class FileTransferWorker(
         val client = cloudSyncRepository.createAuthenticatedClient() ?: return
         val sha = entity.sha256.ifBlank { sha256Hex(file) }
         val size = file.length()
+        uploadProgressTracker.beginFile(
+            displayName = entity.displayName.ifBlank { entity.id },
+            bytesTotal = size,
+            isDownload = false,
+        )
         filesRepository.upsertQuiet(
             entity.copy(
                 sha256 = sha,
@@ -91,12 +115,20 @@ class FileTransferWorker(
                 )
             )
             if (init.uploadStatus != "ready") {
-                // Always proxy: Android -> Perry -> MinIO
-                client.putFileContent(entity.id, file.readBytes(), entity.mimeType)
+                client.putFileContent(
+                    fileId = entity.id,
+                    bytes = file.readBytes(),
+                    mimeType = entity.mimeType,
+                    onProgress = { sent, totalBytes ->
+                        uploadProgressTracker.updateBytes(sent, totalBytes)
+                    },
+                )
                 client.completeFile(
                     entity.id,
                     FileCompleteRequest(sizeBytes = size, sha256 = sha),
                 )
+            } else {
+                uploadProgressTracker.updateBytes(size, size)
             }
             val ready = entity.copy(
                 sha256 = sha,
@@ -108,7 +140,19 @@ class FileTransferWorker(
             )
             filesRepository.upsertQuiet(ready)
             cloudSyncRepository.fileDomainSync?.enqueueUpsert(ready)
+            uploadProgressTracker.completeFile()
             Log.i(TAG, "uploaded file ${entity.id} via perry proxy")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Worker REPLACE/cancellation: leave as pending so next run retries.
+            filesRepository.upsertQuiet(
+                entity.copy(
+                    sha256 = sha,
+                    sizeBytes = size,
+                    uploadStatus = ManagedFileEntity.UPLOAD_PENDING,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            )
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "upload failed ${entity.id}: ${e.message}")
             filesRepository.upsertQuiet(
@@ -125,12 +169,17 @@ class FileTransferWorker(
 
     private suspend fun downloadOne(entity: ManagedFileEntity) {
         val client = cloudSyncRepository.createAuthenticatedClient() ?: return
+        uploadProgressTracker.beginFile(
+            displayName = entity.displayName.ifBlank { entity.id },
+            bytesTotal = entity.sizeBytes.coerceAtLeast(0L),
+            isDownload = true,
+        )
         try {
             val target = filesManager.getFile(entity)
             target.parentFile?.mkdirs()
             val tmp = File(target.parentFile, "${target.name}.part")
-            // Always proxy: Android -> Perry -> MinIO
             val bytes = client.getFileContent(entity.id)
+            uploadProgressTracker.updateBytes(bytes.size.toLong(), bytes.size.toLong())
             tmp.writeBytes(bytes)
             if (entity.sha256.isNotBlank()) {
                 val actual = sha256Hex(tmp)
@@ -151,6 +200,7 @@ class FileTransferWorker(
                     updatedAt = System.currentTimeMillis(),
                 )
             )
+            uploadProgressTracker.completeFile()
             Log.i(TAG, "downloaded file ${entity.id} via perry proxy")
         } catch (e: Exception) {
             Log.w(TAG, "download failed ${entity.id}: ${e.message}")
@@ -180,11 +230,15 @@ class FileTransferWorker(
     companion object {
         private const val TAG = "FileTransferWorker"
         private const val UNIQUE = "perry_file_transfer"
+        private const val BATCH_LIMIT = 8
+        private const val MAX_BATCHES = 64
 
         fun enqueue(context: Context) {
             val req = OneTimeWorkRequestBuilder<FileTransferWorker>().build()
             WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE,
+                // KEEP: REPLACE cancels in-flight uploads (JobCancellationException flood).
+                // Worker already drains all pending batches in one run.
                 ExistingWorkPolicy.KEEP,
                 req,
             )

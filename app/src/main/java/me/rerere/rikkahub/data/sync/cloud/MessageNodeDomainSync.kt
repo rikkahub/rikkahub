@@ -86,6 +86,59 @@ class MessageNodeDomainSync(
         }
     }
 
+    /**
+     * Bootstrap sets change_cursor to head but only ships conversation summaries.
+     * Empty local threads must hydrate bodies via /v1/conversations/{id}/nodes.
+     */
+    suspend fun hydrateMissingNodes(client: PerryApiClient) {
+        val ids = conversationDAO.getAllIds()
+        var hydratedConversations = 0
+        var hydratedNodes = 0
+        for (conversationId in ids) {
+            val parent = conversationDAO.getConversationById(conversationId) ?: continue
+            if (!parent.syncEnabled || parent.deletedAt != null) continue
+            if (messageNodeDAO.countByConversation(conversationId) > 0) continue
+            var beforeIndex: Int? = null
+            var pages = 0
+            var gotAny = false
+            while (pages < 40) {
+                pages++
+                val page = client.listMessageNodes(
+                    conversationId = conversationId,
+                    beforeIndex = beforeIndex,
+                    limit = 200,
+                )
+                if (page.items.isEmpty()) break
+                gotAny = true
+                for (item in page.items) {
+                    if (item.deletedAt != null) continue
+                    val payload = buildJsonObject {
+                        put("conversation_id", JsonPrimitive(item.conversationId))
+                        put("node_index", JsonPrimitive(item.nodeIndex))
+                        put("select_index", JsonPrimitive(item.selectIndex))
+                        put("messages", item.messages ?: JsonArray(emptyList()))
+                    }
+                    applyRemotePayload(
+                        entityId = item.id,
+                        operation = "upsert",
+                        payload = payload,
+                        revision = item.revision,
+                    )
+                    hydratedNodes++
+                }
+                if (!page.hasMore) break
+                beforeIndex = page.oldestIndex ?: page.items.minOfOrNull { it.nodeIndex } ?: break
+            }
+            if (gotAny) hydratedConversations++
+        }
+        if (hydratedConversations > 0) {
+            Log.i(
+                TAG,
+                "hydrated nodes conversations=$hydratedConversations nodes=$hydratedNodes",
+            )
+        }
+    }
+
     suspend fun applyRemotePayload(
         entityId: String,
         operation: String,

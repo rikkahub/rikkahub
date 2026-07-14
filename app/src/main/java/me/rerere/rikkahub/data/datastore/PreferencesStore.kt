@@ -13,6 +13,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import io.pebbletemplates.pebble.PebbleEngine
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.SerialName
@@ -353,6 +354,13 @@ class SettingsStore(
         .distinctUntilChanged()
         .toMutableStateFlow(scope, Settings.dummy())
 
+    /** Wait until DataStore has emitted real settings (not the Eagerly dummy). */
+    suspend fun awaitReady(): Settings {
+        val current = settingsFlow.value
+        if (!current.init) return current
+        return settingsFlow.first { !it.init }
+    }
+
     suspend fun update(settings: Settings) {
         if(settings.init) {
             Log.w(TAG, "Cannot update dummy settings")
@@ -426,7 +434,9 @@ class SettingsStore(
     }
 
     suspend fun update(fn: (Settings) -> Settings) {
-        update(fn(settingsFlow.value))
+        // Never transform Settings.dummy() (page VMs use Eagerly + dummy).
+        val base = awaitReady()
+        update(fn(base))
     }
 
     suspend fun updateAssistant(assistantId: Uuid) {

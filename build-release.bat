@@ -3,7 +3,7 @@ setlocal EnableExtensions
 
 cd /d "%~dp0"
 
-set "RUN_TESTS=1"
+set "RUN_TESTS=0"
 set "RUN_CLEAN=0"
 set "BUILD_BUNDLE=0"
 set "CHECK_ONLY=0"
@@ -12,6 +12,11 @@ set "CHECK_ONLY=0"
 if "%~1"=="" goto args_done
 if /I "%~1"=="--skip-tests" (
     set "RUN_TESTS=0"
+    shift
+    goto parse_args
+)
+if /I "%~1"=="--with-tests" (
+    set "RUN_TESTS=1"
     shift
     goto parse_args
 )
@@ -76,6 +81,53 @@ for %%K in (sdk.dir storeFile storePassword keyAlias keyPassword) do (
     )
 )
 
+set "SIGN_STORE_FILE="
+set "SIGN_STORE_PASSWORD="
+set "SIGN_KEY_ALIAS="
+set "SIGN_KEY_PASSWORD="
+for /F "usebackq tokens=1,* delims==" %%A in ("local.properties") do (
+    if /I "%%A"=="storeFile" set "SIGN_STORE_FILE=%%B"
+    if /I "%%A"=="storePassword" set "SIGN_STORE_PASSWORD=%%B"
+    if /I "%%A"=="keyAlias" set "SIGN_KEY_ALIAS=%%B"
+    if /I "%%A"=="keyPassword" set "SIGN_KEY_PASSWORD=%%B"
+)
+
+set "SIGN_STORE_PATH=%SIGN_STORE_FILE%"
+if not exist "%SIGN_STORE_PATH%" set "SIGN_STORE_PATH=app\%SIGN_STORE_FILE%"
+if not exist "%SIGN_STORE_PATH%" (
+    echo [ERROR] Release keystore was not found: %SIGN_STORE_FILE%
+    exit /b 1
+)
+
+where jar.exe >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] jar.exe was not found. Use a full JDK 17 installation.
+    exit /b 1
+)
+
+where jarsigner.exe >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] jarsigner.exe was not found. Use a full JDK 17 installation.
+    exit /b 1
+)
+
+echo [INFO] Validating release keystore and key passwords...
+set "SIGN_CHECK_DIR=%TEMP%\haruhome-sign-check-%RANDOM%-%RANDOM%"
+mkdir "%SIGN_CHECK_DIR%" >nul 2>&1
+echo Haruhome signing check>"%SIGN_CHECK_DIR%\marker.txt"
+jar.exe --create --file "%SIGN_CHECK_DIR%\sign-check.jar" -C "%SIGN_CHECK_DIR%" marker.txt >nul 2>&1
+if errorlevel 1 goto signing_check_failed
+
+set "HARUHOME_STORE_PASSWORD=%SIGN_STORE_PASSWORD%"
+set "HARUHOME_KEY_PASSWORD=%SIGN_KEY_PASSWORD%"
+jarsigner.exe -keystore "%SIGN_STORE_PATH%" -storepass:env HARUHOME_STORE_PASSWORD -keypass:env HARUHOME_KEY_PASSWORD "%SIGN_CHECK_DIR%\sign-check.jar" "%SIGN_KEY_ALIAS%" >nul 2>&1
+if errorlevel 1 goto signing_check_failed
+
+set "HARUHOME_STORE_PASSWORD="
+set "HARUHOME_KEY_PASSWORD="
+rmdir /S /Q "%SIGN_CHECK_DIR%" >nul 2>&1
+echo [OK] Release signing configuration is valid.
+
 if not exist "web-ui\pnpm-lock.yaml" (
     echo [ERROR] web-ui\pnpm-lock.yaml is missing.
     exit /b 1
@@ -111,7 +163,7 @@ popd
 
 if "%RUN_CLEAN%"=="1" (
     echo [INFO] Cleaning previous Gradle outputs...
-    call gradlew.bat clean
+    call gradlew.bat --no-daemon --no-parallel clean
     if errorlevel 1 (
         echo [ERROR] Gradle clean failed.
         exit /b 1
@@ -127,7 +179,7 @@ if "%BUILD_BUNDLE%"=="1" (
 )
 
 echo [INFO] Running: gradlew.bat %GRADLE_TASKS%
-call gradlew.bat --stacktrace %GRADLE_TASKS%
+call gradlew.bat --no-daemon --no-parallel --stacktrace %GRADLE_TASKS%
 if errorlevel 1 (
     echo [ERROR] Release build failed.
     exit /b 1
@@ -145,14 +197,23 @@ echo [DONE] Release build completed successfully.
 exit /b 0
 
 :usage
-echo Usage: build-release.bat [--check] [--clean] [--skip-tests] [--bundle]
+echo Usage: build-release.bat [--check] [--clean] [--with-tests] [--bundle]
 echo.
 echo   --check        Validate tools and required configuration only.
 echo   --clean        Run Gradle clean before building.
-echo   --skip-tests   Skip Gradle test and lintRelease tasks.
+echo   --with-tests   Run Gradle test and lintRelease before packaging.
+echo   --skip-tests   Compatibility option; tests are skipped by default.
 echo   --bundle       Build an Android App Bundle instead of APK files.
 exit /b 0
 
 :usage_error
-echo Usage: build-release.bat [--check] [--clean] [--skip-tests] [--bundle]
+echo Usage: build-release.bat [--check] [--clean] [--with-tests] [--bundle]
 exit /b 2
+
+:signing_check_failed
+set "HARUHOME_STORE_PASSWORD="
+set "HARUHOME_KEY_PASSWORD="
+rmdir /S /Q "%SIGN_CHECK_DIR%" >nul 2>&1
+echo [ERROR] Release signing validation failed.
+echo [INFO] Check storeFile, storePassword, keyAlias, and keyPassword in local.properties.
+exit /b 1

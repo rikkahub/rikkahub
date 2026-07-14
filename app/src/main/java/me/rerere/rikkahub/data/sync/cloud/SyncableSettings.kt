@@ -44,6 +44,14 @@ object SyncableSettings {
     const val LOREBOOKS = "lorebooks"
     const val SELECT_ASSISTANT = "select_assistant"
     const val PROVIDERS = "providers"
+    const val FAST_MODEL = "fast_model"
+    const val IMAGE_GENERATION_MODEL = "image_generation_model"
+    const val TRANSLATE_THINKING_BUDGET = "translate_thinking_budget"
+    const val ENABLE_WEB_SEARCH = "enable_web_search"
+    const val SEARCH_SERVICES = "search_services"
+    const val SEARCH_COMMON = "search_common"
+    const val SEARCH_SELECTED = "search_selected"
+    const val MCP_SERVERS = "mcp_servers"
 
     val ALL_KEYS: Set<String> = setOf(
         THEME_ID,
@@ -51,12 +59,15 @@ object SyncableSettings {
         DISPLAY_SETTING,
         FAVORITE_MODELS,
         CHAT_MODEL,
+        FAST_MODEL,
         TITLE_MODEL,
         TRANSLATE_MODEL,
+        IMAGE_GENERATION_MODEL,
         ENABLE_SUGGESTION,
         SUGGESTION_MODEL,
         TITLE_PROMPT,
         TRANSLATION_PROMPT,
+        TRANSLATE_THINKING_BUDGET,
         SUGGESTION_PROMPT,
         OCR_MODEL,
         OCR_PROMPT,
@@ -68,6 +79,11 @@ object SyncableSettings {
         LOREBOOKS,
         SELECT_ASSISTANT,
         PROVIDERS,
+        ENABLE_WEB_SEARCH,
+        SEARCH_SERVICES,
+        SEARCH_COMMON,
+        SEARCH_SELECTED,
+        MCP_SERVERS,
     )
 
     fun extract(settings: Settings): Map<String, JsonElement> {
@@ -77,14 +93,17 @@ object SyncableSettings {
             DISPLAY_SETTING to toJson(settings.displaySetting),
             FAVORITE_MODELS to toJson(settings.favoriteModels),
             CHAT_MODEL to JsonPrimitive(settings.chatModelId.toString()),
+            FAST_MODEL to JsonPrimitive(settings.fastModelId.toString()),
             TITLE_MODEL to (settings.titleModelId?.let { JsonPrimitive(it.toString()) } ?: JsonNull),
             TRANSLATE_MODEL to JsonPrimitive(settings.translateModeId.toString()),
+            IMAGE_GENERATION_MODEL to JsonPrimitive(settings.imageGenerationModelId.toString()),
             ENABLE_SUGGESTION to JsonPrimitive(settings.enableSuggestion),
             SUGGESTION_MODEL to (
                 settings.suggestionModelId?.let { JsonPrimitive(it.toString()) } ?: JsonNull
             ),
             TITLE_PROMPT to JsonPrimitive(settings.titlePrompt),
             TRANSLATION_PROMPT to JsonPrimitive(settings.translatePrompt),
+            TRANSLATE_THINKING_BUDGET to JsonPrimitive(settings.translateThinkingBudget),
             SUGGESTION_PROMPT to JsonPrimitive(settings.suggestionPrompt),
             OCR_MODEL to JsonPrimitive(settings.ocrModelId.toString()),
             OCR_PROMPT to JsonPrimitive(settings.ocrPrompt),
@@ -96,6 +115,11 @@ object SyncableSettings {
             LOREBOOKS to toJson(settings.lorebooks),
             SELECT_ASSISTANT to JsonPrimitive(settings.assistantId.toString()),
             PROVIDERS to toJson(settings.providers.map { sanitizeProviderForSync(it) }),
+            ENABLE_WEB_SEARCH to JsonPrimitive(settings.enableWebSearch),
+            SEARCH_SERVICES to toJson(settings.searchServices),
+            SEARCH_COMMON to toJson(settings.searchCommonOptions),
+            SEARCH_SELECTED to JsonPrimitive(settings.searchServiceSelected),
+            MCP_SERVERS to toJson(settings.mcpServers),
         )
     }
 
@@ -108,9 +132,13 @@ object SyncableSettings {
             DISPLAY_SETTING -> settings.copy(displaySetting = fromJson(value))
             FAVORITE_MODELS -> settings.copy(favoriteModels = fromJson(value))
             CHAT_MODEL -> settings.copy(chatModelId = value.asUuidOrNull() ?: settings.chatModelId)
+            FAST_MODEL -> settings.copy(fastModelId = value.asUuidOrNull() ?: settings.fastModelId)
             TITLE_MODEL -> settings.copy(titleModelId = value.asUuidOrNull())
             TRANSLATE_MODEL -> settings.copy(
                 translateModeId = value.asUuidOrNull() ?: settings.translateModeId
+            )
+            IMAGE_GENERATION_MODEL -> settings.copy(
+                imageGenerationModelId = value.asUuidOrNull() ?: settings.imageGenerationModelId
             )
             ENABLE_SUGGESTION -> settings.copy(
                 enableSuggestion = value.asBooleanOrNull() ?: settings.enableSuggestion
@@ -119,6 +147,9 @@ object SyncableSettings {
             TITLE_PROMPT -> settings.copy(titlePrompt = value.asStringOrNull() ?: settings.titlePrompt)
             TRANSLATION_PROMPT -> settings.copy(
                 translatePrompt = value.asStringOrNull() ?: settings.translatePrompt
+            )
+            TRANSLATE_THINKING_BUDGET -> settings.copy(
+                translateThinkingBudget = value.asIntOrNull() ?: settings.translateThinkingBudget
             )
             SUGGESTION_PROMPT -> settings.copy(
                 suggestionPrompt = value.asStringOrNull() ?: settings.suggestionPrompt
@@ -138,6 +169,15 @@ object SyncableSettings {
             SELECT_ASSISTANT -> settings.copy(
                 assistantId = value.asUuidOrNull() ?: settings.assistantId
             )
+            ENABLE_WEB_SEARCH -> settings.copy(
+                enableWebSearch = value.asBooleanOrNull() ?: settings.enableWebSearch
+            )
+            SEARCH_SERVICES -> settings.copy(searchServices = fromJson(value))
+            SEARCH_COMMON -> settings.copy(searchCommonOptions = fromJson(value))
+            SEARCH_SELECTED -> settings.copy(
+                searchServiceSelected = value.asIntOrNull() ?: settings.searchServiceSelected
+            )
+            MCP_SERVERS -> settings.copy(mcpServers = fromJson(value))
             PROVIDERS -> {
                 val remote = runCatching {
                     fromJson<List<ProviderSetting>>(value)
@@ -303,6 +343,11 @@ object SyncableSettings {
     private fun JsonElement.asBooleanOrNull(): Boolean? {
         val primitive = this as? JsonPrimitive ?: return null
         return primitive.booleanOrNull ?: primitive.content.toBooleanStrictOrNull()
+    }
+
+    private fun JsonElement.asIntOrNull(): Int? {
+        val primitive = this as? JsonPrimitive ?: return null
+        return primitive.content.toIntOrNull()
     }
 
     private fun JsonElement.asUuidOrNull(): Uuid? {

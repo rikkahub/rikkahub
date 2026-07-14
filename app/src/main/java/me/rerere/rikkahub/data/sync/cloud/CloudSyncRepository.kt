@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.sync.cloud
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -68,6 +69,12 @@ class CloudSyncRepository(
     var fileDomainSync: FileDomainSync? = null
     private val syncMutex = Mutex()
     private var pendingSyncJob: Job? = null
+    @Volatile
+    private var syncRescheduleRequested = false
+    @Volatile
+    private var bulkEnqueueMode = false
+    @Volatile
+    private var bulkSyncRequested = false
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.NOT_CONFIGURED)
     val connectionStatus: StateFlow<ConnectionStatus> = _connectionStatus.asStateFlow()
 
@@ -98,25 +105,61 @@ class CloudSyncRepository(
         )
     }
 
+    /**
+     * Coalesce sync requests without cancelling an in-flight cycle.
+     * Cancelling mid-push left assistants/settings stranded behind conversation floods.
+     */
     fun requestSync() {
-        pendingSyncJob?.cancel()
+        if (bulkEnqueueMode) {
+            bulkSyncRequested = true
+            return
+        }
+        syncRescheduleRequested = true
+        val existing = pendingSyncJob
+        if (existing != null && existing.isActive) return
         pendingSyncJob = appScope.launch {
-            // Coalesce rapid setting/conversation writes into one cycle.
-            delay(SYNC_DEBOUNCE_MS)
-            val outcome = runSyncCycle()
-            when (outcome) {
-                is CloudSyncOutcome.Retryable -> {
-                    Log.w(TAG, "in-process sync retryable: ${outcome.message}")
-                    CloudSyncWorker.enqueue(appContext)
+            try {
+                do {
+                    syncRescheduleRequested = false
+                    delay(SYNC_DEBOUNCE_MS)
+                    // Another request during debounce: re-wait once more.
+                    if (syncRescheduleRequested) continue
+                    val outcome = runSyncCycle()
+                    when (outcome) {
+                        is CloudSyncOutcome.Retryable -> {
+                            Log.w(TAG, "in-process sync retryable: ${outcome.message}")
+                            CloudSyncWorker.enqueue(appContext)
+                        }
+                        is CloudSyncOutcome.Failed -> {
+                            Log.w(TAG, "in-process sync failed: ${outcome.message}")
+                        }
+                        CloudSyncOutcome.Success -> Log.d(TAG, "in-process sync ok")
+                        CloudSyncOutcome.Skipped -> {
+                            CloudSyncWorker.enqueue(appContext)
+                        }
+                    }
+                } while (syncRescheduleRequested)
+            } finally {
+                pendingSyncJob = null
+                if (syncRescheduleRequested) {
+                    requestSync()
                 }
-                is CloudSyncOutcome.Failed -> {
-                    Log.w(TAG, "in-process sync failed: ${outcome.message}")
-                }
-                CloudSyncOutcome.Success -> Log.d(TAG, "in-process sync ok")
-                CloudSyncOutcome.Skipped -> {
-                    // Mode paused/local or already running — still arm WorkManager backup.
-                    CloudSyncWorker.enqueue(appContext)
-                }
+            }
+        }
+    }
+
+    /**
+     * Bulk import mode: still enqueue outbox rows, but defer requestSync until end.
+     */
+    suspend fun <T> withBulkEnqueue(block: suspend () -> T): T {
+        bulkEnqueueMode = true
+        bulkSyncRequested = false
+        return try {
+            block()
+        } finally {
+            bulkEnqueueMode = false
+            if (bulkSyncRequested) {
+                requestSync()
             }
         }
     }
@@ -336,7 +379,8 @@ class CloudSyncRepository(
 
     suspend fun registerThisDevice(): Result<DeviceRegisterResponse> {
         return runCatching {
-            val settings = settingsStore.settingsFlow.value
+            // Never read Settings.dummy() from first page composition.
+            val settings = settingsStore.awaitReady()
             val config = settings.perryConfig
             require(config.isConfigured()) { "Server host is empty" }
             require(config.bootstrapToken.isNotBlank()) { "Bootstrap token is empty" }
@@ -535,8 +579,35 @@ class CloudSyncRepository(
                     // revisions for new sync keys (providers). Push once.
                     settingsDomainSync?.seedLocalSnapshot(settingsStore.settingsFlow.value)
                 }
+                // Push local outbox first so A exports land before B reconciles.
+                pushOutbox(client, state.deviceId!!)
+                // Devices that already advanced change_cursor never re-run full bootstrap,
+                // so settings/assistants missed due to old conflict bugs stay missing forever.
+                // Reconcile those small domains from bootstrap every cycle (not conversations).
+                runCatching {
+                    val snap = client.bootstrap()
+                    reconcileSettingsAndAssistants(snap)
+                    Log.i(
+                        TAG,
+                        "reconcile bootstrap: settings=${snap.settings.size} " +
+                            "assistants=${snap.assistants.size} cursor=${snap.cursor}",
+                    )
+                }.onFailure {
+                    Log.w(TAG, "settings/assistants reconcile failed: ${it.message}")
+                }
+                // If local still has entities with no/outdated server revision, push again
+                // after reconcile (covers ZIP import on A when providers already had rev).
+                settingsDomainSync?.seedLocalSnapshot(settingsStore.settingsFlow.value)
+                // Second push for anything enqueued during seed after first push.
                 pushOutbox(client, state.deviceId!!)
                 pullChanges(client)
+                // Bootstrap/changes do not embed message_node bodies for all history;
+                // fill empty local conversations from /conversations/{id}/nodes.
+                runCatching {
+                    messageNodeDomainSync?.hydrateMissingNodes(client)
+                }.onFailure {
+                    Log.w(TAG, "message node hydrate failed: ${it.message}")
+                }
                 // Only push local pending uploads / explicit on-demand downloads.
                 // Do not bulk-download every remote file after each sync.
                 requestFileTransfer()
@@ -560,6 +631,8 @@ class CloudSyncRepository(
                 409 -> CloudSyncOutcome.Failed(e.message ?: "conflict")
                 else -> CloudSyncOutcome.Retryable(e.message ?: e.code)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: IOException) {
             // WSL/LAN blips are common; WorkManager will retry.
             Log.w(TAG, "sync network error: ${e.message}")
@@ -573,59 +646,108 @@ class CloudSyncRepository(
     }
 
     private suspend fun pushOutbox(client: PerryApiClient, deviceId: String) {
-        val batch = outboxDao.listReady(System.currentTimeMillis(), limit = 50)
-        if (batch.isEmpty()) return
-        // Parents first so message_node mutations find conversation on server.
-        val orderedBatch = batch.sortedWith(
-            compareBy<SyncOutboxEntity> { outboxPushPriority(it.entityType) }
-                .thenBy { it.createdAt },
-        )
-        val request = SyncMutationsRequest(
-            deviceId = deviceId,
-            mutations = orderedBatch.map { item ->
-                SyncMutationItem(
-                    mutationId = item.mutationId,
-                    entityType = item.entityType,
-                    entityId = item.entityId,
-                    operation = item.operation,
-                    baseRevision = item.baseRevision,
-                    payloadSchemaVersion = item.payloadSchemaVersion,
-                    payload = item.payloadJson?.let {
-                        runCatching { JsonInstant.decodeFromString<JsonElement>(it) }.getOrNull()
-                    },
-                )
-            },
-        )
-        val response = client.mutations(request)
-        val now = System.currentTimeMillis()
-        response.results.forEach { result ->
+        // Drain in loops: settings/assistants may enqueue mid-cycle after seed.
+        // High ceiling for large ZIP imports (hundreds of conversation/node rows).
+        var guard = 0
+        while (guard < 80) {
+            guard++
+            val batch = outboxDao.listReady(System.currentTimeMillis(), limit = 50)
+            if (batch.isEmpty()) {
+                if (guard == 1) Log.d(TAG, "pushOutbox: empty")
+                return
+            }
+            Log.i(
+                TAG,
+                "pushOutbox: ${batch.size} mutations " +
+                    batch.groupingBy { it.entityType }.eachCount(),
+            )
+            // Parents first so message_node mutations find conversation on server.
+            val orderedBatch = batch.sortedWith(
+                compareBy<SyncOutboxEntity> { outboxPushPriority(it.entityType) }
+                    .thenBy { it.createdAt },
+            )
+            val request = SyncMutationsRequest(
+                deviceId = deviceId,
+                mutations = orderedBatch.map { item ->
+                    SyncMutationItem(
+                        mutationId = item.mutationId,
+                        entityType = item.entityType,
+                        entityId = item.entityId,
+                        operation = item.operation,
+                        baseRevision = item.baseRevision,
+                        payloadSchemaVersion = item.payloadSchemaVersion,
+                        payload = item.payloadJson?.let {
+                            runCatching { JsonInstant.decodeFromString<JsonElement>(it) }.getOrNull()
+                        },
+                    )
+                },
+            )
+            val response = client.mutations(request)
+            val now = System.currentTimeMillis()
+            var applied = 0
+            var conflicts = 0
+            var rejected = 0
+            response.results.forEach { result ->
             when (result.status) {
                 "applied", "already_applied" -> {
+                    applied++
                     outboxDao.deleteById(result.mutationId)
                     result.revision?.let { rev ->
                         rememberRevision(result.entityType, result.entityId, rev)
                     }
                 }
                 "conflict" -> {
+                    conflicts++
                     val existing = outboxDao.getById(result.mutationId)
-                    result.revision?.let { rev ->
-                        rememberRevision(result.entityType, result.entityId, rev)
-                    }
-                    // Server wins for v1: apply server payload and drop local mutation.
-                    val operation = existing?.operation ?: "upsert"
-                    result.serverPayload?.let { payload ->
-                        applyEntityPayload(
-                            result.entityType,
-                            result.entityId,
-                            operation,
-                            payload,
-                            result.revision,
+                    val msg = result.message.orEmpty()
+                    // After wipe/reimport, local revision table may still claim rev>0 while
+                    // server row is gone → "base_revision must be 0". Requeue as create.
+                    val createRetry = existing != null &&
+                        existing.operation != "delete" &&
+                        (
+                            msg.contains("base_revision must be 0") ||
+                                (msg.contains("entity does not exist") && (result.revision ?: 0L) == 0L)
+                            )
+                    if (createRetry) {
+                        outboxDao.update(
+                            existing!!.copy(
+                                baseRevision = 0L,
+                                retryCount = existing.retryCount + 1,
+                                nextRetryAt = now,
+                                lastError = msg,
+                                updatedAt = now,
+                            ),
+                        )
+                        Log.w(
+                            TAG,
+                            "conflict requeue base0 ${result.entityType}/${result.entityId}: $msg",
+                        )
+                    } else {
+                        result.revision?.let { rev ->
+                            rememberRevision(result.entityType, result.entityId, rev)
+                        }
+                        // Drop local outbox FIRST so applyEntityPayload is not skipped by
+                        // hasPendingOutbox (assistants previously froze on shared default UUIDs).
+                        outboxDao.deleteById(result.mutationId)
+                        val operation = existing?.operation ?: "upsert"
+                        result.serverPayload?.let { payload ->
+                            applyEntityPayload(
+                                result.entityType,
+                                result.entityId,
+                                operation,
+                                payload,
+                                result.revision,
+                                forceApply = true,
+                            )
+                        }
+                        Log.w(
+                            TAG,
+                            "conflict on ${result.entityType}/${result.entityId}: $msg",
                         )
                     }
-                    outboxDao.deleteById(result.mutationId)
-                    Log.w(TAG, "conflict on ${result.entityType}/${result.entityId}: ${result.message}")
                 }
                 "rejected" -> {
+                    rejected++
                     val existing = outboxDao.getById(result.mutationId) ?: return@forEach
                     outboxDao.update(
                         existing.copy(
@@ -635,21 +757,33 @@ class CloudSyncRepository(
                             updatedAt = now,
                         )
                     )
+                    Log.w(
+                        TAG,
+                        "rejected ${result.entityType}/${result.entityId}: ${result.message}",
+                    )
+                }
+                else -> {
+                    Log.w(TAG, "unknown mutation status ${result.status} for ${result.entityType}/${result.entityId}")
                 }
             }
-        }
-        if (response.cursor > 0) {
-            val state = ensureState()
-            if (response.cursor > state.changeCursor) {
-                stateDao.upsert(state.copy(changeCursor = response.cursor, updatedAt = now))
             }
+            Log.i(TAG, "pushOutbox result applied=$applied conflicts=$conflicts rejected=$rejected")
+            if (response.cursor > 0) {
+                val st = ensureState()
+                if (response.cursor > st.changeCursor) {
+                    stateDao.upsert(st.copy(changeCursor = response.cursor, updatedAt = now))
+                }
+            }
+            // Continue loop if more ready items appeared (or batch was full).
+            if (batch.size < 50 && applied == 0 && conflicts == 0) break
         }
     }
 
     private suspend fun pullChanges(client: PerryApiClient) {
         var cursor = ensureState().changeCursor
         var guard = 0
-        while (guard < 20) {
+        // Large ZIP imports produce thousands of change_log rows; 20*200 was too small.
+        while (guard < 200) {
             guard++
             val page = client.changes(cursor = cursor, limit = 200)
             if (page.changes.isNotEmpty()) {
@@ -668,6 +802,81 @@ class CloudSyncRepository(
                 )
             }
             if (!page.hasMore || page.changes.isEmpty()) break
+        }
+    }
+
+    /**
+     * Apply settings + assistants from bootstrap for devices that already have a
+     * change cursor (incremental-only path). Uses remote revision >= local known
+     * revision, and always inserts missing assistant ids. Does not wipe local-only
+     * assistants that were never pushed (they stay until next local seed push).
+     */
+    private suspend fun reconcileSettingsAndAssistants(bootstrap: SyncBootstrapResponse) {
+        withRemoteApply {
+            var settings = settingsStore.settingsFlow.value
+            var dirty = false
+            bootstrap.settings.forEach { element ->
+                val obj = element as? JsonObject ?: return@forEach
+                val key = obj["key"]?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return@forEach
+                val value = obj["value"] ?: return@forEach
+                val revision = obj["revision"]?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0L
+                val known = revisionDao.get(SettingsDomainSync.ENTITY_SETTING, key)?.revision ?: 0L
+                // Always apply when remote is newer OR local never saw this key revision.
+                // For providers/display_setting also re-apply equal revision if local list
+                // is empty/default (repair after failed earlier apply).
+                val shouldApply = revision > known ||
+                    (revision >= known && key == SyncableSettings.PROVIDERS && settings.providers.isEmpty()) ||
+                    (revision >= known && key == SyncableSettings.DISPLAY_SETTING &&
+                        settings.displaySetting.userNickname.isBlank())
+                if (!shouldApply && revision == known) {
+                    // Still refresh revision stamp; skip body when already current.
+                    return@forEach
+                }
+                if (revision < known) return@forEach
+                if (hasPendingOutbox(SettingsDomainSync.ENTITY_SETTING, key)) {
+                    Log.d(TAG, "reconcile skip setting $key; local outbox pending")
+                    return@forEach
+                }
+                settings = SyncableSettings.applyKey(settings, key, value)
+                rememberRevision(SettingsDomainSync.ENTITY_SETTING, key, revision)
+                dirty = true
+                Log.i(TAG, "reconcile applied setting key=$key rev=$revision (was $known)")
+            }
+            val assistants = settings.assistants.toMutableList()
+            bootstrap.assistants.forEach { element ->
+                val obj = element as? JsonObject ?: return@forEach
+                val id = obj["id"]?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return@forEach
+                val payload = obj["payload"] ?: return@forEach
+                val revision = obj["revision"]?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0L
+                if (hasPendingOutbox(SettingsDomainSync.ENTITY_ASSISTANT, id)) {
+                    Log.d(TAG, "reconcile skip assistant $id; local outbox pending")
+                    return@forEach
+                }
+                val known = revisionDao.get(SettingsDomainSync.ENTITY_ASSISTANT, id)?.revision ?: 0L
+                val idx = assistants.indexOfFirst { it.id.toString() == id }
+                val missingLocally = idx < 0
+                if (!missingLocally && revision < known) return@forEach
+                if (!missingLocally && revision == known) {
+                    // Same rev: still repair empty-name default shells from remote if remote has name.
+                    val remoteName = obj["name"]?.let { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()
+                    val localName = assistants[idx].name
+                    if (localName.isNotBlank() || remoteName.isBlank()) return@forEach
+                }
+                val assistant = runCatching {
+                    JsonInstant.decodeFromJsonElement(Assistant.serializer(), payload)
+                }.getOrNull() ?: return@forEach
+                if (idx >= 0) assistants[idx] = assistant else assistants.add(assistant)
+                rememberRevision(SettingsDomainSync.ENTITY_ASSISTANT, id, revision)
+                dirty = true
+                Log.i(
+                    TAG,
+                    "reconcile applied assistant id=$id name=${assistant.name} rev=$revision " +
+                        "missingLocal=$missingLocally",
+                )
+            }
+            if (dirty) {
+                settingsStore.update(settings.copy(assistants = assistants))
+            }
         }
     }
 
@@ -808,8 +1017,10 @@ class CloudSyncRepository(
                     SettingsDomainSync.ENTITY_ASSISTANT -> {
                         val id = change.entityId
                         // Local edits still in outbox win over remote echo/stale pull.
+                        // Still advance revision so we do not re-pull forever after push.
                         if (hasPendingOutbox(SettingsDomainSync.ENTITY_ASSISTANT, id)) {
                             Log.d(TAG, "skip remote assistant $id; local outbox pending")
+                            rememberRevision(change.entityType, id, change.revision)
                             return@forEach
                         }
                         if (change.operation == "delete") {
@@ -821,6 +1032,7 @@ class CloudSyncRepository(
                         val payload = change.payload
                             ?.let { it as? JsonObject }
                             ?.get("payload")
+                            ?: change.payload
                             ?: return@forEach
                         val assistant = runCatching {
                             JsonInstant.decodeFromJsonElement(Assistant.serializer(), payload)
@@ -898,27 +1110,33 @@ class CloudSyncRepository(
         operation: String,
         payload: JsonElement,
         revision: Long?,
+        forceApply: Boolean = false,
     ) {
         withRemoteApply {
             var settings = settingsStore.settingsFlow.value
             when (entityType) {
                 SettingsDomainSync.ENTITY_SETTING -> {
                     if (operation != "delete") {
-                        val value = (payload as? JsonObject)?.get("value") ?: return@withRemoteApply
+                        // Server conflict/bootstrap payload is the setting row itself
+                        // ({key,value,revision}) OR the mutation wrapper ({value: ...}).
+                        val value = (payload as? JsonObject)?.get("value")
+                            ?: return@withRemoteApply
                         settings = SyncableSettings.applyKey(settings, entityId, value)
                         settingsStore.update(settings)
                     }
                 }
                 SettingsDomainSync.ENTITY_ASSISTANT -> {
-                    if (hasPendingOutbox(SettingsDomainSync.ENTITY_ASSISTANT, entityId)) {
-                        Log.d(TAG, "skip conflict/remote assistant $entityId; local outbox pending")
+                    if (!forceApply && hasPendingOutbox(SettingsDomainSync.ENTITY_ASSISTANT, entityId)) {
+                        Log.d(TAG, "skip remote assistant $entityId; local outbox pending")
                         return@withRemoteApply
                     }
                     val list = settings.assistants.toMutableList()
                     if (operation == "delete") {
                         list.removeAll { it.id.toString() == entityId }
                     } else {
-                        val body = (payload as? JsonObject)?.get("payload") ?: return@withRemoteApply
+                        val obj = payload as? JsonObject
+                        // Accept nested {payload: Assistant} or flat Assistant body.
+                        val body = obj?.get("payload") ?: payload
                         val assistant = runCatching {
                             JsonInstant.decodeFromJsonElement(Assistant.serializer(), body)
                         }.getOrNull() ?: return@withRemoteApply

@@ -5,10 +5,13 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import me.rerere.common.http.await
 import me.rerere.rikkahub.utils.JsonInstant
+import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.BufferedSink
 import java.util.concurrent.TimeUnit
 
 class PerryApiException(
@@ -69,6 +72,18 @@ class PerryApiClient(
         return post("/v1/sync/mutations", body = body, auth = true)
     }
 
+    suspend fun listMessageNodes(
+        conversationId: String,
+        beforeIndex: Int? = null,
+        limit: Int = 200,
+    ): MessageNodeListResponse {
+        val q = buildString {
+            append("/v1/conversations/$conversationId/nodes?limit=$limit")
+            if (beforeIndex != null) append("&before_index=$beforeIndex")
+        }
+        return get(q, auth = true)
+    }
+
     suspend fun initFile(request: FileInitRequest): FileInitResponse {
         val body = json.encodeToString(request)
         return post("/v1/files/init", body = body, auth = true)
@@ -83,11 +98,21 @@ class PerryApiClient(
         return get("/v1/files/$fileId/download-url", auth = true)
     }
 
-    suspend fun putFileContent(fileId: String, bytes: ByteArray, mimeType: String) {
+    suspend fun putFileContent(
+        fileId: String,
+        bytes: ByteArray,
+        mimeType: String,
+        onProgress: ((bytesSent: Long, bytesTotal: Long) -> Unit)? = null,
+    ) {
         val media = (mimeType.ifBlank { "application/octet-stream" }).toMediaType()
+        val body = if (onProgress != null) {
+            ProgressRequestBody(bytes, media, onProgress)
+        } else {
+            bytes.toRequestBody(media)
+        }
         val request = Request.Builder()
             .url(join(baseUrl, "/v1/files/$fileId/content"))
-            .put(bytes.toRequestBody(media))
+            .put(body)
             .applyAuth(true)
             .build()
         val response = httpClient.newCall(request).await()
@@ -100,6 +125,7 @@ class PerryApiClient(
                 httpStatus = response.code,
             )
         }
+        onProgress?.invoke(bytes.size.toLong(), bytes.size.toLong())
     }
 
     suspend fun getFileContent(fileId: String): ByteArray {
@@ -323,6 +349,24 @@ data class FileDownloadUrlResponse(
 )
 
 @Serializable
+data class MessageNodeDto(
+    val id: String,
+    @SerialName("conversation_id") val conversationId: String,
+    @SerialName("node_index") val nodeIndex: Int = 0,
+    @SerialName("select_index") val selectIndex: Int = 0,
+    val messages: JsonElement? = null,
+    val revision: Long = 0,
+    @SerialName("deleted_at") val deletedAt: String? = null,
+)
+
+@Serializable
+data class MessageNodeListResponse(
+    val items: List<MessageNodeDto> = emptyList(),
+    @SerialName("has_more") val hasMore: Boolean = false,
+    @SerialName("oldest_index") val oldestIndex: Int? = null,
+)
+
+@Serializable
 data class SyncChangeItem(
     val seq: Long,
     @SerialName("entity_type") val entityType: String,
@@ -385,3 +429,25 @@ data class ErrorBody(
     val message: String,
     @SerialName("request_id") val requestId: String? = null,
 )
+
+private class ProgressRequestBody(
+    private val bytes: ByteArray,
+    private val contentType: MediaType,
+    private val onProgress: (bytesSent: Long, bytesTotal: Long) -> Unit,
+) : RequestBody() {
+    override fun contentType(): MediaType = contentType
+    override fun contentLength(): Long = bytes.size.toLong()
+
+    override fun writeTo(sink: BufferedSink) {
+        val total = bytes.size.toLong()
+        var offset = 0
+        val chunk = 64 * 1024
+        onProgress(0L, total)
+        while (offset < bytes.size) {
+            val end = minOf(offset + chunk, bytes.size)
+            sink.write(bytes, offset, end - offset)
+            offset = end
+            onProgress(offset.toLong(), total)
+        }
+    }
+}

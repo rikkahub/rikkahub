@@ -14,12 +14,39 @@ Prefer developing on WSL2 Ubuntu with the project and SQLite data on the Linux f
 
 ```bash
 cd server
+uv sync
+./scripts/install-perry.sh   # installs global `perry` → ~/.local/bin/perry
+perry init                   # create .env + random bootstrap token / pepper
+perry start                  # background (pid/log under data/)
+perry                        # admin TUI (wipe / bootstrap / start-stop)
+```
+
+Manual (without CLI):
+
+```bash
 cp .env.example .env
 # edit PERRY_BOOTSTRAP_TOKEN and PERRY_TOKEN_PEPPER
-uv sync
 uv run alembic upgrade head
 uv run uvicorn perry_server.main:app --host 127.0.0.1 --port 8787
 ```
+
+### `perry` CLI
+
+| Command | Description |
+|---------|-------------|
+| `perry` / `perry tui` | Interactive admin TUI |
+| `perry start` | Start server in background |
+| `perry start -f` | Foreground |
+| `perry stop` / `restart` | Stop / restart |
+| `perry status` | Process + DB counts |
+| `perry logs [-f]` | Tail `data/perry.log` |
+| `perry init` | First-time `.env` + secrets |
+| `perry wipe` | Clear sync content, **keep devices** |
+| `perry wipe all` | Clear everything including devices |
+| `perry bootstrap --show` | Print bootstrap token |
+| `perry bootstrap --regen` | New bootstrap token (devices keep working) |
+
+`PERRY_HOME` is set by `install-perry.sh` to this server tree.
 
 ## Health
 

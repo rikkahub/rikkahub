@@ -1,0 +1,696 @@
+#!/usr/bin/env bash
+# Perry CLI — manage Haruhome Perry server from anywhere after install.
+# Prefer: run scripts/install-perry.sh from the server root once.
+set -euo pipefail
+
+VERSION="0.1.0"
+
+# ---------------------------------------------------------------------------
+# Resolve install root
+# ---------------------------------------------------------------------------
+resolve_root() {
+  if [[ -n "${PERRY_HOME:-}" && -f "${PERRY_HOME}/pyproject.toml" ]]; then
+    echo "$PERRY_HOME"
+    return
+  fi
+  # Symlink-aware path of this script
+  local src="${BASH_SOURCE[0]}"
+  while [[ -L "$src" ]]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ "$src" != /* ]] && src="$dir/$src"
+  done
+  local script_dir
+  script_dir="$(cd -P "$(dirname "$src")" && pwd)"
+  # scripts/perry → server root
+  if [[ -f "$script_dir/../pyproject.toml" ]]; then
+    echo "$(cd "$script_dir/.." && pwd)"
+    return
+  fi
+  # wrapper may live in ~/.local/bin with PERRY_HOME embedded — fail clearly
+  echo "ERROR: cannot find Perry server root. Set PERRY_HOME or re-run scripts/install-perry.sh" >&2
+  exit 1
+}
+
+ROOT="$(resolve_root)"
+cd "$ROOT"
+
+RUNTIME_DIR="${PERRY_RUNTIME_DIR:-$ROOT/data}"
+PID_FILE="${PERRY_PID_FILE:-$RUNTIME_DIR/perry.pid}"
+LOG_FILE="${PERRY_LOG_FILE:-$RUNTIME_DIR/perry.log}"
+ENV_FILE="$ROOT/.env"
+
+# ---------------------------------------------------------------------------
+# Colors (TTY only)
+# ---------------------------------------------------------------------------
+if [[ -t 1 ]]; then
+  C_RESET=$'\033[0m'
+  C_BOLD=$'\033[1m'
+  C_DIM=$'\033[2m'
+  C_RED=$'\033[31m'
+  C_GREEN=$'\033[32m'
+  C_YELLOW=$'\033[33m'
+  C_CYAN=$'\033[36m'
+else
+  C_RESET= C_BOLD= C_DIM= C_RED= C_GREEN= C_YELLOW= C_CYAN=
+fi
+
+info()  { echo "${C_CYAN}ℹ${C_RESET} $*"; }
+ok()    { echo "${C_GREEN}✔${C_RESET} $*"; }
+warn()  { echo "${C_YELLOW}⚠${C_RESET} $*"; }
+err()   { echo "${C_RED}✖${C_RESET} $*" >&2; }
+title() { echo; echo "${C_BOLD}$*${C_RESET}"; echo "${C_DIM}$(printf '─%.0s' {1..48})${C_RESET}"; }
+
+# ---------------------------------------------------------------------------
+# Env / paths
+# ---------------------------------------------------------------------------
+load_env() {
+  if [[ ! -f "$ENV_FILE" ]]; then
+    err ".env not found at $ENV_FILE"
+    err "Copy .env.example → .env first (or run: perry init)"
+    return 1
+  fi
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+}
+
+ensure_runtime_dir() {
+  mkdir -p "$RUNTIME_DIR"
+}
+
+resolve_sqlite_path() {
+  local url="${PERRY_DATABASE_URL:-sqlite+aiosqlite:///./data/perry.db}"
+  local path
+  if [[ "$url" == sqlite+aiosqlite:////* ]]; then
+    path="/${url#sqlite+aiosqlite:////}"
+  elif [[ "$url" == sqlite+aiosqlite:///* ]]; then
+    path="${url#sqlite+aiosqlite:///}"
+  elif [[ "$url" == sqlite:////* ]]; then
+    path="/${url#sqlite:////}"
+  elif [[ "$url" == sqlite:///* ]]; then
+    path="${url#sqlite:///}"
+  else
+    err "unsupported PERRY_DATABASE_URL (SQLite only for this CLI): $url"
+    return 1
+  fi
+  if [[ "$path" != /* ]]; then
+    path="$ROOT/${path#./}"
+  fi
+  echo "$path"
+}
+
+read_env_value() {
+  local key="$1"
+  if [[ ! -f "$ENV_FILE" ]]; then
+    echo ""
+    return
+  fi
+  # shellcheck disable=SC2002
+  grep -E "^${key}=" "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2- | sed 's/^["'\'']//;s/["'\'']$//' || true
+}
+
+set_env_value() {
+  local key="$1"
+  local value="$2"
+  local tmp
+  tmp="$(mktemp)"
+  if [[ -f "$ENV_FILE" ]] && grep -qE "^${key}=" "$ENV_FILE"; then
+    # Replace existing line
+    awk -v k="$key" -v v="$value" '
+      BEGIN { done=0 }
+      $0 ~ "^"k"=" {
+        print k"="v
+        done=1
+        next
+      }
+      { print }
+      END { if (!done) print k"="v }
+    ' "$ENV_FILE" >"$tmp"
+  else
+    if [[ -f "$ENV_FILE" ]]; then
+      cat "$ENV_FILE" >"$tmp"
+      echo "${key}=${value}" >>"$tmp"
+    else
+      echo "${key}=${value}" >"$tmp"
+    fi
+  fi
+  mv "$tmp" "$ENV_FILE"
+}
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || {
+    err "missing command: $1"
+    return 1
+  }
+}
+
+uv_run() {
+  if command -v uv >/dev/null 2>&1; then
+    (cd "$ROOT" && uv run "$@")
+  elif [[ -x "$ROOT/.venv/bin/python" ]]; then
+    (cd "$ROOT" && .venv/bin/python -m "$@")
+  else
+    err "uv not found and .venv missing. Run: cd $ROOT && uv sync"
+    return 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Process control
+# ---------------------------------------------------------------------------
+is_running() {
+  if [[ ! -f "$PID_FILE" ]]; then
+    return 1
+  fi
+  local pid
+  pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  [[ -n "$pid" ]] || return 1
+  if kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+  # stale pid
+  rm -f "$PID_FILE"
+  return 1
+}
+
+cmd_status() {
+  load_env || true
+  local host port
+  host="$(read_env_value PERRY_HOST)"
+  port="$(read_env_value PERRY_PORT)"
+  host="${host:-127.0.0.1}"
+  port="${port:-8787}"
+
+  title "Perry status"
+  echo "  home     : $ROOT"
+  echo "  env      : $ENV_FILE"
+  echo "  bind     : ${host}:${port}"
+  echo "  pid file : $PID_FILE"
+  echo "  log file : $LOG_FILE"
+
+  if is_running; then
+    local pid
+    pid="$(cat "$PID_FILE")"
+    ok "server running (pid $pid)"
+    if command -v curl >/dev/null 2>&1; then
+      if curl -fsS --max-time 2 "http://${host}:${port}/health/live" >/dev/null 2>&1; then
+        ok "health/live OK"
+      else
+        warn "process up but health/live not OK yet"
+      fi
+    fi
+  else
+    warn "server not running"
+  fi
+
+  if [[ -f "$ENV_FILE" ]]; then
+    local db
+    db="$(resolve_sqlite_path 2>/dev/null || true)"
+    if [[ -n "$db" && -f "$db" ]] && command -v sqlite3 >/dev/null 2>&1; then
+      local users devices files
+      users="$(sqlite3 "$db" "SELECT COUNT(*) FROM users;" 2>/dev/null || echo "?")"
+      devices="$(sqlite3 "$db" "SELECT COUNT(*) FROM devices;" 2>/dev/null || echo "?")"
+      files="$(sqlite3 "$db" "SELECT COUNT(*) FROM files;" 2>/dev/null || echo "?")"
+      echo "  db       : $db"
+      echo "  users/devices/files : ${users} / ${devices} / ${files}"
+    fi
+    local token
+    token="$(read_env_value PERRY_BOOTSTRAP_TOKEN)"
+    if [[ -n "$token" ]]; then
+      local show="${token:0:4}…${token: -4}"
+      echo "  bootstrap: ${show} (len=${#token})"
+    fi
+  fi
+}
+
+cmd_start() {
+  local foreground=0
+  local host="" port=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -f|--foreground) foreground=1; shift ;;
+      --host) host="$2"; shift 2 ;;
+      --port) port="$2"; shift 2 ;;
+      *) err "unknown start option: $1"; return 2 ;;
+    esac
+  done
+
+  load_env
+  ensure_runtime_dir
+
+  host="${host:-${PERRY_HOST:-127.0.0.1}}"
+  port="${port:-${PERRY_PORT:-8787}}"
+
+  if is_running; then
+    warn "already running (pid $(cat "$PID_FILE"))"
+    return 0
+  fi
+
+  need_cmd uv || return 1
+
+  info "migrating database..."
+  (cd "$ROOT" && uv run alembic upgrade head) || {
+    err "alembic upgrade failed"
+    return 1
+  }
+
+  if [[ "$foreground" -eq 1 ]]; then
+    info "starting foreground on ${host}:${port}"
+    exec uv run uvicorn perry_server.main:app --host "$host" --port "$port" --workers 1
+  fi
+
+  info "starting background on ${host}:${port}"
+  info "log → $LOG_FILE"
+  (
+    cd "$ROOT"
+    # shellcheck disable=SC2086
+    nohup uv run uvicorn perry_server.main:app --host "$host" --port "$port" --workers 1 \
+      >>"$LOG_FILE" 2>&1 &
+    echo $! >"$PID_FILE"
+  )
+  sleep 0.4
+  if is_running; then
+    ok "started (pid $(cat "$PID_FILE"))"
+    ok "use: perry status | perry logs | perry stop"
+  else
+    err "failed to start; see $LOG_FILE"
+    return 1
+  fi
+}
+
+cmd_stop() {
+  if ! is_running; then
+    warn "not running"
+    return 0
+  fi
+  local pid
+  pid="$(cat "$PID_FILE")"
+  info "stopping pid $pid ..."
+  kill "$pid" 2>/dev/null || true
+  local i
+  for i in {1..30}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      rm -f "$PID_FILE"
+      ok "stopped"
+      return 0
+    fi
+    sleep 0.2
+  done
+  warn "force kill"
+  kill -9 "$pid" 2>/dev/null || true
+  rm -f "$PID_FILE"
+  ok "stopped (forced)"
+}
+
+cmd_restart() {
+  cmd_stop || true
+  cmd_start "$@"
+}
+
+cmd_logs() {
+  ensure_runtime_dir
+  if [[ ! -f "$LOG_FILE" ]]; then
+    warn "no log file yet: $LOG_FILE"
+    return 0
+  fi
+  if [[ "${1:-}" == "-f" || "${1:-}" == "--follow" ]]; then
+    tail -n 80 -f "$LOG_FILE"
+  else
+    tail -n 80 "$LOG_FILE"
+  fi
+}
+
+cmd_init() {
+  if [[ -f "$ENV_FILE" ]]; then
+    warn ".env already exists: $ENV_FILE"
+  else
+    cp "$ROOT/.env.example" "$ENV_FILE"
+    ok "created $ENV_FILE from .env.example"
+  fi
+  local token pepper
+  token="$(openssl rand -hex 24 2>/dev/null || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  pepper="$(openssl rand -hex 24 2>/dev/null || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  set_env_value PERRY_BOOTSTRAP_TOKEN "$token"
+  set_env_value PERRY_TOKEN_PEPPER "$pepper"
+  ensure_runtime_dir
+  ok "generated PERRY_BOOTSTRAP_TOKEN and PERRY_TOKEN_PEPPER"
+  echo
+  echo "${C_BOLD}Bootstrap Token (copy now):${C_RESET}"
+  echo "  $token"
+  echo
+  info "then: perry start"
+}
+
+# ---------------------------------------------------------------------------
+# Data wipe
+# ---------------------------------------------------------------------------
+CONTENT_TABLES=(
+  message_nodes
+  conversations
+  conversation_folders
+  assistants
+  assistant_memories
+  favorites
+  files
+  settings
+  change_log
+  mutation_receipts
+)
+
+wipe_db_content() {
+  local keep_devices="${1:-1}"
+  load_env
+  local db
+  db="$(resolve_sqlite_path)"
+  if [[ ! -f "$db" ]]; then
+    warn "DB not found ($db); nothing to wipe"
+    return 0
+  fi
+  need_cmd sqlite3 || return 1
+
+  local before_d after_d before_u after_u
+  before_d="$(sqlite3 "$db" "SELECT COUNT(*) FROM devices;" 2>/dev/null || echo 0)"
+  before_u="$(sqlite3 "$db" "SELECT COUNT(*) FROM users;" 2>/dev/null || echo 0)"
+
+  local sql="PRAGMA foreign_keys = ON; BEGIN;"
+  local t
+  for t in "${CONTENT_TABLES[@]}"; do
+    sql+=" DELETE FROM ${t};"
+  done
+  if [[ "$keep_devices" -eq 0 ]]; then
+    sql+=" DELETE FROM devices; DELETE FROM users;"
+  fi
+  sql+=" COMMIT; VACUUM;"
+
+  sqlite3 "$db" <<<"$sql"
+
+  after_d="$(sqlite3 "$db" "SELECT COUNT(*) FROM devices;" 2>/dev/null || echo 0)"
+  after_u="$(sqlite3 "$db" "SELECT COUNT(*) FROM users;" 2>/dev/null || echo 0)"
+  ok "SQLite content wiped"
+  echo "  users   : $before_u → $after_u"
+  echo "  devices : $before_d → $after_d"
+}
+
+wipe_minio() {
+  load_env || true
+  local endpoint="${MINIO_ENDPOINT:-}"
+  local access="${MINIO_ACCESS_KEY:-}"
+  local secret="${MINIO_SECRET_KEY:-}"
+  local bucket="${MINIO_BUCKET:-haruhomedev}"
+  local secure="${MINIO_SECURE:-false}"
+  local prefix="${WIPE_PREFIX:-users/}"
+
+  if [[ -z "$endpoint" || -z "$access" || -z "$secret" ]]; then
+    warn "MinIO env incomplete; skip object wipe"
+    return 0
+  fi
+
+  info "wiping MinIO s3://${bucket}/${prefix} @ ${endpoint}"
+
+  if command -v mc >/dev/null 2>&1; then
+    local scheme=http alias="perrywipe_$$"
+    if [[ "$secure" == "true" || "$secure" == "1" || "$secure" == "yes" ]]; then
+      scheme=https
+    fi
+    mc alias set "$alias" "${scheme}://${endpoint}" "$access" "$secret" >/dev/null
+    if mc ls "${alias}/${bucket}/${prefix}" >/dev/null 2>&1; then
+      mc rm --recursive --force "${alias}/${bucket}/${prefix}" || true
+      ok "mc removed ${bucket}/${prefix}"
+    else
+      warn "nothing under ${bucket}/${prefix}"
+    fi
+    mc alias remove "$alias" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  export MINIO_ENDPOINT="$endpoint"
+  export MINIO_ACCESS_KEY="$access"
+  export MINIO_SECRET_KEY="$secret"
+  export MINIO_BUCKET="$bucket"
+  export MINIO_SECURE="$secure"
+  export WIPE_PREFIX="$prefix"
+
+  if command -v uv >/dev/null 2>&1; then
+    (cd "$ROOT" && uv run python - <<'PY'
+import os, sys
+from minio import Minio
+from minio.deleteobjects import DeleteObject
+
+endpoint = os.environ["MINIO_ENDPOINT"]
+secure = os.environ.get("MINIO_SECURE", "false").lower() in ("1", "true", "yes")
+client = Minio(endpoint, access_key=os.environ["MINIO_ACCESS_KEY"], secret_key=os.environ["MINIO_SECRET_KEY"], secure=secure)
+bucket = os.environ.get("MINIO_BUCKET", "haruhomedev")
+prefix = os.environ.get("WIPE_PREFIX", "users/")
+if not client.bucket_exists(bucket):
+    print(f"bucket {bucket!r} missing; skip")
+    raise SystemExit(0)
+names = [o.object_name for o in client.list_objects(bucket, prefix=prefix, recursive=True)]
+if not names:
+    print(f"no objects under {bucket}/{prefix}")
+    raise SystemExit(0)
+errors = list(client.remove_objects(bucket, [DeleteObject(n) for n in names]))
+if errors:
+    for e in errors: print(e, file=sys.stderr)
+    raise SystemExit(1)
+print(f"deleted {len(names)} object(s)")
+PY
+    )
+  else
+    err "need 'mc' or 'uv' to wipe MinIO"
+    return 1
+  fi
+  ok "MinIO wipe done"
+}
+
+confirm() {
+  local prompt="${1:-Continue?}"
+  local ans
+  read -r -p "${prompt} [y/N] " ans || true
+  [[ "$ans" == "y" || "$ans" == "Y" || "$ans" == "yes" ]]
+}
+
+cmd_wipe() {
+  local mode="${1:-content}" # content | all
+  local skip_s3=0
+  shift || true
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --db-only) skip_s3=1; shift ;;
+      content|all) mode="$1"; shift ;;
+      *) err "unknown wipe arg: $1"; return 2 ;;
+    esac
+  done
+
+  title "Wipe: mode=$mode"
+  if [[ "$mode" == "all" ]]; then
+    warn "This removes users + devices (all registered devices become invalid)."
+  else
+    info "Keeps users + devices; clears sync content + change feed."
+  fi
+  if ! confirm "Type y to execute"; then
+    warn "cancelled"
+    return 0
+  fi
+
+  if is_running; then
+    warn "server is running; stopping first for safe SQLite wipe"
+    cmd_stop || true
+  fi
+
+  if [[ "$mode" == "all" ]]; then
+    wipe_db_content 0
+  else
+    wipe_db_content 1
+  fi
+  if [[ "$skip_s3" -eq 0 ]]; then
+    wipe_minio || true
+  fi
+  ok "wipe complete"
+}
+
+cmd_bootstrap() {
+  local show_only=0
+  local regen=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --show) show_only=1; shift ;;
+      --regen|--reset) regen=1; shift ;;
+      *) err "unknown bootstrap arg: $1"; return 2 ;;
+    esac
+  done
+
+  if [[ ! -f "$ENV_FILE" ]]; then
+    err "no .env; run: perry init"
+    return 1
+  fi
+
+  if [[ "$show_only" -eq 1 ]]; then
+    local t
+    t="$(read_env_value PERRY_BOOTSTRAP_TOKEN)"
+    if [[ -z "$t" ]]; then
+      err "PERRY_BOOTSTRAP_TOKEN empty"
+      return 1
+    fi
+    echo "$t"
+    return 0
+  fi
+
+  if [[ "$regen" -ne 1 ]]; then
+    # default: interactive confirm regen
+    title "Bootstrap token"
+    local cur
+    cur="$(read_env_value PERRY_BOOTSTRAP_TOKEN)"
+    if [[ -n "$cur" ]]; then
+      echo "  current: ${cur:0:4}…${cur: -4} (len=${#cur})"
+    fi
+    if ! confirm "Generate a NEW bootstrap token?"; then
+      warn "cancelled"
+      return 0
+    fi
+  fi
+
+  local token
+  token="$(openssl rand -hex 24 2>/dev/null || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+  if [[ ${#token} -lt 16 ]]; then
+    err "failed to generate strong token"
+    return 1
+  fi
+  set_env_value PERRY_BOOTSTRAP_TOKEN "$token"
+  ok "PERRY_BOOTSTRAP_TOKEN updated in .env"
+  echo
+  echo "${C_BOLD}New Bootstrap Token (copy into Android / register curl):${C_RESET}"
+  echo "  $token"
+  echo
+  warn "Already-registered devices keep working (device tokens unchanged)."
+  warn "Only new device registration uses this bootstrap token."
+  if is_running; then
+    warn "Restart server to load new token: perry restart"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# TUI
+# ---------------------------------------------------------------------------
+cmd_tui() {
+  while true; do
+    clear 2>/dev/null || true
+    title "Perry Admin TUI  ${C_DIM}v${VERSION}${C_RESET}"
+    echo "  home: $ROOT"
+    if is_running; then
+      echo "  state: ${C_GREEN}running${C_RESET} (pid $(cat "$PID_FILE"))"
+    else
+      echo "  state: ${C_YELLOW}stopped${C_RESET}"
+    fi
+    echo
+    echo "  ${C_BOLD}1${C_RESET}) Status"
+    echo "  ${C_BOLD}2${C_RESET}) Start server (background)"
+    echo "  ${C_BOLD}3${C_RESET}) Stop server"
+    echo "  ${C_BOLD}4${C_RESET}) Restart server"
+    echo "  ${C_BOLD}5${C_RESET}) Tail logs"
+    echo "  ${C_BOLD}6${C_RESET}) Wipe sync data (keep devices)"
+    echo "  ${C_BOLD}7${C_RESET}) Wipe ALL data (devices too)"
+    echo "  ${C_BOLD}8${C_RESET}) Show / reset Bootstrap Token"
+    echo "  ${C_BOLD}9${C_RESET}) Init .env (first-time)"
+    echo "  ${C_BOLD}0${C_RESET}) Exit"
+    echo
+    local choice
+    read -r -p "Select> " choice || exit 0
+    case "$choice" in
+      1) cmd_status; read -r -p "Enter..." _ || true ;;
+      2) cmd_start; read -r -p "Enter..." _ || true ;;
+      3) cmd_stop; read -r -p "Enter..." _ || true ;;
+      4) cmd_restart; read -r -p "Enter..." _ || true ;;
+      5)
+        echo "(Ctrl-C to return)"
+        cmd_logs -f || true
+        ;;
+      6) cmd_wipe content; read -r -p "Enter..." _ || true ;;
+      7) cmd_wipe all; read -r -p "Enter..." _ || true ;;
+      8)
+        title "Bootstrap"
+        echo "  a) Show token"
+        echo "  b) Generate new token"
+        echo "  c) Back"
+        local b
+        read -r -p "Select> " b || true
+        case "$b" in
+          a) cmd_bootstrap --show; echo; read -r -p "Enter..." _ || true ;;
+          b) cmd_bootstrap --regen; read -r -p "Enter..." _ || true ;;
+        esac
+        ;;
+      9) cmd_init; read -r -p "Enter..." _ || true ;;
+      0|q|Q) exit 0 ;;
+      *) warn "invalid choice"; sleep 0.6 ;;
+    esac
+  done
+}
+
+cmd_help() {
+  cat <<EOF
+${C_BOLD}perry${C_RESET} — Haruhome Perry server CLI (v${VERSION})
+
+Usage:
+  perry                  Open admin TUI
+  perry tui              Same as above
+  perry start [-f]       Start server in background (-f foreground)
+  perry stop             Stop background server
+  perry restart          Restart
+  perry status           Show status / counts
+  perry logs [-f]        Show last logs (-f follow)
+  perry init             Create .env + random bootstrap/pepper
+  perry wipe [content|all] [--db-only]
+                         content = keep devices (default)
+                         all     = also delete users/devices
+  perry bootstrap [--show|--regen]
+  perry install-path     Print this CLI / PERRY_HOME
+  perry help
+
+Environment:
+  PERRY_HOME             Server root (set by install-perry.sh)
+  PERRY_RUNTIME_DIR      Default: \$PERRY_HOME/data
+  PERRY_PID_FILE         Default: data/perry.pid
+  PERRY_LOG_FILE         Default: data/perry.log
+
+Install (from server root):
+  ./scripts/install-perry.sh
+EOF
+}
+
+cmd_install_path() {
+  echo "PERRY_HOME=$ROOT"
+  echo "CLI=${BASH_SOURCE[0]}"
+  echo "PID_FILE=$PID_FILE"
+  echo "LOG_FILE=$LOG_FILE"
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+main() {
+  local cmd="${1:-tui}"
+  shift || true
+  case "$cmd" in
+    tui|ui|admin|"") cmd_tui "$@" ;;
+    start) cmd_start "$@" ;;
+    stop) cmd_stop "$@" ;;
+    restart) cmd_restart "$@" ;;
+    status|st) cmd_status "$@" ;;
+    logs|log) cmd_logs "$@" ;;
+    init) cmd_init "$@" ;;
+    wipe) cmd_wipe "$@" ;;
+    bootstrap|token) cmd_bootstrap "$@" ;;
+    install-path|where) cmd_install_path "$@" ;;
+    help|-h|--help) cmd_help ;;
+    version|-V|--version) echo "perry $VERSION" ;;
+    *)
+      err "unknown command: $cmd"
+      cmd_help
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"

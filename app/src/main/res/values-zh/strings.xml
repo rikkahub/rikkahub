@@ -187,6 +187,10 @@
   <string name="backup_page_import_from_cherry_studio">从Cherry Studio导入</string>
   <string name="backup_page_import_from_other_app">从其他APP导入</string>
   <string name="backup_page_importing">正在恢复...</string>
+  <string name="file_transfer_uploading">正在上传...</string>
+  <string name="file_transfer_downloading">正在下载...</string>
+  <string name="file_transfer_progress_detail">%1$s (%2$d/%3$d)</string>
+  <string name="chat_page_compress_progress_detail">%1$d / %2$d tokens</string>
   <string name="backup_page_loading_failed">加载备份文件失败: %s</string>
   <string name="backup_page_local_backup_export">导出为文件</string>
   <string name="backup_page_local_backup_import">备份文件导入</string>

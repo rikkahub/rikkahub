@@ -190,12 +190,16 @@ class FileDomainSync(
             updatedAt = now,
             sha256 = sha256,
             objectKey = objectKey,
+            // Never mark remote metadata as local UPLOAD_PENDING — B would try to
+            // re-upload bytes it does not have and spam "正在上传".
             uploadStatus = when {
                 keepPendingDownload -> ManagedFileEntity.UPLOAD_PENDING_DOWNLOAD
                 hadLocalBytes && remoteStatus == "ready" -> ManagedFileEntity.UPLOAD_READY
+                hadLocalBytes && remoteStatus != "ready" -> existing?.uploadStatus
+                    ?: ManagedFileEntity.UPLOAD_LOCAL_ONLY
                 remoteStatus == "ready" -> ManagedFileEntity.UPLOAD_REMOTE_ONLY
                 remoteStatus == "failed" -> ManagedFileEntity.UPLOAD_FAILED
-                else -> ManagedFileEntity.UPLOAD_PENDING
+                else -> ManagedFileEntity.UPLOAD_REMOTE_ONLY
             },
             remoteRevision = revision,
             deletedAt = null,

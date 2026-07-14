@@ -16,7 +16,10 @@ import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FilesRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.files.FileFolders
+import me.rerere.rikkahub.data.files.SkillPaths
 import me.rerere.rikkahub.data.sync.cloud.CloudSyncRepository
+import me.rerere.rikkahub.data.sync.cloud.SettingsDomainSync
 import me.rerere.rikkahub.utils.JsonInstant
 import java.io.File
 import java.io.FileOutputStream
@@ -37,6 +40,7 @@ class RikkaHubBackupImporter(
     private val memoryRepository: MemoryRepository,
     private val filesRepository: FilesRepository,
     private val cloudSyncRepository: CloudSyncRepository,
+    private val settingsDomainSync: SettingsDomainSync? = null,
 ) {
     data class Options(
         /** When true, repository inserts enqueue outbox + file transfer. */
@@ -131,8 +135,27 @@ class RikkaHubBackupImporter(
                     }
                 }
 
+                // Skills live on disk (not settings.json); import before cloud enqueue.
+                val skillsImported = importSkillsFromExtract(extractDir)
+                if (skillsImported > 0) {
+                    Log.i(TAG, "imported skills files=$skillsImported")
+                }
+
                 if (options.syncToCloud) {
-                    work()
+                    // Defer requestSync until import finishes so conversation floods do not
+                    // cancel/starve settings+assistant push mid-import.
+                    cloudSyncRepository.withBulkEnqueue { work() }
+                    // Force-push settings that already had a server revision (e.g. providers
+                    // after first bootstrap) plus all assistants. seedLocalSnapshot alone
+                    // skips keys with known revision and races with async SettingsDomainSync.
+                    runCatching {
+                        settingsDomainSync?.forceEnqueueSnapshot(
+                            settings = settingsStore.settingsFlow.value,
+                            requestSync = false,
+                        )
+                    }.onFailure {
+                        Log.w(TAG, "forceEnqueueSnapshot after import failed: ${it.message}")
+                    }
                     cloudSyncRepository.requestSync()
                     cloudSyncRepository.requestFileTransfer()
                 } else {
@@ -168,15 +191,154 @@ class RikkaHubBackupImporter(
         val current = settingsStore.settingsFlow.value
         val existingAssistantIds = current.assistants.map { it.id }.toSet()
         val existingProviderIds = current.providers.map { it.id }.toSet()
+        Log.i(
+            TAG,
+            "merge settings: zipAssistants=${imported.assistants.size} " +
+                "localAssistants=${current.assistants.size} " +
+                "zipProviders=${imported.providers.size} " +
+                "localProviders=${current.providers.size} " +
+                "nickname=${imported.displaySetting.userNickname}",
+        )
+
+        // Prefer imported assistant when ids collide (ZIP is source of truth for import).
+        val importedAssistantById = imported.assistants.associateBy { it.id }
+        val mergedAssistants = buildList {
+            for (a in current.assistants) {
+                add(importedAssistantById[a.id] ?: a)
+            }
+            for (a in imported.assistants) {
+                if (a.id !in existingAssistantIds) add(a)
+            }
+        }
         val newAssistants = imported.assistants.filter { it.id !in existingAssistantIds }
+
+        // Prefer imported provider when ids collide so ZIP models win over empty shells.
+        val importedProviderById = imported.providers.associateBy { it.id }
+        val mergedProviders = buildList {
+            for (p in imported.providers) add(p)
+            for (p in current.providers) {
+                if (p.id !in importedProviderById) add(p)
+            }
+        }
         val newProviders = imported.providers.filter { it.id !in existingProviderIds }
+        Log.i(
+            TAG,
+            "merge result: assistants=${mergedAssistants.size} (new=${newAssistants.size}) " +
+                "providers=${mergedProviders.size} (new=${newProviders.size})",
+        )
+
+        // Merge display profile (nickname always; keep local image avatar if import is Dummy).
+        val mergedDisplay = current.displaySetting.copy(
+            userNickname = imported.displaySetting.userNickname
+                .ifBlank { current.displaySetting.userNickname },
+            userAvatar = when {
+                imported.displaySetting.userAvatar != me.rerere.rikkahub.data.model.Avatar.Dummy ->
+                    imported.displaySetting.userAvatar
+                else -> current.displaySetting.userAvatar
+            },
+            showUserAvatar = imported.displaySetting.showUserAvatar,
+        )
+
+        // Also pick up common non-destructive settings that should follow the backup.
         settingsStore.update(
             current.copy(
-                assistants = current.assistants + newAssistants,
-                providers = current.providers + newProviders,
+                assistants = mergedAssistants,
+                providers = mergedProviders,
+                displaySetting = mergedDisplay,
+                chatModelId = imported.chatModelId,
+                fastModelId = imported.fastModelId,
+                titleModelId = imported.titleModelId ?: current.titleModelId,
+                translateModeId = imported.translateModeId,
+                imageGenerationModelId = imported.imageGenerationModelId,
+                suggestionModelId = imported.suggestionModelId ?: current.suggestionModelId,
+                ocrModelId = imported.ocrModelId,
+                compressModelId = imported.compressModelId,
+                favoriteModels = if (imported.favoriteModels.isNotEmpty()) {
+                    imported.favoriteModels
+                } else {
+                    current.favoriteModels
+                },
+                enableWebSearch = imported.enableWebSearch,
+                searchServices = if (imported.searchServices.isNotEmpty()) {
+                    imported.searchServices
+                } else {
+                    current.searchServices
+                },
+                searchCommonOptions = imported.searchCommonOptions,
+                searchServiceSelected = imported.searchServiceSelected,
+                mcpServers = if (imported.mcpServers.isNotEmpty()) {
+                    // Prefer imported server when ids collide.
+                    val byId = imported.mcpServers.associateBy { it.id }
+                    buildList {
+                        for (s in imported.mcpServers) add(s)
+                        for (s in current.mcpServers) {
+                            if (s.id !in byId) add(s)
+                        }
+                    }
+                } else {
+                    current.mcpServers
+                },
+                assistantTags = if (imported.assistantTags.isNotEmpty()) {
+                    (current.assistantTags + imported.assistantTags).distinctBy { it.id }
+                } else {
+                    current.assistantTags
+                },
+                quickMessages = if (imported.quickMessages.isNotEmpty()) {
+                    (current.quickMessages + imported.quickMessages).distinctBy { it.id }
+                } else {
+                    current.quickMessages
+                },
+                modeInjections = if (imported.modeInjections.isNotEmpty()) {
+                    // Prefer imported injection when ids collide (ZIP is source of truth).
+                    val byId = imported.modeInjections.associateBy { it.id }
+                    buildList {
+                        for (m in imported.modeInjections) add(m)
+                        for (m in current.modeInjections) {
+                            if (m.id !in byId) add(m)
+                        }
+                    }
+                } else {
+                    current.modeInjections
+                },
+                lorebooks = if (imported.lorebooks.isNotEmpty()) {
+                    val byId = imported.lorebooks.associateBy { it.id }
+                    buildList {
+                        for (l in imported.lorebooks) add(l)
+                        for (l in current.lorebooks) {
+                            if (l.id !in byId) add(l)
+                        }
+                    }
+                } else {
+                    current.lorebooks
+                },
             ),
         )
         return SettingsMerge(newAssistants.size, newProviders.size)
+    }
+
+    /** Copy skills/ from backup extract into app filesDir/skills (non-destructive). */
+    private fun importSkillsFromExtract(extractDir: File): Int {
+        val srcRoot = File(extractDir, FileFolders.SKILLS)
+        if (!srcRoot.isDirectory) return 0
+        val destRoot = File(appContext.filesDir, FileFolders.SKILLS).apply { mkdirs() }
+        var count = 0
+        srcRoot.walkTopDown().filter { it.isFile }.forEach { src ->
+            val rel = src.relativeTo(srcRoot).invariantSeparatorsPath
+            val skillName = rel.substringBefore('/', missingDelimiterValue = "")
+            val skillRel = rel.substringAfter('/', missingDelimiterValue = "")
+            if (skillName.isBlank() || skillRel.isBlank()) return@forEach
+            val skillDir = SkillPaths.resolveSkillDir(destRoot, skillName) ?: return@forEach
+            val target = SkillPaths.resolveSkillFile(skillDir, skillRel) ?: return@forEach
+            if (target.exists()) return@forEach
+            target.parentFile?.mkdirs()
+            runCatching {
+                src.copyTo(target, overwrite = false)
+                count++
+            }.onFailure {
+                Log.w(TAG, "skill import failed $rel: ${it.message}")
+            }
+        }
+        return count
     }
 
     private data class ChatImport(

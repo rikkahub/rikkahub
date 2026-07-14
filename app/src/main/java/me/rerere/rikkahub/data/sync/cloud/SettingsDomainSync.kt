@@ -88,6 +88,49 @@ class SettingsDomainSync(
         }
     }
 
+    /**
+     * Force-enqueue full current snapshot for settings keys + all assistants.
+     * Used after ZIP import so content changes still push even when a server
+     * revision already exists (seedLocalSnapshot would skip those keys).
+     */
+    suspend fun forceEnqueueSnapshot(
+        settings: Settings,
+        keys: Set<String> = SyncableSettings.ALL_KEYS,
+        assistants: List<Assistant> = settings.assistants,
+        requestSync: Boolean = false,
+    ) {
+        if (settings.init) return
+        var enqueued = false
+        val map = SyncableSettings.extract(settings)
+        for (key in keys) {
+            val value = map[key] ?: continue
+            if (enqueueSetting(key, value, requestSync = false)) enqueued = true
+        }
+        for (assistant in assistants) {
+            if (enqueueAssistantUpsert(assistant, requestSync = false)) enqueued = true
+        }
+        if (enqueued) {
+            Log.i(TAG, "force-enqueued snapshot keys=${keys.size} assistants=${assistants.size}")
+            if (requestSync) cloudSyncRepository.requestSync()
+        }
+    }
+
+    /**
+     * Diff two settings snapshots and enqueue only changed keys / assistants.
+     * Prefer this after import when [previous] is known.
+     */
+    suspend fun enqueueDiff(previous: Settings?, current: Settings, requestSync: Boolean = false) {
+        if (current.init) return
+        if (previous == null || previous.init) {
+            forceEnqueueSnapshot(current, requestSync = requestSync)
+            return
+        }
+        // Temporarily allow enqueue even if suppress flag is set by callers that
+        // already exited withRemoteApply — this is an explicit local push.
+        onLocalSettingsChanged(previous, current)
+        if (requestSync) cloudSyncRepository.requestSync()
+    }
+
     private suspend fun enqueueSetting(
         key: String,
         value: JsonElement?,

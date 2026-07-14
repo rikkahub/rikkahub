@@ -42,7 +42,29 @@ class SettingCloudSyncVM(
 
     fun updateConfig(transform: (PerryServerConfig) -> PerryServerConfig) {
         viewModelScope.launch {
+            // awaitReady inside update(): first open used Settings.dummy() and dropped host/token.
             settingsStore.update { it.copy(perryConfig = transform(it.perryConfig)) }
+        }
+    }
+
+    fun registerDevice() {
+        viewModelScope.launch {
+            _busy.value = true
+            try {
+                // Flush any in-flight TextField updates before reading bootstrap token.
+                kotlinx.coroutines.delay(50)
+                settingsStore.awaitReady()
+                val result = cloudSyncRepository.registerThisDevice()
+                _statusText.value = result.fold(
+                    onSuccess = { "Registered device ${it.deviceId}" },
+                    onFailure = { it.message ?: "Register failed" },
+                )
+                if (result.isSuccess) {
+                    cloudSyncRepository.testConnection()
+                }
+            } finally {
+                _busy.value = false
+            }
         }
     }
 
@@ -56,26 +78,9 @@ class SettingCloudSyncVM(
         viewModelScope.launch {
             _busy.value = true
             try {
+                settingsStore.awaitReady()
                 val result = cloudSyncRepository.testConnection()
                 _statusText.value = formatProbe(result)
-            } finally {
-                _busy.value = false
-            }
-        }
-    }
-
-    fun registerDevice() {
-        viewModelScope.launch {
-            _busy.value = true
-            try {
-                val result = cloudSyncRepository.registerThisDevice()
-                _statusText.value = result.fold(
-                    onSuccess = { "Registered device ${it.deviceId}" },
-                    onFailure = { it.message ?: "Register failed" },
-                )
-                if (result.isSuccess) {
-                    cloudSyncRepository.testConnection()
-                }
             } finally {
                 _busy.value = false
             }

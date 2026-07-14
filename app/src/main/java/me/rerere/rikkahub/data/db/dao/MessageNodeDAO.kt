@@ -15,6 +15,9 @@ interface MessageNodeDAO {
     @Query("SELECT * FROM message_node WHERE conversation_id = :conversationId ORDER BY node_index ASC")
     suspend fun getNodesOfConversation(conversationId: String): List<MessageNodeEntity>
 
+    @Query("SELECT COUNT(*) FROM message_node WHERE conversation_id = :conversationId")
+    suspend fun countByConversation(conversationId: String): Int
+
     @Query(
         "SELECT * FROM message_node WHERE conversation_id = :conversationId " +
             "ORDER BY node_index ASC LIMIT :limit OFFSET :offset"

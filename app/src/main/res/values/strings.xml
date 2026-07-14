@@ -187,6 +187,10 @@
   <string name="backup_page_import_from_cherry_studio">Import from Cherry Studio</string>
   <string name="backup_page_import_from_other_app">Import from other app</string>
   <string name="backup_page_importing">Importing...</string>
+  <string name="file_transfer_uploading">Uploading...</string>
+  <string name="file_transfer_downloading">Downloading...</string>
+  <string name="file_transfer_progress_detail">%1$s (%2$d/%3$d)</string>
+  <string name="chat_page_compress_progress_detail">%1$d / %2$d tokens</string>
   <string name="backup_page_loading_failed">Failed to load backup files: %s</string>
   <string name="backup_page_local_backup_export">Export to File</string>
   <string name="backup_page_local_backup_import">Import from File</string>

@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.StickyHeader
+import me.rerere.rikkahub.ui.components.ui.TaskProgressDialog
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
 import java.io.File
@@ -46,9 +47,24 @@ fun ImportExportTab(
     val context = LocalContext.current
     var isExporting by remember { mutableStateOf(false) }
     var isRestoring by remember { mutableStateOf(false) }
+    var progressTitle by remember { mutableStateOf("") }
+    var progressMessage by remember { mutableStateOf<String?>(null) }
 
     // 导入类型：local 为本地备份，chatbox 为 Chatbox 导入，cherry 为 Cherry Studio 导入
     var importType by remember { mutableStateOf("local") }
+
+    TaskProgressDialog(
+        visible = isExporting || isRestoring,
+        title = progressTitle.ifBlank {
+            if (isExporting) {
+                stringResource(R.string.backup_page_exporting)
+            } else {
+                stringResource(R.string.backup_page_importing)
+            }
+        },
+        message = progressMessage,
+        progress = null,
+    )
 
     // 创建文件保存的launcher
     val createDocumentLauncher = rememberLauncherForActivityResult(
@@ -57,6 +73,8 @@ fun ImportExportTab(
         uri?.let { targetUri ->
             scope.launch {
                 isExporting = true
+                progressTitle = context.getString(R.string.backup_page_exporting)
+                progressMessage = null
                 runCatching {
                     // 导出文件
                     val exportFile = vm.exportToFile()
@@ -94,6 +112,14 @@ fun ImportExportTab(
         uri?.let { sourceUri ->
             scope.launch {
                 isRestoring = true
+                progressTitle = context.getString(R.string.backup_page_importing)
+                progressMessage = when (importType) {
+                    "rikka_merge_cloud" -> "Import RikkaHub ZIP (merge + cloud)"
+                    "rikka_merge" -> "Import RikkaHub ZIP (local only)"
+                    "chatbox" -> context.getString(R.string.backup_page_import_from_chatbox)
+                    "cherry" -> context.getString(R.string.backup_page_import_from_cherry_studio)
+                    else -> context.getString(R.string.backup_page_local_backup_import)
+                }
                 runCatching {
                     when (importType) {
                         "local" -> {

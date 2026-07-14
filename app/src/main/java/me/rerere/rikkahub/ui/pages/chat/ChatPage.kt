@@ -659,8 +659,8 @@ private fun ChatFilesPickerSheet(
             state = inputState,
             assistant = assistant,
             mcpManager = vm.mcpManager,
-            onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages ->
-                vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
+            onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages, onProgress ->
+                vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages, onProgress)
             },
             onUpdateAssistant = {
                 vm.updateSettings(

@@ -26,7 +26,19 @@ interface SyncOutboxDAO {
         """
         SELECT * FROM sync_outbox
         WHERE next_retry_at <= :now
-        ORDER BY created_at ASC
+        ORDER BY
+          CASE entity_type
+            WHEN 'setting' THEN 0
+            WHEN 'file' THEN 1
+            WHEN 'assistant' THEN 2
+            WHEN 'assistant_memory' THEN 3
+            WHEN 'conversation_folder' THEN 4
+            WHEN 'conversation' THEN 5
+            WHEN 'message_node' THEN 6
+            WHEN 'favorite' THEN 7
+            ELSE 9
+          END ASC,
+          created_at ASC
         LIMIT :limit
         """
     )

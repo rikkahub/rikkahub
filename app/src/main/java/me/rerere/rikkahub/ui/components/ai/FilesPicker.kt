@@ -52,6 +52,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.rikkahub.service.ChatService
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Codesandbox
@@ -91,7 +92,12 @@ internal fun FilesPicker(
     assistant: Assistant,
     state: ChatInputState,
     mcpManager: McpManager,
-    onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
+    onCompressContext: (
+        additionalPrompt: String,
+        targetTokens: Int,
+        keepRecentMessages: Int,
+        onProgress: (ChatService.CompressProgress) -> Unit,
+    ) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateConversation: (Conversation) -> Unit,
     showInjectionSheet: Boolean,
@@ -293,8 +299,8 @@ internal fun FilesPicker(
         CompressContextDialog(onDismiss = {
             onShowCompressDialogChange(false)
             onDismiss()
-        }, onConfirm = { additionalPrompt, targetTokens, keepRecentMessages ->
-            onCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
+        }, onConfirm = { additionalPrompt, targetTokens, keepRecentMessages, onProgress ->
+            onCompressContext(additionalPrompt, targetTokens, keepRecentMessages, onProgress)
         })
     }
 }
