@@ -10,17 +10,14 @@ import androidx.work.WorkerParameters
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.FilesRepository
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.asRequestBody
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
 import java.security.MessageDigest
 
 /**
- * Uploads pending local files and downloads remote-ready files missing on disk.
+ * Uploads/downloads file bytes only through Perry proxy.
+ * MinIO stays private on the server; the app never receives storage credentials.
  */
 class FileTransferWorker(
     appContext: Context,
@@ -29,7 +26,6 @@ class FileTransferWorker(
     private val filesRepository: FilesRepository by inject()
     private val filesManager: FilesManager by inject()
     private val cloudSyncRepository: CloudSyncRepository by inject()
-    private val okHttpClient: OkHttpClient by inject()
 
     override suspend fun doWork(): Result {
         return try {
@@ -95,19 +91,8 @@ class FileTransferWorker(
                 )
             )
             if (init.uploadStatus != "ready") {
-                val uploadUrl = init.uploadUrl
-                if (!uploadUrl.isNullOrBlank() && !uploadUrl.contains("__memory_put__")) {
-                    val body = file.asRequestBody(entity.mimeType.toMediaTypeOrNull())
-                    val req = Request.Builder().url(uploadUrl).put(body).build()
-                    okHttpClient.newCall(req).execute().use { resp ->
-                        if (!resp.isSuccessful) {
-                            error("presign PUT failed HTTP ${resp.code}")
-                        }
-                    }
-                } else {
-                    // Dev/test storage or unreachable MinIO: proxy through Perry.
-                    client.putFileContent(entity.id, file.readBytes(), entity.mimeType)
-                }
+                // Always proxy: Android -> Perry -> MinIO
+                client.putFileContent(entity.id, file.readBytes(), entity.mimeType)
                 client.completeFile(
                     entity.id,
                     FileCompleteRequest(sizeBytes = size, sha256 = sha),
@@ -123,7 +108,7 @@ class FileTransferWorker(
             )
             filesRepository.upsertQuiet(ready)
             cloudSyncRepository.fileDomainSync?.enqueueUpsert(ready)
-            Log.i(TAG, "uploaded file ${entity.id}")
+            Log.i(TAG, "uploaded file ${entity.id} via perry proxy")
         } catch (e: Exception) {
             Log.w(TAG, "upload failed ${entity.id}: ${e.message}")
             filesRepository.upsertQuiet(
@@ -144,17 +129,8 @@ class FileTransferWorker(
             val target = filesManager.getFile(entity)
             target.parentFile?.mkdirs()
             val tmp = File(target.parentFile, "${target.name}.part")
-            val urlResp = client.downloadUrl(entity.id)
-            val req = Request.Builder().url(urlResp.downloadUrl).get().build()
-            val usedPresign = !urlResp.downloadUrl.contains("__memory_get__")
-            val bytes = if (usedPresign) {
-                okHttpClient.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) error("download failed HTTP ${resp.code}")
-                    resp.body?.bytes() ?: error("empty body")
-                }
-            } else {
-                client.getFileContent(entity.id)
-            }
+            // Always proxy: Android -> Perry -> MinIO
+            val bytes = client.getFileContent(entity.id)
             tmp.writeBytes(bytes)
             if (entity.sha256.isNotBlank()) {
                 val actual = sha256Hex(tmp)
@@ -175,7 +151,7 @@ class FileTransferWorker(
                     updatedAt = System.currentTimeMillis(),
                 )
             )
-            Log.i(TAG, "downloaded file ${entity.id}")
+            Log.i(TAG, "downloaded file ${entity.id} via perry proxy")
         } catch (e: Exception) {
             Log.w(TAG, "download failed ${entity.id}: ${e.message}")
             filesRepository.upsertQuiet(

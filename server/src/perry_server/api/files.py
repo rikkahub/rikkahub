@@ -14,7 +14,7 @@ from perry_server.schemas.files import (
     FileInitResponse,
 )
 from perry_server.services import files as files_service
-from perry_server.services.storage import InMemoryObjectStorage, ObjectStorage
+from perry_server.services.storage import ObjectStorage
 
 router = APIRouter(prefix="/v1/files", tags=["files"])
 
@@ -79,6 +79,7 @@ async def get_download_url(
     auth: Annotated[AuthContext, Depends(require_device)],
     storage: Annotated[ObjectStorage, Depends(get_storage)],
 ) -> FileDownloadUrlResponse:
+    """Compatibility endpoint: returns Perry proxy content path (not MinIO)."""
     return await files_service.download_url(
         session,
         storage,
@@ -109,18 +110,17 @@ async def put_file_content(
     auth: Annotated[AuthContext, Depends(require_device)],
     storage: Annotated[ObjectStorage, Depends(get_storage)],
 ) -> dict[str, str]:
-    """Compatibility / test upload path when clients cannot reach MinIO directly.
-
-    For in-memory storage this is the real data plane. For MinIO it still works
-    as a proxy put, then clients call /complete.
-    """
+    """Primary data plane: Android uploads bytes through Perry; Perry writes MinIO."""
+    if not storage.is_configured():
+        raise AppError("minio_not_configured", "MinIO is not configured", status_code=503)
     row = await files_service.get_file(session, user_id=auth.user_id, file_id=file_id)
     if row is None or row.deleted_at is not None:
         raise AppError("not_found", "file not found", status_code=404)
     data = await request.body()
     if not data:
         raise AppError("empty_body", "file body is empty", status_code=400)
-    storage.put_object(row.object_key, data, content_type=row.mime_type)
+    storage.ensure_bucket()
+    storage.put_object(row.object_key, data, content_type=row.mime_type or "application/octet-stream")
     return {"status": "uploaded", "bytes": str(len(data))}
 
 
@@ -131,19 +131,15 @@ async def get_file_content(
     auth: Annotated[AuthContext, Depends(require_device)],
     storage: Annotated[ObjectStorage, Depends(get_storage)],
 ) -> Response:
+    """Primary data plane: Android downloads bytes through Perry; Perry reads MinIO."""
+    if not storage.is_configured():
+        raise AppError("minio_not_configured", "MinIO is not configured", status_code=503)
     row = await files_service.get_file(session, user_id=auth.user_id, file_id=file_id)
     if row is None or row.deleted_at is not None:
         raise AppError("not_found", "file not found", status_code=404)
     if row.upload_status != "ready":
         raise AppError("not_ready", "file is not ready", status_code=409)
-    if isinstance(storage, InMemoryObjectStorage):
-        data = storage.get_object_bytes(row.object_key)
-        if data is None:
-            raise AppError("not_found", "object missing", status_code=404)
-        return Response(content=data, media_type=row.mime_type or "application/octet-stream")
-    # For MinIO prefer presigned GET; proxy not implemented for large objects in v1.
-    raise AppError(
-        "use_download_url",
-        "use GET /v1/files/{id}/download-url for MinIO objects",
-        status_code=400,
-    )
+    data = storage.get_object_bytes(row.object_key)
+    if data is None:
+        raise AppError("not_found", "object missing", status_code=404)
+    return Response(content=data, media_type=row.mime_type or "application/octet-stream")

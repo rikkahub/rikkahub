@@ -46,7 +46,9 @@ async def test_file_init_put_complete_download_and_sync(
     body = init.json()
     assert body["id"] == file_id
     assert body["upload_status"] == "pending"
-    assert body["upload_url"]
+    assert body["transfer_mode"] == "proxy"
+    assert body["content_path"] == f"/v1/files/{file_id}/content"
+    assert body["upload_url"] is None
     assert body["revision"] == 1
 
     put = await client.put(
@@ -71,7 +73,9 @@ async def test_file_init_put_complete_download_and_sync(
 
     dl = await client.get(f"/v1/files/{file_id}/download-url", headers=headers)
     assert dl.status_code == 200
-    assert "download_url" in dl.json()
+    assert dl.json()["transfer_mode"] == "proxy"
+    assert dl.json()["content_path"] == f"/v1/files/{file_id}/content"
+    assert dl.json()["download_url"] == f"/v1/files/{file_id}/content"
 
     content = await client.get(f"/v1/files/{file_id}/content", headers=headers)
     assert content.status_code == 200
@@ -200,4 +204,5 @@ async def test_file_sha_dedup_ready(
     body = init2.json()
     assert body["deduplicated"] is True
     assert body["upload_status"] == "ready"
+    assert body["transfer_mode"] == "proxy"
     assert body["upload_url"] is None

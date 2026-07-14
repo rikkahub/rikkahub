@@ -17,6 +17,10 @@ class FileInitResponse(BaseModel):
     id: UUID
     upload_status: Literal["pending", "ready", "failed", "deleted"]
     object_key: str
+    # Always proxy via Perry; MinIO credentials never leave the server.
+    transfer_mode: Literal["proxy"] = "proxy"
+    content_path: str
+    # Deprecated: always null (kept for older clients).
     upload_url: str | None = None
     revision: int
     deduplicated: bool = False
@@ -46,6 +50,9 @@ class FileDto(BaseModel):
 
 class FileDownloadUrlResponse(BaseModel):
     id: UUID
+    # Authenticated Perry content path (not a MinIO presign).
     download_url: str
-    expires_in_seconds: int
+    content_path: str
+    transfer_mode: Literal["proxy"] = "proxy"
+    expires_in_seconds: int = 0
     upload_status: str

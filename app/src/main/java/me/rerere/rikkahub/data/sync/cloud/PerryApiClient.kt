@@ -261,6 +261,8 @@ data class FileInitResponse(
     val id: String,
     @SerialName("upload_status") val uploadStatus: String,
     @SerialName("object_key") val objectKey: String,
+    @SerialName("transfer_mode") val transferMode: String = "proxy",
+    @SerialName("content_path") val contentPath: String? = null,
     @SerialName("upload_url") val uploadUrl: String? = null,
     val revision: Int,
     val deduplicated: Boolean = false,
@@ -289,7 +291,9 @@ data class FileDto(
 data class FileDownloadUrlResponse(
     val id: String,
     @SerialName("download_url") val downloadUrl: String,
-    @SerialName("expires_in_seconds") val expiresInSeconds: Int = 900,
+    @SerialName("content_path") val contentPath: String? = null,
+    @SerialName("transfer_mode") val transferMode: String = "proxy",
+    @SerialName("expires_in_seconds") val expiresInSeconds: Int = 0,
     @SerialName("upload_status") val uploadStatus: String? = null,
 )
 

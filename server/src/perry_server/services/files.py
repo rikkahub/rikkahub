@@ -173,10 +173,13 @@ async def init_upload(
             payload=file_payload(row),
         )
         await session.commit()
+        content_path = f"/v1/files/{row.id}/content"
         return FileInitResponse(
             id=row.id,
             upload_status="ready",
             object_key=row.object_key,
+            transfer_mode="proxy",
+            content_path=content_path,
             upload_url=None,
             revision=row.revision,
             deduplicated=True,
@@ -207,10 +210,13 @@ async def init_upload(
     else:
         if current.upload_status == "ready" and current.sha256 == sha and current.size_bytes == request.size_bytes:
             await session.commit()
+            content_path = f"/v1/files/{current.id}/content"
             return FileInitResponse(
                 id=current.id,
                 upload_status="ready",
                 object_key=current.object_key,
+                transfer_mode="proxy",
+                content_path=content_path,
                 upload_url=None,
                 revision=current.revision,
                 deduplicated=True,
@@ -239,12 +245,14 @@ async def init_upload(
         payload=file_payload(row),
     )
     await session.commit()
-    upload_url = storage.presign_put(row.object_key)
+    content_path = f"/v1/files/{row.id}/content"
     return FileInitResponse(
         id=row.id,
         upload_status="pending",
         object_key=row.object_key,
-        upload_url=upload_url,
+        transfer_mode="proxy",
+        content_path=content_path,
+        upload_url=None,
         revision=row.revision,
         deduplicated=False,
     )
@@ -336,7 +344,7 @@ async def download_url(
     *,
     user_id: UUID,
     file_id: UUID,
-    expires_seconds: int = 900,
+    expires_seconds: int = 0,
 ) -> FileDownloadUrlResponse:
     if not storage.is_configured():
         raise AppError("minio_not_configured", "MinIO is not configured", status_code=503)
@@ -345,10 +353,13 @@ async def download_url(
         raise AppError("not_found", "file not found", status_code=404)
     if row.upload_status != "ready":
         raise AppError("not_ready", "file is not ready for download", status_code=409)
-    url = storage.presign_get(row.object_key, expires_seconds=expires_seconds)
+    content_path = f"/v1/files/{row.id}/content"
+    # Clients must call this path with the device Bearer token; no MinIO URL is exposed.
     return FileDownloadUrlResponse(
         id=row.id,
-        download_url=url,
+        download_url=content_path,
+        content_path=content_path,
+        transfer_mode="proxy",
         expires_in_seconds=expires_seconds,
         upload_status=row.upload_status,
     )

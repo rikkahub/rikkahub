@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from datetime import timedelta
+from io import BytesIO
 from typing import Protocol
 from uuid import UUID
 
@@ -34,13 +34,11 @@ class ObjectStorage(Protocol):
         display_name: str,
     ) -> str: ...
 
-    def presign_put(self, object_key: str, *, expires_seconds: int = 900) -> str: ...
-
-    def presign_get(self, object_key: str, *, expires_seconds: int = 900) -> str: ...
-
     def head_object(self, object_key: str) -> ObjectHead | None: ...
 
     def put_object(self, object_key: str, data: bytes, *, content_type: str) -> None: ...
+
+    def get_object_bytes(self, object_key: str) -> bytes | None: ...
 
     def delete_object(self, object_key: str) -> None: ...
 
@@ -66,7 +64,7 @@ class InMemoryObjectStorage:
         return True
 
     def probe(self) -> tuple[str, str | None]:
-        return "ok", "in-memory storage"
+        return "ok", "in-memory storage (proxy mode)"
 
     def ensure_bucket(self) -> None:
         self._bucket_ready = True
@@ -81,15 +79,6 @@ class InMemoryObjectStorage:
         name = sanitize_object_name(display_name)
         return f"users/{user_id}/files/{file_id}/{name}"
 
-    def presign_put(self, object_key: str, *, expires_seconds: int = 900) -> str:
-        del expires_seconds
-        # Clients PUT body to this URL in tests via put_object helper path.
-        return f"{self._public_base_url}/__memory_put__/{object_key}"
-
-    def presign_get(self, object_key: str, *, expires_seconds: int = 900) -> str:
-        del expires_seconds
-        return f"{self._public_base_url}/__memory_get__/{object_key}"
-
     def head_object(self, object_key: str) -> ObjectHead | None:
         item = self._objects.get(object_key)
         if item is None:
@@ -100,15 +89,17 @@ class InMemoryObjectStorage:
     def put_object(self, object_key: str, data: bytes, *, content_type: str) -> None:
         self._objects[object_key] = (data, content_type)
 
-    def delete_object(self, object_key: str) -> None:
-        self._objects.pop(object_key, None)
-
     def get_object_bytes(self, object_key: str) -> bytes | None:
         item = self._objects.get(object_key)
         return None if item is None else item[0]
 
+    def delete_object(self, object_key: str) -> None:
+        self._objects.pop(object_key, None)
+
 
 class MinioObjectStorage:
+    """Server-side MinIO client. Android never talks to MinIO directly."""
+
     def __init__(self, settings: Settings) -> None:
         if not settings.minio_endpoint or not settings.minio_access_key or not settings.minio_secret_key:
             raise AppError("minio_not_configured", "MinIO is not configured", status_code=503)
@@ -128,7 +119,7 @@ class MinioObjectStorage:
     def probe(self) -> tuple[str, str | None]:
         try:
             self._client.bucket_exists(self._bucket)
-            return "ok", None
+            return "ok", "minio reachable via perry proxy"
         except Exception as exc:  # noqa: BLE001
             return "degraded", str(exc)
 
@@ -146,20 +137,6 @@ class MinioObjectStorage:
         name = sanitize_object_name(display_name)
         return f"users/{user_id}/files/{file_id}/{name}"
 
-    def presign_put(self, object_key: str, *, expires_seconds: int = 900) -> str:
-        return self._client.presigned_put_object(
-            self._bucket,
-            object_key,
-            expires=timedelta(seconds=expires_seconds),
-        )
-
-    def presign_get(self, object_key: str, *, expires_seconds: int = 900) -> str:
-        return self._client.presigned_get_object(
-            self._bucket,
-            object_key,
-            expires=timedelta(seconds=expires_seconds),
-        )
-
     def head_object(self, object_key: str) -> ObjectHead | None:
         try:
             info = self._client.stat_object(self._bucket, object_key)
@@ -172,8 +149,6 @@ class MinioObjectStorage:
         )
 
     def put_object(self, object_key: str, data: bytes, *, content_type: str) -> None:
-        from io import BytesIO
-
         self._client.put_object(
             self._bucket,
             object_key,
@@ -181,6 +156,17 @@ class MinioObjectStorage:
             length=len(data),
             content_type=content_type,
         )
+
+    def get_object_bytes(self, object_key: str) -> bytes | None:
+        try:
+            response = self._client.get_object(self._bucket, object_key)
+        except Exception:  # noqa: BLE001
+            return None
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()
 
     def delete_object(self, object_key: str) -> None:
         try:
@@ -209,20 +195,16 @@ class UnconfiguredObjectStorage:
         name = sanitize_object_name(display_name)
         return f"users/{user_id}/files/{file_id}/{name}"
 
-    def presign_put(self, object_key: str, *, expires_seconds: int = 900) -> str:
-        del object_key, expires_seconds
-        raise AppError("minio_not_configured", "MinIO is not configured", status_code=503)
-
-    def presign_get(self, object_key: str, *, expires_seconds: int = 900) -> str:
-        del object_key, expires_seconds
-        raise AppError("minio_not_configured", "MinIO is not configured", status_code=503)
-
     def head_object(self, object_key: str) -> ObjectHead | None:
         del object_key
         raise AppError("minio_not_configured", "MinIO is not configured", status_code=503)
 
     def put_object(self, object_key: str, data: bytes, *, content_type: str) -> None:
         del object_key, data, content_type
+        raise AppError("minio_not_configured", "MinIO is not configured", status_code=503)
+
+    def get_object_bytes(self, object_key: str) -> bytes | None:
+        del object_key
         raise AppError("minio_not_configured", "MinIO is not configured", status_code=503)
 
     def delete_object(self, object_key: str) -> None:
