@@ -7,13 +7,19 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.uuid.Uuid
 
 /**
  * Keys that may be synced via entity_type=setting.
- * Device-local secrets / connection config are intentionally excluded.
+ * Device-local secrets / connection config are intentionally excluded
+ * (perryDeviceToken, perryConfig, webdav/s3, etc.).
+ *
+ * Providers sync with Perry device-token apiKeys stripped; each device rebinds
+ * Perry gateways to its own token + local Perry host on apply.
  */
 object SyncableSettings {
     const val THEME_ID = "theme_id"
@@ -37,6 +43,7 @@ object SyncableSettings {
     const val MODE_INJECTIONS = "mode_injections"
     const val LOREBOOKS = "lorebooks"
     const val SELECT_ASSISTANT = "select_assistant"
+    const val PROVIDERS = "providers"
 
     val ALL_KEYS: Set<String> = setOf(
         THEME_ID,
@@ -60,6 +67,7 @@ object SyncableSettings {
         MODE_INJECTIONS,
         LOREBOOKS,
         SELECT_ASSISTANT,
+        PROVIDERS,
     )
 
     fun extract(settings: Settings): Map<String, JsonElement> {
@@ -87,6 +95,7 @@ object SyncableSettings {
             MODE_INJECTIONS to toJson(settings.modeInjections),
             LOREBOOKS to toJson(settings.lorebooks),
             SELECT_ASSISTANT to JsonPrimitive(settings.assistantId.toString()),
+            PROVIDERS to toJson(settings.providers.map { sanitizeProviderForSync(it) }),
         )
     }
 
@@ -129,7 +138,150 @@ object SyncableSettings {
             SELECT_ASSISTANT -> settings.copy(
                 assistantId = value.asUuidOrNull() ?: settings.assistantId
             )
+            PROVIDERS -> {
+                val remote = runCatching {
+                    fromJson<List<ProviderSetting>>(value)
+                }.getOrElse { return settings }
+                val merged = mergeRemoteProviders(local = settings.providers, remote = remote)
+                val rebound = rebindProviderCredentials(merged, settings)
+                settings.copy(providers = rebound)
+            }
             else -> settings
+        }
+    }
+
+    /**
+     * Strip device-local Perry tokens before upload. Upstream API keys for
+     * non-Perry providers are kept so multi-device personal use works.
+     */
+    fun sanitizeProviderForSync(provider: ProviderSetting): ProviderSetting {
+        return when (provider) {
+            is ProviderSetting.OpenAI -> {
+                val models = provider.models.map { sanitizeModelForSync(it) }
+                if (PerryCatalog.isPerryGateway(provider)) {
+                    provider.copy(apiKey = "", models = models)
+                } else {
+                    provider.copy(models = models)
+                }
+            }
+            is ProviderSetting.Google -> provider.copy(
+                models = provider.models.map { sanitizeModelForSync(it) },
+            )
+            is ProviderSetting.Claude -> provider.copy(
+                models = provider.models.map { sanitizeModelForSync(it) },
+            )
+        }
+    }
+
+    fun sanitizeModelForSync(model: Model): Model {
+        val overwrite = model.providerOverwrite ?: return model
+        return model.copy(providerOverwrite = sanitizeProviderForSync(overwrite))
+    }
+
+    /**
+     * Server list is authoritative by provider id order from remote.
+     * Preserve local secrets when remote value is blank (e.g. Perry token stripped).
+     */
+    fun mergeRemoteProviders(
+        local: List<ProviderSetting>,
+        remote: List<ProviderSetting>,
+    ): List<ProviderSetting> {
+        val localById = local.associateBy { it.id }
+        return remote.map { remoteProvider ->
+            val localProvider = localById[remoteProvider.id]
+            preserveLocalSecrets(remoteProvider, localProvider)
+        }
+    }
+
+    fun preserveLocalSecrets(
+        remote: ProviderSetting,
+        local: ProviderSetting?,
+    ): ProviderSetting {
+        return when (remote) {
+            is ProviderSetting.OpenAI -> {
+                val localOpen = local as? ProviderSetting.OpenAI
+                if (PerryCatalog.isPerryGateway(remote)) {
+                    // Token always rebound later; keep empty or local until rebind.
+                    remote.copy(
+                        apiKey = localOpen?.apiKey.orEmpty().ifBlank { remote.apiKey },
+                        models = remote.models.map { m ->
+                            m.copy(
+                                providerOverwrite = m.providerOverwrite?.let { ow ->
+                                    preserveLocalSecrets(ow, null)
+                                },
+                            )
+                        },
+                    )
+                } else {
+                    remote.copy(
+                        apiKey = remote.apiKey.ifBlank { localOpen?.apiKey.orEmpty() },
+                        models = remote.models.map { m ->
+                            m.copy(
+                                providerOverwrite = m.providerOverwrite?.let { ow ->
+                                    preserveLocalSecrets(ow, null)
+                                },
+                            )
+                        },
+                    )
+                }
+            }
+            is ProviderSetting.Google -> {
+                val localG = local as? ProviderSetting.Google
+                remote.copy(
+                    apiKey = remote.apiKey.ifBlank { localG?.apiKey.orEmpty() },
+                    privateKey = remote.privateKey.ifBlank { localG?.privateKey.orEmpty() },
+                    models = remote.models.map { m ->
+                        m.copy(
+                            providerOverwrite = m.providerOverwrite?.let { ow ->
+                                preserveLocalSecrets(ow, null)
+                            },
+                        )
+                    },
+                )
+            }
+            is ProviderSetting.Claude -> {
+                val localC = local as? ProviderSetting.Claude
+                remote.copy(
+                    apiKey = remote.apiKey.ifBlank { localC?.apiKey.orEmpty() },
+                    models = remote.models.map { m ->
+                        m.copy(
+                            providerOverwrite = m.providerOverwrite?.let { ow ->
+                                preserveLocalSecrets(ow, null)
+                            },
+                        )
+                    },
+                )
+            }
+        }
+    }
+
+    /** Rebind Perry gateways to this device's token and Perry host. */
+    fun rebindProviderCredentials(
+        providers: List<ProviderSetting>,
+        settings: Settings,
+    ): List<ProviderSetting> {
+        val token = settings.perryDeviceToken
+        val perryBase = runCatching {
+            if (settings.perryConfig.isConfigured()) settings.perryConfig.normalizedBaseUrl() else null
+        }.getOrNull()
+        return providers.map { provider ->
+            when (provider) {
+                is ProviderSetting.OpenAI -> {
+                    if (!PerryCatalog.isPerryGateway(provider)) return@map provider
+                    val monelId = PerryCatalog.monelProviderIdFromBaseUrl(provider.baseUrl)
+                    val baseUrl = if (perryBase != null && monelId != null) {
+                        PerryApiClient.join(perryBase, "/v1/ai/$monelId/v1")
+                    } else {
+                        provider.baseUrl
+                    }
+                    provider.copy(
+                        baseUrl = baseUrl,
+                        apiKey = token.ifBlank { provider.apiKey },
+                        useResponseApi = false,
+                    )
+                }
+                else -> provider
+            }
         }
     }
 
