@@ -29,8 +29,8 @@ internal class VoiceSessionResourceCleaner(
         isAutomaticReconnectCurrentUnderCleanupLock: () -> Boolean = { true },
     ): Boolean {
         if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false
-        detachHermesBridge()
         prepare()
+        detachHermesBridge()
         if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false
         invalidateAudioSessions()
         if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false

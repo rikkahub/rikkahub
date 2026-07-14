@@ -137,6 +137,7 @@ class VoiceAgentCoordinator(
     private var hermesQueueStatusProjectionJob: Job? = null
     private var activeSessionId = 0L
     private var acceptsUnscopedGeminiEvents = true
+    private var interruptedResponseSessionId: Long? = null
     private val cancelledToolCallIds = mutableSetOf<ToolCallKey>()
     private var closing = false
     private var closed = false
@@ -227,6 +228,7 @@ class VoiceAgentCoordinator(
     fun nextSessionId(): Long = synchronized(toolJobsLock) {
         activeSessionId += 1
         acceptsUnscopedGeminiEvents = true
+        interruptedResponseSessionId = null
         activeSessionId
     }
 
@@ -235,6 +237,7 @@ class VoiceAgentCoordinator(
             val retiredSessionId = activeSessionId
             activeSessionId += 1
             acceptsUnscopedGeminiEvents = false
+            interruptedResponseSessionId = null
             // Posted while holding the same ownership lock used by scoped activity and
             // TurnComplete. This gives retirement a total order with in-flight callbacks:
             // an old event is either posted before this reset or rejected after it.
@@ -314,7 +317,7 @@ class VoiceAgentCoordinator(
                 handleTurnComplete(sessionId)
             }
             is GeminiLiveEvent.OutputAudio -> playOutputAudio(event.base64Pcm16, sessionId = sessionId)
-            is GeminiLiveEvent.Interrupted -> handleInterrupted(event)
+            is GeminiLiveEvent.Interrupted -> handleInterrupted(event, sessionId)
             is GeminiLiveEvent.SessionResumptionUpdate -> diagnostics.record(
                 name = "session_resumption_update",
                 detail = "resumable=${event.resumable}, newHandle=${event.newHandle.orEmpty()}",
@@ -539,7 +542,22 @@ class VoiceAgentCoordinator(
         }
     }
 
-    private fun handleInterrupted(event: GeminiLiveEvent.Interrupted) {
+    private fun handleInterrupted(event: GeminiLiveEvent.Interrupted, sessionId: Long?) {
+        val marked = synchronized(toolJobsLock) {
+            val ownsTurn = if (sessionId == null) {
+                acceptsUnscopedGeminiEvents && !closed && !closing
+            } else {
+                activeSessionId == sessionId && !closed && !closing
+            }
+            if (ownsTurn) {
+                interruptedResponseSessionId = sessionId ?: activeSessionId
+            }
+            ownsTurn
+        }
+        if (!marked) {
+            diagnostics.record("stale_gemini_event", event.javaClass.simpleName)
+            return
+        }
         diagnostics.record("gemini_interrupted", event.reason)
         suppressionController.markInterruptedByGemini()
         suppressPlayback()
@@ -657,6 +675,7 @@ class VoiceAgentCoordinator(
 
     private fun handleTurnComplete(sessionId: Long?) {
         val playbackAccepted = audio.markPlaybackTurnComplete(sessionId)
+        var interruptedBoundaryConsumed = false
         val turnAccepted = synchronized(toolJobsLock) {
             val ownsTurn = if (sessionId == null) {
                 acceptsUnscopedGeminiEvents && !closed && !closing
@@ -664,9 +683,21 @@ class VoiceAgentCoordinator(
                 playbackAccepted && activeSessionId == sessionId && !closed && !closing
             }
             if (ownsTurn) {
-                hermesJobManager.announcer.onGeminiTurnComplete()
+                val responseSessionId = sessionId ?: activeSessionId
+                if (interruptedResponseSessionId == responseSessionId) {
+                    interruptedResponseSessionId = null
+                    interruptedBoundaryConsumed = true
+                } else {
+                    hermesJobManager.announcer.onGeminiTurnComplete()
+                }
             }
             ownsTurn
+        }
+        if (interruptedBoundaryConsumed) {
+            diagnostics.record(
+                name = "gemini_interrupted_turn_complete_consumed",
+                detail = "sessionId=${sessionId ?: "none"}",
+            )
         }
         if (!turnAccepted) {
             diagnostics.record(

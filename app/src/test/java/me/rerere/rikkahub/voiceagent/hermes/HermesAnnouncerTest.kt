@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -196,6 +197,56 @@ class HermesAnnouncerTest {
         assertEquals(listOf("call-run"), bridge.stillWorking)
         assertTrue(store.latestRecord(callId = "call-run", jobId = "job-run")!!.stillWorkingAnnounced)
         assertTrue(diagnostics.any { it.first == "hermes_still_working_announced" })
+    }
+
+    @Test
+    fun `retirement revokes every proactive send waiting to enter the bridge`() = runTest {
+        ProactiveSendKind.entries.forEach { kind ->
+            val selected = CompletableDeferred<Unit>()
+            val releaseEntry = CompletableDeferred<Unit>()
+            val conversation = when (kind) {
+                ProactiveSendKind.Completion ->
+                    emptyConversation().withComplete("call-admission", "job-admission", "answer")
+                ProactiveSendKind.Terminal ->
+                    emptyConversation().withFailed("call-admission", "job-admission", "failed")
+                ProactiveSendKind.Progress ->
+                    emptyConversation().withRunning("call-admission", "job-admission")
+            }
+            val store = store(conversation)
+            val bridge = RecordingBridge()
+            val announcer = announcer(
+                queueStore = store,
+                beforeAnnouncementAdmission = {
+                    selected.complete(Unit)
+                    releaseEntry.await()
+                },
+            )
+
+            announcer.onGeminiTurnActive()
+            announcer.attachScoped(bridge, sessionId = 7L)
+            if (kind == ProactiveSendKind.Progress) {
+                announcer.enqueueStillWorking("call-admission", "job-admission")
+            }
+            runCurrent()
+
+            announcer.onGeminiTurnComplete()
+            runCurrent()
+            selected.await()
+
+            announcer.onGeminiSessionRetired()
+            releaseEntry.complete(Unit)
+            runCurrent()
+
+            assertTrue("$kind entered the retired bridge", bridge.completions.isEmpty())
+            assertTrue("$kind entered the retired bridge", bridge.terminals.isEmpty())
+            assertTrue("$kind entered the retired bridge", bridge.stillWorking.isEmpty())
+            val record = requireNotNull(store.latestRecord("call-admission", "job-admission"))
+            if (kind == ProactiveSendKind.Progress) {
+                assertFalse(record.stillWorkingAnnounced)
+            } else {
+                assertTrue(record.messageWritten)
+            }
+        }
     }
 
     @Test
@@ -739,6 +790,7 @@ class HermesAnnouncerTest {
         bridgeSendTimeoutMs: Long = HermesAnnouncer.DEFAULT_BRIDGE_SEND_TIMEOUT_MS,
         quietWindowMs: Long = 0L,
         blockedWatchdogMs: Long = HermesAnnouncer.DEFAULT_BLOCKED_WATCHDOG_MS,
+        beforeAnnouncementAdmission: suspend () -> Unit = {},
     ): HermesAnnouncer = HermesAnnouncer(
         scope = backgroundScope,
         dispatcher = StandardTestDispatcher(testScheduler),
@@ -749,7 +801,10 @@ class HermesAnnouncerTest {
         quietWindowMs = quietWindowMs,
         blockedWatchdogMs = blockedWatchdogMs,
         nowMs = { testScheduler.currentTime },
+        beforeAnnouncementAdmission = beforeAnnouncementAdmission,
     )
+
+    private enum class ProactiveSendKind { Completion, Terminal, Progress }
 
     /** A conversation store whose [update] suspends (yields) first, like the production store. */
     private class YieldingStore(

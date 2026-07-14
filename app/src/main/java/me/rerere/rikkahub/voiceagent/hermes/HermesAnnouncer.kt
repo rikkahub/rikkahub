@@ -4,7 +4,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -47,6 +49,7 @@ class HermesAnnouncer(
     quietWindowMs: Long = DEFAULT_QUIET_WINDOW_MS,
     blockedWatchdogMs: Long = DEFAULT_BLOCKED_WATCHDOG_MS,
     private val nowMs: () -> Long = System::currentTimeMillis,
+    private val beforeAnnouncementAdmission: suspend () -> Unit = {},
 ) {
     private val reducer = AnnouncerReducer(
         quietWindowMs = quietWindowMs,
@@ -202,8 +205,9 @@ class HermesAnnouncer(
             this.attachment?.sessionId == attachment.sessionId
     }
 
-    private fun isCurrentForAnnouncement(attachment: HermesBridgeAttachment): Boolean = synchronized(lock) {
-        attachment.announcementsActive &&
+    private fun isCurrentForAnnouncementLocked(attachment: HermesBridgeAttachment): Boolean {
+        check(Thread.holdsLock(lock))
+        return attachment.announcementsActive &&
             attachment.active &&
             this.attachment?.bridge === attachment.bridge &&
             this.attachment?.sessionId == attachment.sessionId
@@ -366,21 +370,18 @@ class HermesAnnouncer(
         if (record?.status != HermesQueueStatus.Complete || record.resultAnnounced || record.answer == null) {
             return AnnouncementSendOutcome.Skipped
         }
-        if (!isCurrentForAnnouncement(current)) return AnnouncementSendOutcome.AttachmentInvalidated
-        val sent = try {
-            withTimeoutOrNull(bridgeSendTimeoutMs) {
-                current.bridge.sendCompletionFollowUp(
-                    callId = intent.callId,
-                    prompt = record.prompt,
-                    answer = requireNotNull(record.answer),
-                    sessionId = current.sessionId,
-                )
-            } ?: false
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Throwable) {
-            false
+        val admission = enterAnnouncementBridge(current) {
+            current.bridge.sendCompletionFollowUp(
+                callId = intent.callId,
+                prompt = record.prompt,
+                answer = requireNotNull(record.answer),
+                sessionId = current.sessionId,
+            )
         }
+        if (admission is AnnouncementBridgeAdmission.Invalidated) {
+            return AnnouncementSendOutcome.AttachmentInvalidated
+        }
+        val sent = (admission as AnnouncementBridgeAdmission.Entered).sent
         return if (sent) {
             // The RPC succeeded: the outcome is Sent no matter what the bookkeeping does.
             // A failed mark leaves the record unannounced -> bounded re-send on the next
@@ -421,22 +422,19 @@ class HermesAnnouncer(
         ) {
             return AnnouncementSendOutcome.Skipped
         }
-        if (!isCurrentForAnnouncement(current)) return AnnouncementSendOutcome.AttachmentInvalidated
-        val sent = try {
-            withTimeoutOrNull(bridgeSendTimeoutMs) {
-                current.bridge.sendTerminalFollowUp(
-                    callId = intent.callId,
-                    prompt = record.prompt,
-                    status = record.status,
-                    reason = record.error.orEmpty(),
-                    sessionId = current.sessionId,
-                )
-            } ?: false
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Throwable) {
-            false
+        val admission = enterAnnouncementBridge(current) {
+            current.bridge.sendTerminalFollowUp(
+                callId = intent.callId,
+                prompt = record.prompt,
+                status = record.status,
+                reason = record.error.orEmpty(),
+                sessionId = current.sessionId,
+            )
         }
+        if (admission is AnnouncementBridgeAdmission.Invalidated) {
+            return AnnouncementSendOutcome.AttachmentInvalidated
+        }
+        val sent = (admission as AnnouncementBridgeAdmission.Entered).sent
         return if (sent) {
             // The RPC succeeded: the outcome is Sent no matter what the bookkeeping does.
             try {
@@ -468,20 +466,17 @@ class HermesAnnouncer(
         ) {
             return AnnouncementSendOutcome.Skipped
         }
-        if (!isCurrentForAnnouncement(current)) return AnnouncementSendOutcome.AttachmentInvalidated
-        val sent = try {
-            withTimeoutOrNull(bridgeSendTimeoutMs) {
-                current.bridge.sendStillWorkingUpdate(
-                    callId = intent.callId,
-                    prompt = record.prompt,
-                    sessionId = current.sessionId,
-                )
-            } ?: false
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Throwable) {
-            false
+        val admission = enterAnnouncementBridge(current) {
+            current.bridge.sendStillWorkingUpdate(
+                callId = intent.callId,
+                prompt = record.prompt,
+                sessionId = current.sessionId,
+            )
         }
+        if (admission is AnnouncementBridgeAdmission.Invalidated) {
+            return AnnouncementSendOutcome.AttachmentInvalidated
+        }
+        val sent = (admission as AnnouncementBridgeAdmission.Entered).sent
         return if (sent) {
             // The RPC succeeded: the outcome is Sent no matter what the bookkeeping does.
             try {
@@ -503,6 +498,39 @@ class HermesAnnouncer(
         } else {
             AnnouncementSendOutcome.Failed
         }
+    }
+
+    /**
+     * Atomically defines proactive bridge entry against session retirement. The undispatched
+     * child enters the bridge method while [lock] is still held. Once that method suspends or
+     * returns, retirement may proceed; that call was admitted before retirement and may finish.
+     * A call still outside this boundary observes revocation and never enters the bridge.
+     */
+    private suspend fun enterAnnouncementBridge(
+        current: HermesBridgeAttachment,
+        send: suspend () -> Boolean,
+    ): AnnouncementBridgeAdmission {
+        beforeAnnouncementAdmission()
+        return try {
+            withTimeoutOrNull(bridgeSendTimeoutMs) {
+                val entered = synchronized(lock) {
+                    if (!isCurrentForAnnouncementLocked(current)) {
+                        return@withTimeoutOrNull AnnouncementBridgeAdmission.Invalidated
+                    }
+                    async(start = CoroutineStart.UNDISPATCHED) { send() }
+                }
+                AnnouncementBridgeAdmission.Entered(entered.await())
+            } ?: AnnouncementBridgeAdmission.Entered(sent = false)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            AnnouncementBridgeAdmission.Entered(sent = false)
+        }
+    }
+
+    private sealed interface AnnouncementBridgeAdmission {
+        data object Invalidated : AnnouncementBridgeAdmission
+        data class Entered(val sent: Boolean) : AnnouncementBridgeAdmission
     }
 
     companion object {
