@@ -53,6 +53,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         audioAttributes = ::voiceAudioAttributes,
         onAssistantPlaybackError = ::notifyAudioError,
     )
+    private val playbackEventOwner = VoicePlaybackEventOwner()
     private val playbackWriter = VoicePlaybackWriter(
         scope = scope,
         createSink = playbackTracks::createAssistantSinkOrNull,
@@ -74,7 +75,6 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     private var hasAudioFocus = false
     private var captureGeneration = 0L
     private var errorHandler: ((String) -> Unit)? = null
-    private var playbackEventHandler: ((VoicePlaybackEvent) -> Unit)? = null
     private var released = false
     private val bluetoothProfileListener = object : BluetoothProfile.ServiceListener {
         override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
@@ -108,9 +108,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     }
 
     override fun setPlaybackEventHandler(onEvent: ((VoicePlaybackEvent) -> Unit)?) {
-        synchronized(lock) {
-            playbackEventHandler = onEvent
-        }
+        playbackEventOwner.setHandler(onEvent)
     }
 
     override fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) {
@@ -283,7 +281,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     }
 
     override fun markPlaybackTurnComplete(sessionId: Long?): Boolean =
-        playbackWriter.markTurnComplete(sessionId)
+        playbackEventOwner.markTurnComplete(sessionId, playbackWriter::markTurnComplete)
 
     override fun invalidatePlaybackSession() {
         playbackWriter.invalidateSession()
@@ -311,10 +309,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         playbackTracks.markReleased()
         job?.cancel()
         recorder?.let(::stopAndReleaseRecorder)
-        playbackWriter.release()
-        synchronized(lock) {
-            playbackEventHandler = null
-        }
+        playbackEventOwner.releasePlayback(playbackWriter::release)
         playbackTracks.releaseAll()
         clearVoiceCommunicationRoutingBestEffort()
         closeBluetoothHeadsetProxy()
@@ -758,8 +753,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             is VoicePlaybackEvent.Drained ->
                 Log.d(TAG, "Voice playback drained: generation=${event.generation}")
         }
-        val handler = synchronized(lock) { playbackEventHandler }
-        handler?.invoke(event)
+        playbackEventOwner.notify(event)
     }
 
     private fun logCaptureLevelIfNeeded(chunk: Int, pcm16: ByteArray) {

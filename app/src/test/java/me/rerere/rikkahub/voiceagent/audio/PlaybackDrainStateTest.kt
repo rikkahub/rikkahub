@@ -84,4 +84,30 @@ class PlaybackDrainStateTest {
             state.awaitDrained(),
         )
     }
+
+    @Test
+    fun `fails when current playback head makes no progress for bounded interval`() {
+        var nowNanos = 0L
+        var pollCalls = 0
+        val state = PlaybackDrainState(
+            readPlaybackHead = { 100 },
+            isInterrupted = { false },
+            isPlaybackTrackCurrent = { true },
+            poll = {
+                pollCalls += 1
+                nowNanos = 10_000L
+            },
+            monotonicTimeNanos = { nowNanos },
+            noProgressTimeoutNanos = 10_000L,
+        )
+
+        state.onStarted()
+        state.onBytesWritten(2)
+
+        assertEquals(
+            VoicePcm16Sink.DrainResult.Failed("Playback head stalled"),
+            state.awaitDrained(),
+        )
+        assertEquals(1, pollCalls)
+    }
 }

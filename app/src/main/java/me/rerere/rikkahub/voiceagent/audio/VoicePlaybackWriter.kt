@@ -81,7 +81,6 @@ internal class VoicePlaybackWriter(
                 val command = PlaybackCommand.Play(
                     pcm16 = pcm16,
                     writerGeneration = generation,
-                    playbackEpoch = playbackEpoch,
                 )
                 if (!commands.trySend(command).isSuccess) {
                     if (existingEpoch == null) {
@@ -93,7 +92,7 @@ internal class VoicePlaybackWriter(
                     if (existingEpoch == null) {
                         onPlaybackEvent(VoicePlaybackEvent.Active(playbackEpoch))
                     }
-                    EnqueuedPlay(command = command, activatedEpoch = if (existingEpoch == null) playbackEpoch else null)
+                    command
                 }
             }
         }
@@ -114,7 +113,7 @@ internal class VoicePlaybackWriter(
         onDiagnostic(
             VoicePlaybackDiagnostic.ChunkQueued(
                 bytes = pcm16.size,
-                generation = enqueued.command.writerGeneration,
+                generation = enqueued.writerGeneration,
             ),
         )
         return true
@@ -387,7 +386,6 @@ internal class VoicePlaybackWriter(
         data class Play(
             val pcm16: ByteArray,
             val writerGeneration: Long,
-            val playbackEpoch: Long,
         ) : PlaybackCommand
 
         data class Drain(
@@ -395,11 +393,6 @@ internal class VoicePlaybackWriter(
             val playbackEpoch: Long,
         ) : PlaybackCommand
     }
-
-    private data class EnqueuedPlay(
-        val command: PlaybackCommand.Play,
-        val activatedEpoch: Long?,
-    )
 
     private data class Retirement(
         val writerGeneration: Long,

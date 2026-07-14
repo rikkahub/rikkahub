@@ -91,6 +91,26 @@ class VoicePcm16SinkLifecycleTest {
     }
 
     @Test
+    fun `createStarted retains sink when start and both retirement routes fail`() {
+        val sink = FakeVoicePcm16Sink(
+            startResult = VoicePcm16Sink.StartResult.Failed("play failed"),
+            pauseException = IllegalStateException("flush failed"),
+            releaseException = IllegalStateException("release failed"),
+        )
+
+        val outcome = VoicePcm16SinkLifecycle.createStarted(
+            createSink = { sink },
+            nullSinkMessage = "sink missing",
+        )
+
+        val failed = outcome as VoicePcm16SinkLifecycle.StartOutcome.Failed
+        assertEquals("play failed", failed.message)
+        assertSame(sink, failed.sinkRequiringRetirement)
+        assertEquals(1, sink.pauseAndFlushCalls)
+        assertEquals(1, sink.stopAndReleaseCalls)
+    }
+
+    @Test
     fun `writeFully maps written result`() {
         val sink = FakeVoicePcm16Sink()
 
