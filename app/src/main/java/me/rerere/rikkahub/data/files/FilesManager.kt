@@ -323,13 +323,21 @@ class FilesManager(
         }
     }
 
-    suspend fun syncFolder(folder: String = FileFolders.UPLOAD): Int = withContext(Dispatchers.IO) {
+    suspend fun syncFolder(folder: String = FileFolders.UPLOAD): SyncResult = withContext(Dispatchers.IO) {
         val dir = File(context.filesDir, folder)
-        if (!dir.exists()) return@withContext 0
-        val files = dir.listFiles()?.filter { it.isFile } ?: return@withContext 0
+        val diskFiles = if (dir.exists()) {
+            dir.listFiles()?.filter { it.isFile }
+                ?: return@withContext SyncResult(inserted = 0, removed = 0)
+        } else {
+            emptyList()
+        }
+
+        // 磁盘 -> 数据库：补录尚未登记的文件
         var inserted = 0
-        files.forEach { file ->
+        val diskRelativePaths = HashSet<String>()
+        diskFiles.forEach { file ->
             val relativePath = "${folder}/${file.name}"
+            diskRelativePaths.add(relativePath)
             val existing = repository.getByPath(relativePath)
             if (existing == null) {
                 val now = System.currentTimeMillis()
@@ -349,7 +357,16 @@ class FilesManager(
                 inserted += 1
             }
         }
-        inserted
+
+        // 数据库 -> 磁盘：清理文件已不存在的孤儿记录
+        var removed = 0
+        repository.listByFolder(folder).first().forEach { entity ->
+            if (entity.relativePath !in diskRelativePaths && !getFile(entity).isFile) {
+                removed += repository.deleteByPath(entity.relativePath)
+            }
+        }
+
+        SyncResult(inserted = inserted, removed = removed)
     }
 
     suspend fun delete(id: Long, deleteFromDisk: Boolean = true): Boolean = withContext(Dispatchers.IO) {
@@ -436,6 +453,11 @@ class FilesManager(
     private fun guessMimeType(file: File, fileName: String): String =
         FileUtils.guessMimeType(file, fileName)
 }
+
+data class SyncResult(
+    val inserted: Int,
+    val removed: Int,
+)
 
 object FileFolders {
     const val UPLOAD = "upload"
