@@ -4,7 +4,7 @@ import me.rerere.rikkahub.voiceagent.hermesCompletionFollowUpText
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.voiceTextPayload
-import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesJobStatus
 
 private val HermesJobStatus.wireName: String
     get() = when (this) {
@@ -38,7 +38,7 @@ class HermesJobTelemetry(
 
     fun jobSubmitted(callId: String, prompt: String) {
         recordEventSafely(
-            name = "voicelab.mobile.hermes_tool.submitted",
+            name = "hermes_voice.mobile.hermes_tool.submitted",
             attributes = mapOf(
                 "callId" to callId,
                 "gemini.tool_call.call_id" to callId,
@@ -56,7 +56,7 @@ class HermesJobTelemetry(
     fun jobCompleted(completion: HermesJobCompletion) {
         runCatching { onJobCompleted(completion) }
         recordEventSafely(
-            name = "voicelab.mobile.hermes_tool.completed",
+            name = "hermes_voice.mobile.hermes_tool.completed",
             attributes = mapOf(
                 "callId" to completion.callId,
                 "jobId" to completion.jobId,
@@ -89,7 +89,7 @@ class HermesJobTelemetry(
 
     fun jobFailed(callId: String, jobId: String?, statusWire: String, message: String) {
         recordEventSafely(
-            name = "voicelab.mobile.hermes_tool.failed",
+            name = "hermes_voice.mobile.hermes_tool.failed",
             attributes = mapOf(
                 "callId" to callId,
                 "jobId" to jobId,
@@ -116,7 +116,7 @@ class HermesJobTelemetry(
 
     fun followUpSent(callId: String, jobId: String?, prompt: String, answer: String) {
         recordEventSafely(
-            name = "voicelab.mobile.gemini.followup_sent",
+            name = "hermes_voice.mobile.gemini.followup_sent",
             attributes = mapOf(
                 "callId" to callId,
                 "jobId" to jobId,

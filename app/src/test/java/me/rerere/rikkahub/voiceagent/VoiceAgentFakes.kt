@@ -15,15 +15,15 @@ import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.gemini.voiceToolSpecsByName
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
-import me.rerere.rikkahub.voiceagent.voicelab.HermesJobSnapshot
-import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
-import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
-import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobSubmitResponse
-import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
-import me.rerere.rikkahub.voiceagent.voicelab.MobileVoiceSessionResponse
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailure
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureKind
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureSource
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesJobSnapshot
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesJobStatus
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesJobPollResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesJobSubmitResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileVoiceSessionResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.VoiceFailure
+import me.rerere.rikkahub.voiceagent.hermesvoice.VoiceFailureKind
+import me.rerere.rikkahub.voiceagent.hermesvoice.VoiceFailureSource
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
@@ -71,7 +71,7 @@ internal fun hermesFailureFixture(
     safeMessage = message,
     safeSummary = message,
     retryable = false,
-    source = VoiceFailureSource.VoiceLab,
+    source = VoiceFailureSource.HermesVoice,
 )
 
 class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {

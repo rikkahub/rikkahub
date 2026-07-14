@@ -48,7 +48,7 @@ internal class VoiceTranscriptTurnTracker(
         val turnId = inputTurnId
         recordDiagnostic("input_transcript_delta", "turnId=$turnId, chars=${text.length}")
         recordEvent(
-            "voicelab.mobile.transcript.input_delta",
+            "hermes_voice.mobile.transcript.input_delta",
             mapOf("turnId" to turnId) + voiceTextMetadata(key = "text", text = text),
         )
         persistUserLocked(transcript = transcript, turnId = turnId, status = VoiceTranscriptStatus.Partial)
@@ -66,7 +66,7 @@ internal class VoiceTranscriptTurnTracker(
         val transcript = outputTurnTranscript
         recordDiagnostic("output_transcript_delta", "turnId=$outputTurnId, chars=${text.length}")
         recordEvent(
-            "voicelab.mobile.transcript.output_delta",
+            "hermes_voice.mobile.transcript.output_delta",
             mapOf("turnId" to outputTurnId) + voiceTextMetadata(key = "text", text = text),
         )
         persistAssistantLocked(suppressed = suppressed)
@@ -139,7 +139,7 @@ internal class VoiceTranscriptTurnTracker(
             },
             {
                 recordFinalTranscriptEventsOnce(
-                    finalEventName = "voicelab.mobile.transcript.user_final",
+                    finalEventName = "hermes_voice.mobile.transcript.user_final",
                     turnId = turnId,
                     speaker = "user",
                     status = status,
@@ -176,7 +176,7 @@ internal class VoiceTranscriptTurnTracker(
             },
             {
                 recordFinalTranscriptEventsOnce(
-                    finalEventName = "voicelab.mobile.transcript.assistant_final",
+                    finalEventName = "hermes_voice.mobile.transcript.assistant_final",
                     turnId = turnId,
                     speaker = "assistant",
                     status = status,
@@ -209,7 +209,7 @@ internal class VoiceTranscriptTurnTracker(
             "status" to status.statusName,
         ) + voiceTextPayload(key = textKey, text = text)
         recordEvent(finalEventName, attributes)
-        recordEvent("voicelab.mobile.transcript.turn", attributes)
+        recordEvent("hermes_voice.mobile.transcript.turn", attributes)
     }
 
     private fun nextTurnId(speaker: TranscriptSpeaker): String {

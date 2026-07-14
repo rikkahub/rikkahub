@@ -43,8 +43,6 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "VOICE_AGENT_BASE_URL_OVERRIDE", localStringProperty("voiceAgentBaseUrlOverride", "VOICE_AGENT_BASE_URL_OVERRIDE"))
-        buildConfigField("String", "VOICE_AGENT_CF_ACCESS_CLIENT_ID", localStringProperty("voiceAgentCloudflareClientId", "CF_ACCESS_CLIENT_ID"))
-        buildConfigField("String", "VOICE_AGENT_CF_ACCESS_CLIENT_SECRET", localStringProperty("voiceAgentCloudflareClientSecret", "CF_ACCESS_CLIENT_SECRET"))
         buildConfigField("String", "VOICE_AGENT_HERMES_E2E_EXPECTED_HASH", "\"\"")
         buildConfigField("String", "VOICE_AGENT_SENTRY_DSN", localStringProperty("voiceAgentSentryDsn", "VOICE_AGENT_SENTRY_DSN"))
         buildConfigField("String", "VOICE_AGENT_SENTRY_ENVIRONMENT", localStringProperty("voiceAgentSentryEnvironment", "VOICE_AGENT_SENTRY_ENVIRONMENT"))

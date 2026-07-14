@@ -109,7 +109,7 @@ class VoiceAgentCallSessionTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.session.ended" }
+                .filter { it.name == "hermes_voice.mobile.session.ended" }
                 .map { it.attributes },
         )
     }
@@ -150,7 +150,7 @@ class VoiceAgentCallSessionTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.transcript.input_delta" }
+                .filter { it.name == "hermes_voice.mobile.transcript.input_delta" }
                 .map { it.attributes },
         )
         assertEquals(
@@ -161,7 +161,7 @@ class VoiceAgentCallSessionTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.transcript.output_delta" }
+                .filter { it.name == "hermes_voice.mobile.transcript.output_delta" }
                 .map { it.attributes },
         )
         assertEquals(
@@ -177,7 +177,7 @@ class VoiceAgentCallSessionTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.transcript.user_final" }
+                .filter { it.name == "hermes_voice.mobile.transcript.user_final" }
                 .map { it.attributes },
         )
         assertEquals(
@@ -193,7 +193,7 @@ class VoiceAgentCallSessionTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.transcript.assistant_final" }
+                .filter { it.name == "hermes_voice.mobile.transcript.assistant_final" }
                 .map { it.attributes },
         )
         val expectedTranscriptTurns = listOf(
@@ -219,19 +219,19 @@ class VoiceAgentCallSessionTest {
         assertEquals(
             expectedTranscriptTurns.sortedBy { it["turnId"].toString() },
             observability.events
-                .filter { it.name == "voicelab.mobile.transcript.turn" }
+                .filter { it.name == "hermes_voice.mobile.transcript.turn" }
                 .map { it.attributes }
                 .sortedBy { it["turnId"].toString() },
         )
         assertTrue(
             observability.events
-                .filter { it.name.startsWith("voicelab.mobile.transcript.") }
+                .filter { it.name.startsWith("hermes_voice.mobile.transcript.") }
                 .all { it.trace == trace }
         )
         val transcriptTelemetry = observability.events
             .filter {
-                it.name == "voicelab.mobile.transcript.input_delta" ||
-                    it.name == "voicelab.mobile.transcript.output_delta"
+                it.name == "hermes_voice.mobile.transcript.input_delta" ||
+                    it.name == "hermes_voice.mobile.transcript.output_delta"
             }
             .joinToString(separator = "\n") { it.attributes.toString() }
         assertFalse(transcriptTelemetry.contains("hello user"))
@@ -283,14 +283,14 @@ class VoiceAgentCallSessionTest {
         assertEquals(
             expected,
             observability.events
-                .filter { it.name == "voicelab.mobile.transcript.assistant_final" }
+                .filter { it.name == "hermes_voice.mobile.transcript.assistant_final" }
                 .map { it.attributes },
         )
         assertEquals(
             expected,
             observability.events
                 .filter {
-                    it.name == "voicelab.mobile.transcript.turn" &&
+                    it.name == "hermes_voice.mobile.transcript.turn" &&
                         it.attributes["speaker"] == "assistant"
                 }
                 .map { it.attributes },
@@ -322,7 +322,7 @@ class VoiceAgentCallSessionTest {
         session.endAndDrain()
 
         val assistantFinal = observability.events
-            .filter { it.name == "voicelab.mobile.transcript.assistant_final" }
+            .filter { it.name == "hermes_voice.mobile.transcript.assistant_final" }
             .map { it.attributes }
         assertEquals(
             listOf(
@@ -367,11 +367,11 @@ class VoiceAgentCallSessionTest {
         session.endAndDrain()
 
         val assistantFinal = observability.events
-            .filter { it.name == "voicelab.mobile.transcript.assistant_final" }
+            .filter { it.name == "hermes_voice.mobile.transcript.assistant_final" }
             .map { it.attributes }
         val assistantTurns = observability.events
             .filter { event ->
-                event.name == "voicelab.mobile.transcript.turn" &&
+                event.name == "hermes_voice.mobile.transcript.turn" &&
                     event.attributes["speaker"] == "assistant"
             }
             .map { it.attributes }
@@ -423,8 +423,8 @@ class VoiceAgentCallSessionTest {
             emptyList<Map<String, Any?>>(),
             observability.events
                 .filter {
-                    it.name == "voicelab.mobile.transcript.assistant_final" ||
-                        it.name == "voicelab.mobile.transcript.turn"
+                    it.name == "hermes_voice.mobile.transcript.assistant_final" ||
+                        it.name == "hermes_voice.mobile.transcript.turn"
                 }
                 .map { it.attributes },
         )
@@ -518,19 +518,19 @@ class VoiceAgentCallSessionTest {
                 mapOf("sessionId" to 1L, "audio.muted" to false),
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.audio.capture_started" }
+                .filter { it.name == "hermes_voice.mobile.audio.capture_started" }
                 .map { it.attributes },
         )
         assertEquals(
             listOf(mapOf("sessionId" to 1L)),
             observability.events
-                .filter { it.name == "voicelab.mobile.audio.capture_muted" }
+                .filter { it.name == "hermes_voice.mobile.audio.capture_muted" }
                 .map { it.attributes },
         )
         assertEquals(
             listOf(mapOf("sessionId" to 1L)),
             observability.events
-                .filter { it.name == "voicelab.mobile.audio.capture_unmuted" }
+                .filter { it.name == "hermes_voice.mobile.audio.capture_unmuted" }
                 .map { it.attributes },
         )
     }
@@ -573,7 +573,7 @@ class VoiceAgentCallSessionTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.session.failed" }
+                .filter { it.name == "hermes_voice.mobile.session.failed" }
                 .map { it.attributes },
         )
     }
@@ -600,7 +600,7 @@ class VoiceAgentCallSessionTest {
 
         session.start()
         withTimeout(500) {
-            while (observability.events.none { it.name == "voicelab.mobile.session.failed" }) {
+            while (observability.events.none { it.name == "hermes_voice.mobile.session.failed" }) {
                 delay(10)
             }
         }
@@ -616,7 +616,7 @@ class VoiceAgentCallSessionTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.session.failed" }
+                .filter { it.name == "hermes_voice.mobile.session.failed" }
                 .map { it.attributes },
         )
     }
@@ -650,13 +650,13 @@ class VoiceAgentCallSessionTest {
 
         session.start()
         withTimeout(500) {
-            while (observability.events.none { it.name == "voicelab.mobile.session.failed" }) {
+            while (observability.events.none { it.name == "hermes_voice.mobile.session.failed" }) {
                 delay(10)
             }
         }
 
         val summary = observability.events
-            .single { it.name == "voicelab.mobile.session.failed" }
+            .single { it.name == "hermes_voice.mobile.session.failed" }
             .attributes["session.failure.summary"]
             .toString()
         assertTrue(summary.contains("<redacted-url>"))
@@ -700,7 +700,7 @@ class VoiceAgentCallSessionTest {
 
         session.start()
         withTimeout(500) {
-            while (observability.events.none { it.name == "voicelab.mobile.session.failed" }) {
+            while (observability.events.none { it.name == "hermes_voice.mobile.session.failed" }) {
                 delay(10)
             }
         }
@@ -716,7 +716,7 @@ class VoiceAgentCallSessionTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.session.failed" }
+                .filter { it.name == "hermes_voice.mobile.session.failed" }
                 .map { it.attributes },
         )
     }
@@ -752,7 +752,7 @@ class VoiceAgentCallSessionTest {
         )
 
         withTimeout(500) {
-            while (observability.events.none { it.name == "voicelab.mobile.session.failed" }) {
+            while (observability.events.none { it.name == "hermes_voice.mobile.session.failed" }) {
                 delay(10)
             }
         }
@@ -768,11 +768,11 @@ class VoiceAgentCallSessionTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.session.failed" }
+                .filter { it.name == "hermes_voice.mobile.session.failed" }
                 .map { it.attributes },
         )
         assertFalse(
-            observability.events.any { it.name == "voicelab.mobile.session.reconnect_scheduled" }
+            observability.events.any { it.name == "hermes_voice.mobile.session.reconnect_scheduled" }
         )
     }
 
@@ -814,7 +814,7 @@ class VoiceAgentCallSessionTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.session.ended" }
+                .filter { it.name == "hermes_voice.mobile.session.ended" }
                 .map { it.attributes },
         )
     }
@@ -852,7 +852,7 @@ class VoiceAgentCallSessionTest {
                 )
             ),
             observability.events
-                .filter { it.name == "voicelab.mobile.session.ended" }
+                .filter { it.name == "hermes_voice.mobile.session.ended" }
                 .map { it.attributes },
         )
     }

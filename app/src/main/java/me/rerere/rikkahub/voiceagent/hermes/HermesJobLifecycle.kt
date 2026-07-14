@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
-import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesJobStatus
 
 internal const val HERMES_CANCELED_MESSAGE = "Hermes job canceled."
 internal const val HERMES_TIMEOUT_MESSAGE = "Hermes job polling timed out."

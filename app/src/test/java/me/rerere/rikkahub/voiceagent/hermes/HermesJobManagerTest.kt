@@ -31,14 +31,14 @@ import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
-import me.rerere.rikkahub.voiceagent.voicelab.HermesJobStatus
-import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
-import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobSubmitResponse
-import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesResponse
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailure
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureKind
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceFailureSource
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabHttpException
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesJobStatus
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesJobPollResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesJobSubmitResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.VoiceFailure
+import me.rerere.rikkahub.voiceagent.hermesvoice.VoiceFailureKind
+import me.rerere.rikkahub.voiceagent.hermesvoice.VoiceFailureSource
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceHttpException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -269,7 +269,7 @@ class HermesJobManagerTest {
             it.status == HermesQueueStatus.Complete && it.answer == "private answer"
         }
 
-        val submitted = observability.events.single { it.name == "voicelab.mobile.hermes_tool.submitted" }
+        val submitted = observability.events.single { it.name == "hermes_voice.mobile.hermes_tool.submitted" }
         assertEquals(trace, submitted.trace)
         assertEquals("call-1", submitted.attributes["callId"])
         assertEquals("private prompt", submitted.attributes["gemini.tool_call.prompt"])
@@ -284,7 +284,7 @@ class HermesJobManagerTest {
         assertFalse(submitted.attributes.containsKey("prompt.sha256"))
         assertFalse(submitted.attributes.containsKey("prompt.truncated"))
 
-        val completed = observability.events.single { it.name == "voicelab.mobile.hermes_tool.completed" }
+        val completed = observability.events.single { it.name == "hermes_voice.mobile.hermes_tool.completed" }
         assertEquals(trace, completed.trace)
         assertEquals("call-1", completed.attributes["callId"])
         assertEquals("job-1", completed.attributes["jobId"])
@@ -1335,19 +1335,19 @@ class HermesJobManagerTest {
     @Test
     fun `legacy-formatted and retryable-typed poll failures are transient and recover`() = runTest {
         // The manager treats a plain/legacy-formatted exception (no typed VoiceFailure)
-        // and an explicitly retryable typed VoiceLabHttpException the same way: transient,
+        // and an explicitly retryable typed HermesVoiceHttpException the same way: transient,
         // so the job keeps polling and still reaches its answer.
         listOf(
-            "call-legacy-message" to IllegalStateException("Voice Lab request failed 404: job missing"),
-            "call-retryable-http" to VoiceLabHttpException(
+            "call-legacy-message" to IllegalStateException("Hermes Voice request failed 404: job missing"),
+            "call-retryable-http" to HermesVoiceHttpException(
                 statusCode = 404,
-                safePreview = "temporary voice lab failure",
+                safePreview = "temporary Hermes Voice failure",
                 failure = VoiceFailure(
                     kind = VoiceFailureKind.HermesUnavailable,
-                    safeMessage = "temporary voice lab failure",
-                    safeSummary = "temporary voice lab failure",
+                    safeMessage = "temporary Hermes Voice failure",
+                    safeSummary = "temporary Hermes Voice failure",
                     retryable = true,
-                    source = VoiceFailureSource.VoiceLab,
+                    source = VoiceFailureSource.HermesVoice,
                 ),
             ),
         ).forEach { (callId, error) ->
@@ -1373,7 +1373,7 @@ class HermesJobManagerTest {
     fun `non-retryable typed and untyped HTTP poll failures end the job immediately as failed`() = runTest {
         val bridge = RecordingHermesBridge()
         run {
-            // A typed VoiceLabHttpException marked non-retryable ends the job at once
+            // A typed HermesVoiceHttpException marked non-retryable ends the job at once
             // (without waiting out the elapsed budget) as an announced Failed record with
             // a terminal follow-up.
             val toolApi = FakeVoiceToolApi()
@@ -1390,7 +1390,7 @@ class HermesJobManagerTest {
             assertEquals("call-terminal-http" to "terminal http request", toolApi.awaitRequest("call-terminal-http"))
             toolApi.scriptPollFailure(
                 callId = "call-terminal-http",
-                error = VoiceLabHttpException(
+                error = HermesVoiceHttpException(
                     statusCode = 404,
                     safePreview = "job missing",
                     failure = VoiceFailure(
@@ -1398,7 +1398,7 @@ class HermesJobManagerTest {
                         safeMessage = "job missing",
                         safeSummary = "job missing",
                         retryable = false,
-                        source = VoiceFailureSource.VoiceLab,
+                        source = VoiceFailureSource.HermesVoice,
                     ),
                 ),
             )
@@ -1408,13 +1408,13 @@ class HermesJobManagerTest {
             }
             val record = conversationStore.conversation.value.hermesQueueRecords().single { it.callId == "call-terminal-http" }
             assertEquals(HermesQueueStatus.Failed, record.status)
-            assertEquals("Voice Lab request failed 404: job missing", record.error)
+            assertEquals("Hermes Voice request failed 404: job missing", record.error)
             assertEquals(
                 TerminalFollowUp(
                     callId = "call-terminal-http",
                     prompt = "terminal http request",
                     status = HermesQueueStatus.Failed,
-                    reason = "Voice Lab request failed 404: job missing",
+                    reason = "Hermes Voice request failed 404: job missing",
                     sessionId = 14L,
                 ),
                 bridge.terminalFollowUps.single(),
@@ -1440,7 +1440,7 @@ class HermesJobManagerTest {
             )
             toolApi.scriptPollFailure(
                 callId = "call-terminal-status-only",
-                error = VoiceLabHttpException(statusCode = 404, safePreview = "job missing", failure = null),
+                error = HermesVoiceHttpException(statusCode = 404, safePreview = "job missing", failure = null),
             )
 
             conversationStore.awaitHermesRecord("call-terminal-status-only") {
@@ -1449,7 +1449,7 @@ class HermesJobManagerTest {
             val record = conversationStore.conversation.value.hermesQueueRecords()
                 .single { it.callId == "call-terminal-status-only" }
             assertEquals(HermesQueueStatus.Failed, record.status)
-            assertEquals("Voice Lab request failed 404: job missing", record.error)
+            assertEquals("Hermes Voice request failed 404: job missing", record.error)
         }
     }
 

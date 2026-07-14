@@ -87,7 +87,7 @@ class VoiceAgentCallService : Service() {
                         VoiceAgentLog.d(
                             TAG,
                             "config available voiceModelId=${result.config.voiceModelId} " +
-                                "baseUrl=${result.config.voiceLabBaseUrl}",
+                                "baseUrl=${result.config.hermesVoiceBaseUrl}",
                         )
                         val startedNewSession = manager.start(
                             conversationId = id,

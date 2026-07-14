@@ -1,6 +1,6 @@
 @file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 
-package me.rerere.rikkahub.voiceagent.voicelab
+package me.rerere.rikkahub.voiceagent.hermesvoice
 
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
@@ -131,8 +131,8 @@ enum class VoiceFailureKind {
 
 @Serializable
 enum class VoiceFailureSource {
-    @SerialName("voice_lab")
-    VoiceLab,
+    @SerialName("hermes_voice")
+    HermesVoice,
 
     @SerialName("hermes")
     Hermes,
@@ -272,7 +272,7 @@ private fun unknownHermesStatusFailure(raw: String): VoiceFailure {
         safeMessage = safeMessage,
         safeSummary = safeMessage,
         retryable = false,
-        source = VoiceFailureSource.VoiceLab,
+        source = VoiceFailureSource.HermesVoice,
     )
 }
 
@@ -280,15 +280,9 @@ typealias MobileHermesJobSubmitResponse = HermesJobSnapshot
 typealias MobileHermesJobPollResponse = HermesJobSnapshot
 
 @Serializable
-data class VoiceLabMobileCredentials(
-    val hermesProfileApiKey: String,
-    val cloudflareClientId: String? = null,
-    val cloudflareClientSecret: String? = null,
+data class HermesVoiceCredentials(
+    val deviceApiKey: String,
 ) {
     override fun toString(): String =
-        "VoiceLabMobileCredentials(" +
-            "hermesProfileApiKey=[redacted], " +
-            "cloudflareClientId=${cloudflareClientId?.let { "[redacted]" }}, " +
-            "cloudflareClientSecret=${cloudflareClientSecret?.let { "[redacted]" }}" +
-            ")"
+        "HermesVoiceCredentials(deviceApiKey=[redacted])"
 }

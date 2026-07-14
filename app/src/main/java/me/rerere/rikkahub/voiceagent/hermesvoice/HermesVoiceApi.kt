@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.voiceagent.voicelab
+package me.rerere.rikkahub.voiceagent.hermesvoice
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -41,11 +41,7 @@ private val ERROR_SENSITIVE_KEYS = setOf(
     "authorization",
     "apikey",
     "key",
-    "cfaccessclientid",
-    "cfaccessclientsecret",
-    "cloudflareclientid",
-    "cloudflareclientsecret",
-    "hermesprofileapikey",
+    "deviceapikey",
     "accesstoken",
     "refreshtoken",
     "token",
@@ -65,20 +61,20 @@ private val ERROR_SECRET_PATTERNS = listOf(
         option = RegexOption.IGNORE_CASE,
     ),
     Regex(
-        pattern = """("?(?:authorization|api[_-]?key|key|cf[_-]?access[_-]?client[_-]?id|cf[_-]?access[_-]?client[_-]?secret|cloudflare[_-]?client[_-]?id|cloudflare[_-]?client[_-]?secret|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)"?\s*[:=]\s*")([^"]*)("?|$)""",
+        pattern = """("?(?:authorization|api[_-]?key|key|device[_-]?api[_-]?key|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)"?\s*[:=]\s*")([^"]*)("?|$)""",
         option = RegexOption.IGNORE_CASE,
     ),
     Regex(
-        pattern = """('?(?:authorization|api[_-]?key|key|cf[_-]?access[_-]?client[_-]?id|cf[_-]?access[_-]?client[_-]?secret|cloudflare[_-]?client[_-]?id|cloudflare[_-]?client[_-]?secret|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)'?\s*[:=]\s*')([^']*)('?|$)""",
+        pattern = """('?(?:authorization|api[_-]?key|key|device[_-]?api[_-]?key|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)'?\s*[:=]\s*')([^']*)('?|$)""",
         option = RegexOption.IGNORE_CASE,
     ),
     Regex(
-        pattern = """\b((?:authorization|api[_-]?key|key|cf[_-]?access[_-]?client[_-]?id|cf[_-]?access[_-]?client[_-]?secret|cloudflare[_-]?client[_-]?id|cloudflare[_-]?client[_-]?secret|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)\s*[:=]\s*)([^\r\n,;}\]]+)""",
+        pattern = """\b((?:authorization|api[_-]?key|key|device[_-]?api[_-]?key|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)\s*[:=]\s*)([^\r\n,;}\]]+)""",
         option = RegexOption.IGNORE_CASE,
     ),
 )
 
-data class VoiceLabTraceHeaders(
+data class HermesVoiceTraceHeaders(
     val traceId: String,
     val voiceSessionId: String,
     val sentryTrace: String? = null,
@@ -100,8 +96,8 @@ data class VoiceLabTraceHeaders(
     }
 
     companion object {
-        fun from(trace: VoiceTraceContext): VoiceLabTraceHeaders =
-            VoiceLabTraceHeaders(
+        fun from(trace: VoiceTraceContext): HermesVoiceTraceHeaders =
+            HermesVoiceTraceHeaders(
                 traceId = trace.traceId,
                 voiceSessionId = trace.voiceSessionId,
                 sentryTrace = trace.sentryTrace,
@@ -110,13 +106,13 @@ data class VoiceLabTraceHeaders(
     }
 }
 
-internal fun interface VoiceLabHttpTransport {
+internal fun interface HermesVoiceHttpTransport {
     suspend fun execute(request: Request): Response
 }
 
-private class OkHttpVoiceLabTransport(
+private class OkHttpHermesVoiceTransport(
     private val client: OkHttpClient,
-) : VoiceLabHttpTransport {
+) : HermesVoiceHttpTransport {
     override suspend fun execute(request: Request): Response =
         suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request)
@@ -140,22 +136,22 @@ private class OkHttpVoiceLabTransport(
         }
 }
 
-class VoiceLabHttpException(
+class HermesVoiceHttpException(
     val statusCode: Int,
     val safePreview: String,
     val failure: VoiceFailure? = null,
-) : IllegalStateException("Voice Lab request failed $statusCode: $safePreview")
+) : IllegalStateException("Hermes Voice request failed $statusCode: $safePreview")
 
-class VoiceLabMobileApi internal constructor(
+class HermesVoiceApi internal constructor(
     private val baseUrl: String,
-    private val credentials: VoiceLabMobileCredentials,
-    private val transport: VoiceLabHttpTransport,
-    private val traceHeaders: VoiceLabTraceHeaders? = null,
+    private val credentials: HermesVoiceCredentials,
+    private val transport: HermesVoiceHttpTransport,
+    private val traceHeaders: HermesVoiceTraceHeaders? = null,
     private val json: Json = JsonInstant,
 ) {
     constructor(
         baseUrl: String,
-        credentials: VoiceLabMobileCredentials,
+        credentials: HermesVoiceCredentials,
     ) : this(
         baseUrl = baseUrl,
         credentials = credentials,
@@ -165,7 +161,7 @@ class VoiceLabMobileApi internal constructor(
 
     constructor(
         baseUrl: String,
-        credentials: VoiceLabMobileCredentials,
+        credentials: HermesVoiceCredentials,
         json: Json,
     ) : this(
         baseUrl = baseUrl,
@@ -176,8 +172,8 @@ class VoiceLabMobileApi internal constructor(
 
     constructor(
         baseUrl: String,
-        credentials: VoiceLabMobileCredentials,
-        traceHeaders: VoiceLabTraceHeaders?,
+        credentials: HermesVoiceCredentials,
+        traceHeaders: HermesVoiceTraceHeaders?,
     ) : this(
         baseUrl = baseUrl,
         credentials = credentials,
@@ -187,13 +183,13 @@ class VoiceLabMobileApi internal constructor(
 
     constructor(
         baseUrl: String,
-        credentials: VoiceLabMobileCredentials,
+        credentials: HermesVoiceCredentials,
         json: Json,
-        traceHeaders: VoiceLabTraceHeaders?,
+        traceHeaders: HermesVoiceTraceHeaders?,
     ) : this(
         baseUrl = baseUrl,
         credentials = credentials,
-        transport = OkHttpVoiceLabTransport(DEFAULT_HTTP_CLIENT),
+        transport = OkHttpHermesVoiceTransport(DEFAULT_HTTP_CLIENT),
         traceHeaders = traceHeaders,
         json = json,
     )
@@ -202,25 +198,17 @@ class VoiceLabMobileApi internal constructor(
     private val parsedBaseUrl = normalizedBaseUrl.toHttpUrl()
 
     init {
-        require(credentials.hermesProfileApiKey.isNotBlank()) {
-            "Voice Lab Hermes profile API key must not be blank"
-        }
-        require(
-            credentials.cloudflareClientId == null &&
-                credentials.cloudflareClientSecret == null ||
-                !credentials.cloudflareClientId.isNullOrBlank() &&
-                !credentials.cloudflareClientSecret.isNullOrBlank()
-        ) {
-            "Voice Lab Cloudflare Access credentials must be provided together or omitted together"
+        require(credentials.deviceApiKey.isNotBlank()) {
+            "Hermes Voice device API key must not be blank"
         }
         require(parsedBaseUrl.isHttps || parsedBaseUrl.host.isDevHttpHost()) {
-            "Voice Lab baseUrl must use HTTPS unless it targets a local development host"
+            "Hermes Voice baseUrl must use HTTPS unless it targets a local development host"
         }
         require(parsedBaseUrl.query == null && parsedBaseUrl.fragment == null) {
-            "Voice Lab baseUrl must not include a query or fragment"
+            "Hermes Voice baseUrl must not include a query or fragment"
         }
         require(parsedBaseUrl.username.isEmpty() && parsedBaseUrl.password.isEmpty()) {
-            "Voice Lab baseUrl must not include username or password credentials"
+            "Hermes Voice baseUrl must not include username or password credentials"
         }
     }
 
@@ -283,10 +271,8 @@ class VoiceLabMobileApi internal constructor(
     private fun requestBuilder(path: String): Request.Builder =
         Request.Builder()
             .url(normalizedBaseUrl + path)
-            .addHeader("Authorization", "Bearer ${credentials.hermesProfileApiKey}")
+            .addHeader("Authorization", "Bearer ${credentials.deviceApiKey}")
             .apply {
-                credentials.cloudflareClientId?.let { addHeader("CF-Access-Client-Id", it) }
-                credentials.cloudflareClientSecret?.let { addHeader("CF-Access-Client-Secret", it) }
                 traceHeaders?.let {
                     addHeader("X-Voice-Trace-Id", it.traceId)
                     addHeader("X-Voice-Session-Id", it.voiceSessionId)
@@ -313,7 +299,7 @@ class VoiceLabMobileApi internal constructor(
             transport.execute(request).use { response ->
                 if (!response.isSuccessful) {
                     val rawPreview = response.peekBody(ERROR_BODY_PREVIEW_LIMIT + 1).string()
-                    throw VoiceLabHttpException(
+                    throw HermesVoiceHttpException(
                         statusCode = response.code,
                         safePreview = response.toErrorPreview(rawPreview),
                         failure = runCatching { json.decodeFromString<VoiceFailure>(rawPreview) }.getOrNull(),
@@ -325,7 +311,7 @@ class VoiceLabMobileApi internal constructor(
                 }.getOrElse { error ->
                     val errorType = error::class.simpleName ?: "unknown"
                     throw IllegalStateException(
-                        "Voice Lab response decode failed ($errorType): ${responseText.toSanitizedPreview()}"
+                        "Hermes Voice response decode failed ($errorType): ${responseText.toSanitizedPreview()}"
                     )
                 }
             }
@@ -362,9 +348,6 @@ private fun Response.toErrorPreview(rawPreview: String): String =
     )
 
 private fun String.toSanitizedPreview(wasTruncated: Boolean? = null): String {
-    if (isCloudflareAccessHtml()) {
-        return "Cloudflare Access denied. Check Voice Agent Cloudflare Access client id and secret."
-    }
     val preview = if (length > ERROR_BODY_PREVIEW_LIMIT) {
         take((ERROR_BODY_PREVIEW_LIMIT + 1).toInt())
     } else {
@@ -382,12 +365,6 @@ private fun String.toSanitizedPreview(wasTruncated: Boolean? = null): String {
     } else {
         bounded
     }
-}
-
-private fun String.isCloudflareAccessHtml(): Boolean {
-    val normalized = lowercase()
-    return "cloudflare access" in normalized &&
-        ("<!doctype html" in normalized || "<html" in normalized)
 }
 
 private fun String.redactSensitivePreview(): String {

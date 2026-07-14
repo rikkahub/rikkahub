@@ -1,16 +1,16 @@
 package me.rerere.rikkahub.voiceagent
 
-import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobPollResponse
-import me.rerere.rikkahub.voiceagent.voicelab.MobileHermesJobSubmitResponse
-import me.rerere.rikkahub.voiceagent.voicelab.MobileVoiceSessionResponse
-import me.rerere.rikkahub.voiceagent.voicelab.VoiceLabMobileApi
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesJobPollResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesJobSubmitResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.MobileVoiceSessionResponse
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceApi
 
 interface VoiceSessionApi {
     suspend fun createSession(modelId: String): MobileVoiceSessionResponse
 }
 
-class VoiceLabVoiceSessionApi(
-    private val api: VoiceLabMobileApi,
+class HermesVoiceSessionApi(
+    private val api: HermesVoiceApi,
 ) : VoiceSessionApi {
     override suspend fun createSession(modelId: String): MobileVoiceSessionResponse =
         api.createSession(modelId = modelId)
@@ -22,8 +22,8 @@ interface VoiceToolApi {
     suspend fun cancelHermesJob(jobId: String): MobileHermesJobPollResponse
 }
 
-class VoiceLabHermesToolApi(
-    private val api: VoiceLabMobileApi,
+class HermesVoiceToolApi(
+    private val api: HermesVoiceApi,
     private val profileId: String? = null,
 ) : VoiceToolApi {
     override suspend fun submitHermesJob(callId: String, prompt: String): MobileHermesJobSubmitResponse =

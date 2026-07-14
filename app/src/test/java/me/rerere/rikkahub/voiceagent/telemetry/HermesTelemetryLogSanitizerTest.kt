@@ -5,12 +5,12 @@ import org.junit.Test
 
 class HermesTelemetryLogSanitizerTest {
     @Test
-    fun `failure message keeps only safe Voice Lab status prefix`() {
+    fun `failure message keeps only safe Hermes Voice status prefix`() {
         val sanitized = HermesTelemetryLogSanitizer.failureMessage(
-            """Voice Lab request failed 403: {"prompt":"private prompt","answer":"private answer"}"""
+            """Hermes Voice request failed 403: {"prompt":"private prompt","answer":"private answer"}"""
         )
 
-        assertEquals("Voice Lab request failed 403", sanitized)
+        assertEquals("Hermes Voice request failed 403", sanitized)
     }
 
     @Test
