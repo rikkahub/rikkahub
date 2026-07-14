@@ -71,6 +71,8 @@
   <string name="assistant_page_current_assistant">현재 어시스턴트</string>
   <string name="assistant_page_custom_bodies">사용자 정의 본문</string>
   <string name="assistant_page_custom_headers">사용자 정의 헤더</string>
+  <string name="assistant_page_custom_input_placeholder">입력창 안내 문구 사용자 지정</string>
+  <string name="assistant_page_custom_input_placeholder_desc">입력창에 표시할 안내 문구를 사용자 지정합니다</string>
   <string name="assistant_page_default_assistant">기본 어시스턴트</string>
   <string name="assistant_page_delete">삭제</string>
   <string name="assistant_page_delete_body">본문 삭제</string>

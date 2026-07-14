@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -30,8 +31,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -106,6 +109,8 @@ internal fun AssistantBasicContent(
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
+    val focusManager = LocalFocusManager.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -230,6 +235,52 @@ internal fun AssistantBasicContent(
                     )
                 }
             )
+
+            HorizontalDivider()
+
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text(stringResource(R.string.assistant_page_custom_input_placeholder))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_custom_input_placeholder_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.enableCustomInputPlaceholder,
+                        onCheckedChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    enableCustomInputPlaceholder = it
+                                )
+                            )
+                        }
+                    )
+                }
+            ) {
+                if (assistant.enableCustomInputPlaceholder) {
+                    OutlinedTextField(
+                        value = assistant.inputPlaceholder,
+                        onValueChange = { placeholder ->
+                            onUpdate(
+                                assistant.copy(
+                                    inputPlaceholder = placeholder
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = {
+                            Text(stringResource(R.string.chat_input_placeholder))
+                        },
+                        keyboardActions = KeyboardActions(
+                            onDone = { focusManager.clearFocus() },
+                        ),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        singleLine = true,
+                    )
+                }
+            }
         }
 
         Card(

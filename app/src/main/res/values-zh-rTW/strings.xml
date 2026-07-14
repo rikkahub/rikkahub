@@ -71,6 +71,8 @@
   <string name="assistant_page_current_assistant">當前助手</string>
   <string name="assistant_page_custom_bodies">自定義 Body</string>
   <string name="assistant_page_custom_headers">自定義 Headers</string>
+  <string name="assistant_page_custom_input_placeholder">自訂輸入框提示</string>
+  <string name="assistant_page_custom_input_placeholder_desc">自訂輸入框中的提示</string>
   <string name="assistant_page_default_assistant">預設助手</string>
   <string name="assistant_page_delete">刪除</string>
   <string name="assistant_page_delete_body">刪除 Body</string>

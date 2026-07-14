@@ -71,6 +71,8 @@
   <string name="assistant_page_current_assistant">Current Assistant</string>
   <string name="assistant_page_custom_bodies">Custom Body</string>
   <string name="assistant_page_custom_headers">Custom Headers</string>
+  <string name="assistant_page_custom_input_placeholder">Custom Input Prompt</string>
+  <string name="assistant_page_custom_input_placeholder_desc">Customize the prompt shown in the input field</string>
   <string name="assistant_page_default_assistant">Default Assistant</string>
   <string name="assistant_page_delete">Delete</string>
   <string name="assistant_page_delete_body">Delete Body</string>

@@ -71,6 +71,8 @@
   <string name="assistant_page_current_assistant">Текущий ассистент</string>
   <string name="assistant_page_custom_bodies">Пользовательский контекст</string>
   <string name="assistant_page_custom_headers">Пользовательские заголовки</string>
+  <string name="assistant_page_custom_input_placeholder">Настроить подсказку в поле ввода</string>
+  <string name="assistant_page_custom_input_placeholder_desc">Настройте подсказку, отображаемую в поле ввода</string>
   <string name="assistant_page_default_assistant">Ассистент по умолчанию</string>
   <string name="assistant_page_delete">Удалить</string>
   <string name="assistant_page_delete_body">Удалить текст</string>

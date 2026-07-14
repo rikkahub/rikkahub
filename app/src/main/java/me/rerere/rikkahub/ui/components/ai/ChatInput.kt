@@ -98,10 +98,12 @@ import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.QuickMessage
+import me.rerere.rikkahub.data.model.resolveInputPlaceholder
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionContext
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionItem
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionList
 import me.rerere.rikkahub.ui.components.ai.completion.ChatCompletionProvider
+import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
@@ -134,6 +136,8 @@ fun ChatInput(
 ) {
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
+    val defaultInputPlaceholder = stringResource(R.string.chat_input_placeholder)
+    val inputPlaceholder = assistant.resolveInputPlaceholder(defaultInputPlaceholder)
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
     val inputHazeStyle = HazeMaterials.thin(containerColor = hazeTintColor)
 
@@ -235,6 +239,7 @@ fun ChatInput(
                     TextInputRow(
                         state = state,
                         completionProviders = completionProviders,
+                        inputPlaceholder = inputPlaceholder,
                         onSendMessage = { sendMessage() }
                     )
 
@@ -419,6 +424,7 @@ private fun ActionIconButton(
 private fun TextInputRow(
     state: ChatInputState,
     completionProviders: List<ChatCompletionProvider>,
+    inputPlaceholder: String,
     onSendMessage: () -> Unit,
 ) {
     val settings = LocalSettings.current
@@ -554,7 +560,7 @@ private fun TextInputRow(
                 },
             shape = MaterialTheme.shapes.largeIncreased,
             placeholder = {
-                Text(stringResource(R.string.chat_input_placeholder))
+                MarkdownBlock(content = inputPlaceholder)
             },
             lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
             keyboardOptions = KeyboardOptions(
@@ -588,7 +594,7 @@ private fun TextInputRow(
             } else null,
         )
         if (isFullScreen) {
-            FullScreenEditor(state = state) {
+            FullScreenEditor(state = state, inputPlaceholder = inputPlaceholder) {
                 isFullScreen = false
             }
         }
@@ -726,7 +732,7 @@ private fun QuickMessageButton(
 
 @Composable
 private fun FullScreenEditor(
-    state: ChatInputState, onDone: () -> Unit
+    state: ChatInputState, inputPlaceholder: String, onDone: () -> Unit
 ) {
     BasicAlertDialog(
         onDismissRequest = {
@@ -771,7 +777,7 @@ private fun FullScreenEditor(
                             .fillMaxSize(),
                         shape = RoundedCornerShape(32.dp),
                         placeholder = {
-                            Text(stringResource(R.string.chat_input_placeholder))
+                            MarkdownBlock(content = inputPlaceholder)
                         },
                         colors = TextFieldDefaults.colors().copy(
                             unfocusedIndicatorColor = Color.Transparent,
