@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.InMemoryVoiceConversationStore
 import me.rerere.rikkahub.voiceagent.SynchronizedVoiceConversationStore
@@ -86,6 +87,74 @@ class HermesAnnouncerTest {
         assertFalse(store.latestRecord(callId = "call-1", jobId = "job-1")!!.messageWritten)
     }
 
+    @Test
+    fun `close invalidating an in-flight completion falls back exactly once`() = runTest {
+        val conversationStore = ReadHookStore(
+            InMemoryVoiceConversationStore(
+                emptyConversation().withComplete(
+                    callId = "call-close",
+                    jobId = "job-close",
+                    answer = "close answer",
+                ),
+            ),
+        )
+        val store = HermesQueueStore(conversationStore, writer, transcriptPersister)
+        val bridge = RecordingBridge()
+        val announcer = announcer(queueStore = store)
+
+        announcer.attachScoped(bridge, sessionId = 7L)
+        conversationStore.onNextRead { announcer.close() }
+        runCurrent()
+
+        assertTrue(bridge.completions.isEmpty())
+        assertTrue(store.latestRecord("call-close", "job-close")!!.messageWritten)
+
+        announcer.close()
+        val barrier = launch { announcer.awaitClosed() }
+        runCurrent()
+        barrier.join()
+
+        assertEquals(
+            1,
+            conversationStore.conversation.value.visibleHermesResults("Hermes finished: prompt-call-close"),
+        )
+    }
+
+    @Test
+    fun `detach invalidating an in-flight terminal falls back exactly once`() = runTest {
+        val conversationStore = ReadHookStore(
+            InMemoryVoiceConversationStore(
+                emptyConversation().withFailed(
+                    callId = "call-detach",
+                    jobId = "job-detach",
+                    message = "detach failure",
+                ),
+            ),
+        )
+        val store = HermesQueueStore(conversationStore, writer, transcriptPersister)
+        val bridge = RecordingBridge()
+        val announcer = announcer(queueStore = store)
+
+        announcer.attachScoped(bridge, sessionId = 7L)
+        conversationStore.onNextRead { announcer.detachScoped(bridge) }
+        runCurrent()
+
+        assertTrue(bridge.terminals.isEmpty())
+        assertTrue(store.latestRecord("call-detach", "job-detach")!!.messageWritten)
+
+        announcer.close()
+        val barrier = launch { announcer.awaitClosed() }
+        runCurrent()
+        barrier.join()
+
+        assertEquals(
+            1,
+            conversationStore.conversation.value.visibleHermesResults(
+                "Hermes could not finish: prompt-call-detach"
+            ),
+        )
+    }
+
     // 4
     @Test
     fun `attachScoped replays unannounced terminal results`() = runTest {
@@ -153,6 +222,53 @@ class HermesAnnouncerTest {
 
         assertTrue(bridge.stillWorking.isEmpty())
         assertFalse(store.latestRecord(callId = "call-run", jobId = "job-run")!!.stillWorkingAnnounced)
+    }
+
+    @Test
+    fun `progress paired with a correcting completion sends before the final`() = runTest {
+        val store = store(emptyConversation().withRunning(callId = "call-paired", jobId = "job-paired"))
+        val bridge = RecordingBridge()
+        val announcer = announcer(queueStore = store)
+
+        announcer.onGeminiTurnActive()
+        announcer.onPlaybackActive(5L)
+        announcer.attachScoped(bridge, sessionId = 7L)
+        announcer.enqueueStillWorking(callId = "call-paired", jobId = "job-paired")
+        runCurrent()
+
+        store.persistTerminal(
+            callId = "call-paired",
+            prompt = "prompt-call-paired",
+            status = VoiceToolRecordStatus.Complete("paired answer"),
+            jobId = "job-paired",
+            announced = false,
+        )
+        announcer.enqueueCompletion(callId = "call-paired", jobId = "job-paired")
+        runCurrent()
+
+        announcer.onGeminiTurnComplete()
+        announcer.onPlaybackDrained(5L)
+        runCurrent()
+
+        assertEquals(listOf("call-paired"), bridge.stillWorking)
+        assertTrue(bridge.completions.isEmpty())
+
+        announcer.onPlaybackActive(6L)
+        announcer.onGeminiTurnComplete()
+        runCurrent()
+        assertTrue(bridge.completions.isEmpty())
+        announcer.onPlaybackDrained(6L)
+        runCurrent()
+
+        assertEquals(listOf("call-paired"), bridge.stillWorking)
+        assertEquals(listOf("call-paired"), bridge.completions)
+        assertTrue(store.latestRecord("call-paired", "job-paired")!!.resultAnnounced)
+
+        announcer.onGeminiTurnComplete()
+        announcer.onPlaybackDrained(7L)
+        runCurrent()
+        assertEquals(1, bridge.stillWorking.size)
+        assertEquals(1, bridge.completions.size)
     }
 
     // 6
@@ -668,6 +784,25 @@ class HermesAnnouncerTest {
         override suspend fun update(transform: (Conversation) -> Conversation) = delegate.update(transform)
     }
 
+    /** Runs one synchronous callback immediately before the next durable-state value read. */
+    private class ReadHookStore(
+        private val delegate: VoiceConversationStore,
+    ) : VoiceConversationStore {
+        private var nextRead: (() -> Unit)? = null
+        override val conversation: StateFlow<Conversation>
+            get() {
+                nextRead?.also { nextRead = null }?.invoke()
+                return delegate.conversation
+            }
+
+        fun onNextRead(block: () -> Unit) {
+            check(nextRead == null)
+            nextRead = block
+        }
+
+        override suspend fun update(transform: (Conversation) -> Conversation) = delegate.update(transform)
+    }
+
     /** A conversation store whose first [update] throws, then delegates normally. */
     private class FirstUpdateThrowsStore(
         private val delegate: VoiceConversationStore,
@@ -707,4 +842,9 @@ class HermesAnnouncerTest {
         }
         override suspend fun sendCancelResponse(callId: String, outcome: CancelHermesOutcome, sessionId: Long) = true
     }
+
+    private fun Conversation.visibleHermesResults(prefix: String): Int = currentMessages
+        .flatMap { it.parts }
+        .filterIsInstance<UIMessagePart.Text>()
+        .count { it.text.startsWith(prefix) }
 }

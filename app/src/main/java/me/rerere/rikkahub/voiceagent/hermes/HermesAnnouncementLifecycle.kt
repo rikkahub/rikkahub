@@ -34,7 +34,14 @@ internal fun AnnouncementIntent.jobKey(): AnnouncementJobKey {
     return AnnouncementJobKey(jobId?.let { "job:$it" } ?: "call:$callId")
 }
 
-enum class AnnouncementSendOutcome { Sent, Failed, Skipped }
+enum class AnnouncementSendOutcome {
+    Sent,
+    Failed,
+    /** Durable state made the selected intent obsolete; no fallback is needed. */
+    Skipped,
+    /** A still-valid intent lost its reserved bridge and needs reducer-owned fallback. */
+    AttachmentInvalidated,
+}
 
 sealed interface GeminiTurnGate {
     data object Idle : GeminiTurnGate
@@ -269,7 +276,8 @@ class AnnouncerReducer(
                 if (cleared.closed) noChange(cleared) else settle(cleared, event.nowMs)
             }
 
-            AnnouncementSendOutcome.Failed -> {
+            AnnouncementSendOutcome.Failed,
+            AnnouncementSendOutcome.AttachmentInvalidated -> {
                 val settled = if (cleared.closed) noChange(cleared) else settle(cleared, event.nowMs)
                 AnnouncerTransition(settled.state, fallbackOrDrop(intent) + settled.effects)
             }
@@ -300,6 +308,7 @@ class AnnouncerReducer(
                 AnnouncementSendOutcome.Sent -> if (completed) GeminiTurnGate.Idle else GeminiTurnGate.Active
                 AnnouncementSendOutcome.Failed,
                 AnnouncementSendOutcome.Skipped,
+                AnnouncementSendOutcome.AttachmentInvalidated,
                     -> if (activityObserved && !completed) GeminiTurnGate.Active else GeminiTurnGate.Idle
             }
         }

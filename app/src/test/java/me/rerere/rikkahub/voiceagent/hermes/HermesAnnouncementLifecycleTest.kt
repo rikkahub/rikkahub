@@ -288,6 +288,25 @@ class HermesAnnouncementLifecycleTest {
     }
 
     @Test
+    fun `attachment invalidation after close falls back an in-flight final exactly once`() {
+        var state = reducer.reduce(attached, AnnouncerEvent.IntentEnqueued(completion, 100L)).state
+        state = reducer.reduce(state, AnnouncerEvent.Close).state
+
+        val transition = reducer.reduce(
+            state,
+            AnnouncerEvent.SendReturned(AnnouncementSendOutcome.AttachmentInvalidated, 200L),
+        )
+
+        assertEquals(listOf(completion), transition.fallbacks())
+        assertEquals(null, transition.state.inFlight)
+        val repeated = reducer.reduce(
+            transition.state,
+            AnnouncerEvent.SendReturned(AnnouncementSendOutcome.AttachmentInvalidated, 201L),
+        )
+        assertTrue(repeated.fallbacks().isEmpty())
+    }
+
+    @Test
     fun `sent announcement requires a later turn boundary before another job`() {
         var state = reducer.reduce(attached, AnnouncerEvent.IntentEnqueued(completion, 100L)).state
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(terminal, 101L)).state

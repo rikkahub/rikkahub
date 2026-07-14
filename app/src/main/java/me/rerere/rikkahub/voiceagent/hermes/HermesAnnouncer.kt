@@ -337,7 +337,9 @@ class HermesAnnouncer(
     private suspend fun executeSend(intent: AnnouncementIntent) {
         val current = currentAttachment()
         if (current == null) {
-            events.trySend(AnnouncerEvent.SendReturned(AnnouncementSendOutcome.Failed, nowMs()))
+            events.trySend(
+                AnnouncerEvent.SendReturned(AnnouncementSendOutcome.AttachmentInvalidated, nowMs())
+            )
             return
         }
         val outcome = when (intent) {
@@ -356,7 +358,7 @@ class HermesAnnouncer(
         if (record?.status != HermesQueueStatus.Complete || record.resultAnnounced || record.answer == null) {
             return AnnouncementSendOutcome.Skipped
         }
-        if (!isCurrent(current)) return AnnouncementSendOutcome.Skipped
+        if (!isCurrent(current)) return AnnouncementSendOutcome.AttachmentInvalidated
         val sent = try {
             withTimeoutOrNull(bridgeSendTimeoutMs) {
                 current.bridge.sendCompletionFollowUp(
@@ -411,7 +413,7 @@ class HermesAnnouncer(
         ) {
             return AnnouncementSendOutcome.Skipped
         }
-        if (!isCurrent(current)) return AnnouncementSendOutcome.Skipped
+        if (!isCurrent(current)) return AnnouncementSendOutcome.AttachmentInvalidated
         val sent = try {
             withTimeoutOrNull(bridgeSendTimeoutMs) {
                 current.bridge.sendTerminalFollowUp(
@@ -458,7 +460,7 @@ class HermesAnnouncer(
         ) {
             return AnnouncementSendOutcome.Skipped
         }
-        if (!isCurrent(current)) return AnnouncementSendOutcome.Skipped
+        if (!isCurrent(current)) return AnnouncementSendOutcome.AttachmentInvalidated
         val sent = try {
             withTimeoutOrNull(bridgeSendTimeoutMs) {
                 current.bridge.sendStillWorkingUpdate(
