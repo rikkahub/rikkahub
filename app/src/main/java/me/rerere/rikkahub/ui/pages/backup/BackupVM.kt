@@ -12,6 +12,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.sync.importer.ChatboxImporter
 import me.rerere.rikkahub.data.sync.importer.CherryStudioProviderImporter
+import me.rerere.rikkahub.data.sync.importer.RikkaHubBackupImporter
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.sync.S3BackupItem
@@ -26,6 +27,7 @@ class BackupVM(
     private val webDavSync: WebDavSync,
     private val s3Sync: S3Sync,
     private val conversationRepository: ConversationRepository,
+    private val rikkaHubBackupImporter: RikkaHubBackupImporter,
 ) : ViewModel() {
     val settings = settingsStore.settingsFlow.stateIn(
         scope = viewModelScope,
@@ -89,6 +91,28 @@ class BackupVM(
 
     suspend fun restoreFromLocalFile(file: File) {
         webDavSync.restoreFromLocalFile(file, settings.value.webDavConfig)
+    }
+
+    /**
+     * Non-destructive merge import of official RikkaHub backup ZIP.
+     * Does not replace live DB files. Optionally enqueues cloud outbox.
+     */
+    suspend fun importRikkaHubZipMerge(
+        file: File,
+        syncToCloud: Boolean,
+    ): RikkaHubBackupImporter.Report {
+        val report = rikkaHubBackupImporter.import(
+            zipFile = file,
+            options = RikkaHubBackupImporter.Options(syncToCloud = syncToCloud),
+        )
+        Log.i(
+            TAG,
+            "importRikkaHubZipMerge batch=${report.importBatchId} " +
+                "conv=${report.conversationsImported} skip=${report.conversationsSkipped} " +
+                "nodes=${report.messageNodesImported} files=${report.filesImported} " +
+                "mem=${report.memoriesImported} cloud=$syncToCloud",
+        )
+        return report
     }
 
     suspend fun restoreFromChatBox(file: File): ChatboxRestoreResult {

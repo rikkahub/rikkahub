@@ -97,7 +97,7 @@ fun ImportExportTab(
                 runCatching {
                     when (importType) {
                         "local" -> {
-                            // 本地备份导入：处理zip文件
+                            // Destructive full restore (legacy) — overwrites DB files.
                             val tempFile =
                                 File(context.cacheDir, "temp_restore_${System.currentTimeMillis()}.zip")
 
@@ -107,11 +107,34 @@ fun ImportExportTab(
                                 }
                             }
 
-                            // 从临时文件恢复
                             vm.restoreFromLocalFile(tempFile)
-
-                            // 清理临时文件
                             tempFile.delete()
+                        }
+
+                        "rikka_merge", "rikka_merge_cloud" -> {
+                            val tempFile =
+                                File(context.cacheDir, "temp_rikka_merge_${System.currentTimeMillis()}.zip")
+                            context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
+                                FileOutputStream(tempFile).use { outputStream ->
+                                    inputStream.copyTo(outputStream)
+                                }
+                            }
+                            val report = vm.importRikkaHubZipMerge(
+                                file = tempFile,
+                                syncToCloud = importType == "rikka_merge_cloud",
+                            )
+                            tempFile.delete()
+                            toaster.show(
+                                "Imported: ${report.conversationsImported} chats, " +
+                                    "${report.filesImported} files, " +
+                                    "${report.memoriesImported} memories" +
+                                    if (report.conversationsSkipped > 0) {
+                                        " (skipped ${report.conversationsSkipped} existing)"
+                                    } else {
+                                        ""
+                                    },
+                                type = ToastType.Success,
+                            )
                         }
 
                         "chatbox" -> {
@@ -151,11 +174,16 @@ fun ImportExportTab(
                         }
                     }
 
-                    toaster.show(
-                        context.getString(R.string.backup_page_restore_success),
-                        type = ToastType.Success
-                    )
-                    onShowRestartDialog()
+                    if (importType == "local" || importType == "chatbox" || importType == "cherry") {
+                        toaster.show(
+                            context.getString(R.string.backup_page_restore_success),
+                            type = ToastType.Success
+                        )
+                    }
+                    // Only destructive local restore needs process restart.
+                    if (importType == "local") {
+                        onShowRestartDialog()
+                    }
                 }.onFailure { e ->
                     e.printStackTrace()
                     toaster.show(
@@ -211,6 +239,56 @@ fun ImportExportTab(
                 item(
                     onClick = if (!isRestoring) {
                         {
+                            importType = "rikka_merge_cloud"
+                            openDocumentLauncher.launch(arrayOf("application/zip"))
+                        }
+                    } else null,
+                    headlineContent = { Text("Import RikkaHub ZIP (merge + cloud)") },
+                    supportingContent = {
+                        Text(
+                            if (isRestoring && importType == "rikka_merge_cloud") {
+                                stringResource(R.string.backup_page_importing)
+                            } else {
+                                "Merge chats/files/settings into current data, then enqueue cloud sync (recommended)"
+                            }
+                        )
+                    },
+                    leadingContent = {
+                        if (isRestoring && importType == "rikka_merge_cloud") {
+                            CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
+                        } else {
+                            Icon(HugeIcons.FileImport, null)
+                        }
+                    },
+                )
+                item(
+                    onClick = if (!isRestoring) {
+                        {
+                            importType = "rikka_merge"
+                            openDocumentLauncher.launch(arrayOf("application/zip"))
+                        }
+                    } else null,
+                    headlineContent = { Text("Import RikkaHub ZIP (local only)") },
+                    supportingContent = {
+                        Text(
+                            if (isRestoring && importType == "rikka_merge") {
+                                stringResource(R.string.backup_page_importing)
+                            } else {
+                                "Merge into current data without cloud outbox"
+                            }
+                        )
+                    },
+                    leadingContent = {
+                        if (isRestoring && importType == "rikka_merge") {
+                            CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
+                        } else {
+                            Icon(HugeIcons.FileImport, null)
+                        }
+                    },
+                )
+                item(
+                    onClick = if (!isRestoring) {
+                        {
                             importType = "local"
                             openDocumentLauncher.launch(arrayOf("application/zip"))
                         }
@@ -218,15 +296,15 @@ fun ImportExportTab(
                     headlineContent = { Text(stringResource(R.string.backup_page_local_backup_import)) },
                     supportingContent = {
                         Text(
-                            if (isRestoring) {
+                            if (isRestoring && importType == "local") {
                                 stringResource(R.string.backup_page_importing)
                             } else {
-                                stringResource(R.string.backup_page_import_desc)
+                                stringResource(R.string.backup_page_import_desc) + " (destructive overwrite — needs restart)"
                             }
                         )
                     },
                     leadingContent = {
-                        if (isRestoring) {
+                        if (isRestoring && importType == "local") {
                             CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
                         } else {
                             Icon(HugeIcons.FileImport, null)

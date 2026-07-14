@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
+import me.rerere.rikkahub.data.sync.importer.RikkaHubBackupImporter
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.service.ChatNotificationManager
 import me.rerere.rikkahub.service.ChatService
@@ -29,6 +30,17 @@ val appModule = module {
 
     single {
         LocalTools(get(), get(), get(), get())
+    }
+
+    single {
+        RikkaHubBackupImporter(
+            appContext = get(),
+            settingsStore = get(),
+            conversationRepository = get(),
+            memoryRepository = get(),
+            filesRepository = get(),
+            cloudSyncRepository = get(),
+        )
     }
 
     single {
