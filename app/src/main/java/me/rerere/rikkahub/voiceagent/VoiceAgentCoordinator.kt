@@ -231,14 +231,17 @@ class VoiceAgentCoordinator(
     }
 
     fun invalidateActiveSession() {
-        synchronized(toolJobsLock) {
+        val retiredSessionId = synchronized(toolJobsLock) {
+            val retiredSessionId = activeSessionId
             activeSessionId += 1
             acceptsUnscopedGeminiEvents = false
             // Posted while holding the same ownership lock used by scoped activity and
             // TurnComplete. This gives retirement a total order with in-flight callbacks:
             // an old event is either posted before this reset or rejected after it.
             hermesJobManager.announcer.onGeminiSessionRetired()
+            retiredSessionId
         }
+        diagnostics.record("gemini_session_retired", "sessionId=$retiredSessionId")
     }
 
     fun onGeminiEvent(sessionId: Long, event: GeminiLiveEvent) {

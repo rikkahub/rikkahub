@@ -5658,6 +5658,66 @@ class VoiceAgentRuntimeTest {
     }
 
     @Test
+    fun `automatic reconnect cannot announce through bridge in retirement detach gap`() = runTest {
+        val sessionApi = FakeVoiceSessionApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val diagnostics = VoiceDiagnostics()
+        val retirementObserved = CountDownLatch(1)
+        val releaseRetirement = CountDownLatch(1)
+        diagnostics.addListener { event ->
+            if (event.name == "gemini_session_retired") {
+                retirementObserved.countDown()
+                releaseRetirement.await(1, TimeUnit.SECONDS)
+            }
+        }
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = toolApi,
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            reconnectPolicy = fastReconnectPolicy(maxAttempts = 3, delayMs = 1),
+            scope = CoroutineScope(coroutineContext + Dispatchers.Default),
+        )
+
+        session.start()
+        gemini.awaitConnectCount(1)
+        val oldCallback = gemini.eventHandlers.single()
+        oldCallback(voiceToolCall(callId = "call-retire-gap", name = "ask_hermes", arg = "gap"))
+        assertEquals("call-retire-gap" to "gap", toolApi.awaitRequest("call-retire-gap"))
+
+        val reconnect = launch(Dispatchers.Default) {
+            oldCallback(GeminiLiveEvent.WebSocketFailure(message = "network dropped in gap"))
+        }
+        try {
+            assertTrue(retirementObserved.await(500, TimeUnit.MILLISECONDS))
+            toolApi.complete(response(callId = "call-retire-gap", answer = "gap answer"))
+            conversationStore.awaitHermesToolStatus("call-retire-gap", "complete")
+            delay(50)
+            assertTrue("retired session A must not receive the announcement", gemini.textTurns.isEmpty())
+        } finally {
+            releaseRetirement.countDown()
+        }
+
+        reconnect.join()
+        gemini.awaitConnectCount(2)
+        withTimeout(500) {
+            while (gemini.textTurns.none { it.first == 3L && it.second.contains("gap answer") }) {
+                delay(10)
+            }
+        }
+        assertEquals(1, gemini.textTurns.count { it.second.contains("gap answer") })
+        assertTrue(gemini.textTurns.none { it.first == 1L && it.second.contains("gap answer") })
+    }
+
+    @Test
     fun `session closeNow Hermes job survives canceled session scope`() = runTest {
         val sessionApi = FakeVoiceSessionApi()
         val conversationStore = FakeVoiceConversationStore()

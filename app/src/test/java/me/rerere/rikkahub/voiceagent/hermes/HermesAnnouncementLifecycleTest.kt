@@ -91,13 +91,29 @@ class HermesAnnouncementLifecycleTest {
 
         assertEquals(GeminiTurnGate.Idle, retired.state.geminiTurn)
         assertEquals(PlaybackGate(), retired.state.playback)
+        assertTrue(retired.state.bridgeRetired)
         assertTrue(retired.sends().isEmpty())
         assertEquals(completion, retired.state.pendingJobs.single().final)
 
-        val replacementAttached = reducer.reduce(
+        val settlingEvent = reducer.reduce(
             retired.state,
+            AnnouncerEvent.PlaybackDrained(generation = 1L, nowMs = 25L),
+        )
+        assertTrue(settlingEvent.sends().isEmpty())
+        assertEquals(completion, settlingEvent.state.pendingJobs.single().final)
+
+        val detached = reducer.reduce(
+            settlingEvent.state,
+            AnnouncerEvent.BridgeDetached(nowMs = 27L),
+        )
+        assertTrue(detached.fallbacks().isEmpty())
+        assertEquals(completion, detached.state.pendingJobs.single().final)
+
+        val replacementAttached = reducer.reduce(
+            detached.state,
             AnnouncerEvent.BridgeAttached(sessionId = 8L, nowMs = 30L),
         )
+        assertFalse(replacementAttached.state.bridgeRetired)
         assertEquals(listOf(completion), replacementAttached.sends())
         assertEquals(8L, replacementAttached.effects.filterIsInstance<AnnouncerEffect.Send>().single().sessionId)
     }

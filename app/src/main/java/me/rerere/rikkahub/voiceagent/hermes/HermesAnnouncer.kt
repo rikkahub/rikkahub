@@ -21,6 +21,9 @@ class HermesBridgeAttachment internal constructor(
 ) {
     @Volatile
     internal var active: Boolean = true
+
+    @Volatile
+    internal var announcementsActive: Boolean = true
 }
 
 /**
@@ -199,6 +202,13 @@ class HermesAnnouncer(
             this.attachment?.sessionId == attachment.sessionId
     }
 
+    private fun isCurrentForAnnouncement(attachment: HermesBridgeAttachment): Boolean = synchronized(lock) {
+        attachment.announcementsActive &&
+            attachment.active &&
+            this.attachment?.bridge === attachment.bridge &&
+            this.attachment?.sessionId == attachment.sessionId
+    }
+
     // --- intents and conversation-activity taps ---
 
     fun enqueueCompletion(callId: String, jobId: String?) {
@@ -232,7 +242,13 @@ class HermesAnnouncer(
     }
 
     fun onGeminiSessionRetired() {
-        events.trySend(AnnouncerEvent.GeminiSessionRetired(nowMs()))
+        synchronized(lock) {
+            // Revoke proactive speech immediately as well as gating future reducer sends.
+            // Direct tool responses have a separate lifetime: an already accepted Hermes
+            // call may still deliver its queued acknowledgement while reconnect cleanup runs.
+            attachment?.announcementsActive = false
+            events.trySend(AnnouncerEvent.GeminiSessionRetired(nowMs()))
+        }
     }
 
     fun onPlaybackActive(generation: Long) {
@@ -350,7 +366,7 @@ class HermesAnnouncer(
         if (record?.status != HermesQueueStatus.Complete || record.resultAnnounced || record.answer == null) {
             return AnnouncementSendOutcome.Skipped
         }
-        if (!isCurrent(current)) return AnnouncementSendOutcome.AttachmentInvalidated
+        if (!isCurrentForAnnouncement(current)) return AnnouncementSendOutcome.AttachmentInvalidated
         val sent = try {
             withTimeoutOrNull(bridgeSendTimeoutMs) {
                 current.bridge.sendCompletionFollowUp(
@@ -405,7 +421,7 @@ class HermesAnnouncer(
         ) {
             return AnnouncementSendOutcome.Skipped
         }
-        if (!isCurrent(current)) return AnnouncementSendOutcome.AttachmentInvalidated
+        if (!isCurrentForAnnouncement(current)) return AnnouncementSendOutcome.AttachmentInvalidated
         val sent = try {
             withTimeoutOrNull(bridgeSendTimeoutMs) {
                 current.bridge.sendTerminalFollowUp(
@@ -452,7 +468,7 @@ class HermesAnnouncer(
         ) {
             return AnnouncementSendOutcome.Skipped
         }
-        if (!isCurrent(current)) return AnnouncementSendOutcome.AttachmentInvalidated
+        if (!isCurrentForAnnouncement(current)) return AnnouncementSendOutcome.AttachmentInvalidated
         val sent = try {
             withTimeoutOrNull(bridgeSendTimeoutMs) {
                 current.bridge.sendStillWorkingUpdate(

@@ -69,6 +69,7 @@ data class PendingAnnouncementJob(
 
 data class AnnouncerState(
     val bridgeSessionId: Long? = null,
+    val bridgeRetired: Boolean = false,
     val geminiTurn: GeminiTurnGate = GeminiTurnGate.Idle,
     val playback: PlaybackGate = PlaybackGate(),
     val lastInputDeltaAtMs: Long? = null,
@@ -136,7 +137,13 @@ class AnnouncerReducer(
 
         is AnnouncerEvent.BridgeAttached -> when {
             state.closed -> noChange(state)
-            else -> settle(state.copy(bridgeSessionId = event.sessionId), event.nowMs)
+            else -> settle(
+                state.copy(
+                    bridgeSessionId = event.sessionId,
+                    bridgeRetired = false,
+                ),
+                event.nowMs,
+            )
         }
 
         is AnnouncerEvent.BridgeDetached -> when {
@@ -157,11 +164,20 @@ class AnnouncerReducer(
         is AnnouncerEvent.GeminiSessionRetired -> when {
             state.closed -> noChange(state)
             // Session retirement revokes the old socket's turn ownership, but it is not a
-            // speaking boundary. In particular, automatic reconnect may retire the session
-            // before its bridge is detached. A later bridge/playback event performs settle().
+            // speaking boundary. Automatic reconnect may retire the session before its bridge
+            // is detached, so mark that bridge ineligible until a replacement attaches.
             else -> AnnouncerTransition(
-                state.copy(geminiTurn = GeminiTurnGate.Idle),
-                emptyList(),
+                state.copy(
+                    bridgeRetired = true,
+                    geminiTurn = GeminiTurnGate.Idle,
+                    blockedWatchdogAtMs = null,
+                ),
+                buildList {
+                    add(AnnouncerEffect.CancelQuietTimer)
+                    if (state.blockedWatchdogAtMs != null) {
+                        add(AnnouncerEffect.CancelBlockedWatchdog)
+                    }
+                },
             )
         }
 
@@ -457,6 +473,13 @@ class AnnouncerReducer(
                 state = state.copy(blockedWatchdogAtMs = null)
                 effects += AnnouncerEffect.CancelBlockedWatchdog
             }
+            return AnnouncerTransition(state, effects)
+        }
+
+        // A retired bridge remains present in the shell until cleanup detaches it, but from
+        // retirement onward it is never eligible to reserve a send. Keep durable intents
+        // queued across all settling events until the replacement BridgeAttached arrives.
+        if (state.bridgeRetired) {
             return AnnouncerTransition(state, effects)
         }
 
