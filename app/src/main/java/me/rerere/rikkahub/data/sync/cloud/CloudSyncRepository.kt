@@ -157,6 +157,9 @@ class CloudSyncRepository(
         }
         val now = System.currentTimeMillis()
         val mutationId = UUID.randomUUID().toString()
+        // Coalesce: keep only the latest pending mutation per entity so rapid
+        // toggles do not push stale intermediate snapshots / cause conflicts.
+        outboxDao.deleteByEntity(entityType, entityId)
         outboxDao.insert(
             SyncOutboxEntity(
                 mutationId = mutationId,
@@ -173,6 +176,10 @@ class CloudSyncRepository(
             )
         )
         return mutationId
+    }
+
+    suspend fun hasPendingOutbox(entityType: String, entityId: String): Boolean {
+        return outboxDao.countByEntity(entityType, entityId) > 0
     }
 
     suspend fun testConnection(): ConnectionProbeResult = withContext(Dispatchers.IO) {
@@ -671,6 +678,11 @@ class CloudSyncRepository(
                     }
                     SettingsDomainSync.ENTITY_ASSISTANT -> {
                         val id = change.entityId
+                        // Local edits still in outbox win over remote echo/stale pull.
+                        if (hasPendingOutbox(SettingsDomainSync.ENTITY_ASSISTANT, id)) {
+                            Log.d(TAG, "skip remote assistant $id; local outbox pending")
+                            return@forEach
+                        }
                         if (change.operation == "delete") {
                             assistants.removeAll { it.id.toString() == id }
                             rememberRevision(change.entityType, id, change.revision)
@@ -760,6 +772,10 @@ class CloudSyncRepository(
                     }
                 }
                 SettingsDomainSync.ENTITY_ASSISTANT -> {
+                    if (hasPendingOutbox(SettingsDomainSync.ENTITY_ASSISTANT, entityId)) {
+                        Log.d(TAG, "skip conflict/remote assistant $entityId; local outbox pending")
+                        return@withRemoteApply
+                    }
                     val list = settings.assistants.toMutableList()
                     if (operation == "delete") {
                         list.removeAll { it.id.toString() == entityId }

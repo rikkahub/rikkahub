@@ -38,6 +38,17 @@ interface SyncOutboxDAO {
     @Query("DELETE FROM sync_outbox WHERE mutation_id = :mutationId")
     suspend fun deleteById(mutationId: String)
 
+    @Query("DELETE FROM sync_outbox WHERE entity_type = :entityType AND entity_id = :entityId")
+    suspend fun deleteByEntity(entityType: String, entityId: String)
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM sync_outbox
+        WHERE entity_type = :entityType AND entity_id = :entityId
+        """
+    )
+    suspend fun countByEntity(entityType: String, entityId: String): Int
+
     @Query("DELETE FROM sync_outbox")
     suspend fun clearAll()
 }

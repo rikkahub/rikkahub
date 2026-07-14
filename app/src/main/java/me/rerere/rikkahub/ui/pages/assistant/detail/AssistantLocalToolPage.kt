@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
+import me.rerere.rikkahub.data.ai.tools.local.isEffectivelyEnabled
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -105,17 +106,25 @@ private fun AssistantLocalToolContent(
         if (enabled && option == LocalToolOption.ScreenTime && !context.hasUsageStatsPermission()) {
             toaster.show(message = permissionRequiredText, type = ToastType.Warning)
             context.openUsageAccessSettings()
+            return
         }
         if (enabled && option == LocalToolOption.Calendar && !calendarPermissionState.allPermissionsGranted) {
             calendarPermissionState.requestPermissions()
             return
         }
         val newLocalTools = if (enabled) {
-            assistant.localTools + option
+            if (assistant.localTools.contains(option)) assistant.localTools
+            else assistant.localTools + option
         } else {
             assistant.localTools - option
         }
         onUpdate(assistant.copy(localTools = newLocalTools))
+    }
+
+    fun switchChecked(option: LocalToolOption): Boolean {
+        // Permission-gated tools only appear ON when runnable on this device.
+        // Remote sync may keep preference intent; without permission UI stays off.
+        return option.isEffectivelyEnabled(context, assistant.localTools)
     }
 
     Column(
@@ -137,7 +146,7 @@ private fun AssistantLocalToolContent(
                 },
                 trailingContent = {
                     Switch(
-                        checked = assistant.localTools.contains(LocalToolOption.JavascriptEngine),
+                        checked = switchChecked(LocalToolOption.JavascriptEngine),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.JavascriptEngine, it) }
                     )
                 }
@@ -151,7 +160,7 @@ private fun AssistantLocalToolContent(
                 },
                 trailingContent = {
                     Switch(
-                        checked = assistant.localTools.contains(LocalToolOption.TimeInfo),
+                        checked = switchChecked(LocalToolOption.TimeInfo),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.TimeInfo, it) }
                     )
                 }
@@ -165,7 +174,7 @@ private fun AssistantLocalToolContent(
                 },
                 trailingContent = {
                     Switch(
-                        checked = assistant.localTools.contains(LocalToolOption.Clipboard),
+                        checked = switchChecked(LocalToolOption.Clipboard),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.Clipboard, it) }
                     )
                 }
@@ -179,7 +188,7 @@ private fun AssistantLocalToolContent(
                 },
                 trailingContent = {
                     Switch(
-                        checked = assistant.localTools.contains(LocalToolOption.Tts),
+                        checked = switchChecked(LocalToolOption.Tts),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.Tts, it) }
                     )
                 }
@@ -193,7 +202,7 @@ private fun AssistantLocalToolContent(
                 },
                 trailingContent = {
                     Switch(
-                        checked = assistant.localTools.contains(LocalToolOption.AskUser),
+                        checked = switchChecked(LocalToolOption.AskUser),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.AskUser, it) }
                     )
                 }
@@ -207,7 +216,7 @@ private fun AssistantLocalToolContent(
                 },
                 trailingContent = {
                     Switch(
-                        checked = assistant.localTools.contains(LocalToolOption.ScreenTime),
+                        checked = switchChecked(LocalToolOption.ScreenTime),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.ScreenTime, it) }
                     )
                 }
@@ -221,7 +230,7 @@ private fun AssistantLocalToolContent(
                 },
                 trailingContent = {
                     Switch(
-                        checked = assistant.localTools.contains(LocalToolOption.Calendar),
+                        checked = switchChecked(LocalToolOption.Calendar),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.Calendar, it) }
                     )
                 }
