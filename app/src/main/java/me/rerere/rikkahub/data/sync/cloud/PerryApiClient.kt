@@ -122,6 +122,27 @@ class PerryApiClient(
         return body?.bytes() ?: ByteArray(0)
     }
 
+    /** Phase 8: Monel catalog via Perry (no Monel auth key on device). */
+    suspend fun catalogProviders(): List<JsonElement> {
+        return get("/v1/catalog/providers", auth = true)
+    }
+
+    suspend fun catalogModels(): List<JsonElement> {
+        return get("/v1/catalog/models", auth = true)
+    }
+
+    suspend fun catalogModelsByProvider(): List<JsonElement> {
+        return get("/v1/catalog/models/by-provider", auth = true)
+    }
+
+    /**
+     * Base URL for OpenAI-compatible SDK against a Monel provider, e.g.
+     * `{perry}/v1/ai/{providerId}/v1` with device token as apiKey.
+     */
+    fun aiProviderBaseUrl(providerId: String): String {
+        return join(baseUrl, "/v1/ai/$providerId/v1")
+    }
+
     private suspend inline fun <reified T> get(
         path: String,
         auth: Boolean,

@@ -1,13 +1,12 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
-
-from fastapi import Request
+from fastapi import APIRouter, Depends, Request
 
 from perry_server.auth.deps import AuthContext, get_app_settings, require_device
 from perry_server.config import Settings
 from perry_server.schemas.common import ComponentStatus, ServerInfoResponse
+from perry_server.services.monel import MonelClient
 from perry_server.services.storage import ObjectStorage
 
 router = APIRouter(prefix="/v1", tags=["server"])
@@ -20,15 +19,15 @@ async def server_info(
     _auth: Annotated[AuthContext, Depends(require_device)],
 ) -> ServerInfoResponse:
     storage = getattr(request.app.state, "object_storage", None)
+    monel = getattr(request.app.state, "monel_client", None)
     minio_status = _probe_storage(storage)
+    monel_status = await _probe_monel(monel)
     files_enabled = minio_status.status == "ok"
+    monel_enabled = monel_status.status == "ok"
     components: dict[str, ComponentStatus] = {
         "database": ComponentStatus(status="ok"),
         "minio": minio_status,
-        "monel": _component_status(
-            configured=bool(settings.monel_base_url and settings.monel_auth_key),
-            label="monel",
-        ),
+        "monel": monel_status,
     }
     return ServerInfoResponse(
         api_version=settings.perry_api_version,
@@ -37,7 +36,7 @@ async def server_info(
         features={
             "sync": True,
             "files": files_enabled,
-            "monel_facade": False,
+            "monel_facade": monel_enabled,
         },
         components=components,
     )
@@ -50,8 +49,8 @@ def _probe_storage(storage: ObjectStorage | None) -> ComponentStatus:
     return ComponentStatus(status=status, detail=detail)
 
 
-def _component_status(*, configured: bool, label: str) -> ComponentStatus:
-    if not configured:
-        return ComponentStatus(status="not_configured", detail=f"{label} not configured")
-    # Monel probe deferred to Phase 8.
-    return ComponentStatus(status="degraded", detail=f"{label} configured but not probed")
+async def _probe_monel(monel: MonelClient | None) -> ComponentStatus:
+    if monel is None:
+        return ComponentStatus(status="not_configured", detail="monel not configured")
+    status, detail = await monel.probe()
+    return ComponentStatus(status=status, detail=detail)
