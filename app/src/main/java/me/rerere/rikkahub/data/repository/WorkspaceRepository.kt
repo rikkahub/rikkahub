@@ -18,6 +18,7 @@ import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import kotlin.uuid.Uuid
@@ -169,6 +170,33 @@ class WorkspaceRepository(
         manager.writeText(workspace.root, path, text, overwrite)
     }
 
+    /**
+     * 读取文本用于应用内预览/编辑, 支持两个存储区.
+     * FILES 区走 [WorkspaceManager.readText] (自带大小保护); LINUX 区通过 exportFile 读入内存,
+     * 因此这里对 LINUX 区显式做大小限制, 避免大文件撑爆内存.
+     */
+    suspend fun readTextForPreview(
+        id: String,
+        area: WorkspaceStorageArea,
+        path: String,
+    ): String = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        manager.ensureWorkspace(workspace.root)
+        when (area) {
+            WorkspaceStorageArea.FILES -> manager.readText(workspace.root, path)
+            WorkspaceStorageArea.LINUX -> {
+                val size = manager.fileSize(workspace.root, path, area)
+                require(size <= MAX_PREVIEW_BYTES) {
+                    "文件过大, 无法预览 (${size} bytes)"
+                }
+                ByteArrayOutputStream().use { out ->
+                    manager.exportFile(workspace.root, path, area, out)
+                    out.toString(Charsets.UTF_8.name())
+                }
+            }
+        }
+    }
+
     suspend fun importFile(
         id: String,
         area: WorkspaceStorageArea,
@@ -285,5 +313,6 @@ class WorkspaceRepository(
 
     companion object {
         private const val TAG = "WorkspaceRepository"
+        private const val MAX_PREVIEW_BYTES = 512L * 1024
     }
 }
