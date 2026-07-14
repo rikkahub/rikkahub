@@ -26,6 +26,7 @@ import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.fts.SimpleDictManager
 import me.rerere.rikkahub.data.db.migrations.MIGRATION_27_28
+import me.rerere.rikkahub.data.db.migrations.MIGRATION_28_29
 import me.rerere.rikkahub.data.db.migrations.Migration_6_7
 import me.rerere.rikkahub.data.db.migrations.Migration_11_12
 import me.rerere.rikkahub.data.db.migrations.Migration_13_14
@@ -60,6 +61,7 @@ val dataSourceModule = module {
                 Migration_14_15,
                 Migration_15_16,
                 MIGRATION_27_28,
+                MIGRATION_28_29,
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {

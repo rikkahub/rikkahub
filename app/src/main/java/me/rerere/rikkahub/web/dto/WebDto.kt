@@ -168,7 +168,7 @@ data class PagedResult<T>(
 
 @Serializable
 data class UploadedFileDto(
-    val id: Long,
+    val id: String,
     val url: String,
     val fileName: String,
     val mime: String,

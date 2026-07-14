@@ -69,6 +69,59 @@ class PerryApiClient(
         return post("/v1/sync/mutations", body = body, auth = true)
     }
 
+    suspend fun initFile(request: FileInitRequest): FileInitResponse {
+        val body = json.encodeToString(request)
+        return post("/v1/files/init", body = body, auth = true)
+    }
+
+    suspend fun completeFile(fileId: String, request: FileCompleteRequest): FileDto {
+        val body = json.encodeToString(request)
+        return post("/v1/files/$fileId/complete", body = body, auth = true)
+    }
+
+    suspend fun downloadUrl(fileId: String): FileDownloadUrlResponse {
+        return get("/v1/files/$fileId/download-url", auth = true)
+    }
+
+    suspend fun putFileContent(fileId: String, bytes: ByteArray, mimeType: String) {
+        val media = (mimeType.ifBlank { "application/octet-stream" }).toMediaType()
+        val request = Request.Builder()
+            .url(join(baseUrl, "/v1/files/$fileId/content"))
+            .put(bytes.toRequestBody(media))
+            .applyAuth(true)
+            .build()
+        val response = httpClient.newCall(request).await()
+        val raw = response.body?.string().orEmpty()
+        if (!response.isSuccessful) {
+            val err = runCatching { json.decodeFromString<ErrorEnvelope>(raw) }.getOrNull()
+            throw PerryApiException(
+                code = err?.error?.code ?: "http_${response.code}",
+                message = err?.error?.message ?: raw.ifBlank { "HTTP ${response.code}" },
+                httpStatus = response.code,
+            )
+        }
+    }
+
+    suspend fun getFileContent(fileId: String): ByteArray {
+        val request = Request.Builder()
+            .url(join(baseUrl, "/v1/files/$fileId/content"))
+            .get()
+            .applyAuth(true)
+            .build()
+        val response = httpClient.newCall(request).await()
+        val body = response.body
+        if (!response.isSuccessful) {
+            val raw = body?.string().orEmpty()
+            val err = runCatching { json.decodeFromString<ErrorEnvelope>(raw) }.getOrNull()
+            throw PerryApiException(
+                code = err?.error?.code ?: "http_${response.code}",
+                message = err?.error?.message ?: raw.ifBlank { "HTTP ${response.code}" },
+                httpStatus = response.code,
+            )
+        }
+        return body?.bytes() ?: ByteArray(0)
+    }
+
     private suspend inline fun <reified T> get(
         path: String,
         auth: Boolean,
@@ -190,6 +243,54 @@ data class SyncBootstrapResponse(
     @SerialName("conversation_folders") val conversationFolders: List<JsonElement> = emptyList(),
     @SerialName("assistant_memories") val assistantMemories: List<JsonElement> = emptyList(),
     val favorites: List<JsonElement> = emptyList(),
+    val files: List<JsonElement> = emptyList(),
+)
+
+@Serializable
+data class FileInitRequest(
+    val id: String? = null,
+    val folder: String = "upload",
+    @SerialName("display_name") val displayName: String,
+    @SerialName("mime_type") val mimeType: String = "application/octet-stream",
+    @SerialName("size_bytes") val sizeBytes: Long,
+    val sha256: String,
+)
+
+@Serializable
+data class FileInitResponse(
+    val id: String,
+    @SerialName("upload_status") val uploadStatus: String,
+    @SerialName("object_key") val objectKey: String,
+    @SerialName("upload_url") val uploadUrl: String? = null,
+    val revision: Int,
+    val deduplicated: Boolean = false,
+)
+
+@Serializable
+data class FileCompleteRequest(
+    @SerialName("size_bytes") val sizeBytes: Long? = null,
+    val sha256: String? = null,
+)
+
+@Serializable
+data class FileDto(
+    val id: String,
+    val folder: String? = null,
+    @SerialName("display_name") val displayName: String? = null,
+    @SerialName("mime_type") val mimeType: String? = null,
+    @SerialName("size_bytes") val sizeBytes: Long? = null,
+    val sha256: String? = null,
+    @SerialName("object_key") val objectKey: String? = null,
+    @SerialName("upload_status") val uploadStatus: String? = null,
+    val revision: Int? = null,
+)
+
+@Serializable
+data class FileDownloadUrlResponse(
+    val id: String,
+    @SerialName("download_url") val downloadUrl: String,
+    @SerialName("expires_in_seconds") val expiresInSeconds: Int = 900,
+    @SerialName("upload_status") val uploadStatus: String? = null,
 )
 
 @Serializable

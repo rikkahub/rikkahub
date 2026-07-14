@@ -82,10 +82,9 @@ fun Route.filesRoutes(
 
         // DELETE /api/files/{id} - Delete uploaded file
         delete("/{id}") {
-            val idParam = call.pathParameters["id"]
+            val id = call.pathParameters["id"]
+                ?.takeIf { it.isNotBlank() }
                 ?: throw BadRequestException("Missing file id")
-            val id = idParam.toLongOrNull()
-                ?: throw BadRequestException("Invalid file id")
 
             val deleted = filesManager.delete(id, deleteFromDisk = true)
             if (!deleted) {
@@ -97,10 +96,9 @@ fun Route.filesRoutes(
 
         // GET /api/files/id/{id} - Get file by ID
         get("/id/{id}") {
-            val idParam = call.pathParameters["id"]
+            val id = call.pathParameters["id"]
+                ?.takeIf { it.isNotBlank() }
                 ?: throw BadRequestException("Missing file id")
-            val id = idParam.toLongOrNull()
-                ?: throw BadRequestException("Invalid file id")
 
             val entity = filesManager.get(id)
                 ?: throw NotFoundException("File not found")

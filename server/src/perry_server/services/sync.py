@@ -14,6 +14,7 @@ from perry_server.models.change_log import ChangeLog
 from perry_server.models.conversation import Conversation
 from perry_server.models.conversation_folder import ConversationFolder
 from perry_server.models.favorite import Favorite
+from perry_server.models.file_object import FileObject
 from perry_server.models.message_node import MessageNode
 from perry_server.models.mutation_receipt import MutationReceipt
 from perry_server.models.setting import Setting
@@ -25,6 +26,7 @@ from perry_server.schemas.sync import (
     MutationResult,
     MutationsResponse,
 )
+from perry_server.services.files import file_payload as _file_payload_from_service
 
 SUPPORTED_ENTITY_TYPES = {
     "setting",
@@ -34,6 +36,7 @@ SUPPORTED_ENTITY_TYPES = {
     "message_node",
     "assistant_memory",
     "favorite",
+    "file",
 }
 BOOTSTRAP_CONVERSATION_LIMIT = 200
 
@@ -142,6 +145,10 @@ def _memory_payload(memory: AssistantMemory) -> dict[str, Any]:
     }
 
 
+def _file_payload(row: FileObject) -> dict[str, Any]:
+    return _file_payload_from_service(row)
+
+
 def _favorite_payload(favorite: Favorite) -> dict[str, Any]:
     meta: Any = None
     if favorite.meta_json:
@@ -186,6 +193,37 @@ def _extract_memory_fields(payload: dict[str, Any]) -> dict[str, Any]:
         UUID(assistant_id)
     content = str(src.get("content") or "")
     return {"assistant_id": assistant_id, "content": content}
+
+
+def _extract_file_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    body = payload.get("payload")
+    if not isinstance(body, dict):
+        body = {}
+    src = {**body, **{k: v for k, v in payload.items() if k != "payload"}}
+    folder = str(src.get("folder") or "upload")
+    display_name = str(
+        src.get("display_name") if "display_name" in src else src.get("displayName") or "file"
+    )
+    mime_type = str(
+        src.get("mime_type") if "mime_type" in src else src.get("mimeType") or "application/octet-stream"
+    )
+    size_bytes = int(src.get("size_bytes") if "size_bytes" in src else src.get("sizeBytes") or 0)
+    sha256 = str(src.get("sha256") or "").lower()
+    object_key = str(src.get("object_key") if "object_key" in src else src.get("objectKey") or "")
+    upload_status = str(
+        src.get("upload_status") if "upload_status" in src else src.get("uploadStatus") or "pending"
+    )
+    if upload_status not in {"pending", "ready", "failed", "deleted"}:
+        upload_status = "pending"
+    return {
+        "folder": folder,
+        "display_name": display_name,
+        "mime_type": mime_type,
+        "size_bytes": size_bytes,
+        "sha256": sha256,
+        "object_key": object_key,
+        "upload_status": upload_status,
+    }
 
 
 def _extract_favorite_fields(payload: dict[str, Any]) -> dict[str, Any]:
@@ -368,6 +406,9 @@ async def bootstrap(session: AsyncSession, *, user_id: UUID) -> BootstrapRespons
     favorites_result = await session.execute(
         select(Favorite).where(Favorite.user_id == user_id, Favorite.deleted_at.is_(None))
     )
+    files_result = await session.execute(
+        select(FileObject).where(FileObject.user_id == user_id, FileObject.deleted_at.is_(None))
+    )
     return BootstrapResponse(
         cursor=cursor,
         server_time=_now().isoformat(),
@@ -379,6 +420,7 @@ async def bootstrap(session: AsyncSession, *, user_id: UUID) -> BootstrapRespons
         conversation_folders=[_folder_payload(row) for row in folders_result.scalars().all()],
         assistant_memories=[_memory_payload(row) for row in memories_result.scalars().all()],
         favorites=[_favorite_payload(row) for row in favorites_result.scalars().all()],
+        files=[_file_payload(row) for row in files_result.scalars().all()],
     )
 
 
@@ -484,6 +526,10 @@ async def _apply_one(
         )
     elif item.entity_type == "favorite":
         result = await _apply_favorite_mutation(
+            session, user_id=user_id, device_id=device_id, item=item
+        )
+    elif item.entity_type == "file":
+        result = await _apply_file_mutation(
             session, user_id=user_id, device_id=device_id, item=item
         )
     else:  # pragma: no cover
@@ -1754,6 +1800,179 @@ async def _apply_favorite_mutation(
         entity_id=item.entity_id,
         revision=favorite.revision,
         server_payload=_favorite_payload(favorite),
+    )
+
+
+async def _apply_file_mutation(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    device_id: UUID,
+    item: MutationItem,
+) -> MutationResult:
+    try:
+        file_id = UUID(item.entity_id)
+    except ValueError:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message="entity_id must be a UUID for file",
+        )
+
+    result = await session.execute(
+        select(FileObject).where(FileObject.user_id == user_id, FileObject.id == file_id)
+    )
+    row = result.scalar_one_or_none()
+
+    if item.operation == "delete":
+        if row is None or row.deleted_at is not None:
+            rev = row.revision if row is not None else 0
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="applied",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=rev,
+                server_payload=_file_payload(row) if row else None,
+            )
+        if item.base_revision != 0 and item.base_revision != row.revision:
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="conflict",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=row.revision,
+                server_payload=_file_payload(row),
+                message="base_revision mismatch",
+            )
+        row.revision += 1
+        row.deleted_at = _now()
+        row.upload_status = "deleted"
+        row.updated_at = _now()
+        row.updated_by_device = device_id
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="file",
+            entity_id=str(file_id),
+            operation="delete",
+            revision=row.revision,
+            payload=_file_payload(row),
+        )
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="applied",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=row.revision,
+            server_payload=_file_payload(row),
+        )
+
+    try:
+        fields = _extract_file_fields(item.payload or {})
+    except (ValueError, TypeError) as exc:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message=str(exc),
+        )
+
+    if row is None:
+        if item.base_revision not in (0,):
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="conflict",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=0,
+                message="entity does not exist; base_revision must be 0",
+            )
+        object_key = fields["object_key"] or f"users/{user_id}/files/{file_id}/{fields['display_name']}"
+        row = FileObject(
+            id=file_id,
+            user_id=user_id,
+            folder=fields["folder"],
+            display_name=fields["display_name"],
+            mime_type=fields["mime_type"],
+            size_bytes=fields["size_bytes"],
+            sha256=fields["sha256"],
+            object_key=object_key,
+            upload_status=fields["upload_status"],
+            revision=1,
+            payload_schema_version=item.payload_schema_version,
+            updated_by_device=device_id,
+            deleted_at=None,
+        )
+        session.add(row)
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="file",
+            entity_id=str(file_id),
+            operation="upsert",
+            revision=row.revision,
+            payload=_file_payload(row),
+        )
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="applied",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=row.revision,
+            server_payload=_file_payload(row),
+        )
+
+    if item.base_revision != row.revision:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="conflict",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=row.revision,
+            server_payload=_file_payload(row),
+            message="base_revision mismatch",
+        )
+
+    row.folder = fields["folder"]
+    row.display_name = fields["display_name"]
+    row.mime_type = fields["mime_type"]
+    row.size_bytes = fields["size_bytes"]
+    if fields["sha256"]:
+        row.sha256 = fields["sha256"]
+    if fields["object_key"]:
+        row.object_key = fields["object_key"]
+    row.upload_status = fields["upload_status"]
+    row.revision += 1
+    row.payload_schema_version = item.payload_schema_version
+    row.updated_at = _now()
+    row.updated_by_device = device_id
+    row.deleted_at = None
+    await session.flush()
+    await _append_change(
+        session,
+        user_id=user_id,
+        device_id=device_id,
+        entity_type="file",
+        entity_id=str(file_id),
+        operation="upsert",
+        revision=row.revision,
+        payload=_file_payload(row),
+    )
+    return MutationResult(
+        mutation_id=item.mutation_id,
+        status="applied",
+        entity_type=item.entity_type,
+        entity_id=item.entity_id,
+        revision=row.revision,
+        server_payload=_file_payload(row),
     )
 
 

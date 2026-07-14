@@ -61,3 +61,4 @@ class BootstrapResponse(BaseModel):
     conversation_folders: list[dict[str, Any]] = Field(default_factory=list)
     assistant_memories: list[dict[str, Any]] = Field(default_factory=list)
     favorites: list[dict[str, Any]] = Field(default_factory=list)
+    files: list[dict[str, Any]] = Field(default_factory=list)

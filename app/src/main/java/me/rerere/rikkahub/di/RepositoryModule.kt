@@ -14,6 +14,7 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.sync.cloud.CloudSyncRepository
 import me.rerere.rikkahub.data.sync.cloud.ConversationDomainSync
 import me.rerere.rikkahub.data.sync.cloud.FavoriteDomainSync
+import me.rerere.rikkahub.data.sync.cloud.FileDomainSync
 import me.rerere.rikkahub.data.sync.cloud.FolderDomainSync
 import me.rerere.rikkahub.data.sync.cloud.MemoryDomainSync
 import me.rerere.rikkahub.data.sync.cloud.MessageNodeDomainSync
@@ -167,6 +168,17 @@ val repositoryModule = module {
         )
         get<CloudSyncRepository>().favoriteDomainSync = domain
         get<FavoriteRepository>().favoriteDomainSync = domain
+        domain
+    }
+
+    single(createdAtStart = true) {
+        val domain = FileDomainSync(
+            cloudSyncRepository = get(),
+            revisionDao = get(),
+            filesRepository = get(),
+        )
+        get<CloudSyncRepository>().fileDomainSync = domain
+        get<FilesRepository>().fileDomainSync = domain
         domain
     }
 }

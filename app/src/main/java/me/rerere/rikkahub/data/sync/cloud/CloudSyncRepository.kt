@@ -64,6 +64,7 @@ class CloudSyncRepository(
     var messageNodeDomainSync: MessageNodeDomainSync? = null
     var memoryDomainSync: MemoryDomainSync? = null
     var favoriteDomainSync: FavoriteDomainSync? = null
+    var fileDomainSync: FileDomainSync? = null
     private val syncMutex = Mutex()
     private var pendingSyncJob: Job? = null
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.NOT_CONFIGURED)
@@ -80,6 +81,22 @@ class CloudSyncRepository(
      * Schedule a sync soon. AUTO mode runs in-process (debounced) so users do not
      * have to tap "Sync now"; WorkManager remains a process-death / retry backup.
      */
+    fun requestFileTransfer() {
+        FileTransferWorker.enqueue(appContext)
+    }
+
+    fun createAuthenticatedClient(): PerryApiClient? {
+        val settings = settingsStore.settingsFlow.value
+        val config = settings.perryConfig
+        val token = settings.perryDeviceToken
+        if (!config.isConfigured() || token.isBlank()) return null
+        return PerryApiClient(
+            okHttpClient,
+            config.normalizedBaseUrl(),
+            deviceToken = token,
+        )
+    }
+
     fun requestSync() {
         pendingSyncJob?.cancel()
         pendingSyncJob = appScope.launch {
@@ -422,9 +439,13 @@ class CloudSyncRepository(
                     if (bootstrap.favorites.isEmpty()) {
                         favoriteDomainSync?.seedLocalFavorites()
                     }
+                    if (bootstrap.files.isEmpty()) {
+                        fileDomainSync?.seedLocalFiles()
+                    }
                 }
                 pushOutbox(client, state.deviceId!!)
                 pullChanges(client)
+                requestFileTransfer()
                 val now = System.currentTimeMillis()
                 stateDao.updateCursor(
                     cursor = ensureState().changeCursor,
@@ -581,6 +602,19 @@ class CloudSyncRepository(
                 rememberRevision(SettingsDomainSync.ENTITY_ASSISTANT, id, revision)
             }
             settingsStore.update(settings.copy(assistants = assistants))
+            // File metadata first so attachments can resolve after assistants/messages land.
+            bootstrap.files.forEach { element ->
+                val obj = element as? JsonObject ?: return@forEach
+                val id = obj["id"]?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return@forEach
+                val revision = obj["revision"]
+                    ?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0L
+                fileDomainSync?.applyRemotePayload(
+                    entityId = id,
+                    operation = "upsert",
+                    payload = obj,
+                    revision = revision,
+                )
+            }
             // Folders first so UI membership resolves when conversation summaries land.
             bootstrap.conversationFolders.forEach { element ->
                 val obj = element as? JsonObject ?: return@forEach
@@ -651,12 +685,13 @@ class CloudSyncRepository(
             val ordered = changes.sortedBy { change ->
                 when (change.entityType) {
                     SettingsDomainSync.ENTITY_SETTING -> 0
-                    SettingsDomainSync.ENTITY_ASSISTANT -> 1
-                    MemoryDomainSync.ENTITY_MEMORY -> 2
-                    FolderDomainSync.ENTITY_FOLDER -> 3
-                    ConversationDomainSync.ENTITY_CONVERSATION -> 4
-                    MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> 5
-                    FavoriteDomainSync.ENTITY_FAVORITE -> 6
+                    FileDomainSync.ENTITY_FILE -> 1
+                    SettingsDomainSync.ENTITY_ASSISTANT -> 2
+                    MemoryDomainSync.ENTITY_MEMORY -> 3
+                    FolderDomainSync.ENTITY_FOLDER -> 4
+                    ConversationDomainSync.ENTITY_CONVERSATION -> 5
+                    MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> 6
+                    FavoriteDomainSync.ENTITY_FAVORITE -> 7
                     else -> 9
                 }
             }
@@ -739,6 +774,15 @@ class CloudSyncRepository(
                     }
                     FavoriteDomainSync.ENTITY_FAVORITE -> {
                         favoriteDomainSync?.applyRemotePayload(
+                            entityId = change.entityId,
+                            operation = change.operation,
+                            payload = change.payload,
+                            revision = change.revision,
+                        )
+                        rememberRevision(change.entityType, change.entityId, change.revision)
+                    }
+                    FileDomainSync.ENTITY_FILE -> {
+                        fileDomainSync?.applyRemotePayload(
                             entityId = change.entityId,
                             operation = change.operation,
                             payload = change.payload,
@@ -829,6 +873,14 @@ class CloudSyncRepository(
                         revision = revision ?: 0L,
                     )
                 }
+                FileDomainSync.ENTITY_FILE -> {
+                    fileDomainSync?.applyRemotePayload(
+                        entityId = entityId,
+                        operation = operation,
+                        payload = payload,
+                        revision = revision ?: 0L,
+                    )
+                }
             }
             revision?.let { rememberRevision(entityType, entityId, it) }
         }
@@ -855,12 +907,13 @@ class CloudSyncRepository(
 
     private fun outboxPushPriority(entityType: String): Int = when (entityType) {
         SettingsDomainSync.ENTITY_SETTING -> 0
-        SettingsDomainSync.ENTITY_ASSISTANT -> 1
-        MemoryDomainSync.ENTITY_MEMORY -> 2
-        FolderDomainSync.ENTITY_FOLDER -> 3
-        ConversationDomainSync.ENTITY_CONVERSATION -> 4
-        MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> 5
-        FavoriteDomainSync.ENTITY_FAVORITE -> 6
+        FileDomainSync.ENTITY_FILE -> 1
+        SettingsDomainSync.ENTITY_ASSISTANT -> 2
+        MemoryDomainSync.ENTITY_MEMORY -> 3
+        FolderDomainSync.ENTITY_FOLDER -> 4
+        ConversationDomainSync.ENTITY_CONVERSATION -> 5
+        MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> 6
+        FavoriteDomainSync.ENTITY_FAVORITE -> 7
         else -> 9
     }
 

@@ -3,24 +3,28 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from fastapi import Request
+
 from perry_server.auth.deps import AuthContext, get_app_settings, require_device
 from perry_server.config import Settings
 from perry_server.schemas.common import ComponentStatus, ServerInfoResponse
+from perry_server.services.storage import ObjectStorage
 
 router = APIRouter(prefix="/v1", tags=["server"])
 
 
 @router.get("/server-info", response_model=ServerInfoResponse)
 async def server_info(
+    request: Request,
     settings: Annotated[Settings, Depends(get_app_settings)],
     _auth: Annotated[AuthContext, Depends(require_device)],
 ) -> ServerInfoResponse:
+    storage = getattr(request.app.state, "object_storage", None)
+    minio_status = _probe_storage(storage)
+    files_enabled = minio_status.status == "ok"
     components: dict[str, ComponentStatus] = {
         "database": ComponentStatus(status="ok"),
-        "minio": _component_status(
-            configured=bool(settings.minio_endpoint and settings.minio_access_key),
-            label="minio",
-        ),
+        "minio": minio_status,
         "monel": _component_status(
             configured=bool(settings.monel_base_url and settings.monel_auth_key),
             label="monel",
@@ -32,15 +36,22 @@ async def server_info(
         server_time=datetime.now(UTC).isoformat(),
         features={
             "sync": True,
-            "files": False,
+            "files": files_enabled,
             "monel_facade": False,
         },
         components=components,
     )
 
 
+def _probe_storage(storage: ObjectStorage | None) -> ComponentStatus:
+    if storage is None:
+        return ComponentStatus(status="not_configured", detail="minio not configured")
+    status, detail = storage.probe()
+    return ComponentStatus(status=status, detail=detail)
+
+
 def _component_status(*, configured: bool, label: str) -> ComponentStatus:
     if not configured:
         return ComponentStatus(status="not_configured", detail=f"{label} not configured")
-    # Phase 1 does not probe remote components yet; mark configured as degraded until Phase 7/8.
+    # Monel probe deferred to Phase 8.
     return ComponentStatus(status="degraded", detail=f"{label} configured but not probed")

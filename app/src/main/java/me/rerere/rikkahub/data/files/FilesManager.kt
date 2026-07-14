@@ -95,7 +95,7 @@ class FilesManager(
     suspend fun list(folder: String = FileFolders.UPLOAD): List<ManagedFileEntity> =
         repository.listByFolder(folder).first()
 
-    suspend fun get(id: Long): ManagedFileEntity? = repository.getById(id)
+    suspend fun get(id: String): ManagedFileEntity? = repository.getById(id)
 
     suspend fun getByRelativePath(relativePath: String): ManagedFileEntity? = repository.getByPath(relativePath)
 
@@ -335,8 +335,12 @@ class FilesManager(
                 val now = System.currentTimeMillis()
                 val displayName = file.name
                 val mimeType = guessMimeType(file, displayName)
+                val stem = file.nameWithoutExtension
+                val id = runCatching { java.util.UUID.fromString(stem).toString() }
+                    .getOrElse { java.util.UUID.randomUUID().toString() }
                 repository.insert(
                     ManagedFileEntity(
+                        id = id,
                         folder = folder,
                         relativePath = relativePath,
                         displayName = displayName,
@@ -344,6 +348,7 @@ class FilesManager(
                         sizeBytes = file.length(),
                         createdAt = file.lastModified().takeIf { it > 0 } ?: now,
                         updatedAt = now,
+                        uploadStatus = ManagedFileEntity.UPLOAD_LOCAL_ONLY,
                     )
                 )
                 inserted += 1
@@ -352,7 +357,7 @@ class FilesManager(
         inserted
     }
 
-    suspend fun delete(id: Long, deleteFromDisk: Boolean = true): Boolean = withContext(Dispatchers.IO) {
+    suspend fun delete(id: String, deleteFromDisk: Boolean = true): Boolean = withContext(Dispatchers.IO) {
         val entity = repository.getById(id) ?: return@withContext false
         if (deleteFromDisk) {
             runCatching { getFile(entity).delete() }
@@ -371,6 +376,12 @@ class FilesManager(
     private fun buildUuidFileName(displayName: String?, mimeType: String?): String =
         FileUtils.buildUuidFileName(displayName, mimeType)
 
+    private fun fileIdFromDiskName(file: File): String {
+        val stem = file.nameWithoutExtension
+        return runCatching { java.util.UUID.fromString(stem).toString() }
+            .getOrElse { java.util.UUID.randomUUID().toString() }
+    }
+
     private suspend fun createManagedFileEntity(
         folder: String,
         file: File,
@@ -380,6 +391,7 @@ class FilesManager(
         val now = System.currentTimeMillis()
         return repository.insert(
             ManagedFileEntity(
+                id = fileIdFromDiskName(file),
                 folder = folder,
                 relativePath = buildRelativePath(folder, file),
                 displayName = displayName,
@@ -387,6 +399,7 @@ class FilesManager(
                 sizeBytes = file.length(),
                 createdAt = now,
                 updatedAt = now,
+                uploadStatus = ManagedFileEntity.UPLOAD_LOCAL_ONLY,
             )
         )
     }
@@ -402,6 +415,7 @@ class FilesManager(
                 val now = System.currentTimeMillis()
                 repository.insert(
                     ManagedFileEntity(
+                        id = fileIdFromDiskName(file),
                         folder = folder,
                         relativePath = relativePath,
                         displayName = displayName,
@@ -409,6 +423,7 @@ class FilesManager(
                         sizeBytes = file.length(),
                         createdAt = now,
                         updatedAt = now,
+                        uploadStatus = ManagedFileEntity.UPLOAD_LOCAL_ONLY,
                     )
                 )
             }.onFailure {
