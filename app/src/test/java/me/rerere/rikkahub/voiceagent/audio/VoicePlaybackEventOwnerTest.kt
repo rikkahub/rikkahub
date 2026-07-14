@@ -1,25 +1,17 @@
 package me.rerere.rikkahub.voiceagent.audio
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VoicePlaybackEventOwnerTest {
     @Test
-    fun `forwards events and delegates turn boundary`() {
+    fun `forwards events to installed handler`() {
         val events = mutableListOf<VoicePlaybackEvent>()
-        var markedSessionId: Long? = null
         val owner = VoicePlaybackEventOwner()
         owner.setHandler(events::add)
 
         owner.notify(VoicePlaybackEvent.Active(1L))
-        val accepted = owner.markTurnComplete(100L) { sessionId ->
-            markedSessionId = sessionId
-            true
-        }
 
-        assertTrue(accepted)
-        assertEquals(100L, markedSessionId)
         assertEquals(listOf(VoicePlaybackEvent.Active(1L)), events)
     }
 

@@ -281,7 +281,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     }
 
     override fun markPlaybackTurnComplete(sessionId: Long?): Boolean =
-        playbackEventOwner.markTurnComplete(sessionId, playbackWriter::markTurnComplete)
+        playbackWriter.markTurnComplete(sessionId)
 
     override fun invalidatePlaybackSession() {
         playbackWriter.invalidateSession()

@@ -15,11 +15,6 @@ internal class VoicePlaybackEventOwner {
         currentHandler?.invoke(event)
     }
 
-    fun markTurnComplete(
-        sessionId: Long?,
-        markPlaybackTurnComplete: (Long?) -> Boolean,
-    ): Boolean = markPlaybackTurnComplete(sessionId)
-
     fun releasePlayback(release: () -> Unit) {
         release()
         synchronized(lock) {

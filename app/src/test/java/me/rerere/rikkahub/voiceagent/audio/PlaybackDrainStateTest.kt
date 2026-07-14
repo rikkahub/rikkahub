@@ -110,4 +110,62 @@ class PlaybackDrainStateTest {
         )
         assertEquals(1, pollCalls)
     }
+
+    @Test
+    fun `partial progress resets timeout until target drains after total timeout`() {
+        var rawPlaybackHead = 100
+        var nowNanos = 0L
+        var pollCalls = 0
+        val state = PlaybackDrainState(
+            readPlaybackHead = { rawPlaybackHead },
+            isInterrupted = { false },
+            isPlaybackTrackCurrent = { true },
+            poll = {
+                pollCalls += 1
+                nowNanos += 6_000L
+                rawPlaybackHead += 1
+            },
+            monotonicTimeNanos = { nowNanos },
+            noProgressTimeoutNanos = 10_000L,
+        )
+
+        state.onStarted()
+        state.onBytesWritten(8)
+
+        assertEquals(VoicePcm16Sink.DrainResult.Drained, state.awaitDrained())
+        assertEquals(4, pollCalls)
+        assertEquals(24_000L, nowNanos)
+    }
+
+    @Test
+    fun `full timeout after last partial progress still fails`() {
+        var rawPlaybackHead = 100
+        var nowNanos = 0L
+        var pollCalls = 0
+        val state = PlaybackDrainState(
+            readPlaybackHead = { rawPlaybackHead },
+            isInterrupted = { false },
+            isPlaybackTrackCurrent = { true },
+            poll = {
+                pollCalls += 1
+                if (pollCalls == 1) {
+                    rawPlaybackHead += 1
+                    nowNanos = 6_000L
+                } else {
+                    nowNanos = 16_000L
+                }
+            },
+            monotonicTimeNanos = { nowNanos },
+            noProgressTimeoutNanos = 10_000L,
+        )
+
+        state.onStarted()
+        state.onBytesWritten(4)
+
+        assertEquals(
+            VoicePcm16Sink.DrainResult.Failed("Playback head stalled"),
+            state.awaitDrained(),
+        )
+        assertEquals(2, pollCalls)
+    }
 }

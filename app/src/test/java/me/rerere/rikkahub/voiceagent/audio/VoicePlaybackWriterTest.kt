@@ -69,6 +69,39 @@ class VoicePlaybackWriterTest {
     }
 
     @Test
+    fun `stale turn boundary leaves current epoch accepting until correct boundary`() {
+        val scope = testScope()
+        val events = CopyOnWriteArrayList<VoicePlaybackEvent>()
+        val sink = FakeVoicePcm16Sink(expectedWrites = 2, blockDrain = true)
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { sink },
+            onPlaybackEvent = events::add,
+        )
+
+        writer.activateSession(100L)
+        assertTrue(writer.playBase64("AQID", sessionId = 100L))
+
+        assertFalse(writer.markTurnComplete(sessionId = 99L))
+        assertEquals(listOf(VoicePlaybackEvent.Active(1L)), events)
+
+        assertTrue(writer.playBase64("BAUG", sessionId = 100L))
+        assertEquals(listOf(VoicePlaybackEvent.Active(1L)), events)
+        assertTrue(writer.markTurnComplete(sessionId = 100L))
+        assertTrue(sink.awaitDrainStarted())
+        assertEquals(2, sink.writes.size)
+        assertEquals(
+            listOf(VoicePlaybackEvent.Active(1L), VoicePlaybackEvent.DrainStarted(1L)),
+            events,
+        )
+
+        sink.releaseDrain()
+        assertTrue(waitUntil { events.lastOrNull() == VoicePlaybackEvent.Drained(1L) })
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
     fun `suppress increments generation retires active sink and skips queued stale chunks`() {
         val scope = testScope()
         val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
@@ -103,6 +136,44 @@ class VoicePlaybackWriterTest {
         assertTrue(diagnostics.any { it is VoicePlaybackDiagnostic.PlaybackSuppressed })
         assertTrue(diagnostics.any { it is VoicePlaybackDiagnostic.StaleChunkRejected })
 
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
+    fun `playback admission stays closed while suppression retirement is blocked`() {
+        val scope = testScope()
+        val events = CopyOnWriteArrayList<VoicePlaybackEvent>()
+        val firstSink = FakeVoicePcm16Sink(expectedWrites = 1, blockPauseAndFlush = true)
+        val secondSink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val sinkIndex = AtomicInteger()
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = {
+                if (sinkIndex.getAndIncrement() == 0) firstSink else secondSink
+            },
+            onPlaybackEvent = events::add,
+        )
+
+        writer.activateSession(100L)
+        assertTrue(writer.playBase64("AQID", sessionId = 100L))
+        assertTrue(firstSink.awaitWrites(2))
+
+        val suppression = Thread { writer.suppress() }.apply { start() }
+        assertTrue(firstSink.awaitPauseAndFlushStarted())
+
+        assertFalse(writer.playBase64("BAUG", sessionId = 100L))
+        assertEquals(1, sinkIndex.get())
+        assertFalse(events.contains(VoicePlaybackEvent.Active(2L)))
+
+        firstSink.releasePauseAndFlush()
+        suppression.join(2_000L)
+        assertFalse(suppression.isAlive)
+        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(1L)) })
+
+        assertTrue(writer.playBase64("BAUG", sessionId = 100L))
+        assertTrue(secondSink.awaitWrites(2))
+        assertTrue(events.contains(VoicePlaybackEvent.Active(2L)))
         writer.release()
         scope.cancel()
     }
@@ -654,6 +725,7 @@ class VoicePlaybackWriterTest {
         private val writeException: RuntimeException? = null,
         private val blockDrain: Boolean = false,
         private val drainResult: VoicePcm16Sink.DrainResult = VoicePcm16Sink.DrainResult.Drained,
+        private val blockPauseAndFlush: Boolean = false,
         private val pauseException: RuntimeException? = null,
         private val releaseException: RuntimeException? = null,
     ) : VoicePcm16Sink {
@@ -662,6 +734,8 @@ class VoicePlaybackWriterTest {
         private val releaseBlockedWriteLatch = CountDownLatch(1)
         private val drainStartedLatch = CountDownLatch(1)
         private val releaseDrainLatch = CountDownLatch(1)
+        private val pauseAndFlushStartedLatch = CountDownLatch(1)
+        private val releasePauseAndFlushLatch = CountDownLatch(1)
         private val startCallCount = AtomicInteger()
         private val pauseAndFlushCallCount = AtomicInteger()
         private val stopAndReleaseCallCount = AtomicInteger()
@@ -708,6 +782,8 @@ class VoicePlaybackWriterTest {
 
         override fun pauseAndFlush() {
             pauseAndFlushCallCount.incrementAndGet()
+            pauseAndFlushStartedLatch.countDown()
+            if (blockPauseAndFlush) releasePauseAndFlushLatch.await(2, TimeUnit.SECONDS)
             pauseException?.let { throw it }
         }
 
@@ -723,6 +799,11 @@ class VoicePlaybackWriterTest {
         fun awaitDrainStarted(): Boolean = drainStartedLatch.await(2, TimeUnit.SECONDS)
 
         fun releaseDrain() = releaseDrainLatch.countDown()
+
+        fun awaitPauseAndFlushStarted(): Boolean =
+            pauseAndFlushStartedLatch.await(2, TimeUnit.SECONDS)
+
+        fun releasePauseAndFlush() = releasePauseAndFlushLatch.countDown()
 
         fun releaseBlockedWrite() {
             releaseBlockedWriteLatch.countDown()
