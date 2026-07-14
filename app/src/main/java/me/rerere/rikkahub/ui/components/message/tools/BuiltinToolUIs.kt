@@ -39,6 +39,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -557,6 +558,61 @@ object CalendarCreateToolUI : ToolUIRenderer {
         val eventTitle = context.arguments.getStringContent("title") ?: ""
         return stringResource(R.string.chat_message_tool_calendar_create, eventTitle)
     }
+}
+
+object AlarmQueryToolUI : ToolUIRenderer {
+    override val toolName: String = "alarm_query"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Time02
+
+    @Composable
+    override fun title(context: ToolUIContext): String =
+        stringResource(R.string.chat_message_tool_alarm_query)
+
+    override fun hasSummary(context: ToolUIContext): Boolean {
+        val prim = context.content?.jsonObjectOrNull?.get("has_next_alarm")?.jsonPrimitiveOrNull
+        return prim?.booleanOrNull == true || prim?.contentOrNull == "true"
+    }
+
+    @Composable
+    override fun Summary(context: ToolUIContext) {
+        val iso = context.content.getStringContent("trigger_iso") ?: return
+        Text(
+            text = iso,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.shimmer(isLoading = context.loading),
+        )
+    }
+}
+
+object AlarmCreateToolUI : ToolUIRenderer {
+    override val toolName: String = "alarm_create"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Time02
+
+    @Composable
+    override fun title(context: ToolUIContext): String {
+        val hour = context.arguments.getStringContent("hour") ?: "?"
+        val minute = context.arguments.getStringContent("minute") ?: "?"
+        val label = "%02d:%02d".format(
+            hour.toIntOrNull() ?: 0,
+            minute.toIntOrNull() ?: 0,
+        )
+        return stringResource(R.string.chat_message_tool_alarm_create, label)
+    }
+}
+
+object AlarmShowToolUI : ToolUIRenderer {
+    override val toolName: String = "alarm_show"
+
+    override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Time02
+
+    @Composable
+    override fun title(context: ToolUIContext): String =
+        stringResource(R.string.chat_message_tool_alarm_show)
 }
 
 @Composable

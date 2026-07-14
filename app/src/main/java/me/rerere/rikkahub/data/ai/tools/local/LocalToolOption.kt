@@ -32,4 +32,12 @@ sealed class LocalToolOption {
     @Serializable
     @SerialName("calendar")
     data object Calendar : LocalToolOption()
+
+    /**
+     * Device clock alarms (local only; not cloud-synced).
+     * Create via system AlarmClock intent; query next alarm only.
+     */
+    @Serializable
+    @SerialName("alarm")
+    data object Alarm : LocalToolOption()
 }

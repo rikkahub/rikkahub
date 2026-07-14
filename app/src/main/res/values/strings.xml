@@ -1264,6 +1264,11 @@
   <string name="assistant_page_local_tools_calendar_desc">Let the AI query and create calendar events</string>
   <string name="chat_message_tool_calendar_query">Query calendar events</string>
   <string name="chat_message_tool_calendar_create">Create event: %1$s</string>
+  <string name="assistant_page_local_tools_alarm_title">Alarms</string>
+  <string name="assistant_page_local_tools_alarm_desc">Let the AI read the next alarm and open the system Clock to create alarms (local only, not cloud-synced)</string>
+  <string name="chat_message_tool_alarm_query">Query next alarm</string>
+  <string name="chat_message_tool_alarm_create">Create alarm: %1$s</string>
+  <string name="chat_message_tool_alarm_show">Open alarms</string>
   <string name="chat_page_move_to_folder">Move to Folder</string>
   <string name="chat_page_remove_from_folder">Remove from Folder</string>
   <string name="chat_page_create_folder">New Folder</string>

@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
+import me.rerere.rikkahub.data.ai.tools.local.canUseAlarmTools
 import me.rerere.rikkahub.data.ai.tools.local.isEffectivelyEnabled
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -110,6 +111,13 @@ private fun AssistantLocalToolContent(
         }
         if (enabled && option == LocalToolOption.Calendar && !calendarPermissionState.allPermissionsGranted) {
             calendarPermissionState.requestPermissions()
+            return
+        }
+        if (enabled && option == LocalToolOption.Alarm && !canUseAlarmTools(context)) {
+            toaster.show(
+                message = "No system Clock app found for alarms",
+                type = ToastType.Warning,
+            )
             return
         }
         val newLocalTools = if (enabled) {
@@ -232,6 +240,20 @@ private fun AssistantLocalToolContent(
                     Switch(
                         checked = switchChecked(LocalToolOption.Calendar),
                         onCheckedChange = { toggleLocalTool(LocalToolOption.Calendar, it) }
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_alarm_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_alarm_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = switchChecked(LocalToolOption.Alarm),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Alarm, it) }
                     )
                 }
             )

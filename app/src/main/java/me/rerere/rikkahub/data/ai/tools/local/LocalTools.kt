@@ -32,6 +32,12 @@ class LocalTools(
 
     val calendarCreateTool by lazy { buildCalendarCreateTool(context) }
 
+    val alarmQueryTool by lazy { buildAlarmQueryTool(context) }
+
+    val alarmCreateTool by lazy { buildAlarmCreateTool(context) }
+
+    val alarmShowTool by lazy { buildAlarmShowTool(context) }
+
     fun getTools(options: List<LocalToolOption>): List<Tool> {
         val tools = mutableListOf<Tool>()
         // Only expose tools that are both enabled and runnable on this device.
@@ -58,6 +64,16 @@ class LocalTools(
             tools.add(calendarQueryTool)
             tools.add(calendarCreateTool)
         }
+        // AlarmClock path needs a resolvable Clock app, not dangerous runtime perms.
+        if (options.contains(LocalToolOption.Alarm) && canUseAlarmTools(context)) {
+            tools.add(alarmQueryTool)
+            if (canCreateAlarmViaClock(context)) {
+                tools.add(alarmCreateTool)
+            }
+            if (canShowAlarms(context)) {
+                tools.add(alarmShowTool)
+            }
+        }
         return tools
     }
 }
@@ -79,6 +95,7 @@ fun LocalToolOption.isEffectivelyEnabled(context: Context, enabledOptions: List<
     return when (this) {
         LocalToolOption.ScreenTime -> context.hasUsageStatsPermission()
         LocalToolOption.Calendar -> hasCalendarPermissions(context)
+        LocalToolOption.Alarm -> canUseAlarmTools(context)
         else -> true
     }
 }
