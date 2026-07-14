@@ -510,9 +510,11 @@ class CloudSyncRepository(
                 if (state.changeCursor <= 0L) {
                     val bootstrap = client.bootstrap()
                     applyBootstrap(bootstrap)
-                    if (bootstrap.settings.isEmpty() && bootstrap.assistants.isEmpty()) {
-                        settingsDomainSync?.seedLocalSnapshot(settingsStore.settingsFlow.value)
-                    }
+                    // Seed any local keys that have no revision yet (e.g. newly
+                    // added "providers" after older settings already exist on server).
+                    // Previously this only ran when bootstrap was completely empty,
+                    // so providers never left device A.
+                    settingsDomainSync?.seedLocalSnapshot(settingsStore.settingsFlow.value)
                     if (bootstrap.conversations.isEmpty()) {
                         conversationDomainSync?.seedLocalConversations()
                     }
@@ -528,6 +530,10 @@ class CloudSyncRepository(
                     if (bootstrap.files.isEmpty()) {
                         fileDomainSync?.seedLocalFiles()
                     }
+                } else {
+                    // Upgrade path: device already past bootstrap but missing
+                    // revisions for new sync keys (providers). Push once.
+                    settingsDomainSync?.seedLocalSnapshot(settingsStore.settingsFlow.value)
                 }
                 pushOutbox(client, state.deviceId!!)
                 pullChanges(client)

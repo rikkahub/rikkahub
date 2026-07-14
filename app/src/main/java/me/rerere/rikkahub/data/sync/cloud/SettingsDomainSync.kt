@@ -42,7 +42,9 @@ class SettingsDomainSync(
         for (key in SyncableSettings.ALL_KEYS) {
             val oldVal = prevMap[key]
             val newVal = currMap[key]
-            if (oldVal == newVal) continue
+            // Compare canonical JSON strings: JsonElement structural equality can
+            // miss equivalent provider lists depending on element implementation.
+            if (jsonEquals(oldVal, newVal)) continue
             enqueueSetting(key, newVal)
         }
 
@@ -61,7 +63,10 @@ class SettingsDomainSync(
     }
 
     /**
-     * When server bootstrap is empty, push current local settings/assistants once.
+     * Push any local setting keys / assistants that have no known server revision yet.
+     * Safe to call repeatedly: keys that already have a revision are skipped.
+     * This covers upgrades that add new sync keys (e.g. providers) after older
+     * settings already exist on the server.
      */
     suspend fun seedLocalSnapshot(settings: Settings) {
         if (settings.init) return
@@ -79,7 +84,7 @@ class SettingsDomainSync(
             if (enqueueAssistantUpsert(assistant, requestSync = false)) enqueued = true
         }
         if (enqueued) {
-            Log.d(TAG, "seeded local snapshot into outbox")
+            Log.d(TAG, "seeded local snapshot into outbox (missing-revision keys)")
         }
     }
 
@@ -147,6 +152,16 @@ class SettingsDomainSync(
                 updatedAt = System.currentTimeMillis(),
             )
         )
+    }
+
+    private fun jsonEquals(a: JsonElement?, b: JsonElement?): Boolean {
+        if (a === b) return true
+        if (a == null || b == null) return false
+        if (a == b) return true
+        return runCatching {
+            JsonInstant.encodeToString(JsonElement.serializer(), a) ==
+                JsonInstant.encodeToString(JsonElement.serializer(), b)
+        }.getOrDefault(false)
     }
 
     companion object {

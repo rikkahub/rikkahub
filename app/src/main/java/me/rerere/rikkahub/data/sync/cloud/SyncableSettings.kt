@@ -141,7 +141,13 @@ object SyncableSettings {
             PROVIDERS -> {
                 val remote = runCatching {
                     fromJson<List<ProviderSetting>>(value)
-                }.getOrElse { return settings }
+                }.getOrElse { err ->
+                    android.util.Log.w(
+                        "SyncableSettings",
+                        "failed to decode providers payload: ${err.message}",
+                    )
+                    return settings
+                }
                 val merged = mergeRemoteProviders(local = settings.providers, remote = remote)
                 val rebound = rebindProviderCredentials(merged, settings)
                 settings.copy(providers = rebound)
