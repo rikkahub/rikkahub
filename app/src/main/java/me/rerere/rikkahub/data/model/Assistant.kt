@@ -59,7 +59,7 @@ data class QuickMessage(
 
 @Serializable
 data class AssistantMemory(
-    val id: Int,
+    val id: String = "",
     val content: String = "",
 )
 

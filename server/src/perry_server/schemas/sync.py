@@ -59,3 +59,5 @@ class BootstrapResponse(BaseModel):
     # Phase 5: first page of conversation summaries (full history via list API + changes).
     conversations: list[dict[str, Any]] = Field(default_factory=list)
     conversation_folders: list[dict[str, Any]] = Field(default_factory=list)
+    assistant_memories: list[dict[str, Any]] = Field(default_factory=list)
+    favorites: list[dict[str, Any]] = Field(default_factory=list)

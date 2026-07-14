@@ -13,7 +13,9 @@ import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.sync.cloud.CloudSyncRepository
 import me.rerere.rikkahub.data.sync.cloud.ConversationDomainSync
+import me.rerere.rikkahub.data.sync.cloud.FavoriteDomainSync
 import me.rerere.rikkahub.data.sync.cloud.FolderDomainSync
+import me.rerere.rikkahub.data.sync.cloud.MemoryDomainSync
 import me.rerere.rikkahub.data.sync.cloud.MessageNodeDomainSync
 import me.rerere.rikkahub.data.sync.cloud.SettingsDomainSync
 import me.rerere.workspace.ProotShellRunner
@@ -143,6 +145,28 @@ val repositoryModule = module {
         )
         get<CloudSyncRepository>().messageNodeDomainSync = domain
         get<ConversationRepository>().messageNodeDomainSync = domain
+        domain
+    }
+
+    single(createdAtStart = true) {
+        val domain = MemoryDomainSync(
+            cloudSyncRepository = get(),
+            revisionDao = get(),
+            memoryDAO = get(),
+        )
+        get<CloudSyncRepository>().memoryDomainSync = domain
+        get<MemoryRepository>().memoryDomainSync = domain
+        domain
+    }
+
+    single(createdAtStart = true) {
+        val domain = FavoriteDomainSync(
+            cloudSyncRepository = get(),
+            revisionDao = get(),
+            favoriteDAO = get(),
+        )
+        get<CloudSyncRepository>().favoriteDomainSync = domain
+        get<FavoriteRepository>().favoriteDomainSync = domain
         domain
     }
 }

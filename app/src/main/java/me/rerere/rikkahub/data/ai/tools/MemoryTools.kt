@@ -6,7 +6,6 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -20,8 +19,8 @@ import java.time.LocalDate
 fun buildMemoryTools(
     json: Json,
     onCreation: suspend (String) -> AssistantMemory,
-    onUpdate: suspend (Int, String) -> AssistantMemory,
-    onDelete: suspend (Int) -> Unit
+    onUpdate: suspend (String, String) -> AssistantMemory,
+    onDelete: suspend (String) -> Unit
 ): List<Tool> = listOf(
     Tool(
         name = "memory_tool",
@@ -37,11 +36,12 @@ fun buildMemoryTools(
             Do not show memory content directly in the conversation unless the user explicitly asks.
             Today is ${LocalDate.now().toLocalString(true)}.
             Similar memories should be merged; prefer updating existing records.
+            Memory ids are UUID strings.
 
             Examples:
             {"action":"create","content":"User prefers brief replies and is more active on weekends."}
-            {"action":"edit","id":12,"content":"User’s preferred name updated to “A-Xing”, prefers Chinese replies."}
-            {"action":"delete","id":7}
+            {"action":"edit","id":"550e8400-e29b-41d4-a716-446655440000","content":"User’s preferred name updated to “A-Xing”, prefers Chinese replies."}
+            {"action":"delete","id":"550e8400-e29b-41d4-a716-446655440000"}
         """.trimIndent(),
         parameters = {
             InputSchema.Obj(
@@ -59,8 +59,8 @@ fun buildMemoryTools(
                         put("description", "Operation to perform: create, edit, or delete")
                     })
                     put("id", buildJsonObject {
-                        put("type", "integer")
-                        put("description", "The id of the memory record (required for edit/delete)")
+                        put("type", "string")
+                        put("description", "The UUID of the memory record (required for edit/delete)")
                     })
                     put("content", buildJsonObject {
                         put("type", "string")
@@ -80,13 +80,13 @@ fun buildMemoryTools(
                 }
 
                 "edit" -> {
-                    val id = params["id"]?.jsonPrimitive?.intOrNull ?: error("id is required")
+                    val id = params["id"]?.jsonPrimitive?.contentOrNull ?: error("id is required")
                     val content = params["content"]?.jsonPrimitive?.contentOrNull ?: error("content is required")
                     json.encodeToJsonElement(AssistantMemory.serializer(), onUpdate(id, content))
                 }
 
                 "delete" -> {
-                    val id = params["id"]?.jsonPrimitive?.intOrNull ?: error("id is required")
+                    val id = params["id"]?.jsonPrimitive?.contentOrNull ?: error("id is required")
                     onDelete(id)
                     buildJsonObject {
                         put("success", true)

@@ -5,8 +5,13 @@ import kotlinx.coroutines.flow.map
 import me.rerere.rikkahub.data.db.dao.MemoryDAO
 import me.rerere.rikkahub.data.db.entity.MemoryEntity
 import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.sync.cloud.MemoryDomainSync
+import kotlin.uuid.Uuid
 
 class MemoryRepository(private val memoryDAO: MemoryDAO) {
+    // Set after Koin creates MemoryDomainSync (avoids ctor cycles).
+    var memoryDomainSync: MemoryDomainSync? = null
+
     companion object {
         const val GLOBAL_MEMORY_ID = "__global__"
     }
@@ -34,15 +39,16 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
     }
 
     suspend fun deleteMemoriesOfAssistant(assistantId: String) {
+        val existing = memoryDAO.getMemoriesOfAssistant(assistantId)
         memoryDAO.deleteMemoriesOfAssistant(assistantId)
+        existing.forEach { memoryDomainSync?.enqueueDelete(it.id) }
     }
 
-    suspend fun updateContent(id: Int, content: String): AssistantMemory {
-        val old = memoryDAO.getMemoryById(id) ?: error("Memory record #$id not found")
-        val newMemory = old.copy(
-            content = content
-        )
+    suspend fun updateContent(id: String, content: String): AssistantMemory {
+        val old = memoryDAO.getMemoryById(id) ?: error("Memory record $id not found")
+        val newMemory = old.copy(content = content)
         memoryDAO.updateMemory(newMemory)
+        memoryDomainSync?.enqueueUpsert(newMemory)
         return AssistantMemory(
             id = newMemory.id,
             content = newMemory.content,
@@ -50,22 +56,18 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
     }
 
     suspend fun addMemory(assistantId: String, content: String): AssistantMemory {
-        val memory = AssistantMemory(
-            id = 0,
+        val entity = MemoryEntity(
+            id = Uuid.random().toString(),
+            assistantId = assistantId,
             content = content,
         )
-        val newMemory = memory.copy(
-            id = memoryDAO.insertMemory(
-                MemoryEntity(
-                    assistantId = assistantId,
-                    content = memory.content
-                )
-            ).toInt()
-        )
-        return newMemory
+        memoryDAO.insertMemory(entity)
+        memoryDomainSync?.enqueueUpsert(entity)
+        return AssistantMemory(id = entity.id, content = entity.content)
     }
 
-    suspend fun deleteMemory(id: Int) {
+    suspend fun deleteMemory(id: String) {
         memoryDAO.deleteMemory(id)
+        memoryDomainSync?.enqueueDelete(id)
     }
 }

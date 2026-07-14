@@ -9,9 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from perry_server.models.assistant import Assistant
+from perry_server.models.assistant_memory import AssistantMemory
 from perry_server.models.change_log import ChangeLog
 from perry_server.models.conversation import Conversation
 from perry_server.models.conversation_folder import ConversationFolder
+from perry_server.models.favorite import Favorite
 from perry_server.models.message_node import MessageNode
 from perry_server.models.mutation_receipt import MutationReceipt
 from perry_server.models.setting import Setting
@@ -30,6 +32,8 @@ SUPPORTED_ENTITY_TYPES = {
     "conversation",
     "conversation_folder",
     "message_node",
+    "assistant_memory",
+    "favorite",
 }
 BOOTSTRAP_CONVERSATION_LIMIT = 200
 
@@ -122,6 +126,103 @@ def _message_node_payload(node: MessageNode) -> dict[str, Any]:
         "updated_at": node.updated_at.isoformat() if node.updated_at else None,
         "deleted_at": node.deleted_at.isoformat() if node.deleted_at else None,
         "updated_by_device": str(node.updated_by_device) if node.updated_by_device else None,
+    }
+
+
+def _memory_payload(memory: AssistantMemory) -> dict[str, Any]:
+    return {
+        "id": str(memory.id),
+        "assistant_id": memory.assistant_id,
+        "content": memory.content,
+        "revision": memory.revision,
+        "payload_schema_version": memory.payload_schema_version,
+        "updated_at": memory.updated_at.isoformat() if memory.updated_at else None,
+        "deleted_at": memory.deleted_at.isoformat() if memory.deleted_at else None,
+        "updated_by_device": str(memory.updated_by_device) if memory.updated_by_device else None,
+    }
+
+
+def _favorite_payload(favorite: Favorite) -> dict[str, Any]:
+    meta: Any = None
+    if favorite.meta_json:
+        try:
+            meta = json.loads(favorite.meta_json)
+        except json.JSONDecodeError:
+            meta = favorite.meta_json
+    ref: Any = {}
+    if favorite.ref_json:
+        try:
+            ref = json.loads(favorite.ref_json)
+        except json.JSONDecodeError:
+            ref = favorite.ref_json
+    return {
+        "id": favorite.id,
+        "type": favorite.type,
+        "ref_key": favorite.ref_key,
+        "ref_json": ref,
+        "snapshot_json": favorite.snapshot_json,
+        "meta_json": meta,
+        "created_at_ms": favorite.created_at_ms,
+        "updated_at_ms": favorite.updated_at_ms,
+        "revision": favorite.revision,
+        "payload_schema_version": favorite.payload_schema_version,
+        "updated_at": favorite.updated_at.isoformat() if favorite.updated_at else None,
+        "deleted_at": favorite.deleted_at.isoformat() if favorite.deleted_at else None,
+        "updated_by_device": str(favorite.updated_by_device) if favorite.updated_by_device else None,
+    }
+
+
+def _extract_memory_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    body = payload.get("payload")
+    if not isinstance(body, dict):
+        body = {}
+    src = {**body, **{k: v for k, v in payload.items() if k != "payload"}}
+    assistant_raw = src.get("assistant_id") if "assistant_id" in src else src.get("assistantId")
+    if assistant_raw is None or str(assistant_raw).strip() == "":
+        raise ValueError("assistant_id is required")
+    assistant_id = str(assistant_raw)
+    if assistant_id != "__global__":
+        # Validate UUID form for non-global memories, but store as string.
+        UUID(assistant_id)
+    content = str(src.get("content") or "")
+    return {"assistant_id": assistant_id, "content": content}
+
+
+def _extract_favorite_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    body = payload.get("payload")
+    if not isinstance(body, dict):
+        body = {}
+    src = {**body, **{k: v for k, v in payload.items() if k != "payload"}}
+    fav_type = str(src.get("type") or "node")
+    ref_key = str(src.get("ref_key") if "ref_key" in src else src.get("refKey") or "")
+    if not ref_key:
+        raise ValueError("ref_key is required")
+    ref_raw = src.get("ref_json") if "ref_json" in src else src.get("refJson")
+    if isinstance(ref_raw, (dict, list)):
+        ref_json = json.dumps(ref_raw, ensure_ascii=False, separators=(",", ":"))
+    else:
+        ref_json = str(ref_raw or "{}")
+    snapshot = src.get("snapshot_json") if "snapshot_json" in src else src.get("snapshotJson")
+    snapshot_json = "" if snapshot is None else str(snapshot)
+    meta_raw = src.get("meta_json") if "meta_json" in src else src.get("metaJson")
+    if meta_raw is None:
+        meta_json = None
+    elif isinstance(meta_raw, (dict, list)):
+        meta_json = json.dumps(meta_raw, ensure_ascii=False, separators=(",", ":"))
+    else:
+        meta_json = str(meta_raw)
+    created_at_ms = int(src.get("created_at_ms") if "created_at_ms" in src else src.get("createdAt") or 0)
+    updated_at_ms = int(
+        src.get("updated_at_ms") if "updated_at_ms" in src else src.get("updatedAt") or created_at_ms or 0
+    )
+    return {
+        "type": fav_type,
+        "ref_key": ref_key,
+        "ref_json": ref_json,
+        "snapshot_json": snapshot_json,
+        "meta_json": meta_json,
+        "created_at_ms": created_at_ms,
+        "updated_at_ms": updated_at_ms,
     }
 
 
@@ -258,6 +359,15 @@ async def bootstrap(session: AsyncSession, *, user_id: UUID) -> BootstrapRespons
             ConversationFolder.deleted_at.is_(None),
         )
     )
+    memories_result = await session.execute(
+        select(AssistantMemory).where(
+            AssistantMemory.user_id == user_id,
+            AssistantMemory.deleted_at.is_(None),
+        )
+    )
+    favorites_result = await session.execute(
+        select(Favorite).where(Favorite.user_id == user_id, Favorite.deleted_at.is_(None))
+    )
     return BootstrapResponse(
         cursor=cursor,
         server_time=_now().isoformat(),
@@ -267,6 +377,8 @@ async def bootstrap(session: AsyncSession, *, user_id: UUID) -> BootstrapRespons
             _conversation_payload(row) for row in conversations_result.scalars().all()
         ],
         conversation_folders=[_folder_payload(row) for row in folders_result.scalars().all()],
+        assistant_memories=[_memory_payload(row) for row in memories_result.scalars().all()],
+        favorites=[_favorite_payload(row) for row in favorites_result.scalars().all()],
     )
 
 
@@ -364,6 +476,14 @@ async def _apply_one(
         )
     elif item.entity_type == "message_node":
         result = await _apply_message_node_mutation(
+            session, user_id=user_id, device_id=device_id, item=item
+        )
+    elif item.entity_type == "assistant_memory":
+        result = await _apply_memory_mutation(
+            session, user_id=user_id, device_id=device_id, item=item
+        )
+    elif item.entity_type == "favorite":
+        result = await _apply_favorite_mutation(
             session, user_id=user_id, device_id=device_id, item=item
         )
     else:  # pragma: no cover
@@ -1277,6 +1397,363 @@ async def _apply_message_node_mutation(
         entity_id=item.entity_id,
         revision=node.revision,
         server_payload=_message_node_payload(node),
+    )
+
+
+async def _apply_memory_mutation(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    device_id: UUID,
+    item: MutationItem,
+) -> MutationResult:
+    try:
+        memory_id = UUID(item.entity_id)
+    except ValueError:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message="entity_id must be a UUID for assistant_memory",
+        )
+
+    result = await session.execute(
+        select(AssistantMemory).where(
+            AssistantMemory.user_id == user_id,
+            AssistantMemory.id == memory_id,
+        )
+    )
+    memory = result.scalar_one_or_none()
+
+    if item.operation == "delete":
+        if memory is None or memory.deleted_at is not None:
+            rev = memory.revision if memory is not None else 0
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="applied",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=rev,
+                server_payload=_memory_payload(memory) if memory else None,
+            )
+        if item.base_revision != 0 and item.base_revision != memory.revision:
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="conflict",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=memory.revision,
+                server_payload=_memory_payload(memory),
+                message="base_revision mismatch",
+            )
+        memory.revision += 1
+        memory.deleted_at = _now()
+        memory.updated_at = _now()
+        memory.updated_by_device = device_id
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="assistant_memory",
+            entity_id=str(memory_id),
+            operation="delete",
+            revision=memory.revision,
+            payload=_memory_payload(memory),
+        )
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="applied",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=memory.revision,
+            server_payload=_memory_payload(memory),
+        )
+
+    try:
+        fields = _extract_memory_fields(item.payload or {})
+    except (ValueError, TypeError) as exc:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message=str(exc),
+        )
+
+    if memory is None:
+        if item.base_revision not in (0,):
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="conflict",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=0,
+                message="entity does not exist; base_revision must be 0",
+            )
+        memory = AssistantMemory(
+            id=memory_id,
+            user_id=user_id,
+            assistant_id=fields["assistant_id"],
+            content=fields["content"],
+            revision=1,
+            payload_schema_version=item.payload_schema_version,
+            updated_by_device=device_id,
+            deleted_at=None,
+        )
+        session.add(memory)
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="assistant_memory",
+            entity_id=str(memory_id),
+            operation="upsert",
+            revision=memory.revision,
+            payload=_memory_payload(memory),
+        )
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="applied",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=memory.revision,
+            server_payload=_memory_payload(memory),
+        )
+
+    if item.base_revision != memory.revision:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="conflict",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=memory.revision,
+            server_payload=_memory_payload(memory),
+            message="base_revision mismatch",
+        )
+
+    memory.assistant_id = fields["assistant_id"]
+    memory.content = fields["content"]
+    memory.revision += 1
+    memory.payload_schema_version = item.payload_schema_version
+    memory.updated_at = _now()
+    memory.updated_by_device = device_id
+    memory.deleted_at = None
+    await session.flush()
+    await _append_change(
+        session,
+        user_id=user_id,
+        device_id=device_id,
+        entity_type="assistant_memory",
+        entity_id=str(memory_id),
+        operation="upsert",
+        revision=memory.revision,
+        payload=_memory_payload(memory),
+    )
+    return MutationResult(
+        mutation_id=item.mutation_id,
+        status="applied",
+        entity_type=item.entity_type,
+        entity_id=item.entity_id,
+        revision=memory.revision,
+        server_payload=_memory_payload(memory),
+    )
+
+
+async def _apply_favorite_mutation(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    device_id: UUID,
+    item: MutationItem,
+) -> MutationResult:
+    favorite_id = item.entity_id
+    if not favorite_id or len(favorite_id) > 256:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message="entity_id invalid for favorite",
+        )
+
+    result = await session.execute(
+        select(Favorite).where(Favorite.user_id == user_id, Favorite.id == favorite_id)
+    )
+    favorite = result.scalar_one_or_none()
+
+    if item.operation == "delete":
+        if favorite is None or favorite.deleted_at is not None:
+            rev = favorite.revision if favorite is not None else 0
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="applied",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=rev,
+                server_payload=_favorite_payload(favorite) if favorite else None,
+            )
+        if item.base_revision != 0 and item.base_revision != favorite.revision:
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="conflict",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=favorite.revision,
+                server_payload=_favorite_payload(favorite),
+                message="base_revision mismatch",
+            )
+        favorite.revision += 1
+        favorite.deleted_at = _now()
+        favorite.updated_at = _now()
+        favorite.updated_by_device = device_id
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="favorite",
+            entity_id=favorite_id,
+            operation="delete",
+            revision=favorite.revision,
+            payload=_favorite_payload(favorite),
+        )
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="applied",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=favorite.revision,
+            server_payload=_favorite_payload(favorite),
+        )
+
+    try:
+        fields = _extract_favorite_fields(item.payload or {})
+    except (ValueError, TypeError) as exc:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="rejected",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            message=str(exc),
+        )
+
+    # Unique (user_id, ref_key): tombstone other live row with same ref_key.
+    ref_holder_result = await session.execute(
+        select(Favorite).where(
+            Favorite.user_id == user_id,
+            Favorite.ref_key == fields["ref_key"],
+            Favorite.id != favorite_id,
+            Favorite.deleted_at.is_(None),
+        )
+    )
+    ref_holder = ref_holder_result.scalar_one_or_none()
+    if ref_holder is not None:
+        ref_holder.revision += 1
+        ref_holder.deleted_at = _now()
+        ref_holder.updated_at = _now()
+        ref_holder.updated_by_device = device_id
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="favorite",
+            entity_id=ref_holder.id,
+            operation="delete",
+            revision=ref_holder.revision,
+            payload=_favorite_payload(ref_holder),
+        )
+
+    if favorite is None:
+        if item.base_revision not in (0,):
+            return MutationResult(
+                mutation_id=item.mutation_id,
+                status="conflict",
+                entity_type=item.entity_type,
+                entity_id=item.entity_id,
+                revision=0,
+                message="entity does not exist; base_revision must be 0",
+            )
+        favorite = Favorite(
+            id=favorite_id,
+            user_id=user_id,
+            type=fields["type"],
+            ref_key=fields["ref_key"],
+            ref_json=fields["ref_json"],
+            snapshot_json=fields["snapshot_json"],
+            meta_json=fields["meta_json"],
+            created_at_ms=fields["created_at_ms"],
+            updated_at_ms=fields["updated_at_ms"],
+            revision=1,
+            payload_schema_version=item.payload_schema_version,
+            updated_by_device=device_id,
+            deleted_at=None,
+        )
+        session.add(favorite)
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="favorite",
+            entity_id=favorite_id,
+            operation="upsert",
+            revision=favorite.revision,
+            payload=_favorite_payload(favorite),
+        )
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="applied",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=favorite.revision,
+            server_payload=_favorite_payload(favorite),
+        )
+
+    if item.base_revision != favorite.revision:
+        return MutationResult(
+            mutation_id=item.mutation_id,
+            status="conflict",
+            entity_type=item.entity_type,
+            entity_id=item.entity_id,
+            revision=favorite.revision,
+            server_payload=_favorite_payload(favorite),
+            message="base_revision mismatch",
+        )
+
+    favorite.type = fields["type"]
+    favorite.ref_key = fields["ref_key"]
+    favorite.ref_json = fields["ref_json"]
+    favorite.snapshot_json = fields["snapshot_json"]
+    favorite.meta_json = fields["meta_json"]
+    favorite.created_at_ms = fields["created_at_ms"]
+    favorite.updated_at_ms = fields["updated_at_ms"]
+    favorite.revision += 1
+    favorite.payload_schema_version = item.payload_schema_version
+    favorite.updated_at = _now()
+    favorite.updated_by_device = device_id
+    favorite.deleted_at = None
+    await session.flush()
+    await _append_change(
+        session,
+        user_id=user_id,
+        device_id=device_id,
+        entity_type="favorite",
+        entity_id=favorite_id,
+        operation="upsert",
+        revision=favorite.revision,
+        payload=_favorite_payload(favorite),
+    )
+    return MutationResult(
+        mutation_id=item.mutation_id,
+        status="applied",
+        entity_type=item.entity_type,
+        entity_id=item.entity_id,
+        revision=favorite.revision,
+        server_payload=_favorite_payload(favorite),
     )
 
 

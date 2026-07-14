@@ -188,6 +188,8 @@ data class SyncBootstrapResponse(
     val assistants: List<JsonElement> = emptyList(),
     val conversations: List<JsonElement> = emptyList(),
     @SerialName("conversation_folders") val conversationFolders: List<JsonElement> = emptyList(),
+    @SerialName("assistant_memories") val assistantMemories: List<JsonElement> = emptyList(),
+    val favorites: List<JsonElement> = emptyList(),
 )
 
 @Serializable

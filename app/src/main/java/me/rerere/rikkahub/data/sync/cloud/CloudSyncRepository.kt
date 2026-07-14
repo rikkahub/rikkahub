@@ -62,6 +62,8 @@ class CloudSyncRepository(
     var conversationDomainSync: ConversationDomainSync? = null
     var folderDomainSync: FolderDomainSync? = null
     var messageNodeDomainSync: MessageNodeDomainSync? = null
+    var memoryDomainSync: MemoryDomainSync? = null
+    var favoriteDomainSync: FavoriteDomainSync? = null
     private val syncMutex = Mutex()
     private var pendingSyncJob: Job? = null
     private val _connectionStatus = MutableStateFlow(ConnectionStatus.NOT_CONFIGURED)
@@ -407,6 +409,12 @@ class CloudSyncRepository(
                     if (bootstrap.conversationFolders.isEmpty()) {
                         folderDomainSync?.seedLocalFolders()
                     }
+                    if (bootstrap.assistantMemories.isEmpty()) {
+                        memoryDomainSync?.seedLocalMemories()
+                    }
+                    if (bootstrap.favorites.isEmpty()) {
+                        favoriteDomainSync?.seedLocalFavorites()
+                    }
                 }
                 pushOutbox(client, state.deviceId!!)
                 pullChanges(client)
@@ -591,6 +599,30 @@ class CloudSyncRepository(
                     revision = revision,
                 )
             }
+            bootstrap.assistantMemories.forEach { element ->
+                val obj = element as? JsonObject ?: return@forEach
+                val id = obj["id"]?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return@forEach
+                val revision = obj["revision"]
+                    ?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0L
+                memoryDomainSync?.applyRemotePayload(
+                    entityId = id,
+                    operation = "upsert",
+                    payload = obj,
+                    revision = revision,
+                )
+            }
+            bootstrap.favorites.forEach { element ->
+                val obj = element as? JsonObject ?: return@forEach
+                val id = obj["id"]?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return@forEach
+                val revision = obj["revision"]
+                    ?.let { (it as? JsonPrimitive)?.contentOrNull?.toLongOrNull() } ?: 0L
+                favoriteDomainSync?.applyRemotePayload(
+                    entityId = id,
+                    operation = "upsert",
+                    payload = obj,
+                    revision = revision,
+                )
+            }
             val state = ensureState()
             stateDao.upsert(
                 state.copy(
@@ -613,9 +645,11 @@ class CloudSyncRepository(
                 when (change.entityType) {
                     SettingsDomainSync.ENTITY_SETTING -> 0
                     SettingsDomainSync.ENTITY_ASSISTANT -> 1
-                    FolderDomainSync.ENTITY_FOLDER -> 2
-                    ConversationDomainSync.ENTITY_CONVERSATION -> 3
-                    MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> 4
+                    MemoryDomainSync.ENTITY_MEMORY -> 2
+                    FolderDomainSync.ENTITY_FOLDER -> 3
+                    ConversationDomainSync.ENTITY_CONVERSATION -> 4
+                    MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> 5
+                    FavoriteDomainSync.ENTITY_FAVORITE -> 6
                     else -> 9
                 }
             }
@@ -675,6 +709,24 @@ class CloudSyncRepository(
                     }
                     MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> {
                         messageNodeDomainSync?.applyRemotePayload(
+                            entityId = change.entityId,
+                            operation = change.operation,
+                            payload = change.payload,
+                            revision = change.revision,
+                        )
+                        rememberRevision(change.entityType, change.entityId, change.revision)
+                    }
+                    MemoryDomainSync.ENTITY_MEMORY -> {
+                        memoryDomainSync?.applyRemotePayload(
+                            entityId = change.entityId,
+                            operation = change.operation,
+                            payload = change.payload,
+                            revision = change.revision,
+                        )
+                        rememberRevision(change.entityType, change.entityId, change.revision)
+                    }
+                    FavoriteDomainSync.ENTITY_FAVORITE -> {
+                        favoriteDomainSync?.applyRemotePayload(
                             entityId = change.entityId,
                             operation = change.operation,
                             payload = change.payload,
@@ -745,6 +797,22 @@ class CloudSyncRepository(
                         revision = revision ?: 0L,
                     )
                 }
+                MemoryDomainSync.ENTITY_MEMORY -> {
+                    memoryDomainSync?.applyRemotePayload(
+                        entityId = entityId,
+                        operation = operation,
+                        payload = payload,
+                        revision = revision ?: 0L,
+                    )
+                }
+                FavoriteDomainSync.ENTITY_FAVORITE -> {
+                    favoriteDomainSync?.applyRemotePayload(
+                        entityId = entityId,
+                        operation = operation,
+                        payload = payload,
+                        revision = revision ?: 0L,
+                    )
+                }
             }
             revision?.let { rememberRevision(entityType, entityId, it) }
         }
@@ -772,9 +840,11 @@ class CloudSyncRepository(
     private fun outboxPushPriority(entityType: String): Int = when (entityType) {
         SettingsDomainSync.ENTITY_SETTING -> 0
         SettingsDomainSync.ENTITY_ASSISTANT -> 1
-        FolderDomainSync.ENTITY_FOLDER -> 2
-        ConversationDomainSync.ENTITY_CONVERSATION -> 3
-        MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> 4
+        MemoryDomainSync.ENTITY_MEMORY -> 2
+        FolderDomainSync.ENTITY_FOLDER -> 3
+        ConversationDomainSync.ENTITY_CONVERSATION -> 4
+        MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> 5
+        FavoriteDomainSync.ENTITY_FAVORITE -> 6
         else -> 9
     }
 

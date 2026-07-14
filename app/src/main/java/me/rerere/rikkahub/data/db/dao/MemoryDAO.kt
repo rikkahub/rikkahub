@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.db.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
@@ -22,16 +23,16 @@ interface MemoryDAO {
     suspend fun getAllMemories(): List<MemoryEntity>
 
     @Query("SELECT * FROM memoryentity WHERE id = :id")
-    suspend fun getMemoryById(id: Int): MemoryEntity?
+    suspend fun getMemoryById(id: String): MemoryEntity?
 
-    @Insert
-    suspend fun insertMemory(memory: MemoryEntity): Long
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMemory(memory: MemoryEntity)
 
     @Update
     suspend fun updateMemory(memory: MemoryEntity)
 
     @Query("DELETE FROM memoryentity WHERE id = :id")
-    suspend fun deleteMemory(id: Int)
+    suspend fun deleteMemory(id: String)
 
     @Query("DELETE FROM memoryentity WHERE assistant_id = :assistantId")
     suspend fun deleteMemoriesOfAssistant(assistantId: String)

@@ -104,7 +104,7 @@ private fun AssistantMemoryContent(
     onDeleteMemory: (AssistantMemory) -> Unit,
 ) {
     val memoryDialogState = useEditState<AssistantMemory> {
-        if (it.id == 0) {
+        if (it.id.isBlank()) {
             onAddMemory(it)
         } else {
             onUpdateMemory(it)
@@ -263,7 +263,7 @@ private fun AssistantMemoryContent(
 
             IconButton(
                 onClick = {
-                    memoryDialogState.open(AssistantMemory(0, ""))
+                    memoryDialogState.open(AssistantMemory("", ""))
                 },
                 modifier = Modifier.align(Alignment.CenterEnd)
             ) {
