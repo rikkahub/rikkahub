@@ -9,8 +9,10 @@ TIMEOUT_SECONDS="${VOICE_AGENT_E2E_TIMEOUT_SECONDS:-180}"
 POLL_INTERVAL_SECONDS="${VOICE_AGENT_E2E_POLL_INTERVAL_SECONDS:-1}"
 REPORT_DIR="${VOICE_AGENT_E2E_REPORT_DIR:-build/reports/hermes-text-e2e}"
 ACTION="me.rerere.rikkahub.debug.voiceagent.SEND_HERMES_TEXT"
-RECEIVER="$PACKAGE/.voiceagent.debug.HermesTextDebugReceiver"
+RECEIVER="$PACKAGE/me.rerere.rikkahub.voiceagent.debug.HermesTextDebugReceiver"
+FOREGROUND_ACTIVITY="$PACKAGE/androidx.activity.ComponentActivity"
 PROMPT="Reply exactly: hermes-device-ok"
+REMOTE_SHELL_PROMPT="'$PROMPT'"
 EXPECTED_ANSWER="hermes-device-ok"
 TAG="HermesTextDebugE2E"
 
@@ -57,12 +59,15 @@ if ! adb_device shell pm path "$PACKAGE" 2>/dev/null | grep -Fq 'package:'; then
   exit 3
 fi
 
+adb_device shell input keyevent KEYCODE_WAKEUP >/dev/null
+adb_device shell wm dismiss-keyguard >/dev/null 2>&1 || true
+adb_device shell am start --activity-no-history -n "$FOREGROUND_ACTIVITY" >/dev/null
 adb_device logcat -c >/dev/null
 adb_device shell am broadcast \
   -a "$ACTION" \
   -n "$RECEIVER" \
   --es conversation_id "$CONVERSATION_ID" \
-  --es prompt "$PROMPT" \
+  --es prompt "$REMOTE_SHELL_PROMPT" \
   --es expected_answer "$EXPECTED_ANSWER" \
   >/dev/null
 

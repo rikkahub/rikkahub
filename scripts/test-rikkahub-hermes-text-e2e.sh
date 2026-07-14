@@ -27,6 +27,11 @@ case "${args[*]}" in
   "shell pm path me.rerere.rikkahub.debug")
     printf 'package:/data/app/debug/base.apk\n'
     ;;
+  "shell input keyevent KEYCODE_WAKEUP"|"shell wm dismiss-keyguard")
+    ;;
+  "shell am start --activity-no-history -n me.rerere.rikkahub.debug/androidx.activity.ComponentActivity")
+    printf 'Starting: Intent\n'
+    ;;
   "shell am broadcast"*)
     printf 'Broadcast completed: result=0\n'
     ;;
@@ -88,6 +93,15 @@ if grep -Eq '11111111-1111-4111-8111-111111111111|Reply exactly|hermes-device-ok
   exit 1
 fi
 grep -F 'SEND_HERMES_TEXT' "$FAKE_ADB_ARGS_LOG" >/dev/null
+grep -F \
+  'me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.debug.HermesTextDebugReceiver' \
+  "$FAKE_ADB_ARGS_LOG" >/dev/null
+grep -F -- "--es prompt 'Reply exactly: hermes-device-ok'" "$FAKE_ADB_ARGS_LOG" >/dev/null
+grep -Fx -- '-s fake-serial shell input keyevent KEYCODE_WAKEUP' "$FAKE_ADB_ARGS_LOG" >/dev/null
+grep -Fx -- '-s fake-serial shell wm dismiss-keyguard' "$FAKE_ADB_ARGS_LOG" >/dev/null
+grep -Fx -- \
+  '-s fake-serial shell am start --activity-no-history -n me.rerere.rikkahub.debug/androidx.activity.ComponentActivity' \
+  "$FAKE_ADB_ARGS_LOG" >/dev/null
 cleanup_count="$(grep -Fc 'logcat -c' "$FAKE_ADB_ARGS_LOG")"
 if (( cleanup_count < 2 )); then
   printf 'Expected start and trap logcat cleanup, got %s\n' "$cleanup_count" >&2
