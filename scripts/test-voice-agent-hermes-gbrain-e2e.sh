@@ -1298,13 +1298,15 @@ fi
 late_trace_answer_log_dir="$TMP_DIR/late-trace-answer-log"
 late_trace_adb_log="$TMP_DIR/late-trace-adb-args.log"
 late_trace_counter="$TMP_DIR/late-trace-counter"
+# Keep the pointer missing through cleanup discovery, scoped publication, and the
+# first manual-answer lookup; the answer retry must observe the late trace.
 set +e
 late_trace_answer_output="$(
   PATH="$TMP_DIR:$PATH" \
   FAKE_ADB_ARGS_LOG="$late_trace_adb_log" \
   FAKE_ADB_LATEST_TRACE_ID=late \
   FAKE_ADB_LATE_TRACE_COUNTER="$late_trace_counter" \
-  FAKE_ADB_LATE_TRACE_MISSING_COUNT=2 \
+  FAKE_ADB_LATE_TRACE_MISSING_COUNT=3 \
   FAKE_ADB_MISSING_BASE_ANSWER=1 \
   VOICE_AGENT_E2E_SERIAL=RZ \
   VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
