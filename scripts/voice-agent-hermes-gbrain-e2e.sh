@@ -209,11 +209,11 @@ extract_tested_hermes_call_id() {
     printf 'Could not safely identify the tested Hermes call.\n' >&2
     return 1
   fi
-  if [[ ! "$line" =~ hermes_tool_response_hash[[:space:]]+callId=([A-Za-z0-9._:-]+),[[:space:]]+actualHash= ]]; then
+  if [[ ! "$line" =~ (^|[[:space:]])callId=([A-Za-z0-9._:-]+)(,|[[:space:]]|$) ]]; then
     printf 'Could not safely identify the tested Hermes call.\n' >&2
     return 1
   fi
-  call_id="${BASH_REMATCH[1]}"
+  call_id="${BASH_REMATCH[2]}"
   if (( ${#call_id} > 128 )); then
     printf 'Could not safely identify the tested Hermes call.\n' >&2
     return 1

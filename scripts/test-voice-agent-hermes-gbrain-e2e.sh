@@ -265,7 +265,7 @@ LOGS
         cat <<'LOGS'
 06-08 12:00:02.500 D/VoiceAgentE2E(1): hermes_queue_event type=job_created callId=call-1 jobId=job-1 status=queued sent=n/a
 06-08 12:00:02.600 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
-06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, responseChars=25, normalizedChars=25, elapsedMs=100
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
 06-08 12:00:03.500 D/VoiceAgentE2E(1): hermes_queue_event type=job_completed callId=call-1 jobId=job-1 status=succeeded sent=n/a
 06-08 12:00:03.600 D/VoiceAgentGemini(1): send kind=clientContent sent=true
 06-08 12:00:03.700 D/VoiceAgentE2E(1): hermes_queue_event type=still_working_text_turn_sent callId=call-1 jobId=none status=none sent=true
@@ -276,7 +276,7 @@ LOGS
 LOGS
       elif [[ "${FAKE_ADB_MISSING_HASH_CALL_ID_FLOW:-0}" == "1" ]]; then
         cat <<'LOGS'
-06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, responseChars=25, normalizedChars=25, elapsedMs=100
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
 06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
 06-08 12:00:04.100 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-1 jobId=none status=none sent=true
 06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
@@ -286,7 +286,7 @@ LOGS
 LOGS
       elif [[ "${FAKE_ADB_UNSAFE_HASH_CALL_ID_FLOW:-0}" == "1" ]]; then
         cat <<'LOGS'
-06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call/1, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, responseChars=25, normalizedChars=25, elapsedMs=100
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call/1, responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
 06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
 06-08 12:00:04.100 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call/1 jobId=none status=none sent=true
 06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
@@ -296,7 +296,7 @@ LOGS
 LOGS
       elif [[ "${FAKE_ADB_AMBIGUOUS_HASH_CALL_ID_FLOW:-0}" == "1" ]]; then
         cat <<'LOGS'
-06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, callId=call-2, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, responseChars=25, normalizedChars=25, elapsedMs=100
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, callId=call-2, responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
 06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
 06-08 12:00:04.100 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-1 jobId=none status=none sent=true
 06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
@@ -306,7 +306,7 @@ LOGS
 LOGS
       elif [[ "${FAKE_ADB_WRONG_FINAL_CALL_FLOW:-0}" == "1" ]]; then
         cat <<'LOGS'
-06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, responseChars=25, normalizedChars=25, elapsedMs=100
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
 06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
 06-08 12:00:04.100 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-2 jobId=none status=none sent=true
 06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
@@ -318,7 +318,7 @@ LOGS
         cat <<'LOGS'
 06-08 12:00:02.500 D/VoiceAgentE2E(1): hermes_queue_event type=job_created callId=call-1 jobId=job-1 status=queued sent=n/a
 06-08 12:00:02.600 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
-06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, responseChars=25, normalizedChars=25, elapsedMs=100
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
 06-08 12:00:03.500 D/VoiceAgentE2E(1): hermes_queue_event type=job_completed callId=call-1 jobId=job-1 status=succeeded sent=n/a
 06-08 12:00:03.600 D/VoiceAgentGemini(1): send kind=clientContent sent=true
 06-08 12:00:03.700 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-1 jobId=none status=none sent=true
@@ -329,7 +329,7 @@ LOGS
 LOGS
       else
         cat <<'LOGS'
-06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, responseChars=25, normalizedChars=25, elapsedMs=100
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
 06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
 06-08 12:00:04.100 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-1 jobId=none status=none sent=true
 06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
