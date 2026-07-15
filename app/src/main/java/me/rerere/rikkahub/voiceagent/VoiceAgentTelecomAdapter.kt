@@ -13,16 +13,22 @@ import android.telecom.TelecomManager
 internal const val VOICE_AGENT_CALL_URI_SCHEME = "rikkahub-voice"
 private const val VOICE_AGENT_CALL_URI_PREFIX = "voice-agent-"
 
+interface VoiceAgentTelecomGateway {
+    fun register(): Result<Unit>
+
+    fun startCall(attemptId: VoiceAgentTelecomAttemptId): Result<Unit>
+}
+
 class VoiceAgentTelecomAdapter(
     private val context: Context,
-) {
+) : VoiceAgentTelecomGateway {
     private val handle: PhoneAccountHandle
         get() = PhoneAccountHandle(
             ComponentName(context, VoiceAgentConnectionService::class.java),
             "rikka-voice-agent",
         )
 
-    fun register(): Result<Unit> = runCatching {
+    override fun register(): Result<Unit> = runCatching {
         val telecomManager = requireTelecomManager()
         val account = PhoneAccount.builder(handle, "RikkaHub Voice Agent")
             .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED)
@@ -31,7 +37,7 @@ class VoiceAgentTelecomAdapter(
         telecomManager.registerPhoneAccount(account)
     }
 
-    fun startCall(attemptId: VoiceAgentTelecomAttemptId): Result<Unit> =
+    override fun startCall(attemptId: VoiceAgentTelecomAttemptId): Result<Unit> =
         startCall(
             Uri.fromParts(
                 VOICE_AGENT_CALL_URI_SCHEME,
