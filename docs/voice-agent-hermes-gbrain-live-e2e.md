@@ -110,6 +110,22 @@ files outside the repository.
 
 Do not commit generated or supplied PCM files, generated prompt text, or the real spoken prompt text.
 
+## Build And Install The Debug APK
+
+Debug APK packaging automatically resolves Voice Agent Sentry settings from
+explicit Gradle/local properties, process environment, then
+`~/.config/voice-lab/local.env`. Never source or print that file. Packaging
+fails if the DSN, environment, or trace sample rate is missing or invalid.
+
+```bash
+scripts/test-voice-agent-sentry-build.sh
+./gradlew :app:validateVoiceAgentSentryDebug :app:assembleDebug
+```
+
+The build must report `Voice Agent Sentry debug configuration verified` without
+printing any value. Install
+`app/build/outputs/apk/debug/app-universal-debug.apk`.
+
 ## Running
 
 From the repository root:
