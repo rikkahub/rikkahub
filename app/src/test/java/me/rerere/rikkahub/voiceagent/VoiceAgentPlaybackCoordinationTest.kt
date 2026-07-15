@@ -407,6 +407,39 @@ class VoiceAgentPlaybackCoordinationTest {
     }
 
     @Test
+    fun `GenerationComplete cannot replace turn completion when playback is already drained`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            hermesAnnouncementQuietWindowMs = 0L,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.InputTranscript("generation-only turn active"))
+        coordinator.onGeminiEvent(
+            voiceToolCall(callId = "call-generation-only", name = "ask_hermes", arg = "generation only")
+        )
+        assertEquals(
+            "call-generation-only" to "generation only",
+            toolApi.awaitRequest("call-generation-only"),
+        )
+        toolApi.complete(response(callId = "call-generation-only", answer = "turn-boundary answer"))
+        coordinator.awaitToolJobsWithTimeout()
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.GenerationComplete)
+        delay(20)
+        assertTrue(gemini.textTurns.isEmpty())
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.TurnComplete)
+        awaitTextTurnCount(gemini, 1)
+        assertEquals(1, gemini.textTurns.size)
+        assertTrue(gemini.textTurns.single().second.contains("turn-boundary answer"))
+    }
+
+    @Test
     fun `Gemini interruption does not release Hermes before the following turn completes`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
