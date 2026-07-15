@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.voiceagent
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -10,30 +11,77 @@ data class VoiceAgentAudioRouteResolution(
     val failure: VoiceAgentTelecomFailure? = null,
 )
 
-class VoiceAgentAudioRouteResolver(
+internal fun interface VoiceAgentTelecomOutcomeTimeout {
+    suspend fun awaitOutcome(
+        timeoutMs: Long,
+        observe: suspend () -> VoiceAgentTelecomOutcome,
+    ): VoiceAgentTelecomOutcome?
+}
+
+private object DefaultVoiceAgentTelecomOutcomeTimeout : VoiceAgentTelecomOutcomeTimeout {
+    override suspend fun awaitOutcome(
+        timeoutMs: Long,
+        observe: suspend () -> VoiceAgentTelecomOutcome,
+    ): VoiceAgentTelecomOutcome? = withTimeoutOrNull(timeoutMs) { observe() }
+}
+
+class VoiceAgentAudioRouteResolver internal constructor(
     private val gateway: VoiceAgentTelecomGateway,
     private val registry: VoiceAgentTelecomCallRegistry,
-    private val timeoutMs: Long = 3_000L,
+    private val timeoutMs: Long,
+    private val outcomeTimeout: VoiceAgentTelecomOutcomeTimeout,
 ) {
+    constructor(
+        gateway: VoiceAgentTelecomGateway,
+        registry: VoiceAgentTelecomCallRegistry,
+        timeoutMs: Long = 3_000L,
+    ) : this(gateway, registry, timeoutMs, DefaultVoiceAgentTelecomOutcomeTimeout)
+
     suspend fun resolve(): VoiceAgentAudioRouteResolution {
         val attempt = registry.beginAttempt()
-        gateway.register().exceptionOrNull()?.let {
-            return fallback(attempt, "telecom_register_failed", it)
-        }
-        gateway.startCall(attempt).exceptionOrNull()?.let {
-            return fallback(attempt, "telecom_start_failed", it)
-        }
-        return when (val outcome = withTimeoutOrNull(timeoutMs) { registry.awaitOutcome(attempt) }) {
-            VoiceAgentTelecomOutcome.Active -> VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.Telecom)
-            is VoiceAgentTelecomOutcome.Failed -> VoiceAgentAudioRouteResolution(
-                VoiceAudioRouteOwner.DirectFallback,
-                outcome.failure,
-            )
-            null -> fallback(
-                attempt,
-                "telecom_connection_timeout",
-                IllegalStateException("Android Telecom did not become active within ${timeoutMs}ms"),
-            )
+        try {
+            gateway.register().exceptionOrNull()?.let {
+                return fallback(attempt, "telecom_register_failed", it)
+            }
+            gateway.startCall(attempt).exceptionOrNull()?.let {
+                return fallback(attempt, "telecom_start_failed", it)
+            }
+            return when (val outcome = outcomeTimeout.awaitOutcome(timeoutMs) { registry.observeOutcome(attempt) }) {
+                VoiceAgentTelecomOutcome.Active -> {
+                    registry.acknowledgeOutcome(attempt)
+                    VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.Telecom)
+                }
+                is VoiceAgentTelecomOutcome.Failed -> {
+                    registry.acknowledgeOutcome(attempt)
+                    VoiceAgentAudioRouteResolution(
+                        VoiceAudioRouteOwner.DirectFallback,
+                        outcome.failure,
+                    )
+                }
+                null -> fallback(
+                    attempt,
+                    "telecom_connection_timeout",
+                    IllegalStateException("Android Telecom did not become active within ${timeoutMs}ms"),
+                )
+            }
+        } catch (cancellation: CancellationException) {
+            withContext(NonCancellable) {
+                val retirementError = runCatching {
+                    registry.retireAttempt(
+                        attempt,
+                        VoiceAgentTelecomFailure(
+                            diagnosticName = "telecom_resolution_cancelled",
+                            detail = cancellation.message ?: cancellation.javaClass.simpleName,
+                        ),
+                    )
+                }.exceptionOrNull()
+                val acknowledgementError = runCatching {
+                    registry.awaitOutcome(attempt)
+                }.exceptionOrNull()
+                retirementError?.let(cancellation::addSuppressed)
+                acknowledgementError?.let(cancellation::addSuppressed)
+            }
+            throw cancellation
         }
     }
 

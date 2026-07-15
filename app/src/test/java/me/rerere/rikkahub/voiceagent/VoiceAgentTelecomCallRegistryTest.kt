@@ -27,6 +27,70 @@ class VoiceAgentTelecomCallRegistryTest {
     }
 
     @Test
+    fun `observing an outcome retains it until explicit acknowledgement`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val call = FakeTelecomCall()
+        registry.activate(attempt, call)
+
+        assertEquals(VoiceAgentTelecomOutcome.Active, registry.observeOutcome(attempt))
+        assertEquals(VoiceAgentTelecomOutcome.Active, registry.observeOutcome(attempt))
+        assertTrue(registry.hasActiveConnection())
+
+        registry.acknowledgeOutcome(attempt)
+
+        assertAttemptWasConsumed(registry, attempt)
+        assertTrue(registry.hasActiveConnection())
+    }
+
+    @Test
+    fun `acknowledging pending attempt does not remove it`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val call = FakeTelecomCall()
+
+        registry.acknowledgeOutcome(attempt)
+
+        assertTrue(registry.activate(attempt, call))
+        assertEquals(VoiceAgentTelecomOutcome.Active, registry.awaitOutcome(attempt))
+    }
+
+    @Test
+    fun `scoped retirement disconnects active attempt before publishing failure`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val events = mutableListOf<String>()
+        val call = FakeTelecomCall { events += "disconnect" }
+        val failure = VoiceAgentTelecomFailure("telecom_resolution_cancelled", "caller cancelled")
+        registry.activate(attempt, call)
+
+        registry.retireAttempt(attempt, failure)
+        val outcome = registry.awaitOutcome(attempt).also { events += "outcome" }
+
+        assertEquals(VoiceAgentTelecomOutcome.Failed(failure), outcome)
+        assertEquals(listOf("disconnect", "outcome"), events)
+        assertFalse(registry.hasActiveConnection())
+        assertAttemptWasConsumed(registry, attempt)
+    }
+
+    @Test
+    fun `scoped retirement of stale attempt leaves newer active call untouched`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val staleAttempt = registry.beginAttempt()
+        val currentAttempt = registry.beginAttempt()
+        val currentCall = FakeTelecomCall()
+        val failure = VoiceAgentTelecomFailure("telecom_resolution_cancelled", "caller cancelled")
+        registry.activate(currentAttempt, currentCall)
+
+        registry.retireAttempt(staleAttempt, failure)
+
+        assertEquals(VoiceAgentTelecomOutcome.Failed(failure), registry.awaitOutcome(staleAttempt))
+        assertTrue(registry.hasActiveConnection())
+        assertEquals(0, currentCall.disconnectCalls)
+        assertEquals(VoiceAgentTelecomOutcome.Active, registry.awaitOutcome(currentAttempt))
+    }
+
+    @Test
     fun `active outcome is published only after activation callback returns`() = runBlocking {
         val registry = VoiceAgentTelecomCallRegistry()
         val attempt = registry.beginAttempt()
