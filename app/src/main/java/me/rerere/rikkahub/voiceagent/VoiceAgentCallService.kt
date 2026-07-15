@@ -7,16 +7,13 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.ServiceCompat
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
@@ -28,20 +25,12 @@ class VoiceAgentCallService : Service() {
     private val settingsStore: SettingsStore by inject()
     private val chatService: ChatService by inject()
     private val notificationFactory: VoiceAgentNotificationFactory by inject()
-    private val telecomAdapter: VoiceAgentTelecomAdapter by inject()
     private val telecomCallRegistry: VoiceAgentTelecomCallRegistry by inject()
+    private val callStartup: VoiceAgentCallStartup by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val telecomAttemptCoordinator by lazy {
-        VoiceAgentTelecomAttemptCoordinator(
-            registry = telecomCallRegistry,
-            scope = serviceScope,
-            startCall = telecomAdapter::startCall,
-        )
-    }
     private var notificationJob: Job? = null
     private var endJob: Job? = null
     private var callGeneration = 0L
-    private var telecomConversationId: Uuid? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -99,13 +88,28 @@ class VoiceAgentCallService : Service() {
                             "config available voiceModelId=${result.config.voiceModelId} " +
                                 "baseUrl=${result.config.hermesVoiceBaseUrl}",
                         )
-                        val startedNewSession = manager.start(
+                        val startupResult = callStartup.start(
                             conversationId = id,
                             config = result.config,
-                            routeOwner = VoiceAudioRouteOwner.DirectFallback,
                             scope = serviceScope,
+                            isCurrent = { startGeneration == callGeneration },
                         )
+                        val started = when (startupResult) {
+                            is VoiceAgentCallStartupResult.Stale -> return@launch
+                            is VoiceAgentCallStartupResult.Started -> startupResult
+                        }
+                        val routeResolution = started.resolution
+                        val startedNewSession = started.startedNewSession
                         VoiceAgentLog.d(TAG, "manager start returned startedNewSession=$startedNewSession")
+                        routeResolution.failure?.let { failure ->
+                            manager.recordDiagnostic(failure.diagnosticName, failure.detail)
+                            manager.updateCallStatus(
+                                VoiceCallStatus.Degraded("Telecom unavailable: ${failure.detail}"),
+                            )
+                        }
+                        if (routeResolution.owner == VoiceAudioRouteOwner.Telecom) {
+                            manager.updateCallStatus(VoiceCallStatus.BackgroundCapable)
+                        }
                         notificationJob = serviceScope.launch {
                             manager.state.collect { state ->
                                 startForegroundFor(id.toString(), state)
@@ -117,13 +121,7 @@ class VoiceAgentCallService : Service() {
                             VoiceAgentLog.d(TAG, "existing session is error; reconnecting")
                             manager.reconnect()
                         }
-                        val hasActiveTelecomCall = telecomConversationId == id &&
-                            telecomCallRegistry.hasActiveConnection()
-                        val needsTelecomSetup = startedNewSession || !hasActiveTelecomCall
-                        if (needsTelecomSetup) {
-                            startTelecomCall(id, startGeneration)
-                        }
-                        if (needsTelecomSetup) {
+                        if (startedNewSession) {
                             VoiceAgentLog.d(TAG, "waiting for startup state")
                             var observedReconnectAttempt = !serviceReconnect
                             val startupState = manager.state.first { state ->
@@ -161,9 +159,6 @@ class VoiceAgentCallService : Service() {
                                     return@launch
                                 }
                             }
-                        }
-                        if (!needsTelecomSetup && manager.state.value.call !is VoiceCallStatus.Degraded) {
-                            manager.updateCallStatus(VoiceCallStatus.BackgroundCapable)
                         }
                     }
                     is VoiceAgentConfigResult.Unavailable -> {
@@ -251,44 +246,8 @@ class VoiceAgentCallService : Service() {
         }
     }
 
-    private fun startTelecomCall(conversationId: Uuid, startGeneration: Long) {
-        VoiceAgentLog.d(TAG, "starting telecom call conversationId=$conversationId")
-        retireTelecomCall()
-        telecomAdapter.register()
-            .onFailure {
-                val detail = it.message ?: it.javaClass.simpleName
-                VoiceAgentLog.w(TAG, "telecom register failed: ${detail.redactForVoiceAgentLog()}")
-                manager.recordDiagnostic("telecom_register_failed", detail)
-                manager.updateCallStatus(VoiceCallStatus.Degraded("Telecom unavailable: $detail"))
-                return
-            }
-        telecomAttemptCoordinator.start(
-            isCurrent = {
-                callGeneration == startGeneration &&
-                    manager.activeConversationId.value == conversationId
-            },
-        ) { outcome ->
-            when (outcome) {
-                VoiceAgentTelecomOutcome.Active -> {
-                    telecomConversationId = conversationId
-                    manager.updateCallStatus(VoiceCallStatus.BackgroundCapable)
-                }
-                is VoiceAgentTelecomOutcome.Failed -> {
-                    val failure = outcome.failure
-                    VoiceAgentLog.w(
-                        TAG,
-                        "telecom attempt failed: ${failure.detail.redactForVoiceAgentLog()}",
-                    )
-                    manager.recordDiagnostic(failure.diagnosticName, failure.detail)
-                    manager.updateCallStatus(VoiceCallStatus.Degraded("Telecom call unavailable: ${failure.detail}"))
-                }
-            }
-        }
-    }
-
     private fun retireTelecomCall() {
-        telecomConversationId = null
-        telecomAttemptCoordinator.retire()
+        telecomCallRegistry.disconnectActive()
     }
 
     private fun startForegroundFor(conversationId: String, state: VoiceAgentUiState) {
@@ -313,46 +272,6 @@ class VoiceAgentCallService : Service() {
 
 internal fun shouldStartForegroundForVoiceAgentEnd(activeConversationId: Uuid?): Boolean =
     true
-
-internal class VoiceAgentTelecomAttemptCoordinator(
-    private val registry: VoiceAgentTelecomCallRegistry,
-    private val scope: CoroutineScope,
-    private val startCall: (VoiceAgentTelecomAttemptId) -> Result<Unit>,
-) {
-    private var currentAttemptId: VoiceAgentTelecomAttemptId? = null
-
-    fun start(
-        isCurrent: () -> Boolean,
-        onOutcome: (VoiceAgentTelecomOutcome) -> Unit,
-    ): VoiceAgentTelecomAttemptId {
-        retire()
-        val attemptId = registry.beginAttempt()
-        currentAttemptId = attemptId
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            val outcome = withContext(NonCancellable) {
-                registry.awaitOutcome(attemptId)
-            }
-            if (currentAttemptId == attemptId && isCurrent()) {
-                onOutcome(outcome)
-            }
-        }
-        startCall(attemptId).onFailure { error ->
-            registry.fail(
-                attemptId,
-                VoiceAgentTelecomFailure(
-                    diagnosticName = "telecom_start_failed",
-                    detail = error.message ?: error.javaClass.simpleName,
-                ),
-            )
-        }
-        return attemptId
-    }
-
-    fun retire() {
-        currentAttemptId = null
-        registry.disconnectActive()
-    }
-}
 
 internal fun Throwable.toVoiceAgentLogDetail(): String =
     "${javaClass.simpleName}: ${(message ?: "").redactForVoiceAgentLog()}"

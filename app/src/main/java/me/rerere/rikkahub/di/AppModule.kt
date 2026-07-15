@@ -21,6 +21,7 @@ import me.rerere.rikkahub.voiceagent.DefaultVoiceAgentCallFactory
 import me.rerere.rikkahub.voiceagent.VoiceAgentAudioRouteResolver
 import me.rerere.rikkahub.voiceagent.VoiceAgentCallFactory
 import me.rerere.rikkahub.voiceagent.VoiceAgentCallManager
+import me.rerere.rikkahub.voiceagent.VoiceAgentCallStartup
 import me.rerere.rikkahub.voiceagent.VoiceAgentNotificationFactory
 import me.rerere.rikkahub.voiceagent.VoiceSessionMetadataStore
 import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomAdapter
@@ -162,6 +163,10 @@ val appModule = module {
 
     single {
         VoiceAgentAudioRouteResolver(gateway = get(), registry = get())
+    }
+
+    single {
+        VoiceAgentCallStartup(manager = get(), routeResolver = get(), telecomRegistry = get())
     }
 
     single {
