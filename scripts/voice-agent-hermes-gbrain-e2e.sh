@@ -169,6 +169,7 @@ wait_for_log() {
   local label="$1"
   local pattern="$2"
   local timeout_seconds="${3:-90}"
+  local reported_pattern="${4:-$pattern}"
   local deadline=$((SECONDS + timeout_seconds))
   local matched_line
   WAIT_FOR_LOG_FAILURE=""
@@ -187,9 +188,37 @@ wait_for_log() {
     sleep 1
   done
   printf 'Missing marker after %ss: %s\n' "$timeout_seconds" "$label" >&2
-  printf 'Pattern: %s\n' "$pattern" >&2
+  printf 'Pattern: %s\n' "$reported_pattern" >&2
   WAIT_FOR_LOG_FAILURE="timeout"
   return 1
+}
+
+extract_tested_hermes_call_id() {
+  local line_number="$1"
+  local line
+  local after_first_call_id
+  local call_id
+
+  if [[ ! "$line_number" =~ ^[0-9]+$ ]]; then
+    printf 'Could not safely identify the tested Hermes call.\n' >&2
+    return 1
+  fi
+  line="$(sed -n "${line_number}p" "$LOG_FILE")"
+  after_first_call_id="${line#*callId=}"
+  if [[ "$after_first_call_id" == "$line" || "$after_first_call_id" == *"callId="* ]]; then
+    printf 'Could not safely identify the tested Hermes call.\n' >&2
+    return 1
+  fi
+  if [[ ! "$line" =~ hermes_tool_response_hash[[:space:]]+callId=([A-Za-z0-9._:-]+),[[:space:]]+actualHash= ]]; then
+    printf 'Could not safely identify the tested Hermes call.\n' >&2
+    return 1
+  fi
+  call_id="${BASH_REMATCH[1]}"
+  if (( ${#call_id} > 128 )); then
+    printf 'Could not safely identify the tested Hermes call.\n' >&2
+    return 1
+  fi
+  printf '%s' "$call_id"
 }
 
 wait_for_log_without_advancing() {
@@ -646,9 +675,13 @@ else
     "VoiceAgentE2E.*hermes_tool_response_hash .*actualHash=$EXPECTED_HASH_LOWER(,|$)" \
     "$HERMES_RESPONSE_TIMEOUT_SECONDS"
 fi
+hermes_hash_line=$((LOG_SEARCH_START_LINE - 1))
+TESTED_HERMES_CALL_ID="$(extract_tested_hermes_call_id "$hermes_hash_line")" || exit 1
+TESTED_HERMES_CALL_ID_ERE="${TESTED_HERMES_CALL_ID//./\\.}"
 wait_for_log "completed Hermes answer sent to Gemini" \
-  'VoiceAgentE2E.*hermes_queue_event type=late_text_turn_sent .*sent=true' \
-  "$FINAL_ANSWER_TIMEOUT_SECONDS"
+  "VoiceAgentE2E.*hermes_queue_event type=late_text_turn_sent callId=$TESTED_HERMES_CALL_ID_ERE jobId=.* sent=true" \
+  "$FINAL_ANSWER_TIMEOUT_SECONDS" \
+  'VoiceAgentE2E.*hermes_queue_event type=late_text_turn_sent callId=[tested-call] jobId=.* sent=true'
 wait_for_log "Gemini output audio received" 'VoiceAgentGemini.*event kind=OutputAudio' 120
 wait_for_log "final voice playback active" \
   'AndroidVoiceAudioEngine.*Voice playback active: playbackEpoch=[0-9]+' \
