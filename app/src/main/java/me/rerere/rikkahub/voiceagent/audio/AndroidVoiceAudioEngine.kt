@@ -543,8 +543,6 @@ class AndroidVoiceAudioEngine(
         const val CAPTURE_SAMPLE_RATE = 16_000
         const val MIN_CAPTURE_BUFFER_BYTES = 3_200
         const val CAPTURE_LEVEL_LOG_INTERVAL_CHUNKS = 10
-        const val BLUETOOTH_HEADSET_PROFILE_WAIT_STEPS = 10
-        const val BLUETOOTH_HEADSET_PROFILE_WAIT_MS = 100L
 
         fun captureBufferSize(): Int {
             val bufferSize = AudioRecord.getMinBufferSize(
