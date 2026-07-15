@@ -24,6 +24,9 @@ Click to join our Discord server 👉 [【RikkaHub】](https://discord.gg/9weBqx
 
 🔗 [Download from Google Play](https://play.google.com/store/apps/details?id=me.rerere.rikkahub)
 
+> [!WARNING]
+> There are many forked versions of RikkaHub. Issues with forks are unrelated to RikkaHub, so please use forks with caution to avoid privacy leaks or excessive permission requests.
+
 ## 💖 Sponsors
 
 |                                         Sponsor                                         | Description                                                                                                                                                                                                                                         |
