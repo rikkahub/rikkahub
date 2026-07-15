@@ -68,6 +68,21 @@ assert_file_does_not_exist() {
   fi
 }
 
+assert_file_mode() {
+  local path="$1"
+  local expected="$2"
+  if [[ ! -f "$path" ]]; then
+    printf 'Expected file to exist: %s\n' "$path" >&2
+    exit 1
+  fi
+  local actual
+  actual="$(stat -c '%a' "$path")"
+  if [[ "$actual" != "$expected" ]]; then
+    printf 'Expected file %s to have mode %s, got %s\n' "$path" "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
 assert_last_line_after() {
   local path="$1"
   local earlier="$2"
@@ -246,27 +261,87 @@ LOGS
       printf '06-08 12:00:02.500 E/VoiceAgentCallService(1): Voice Lab request failed 403\n'
     fi
     if [[ "${FAKE_ADB_SKIP_TOOL_CALL:-0}" != "1" ]]; then
-      if [[ "${FAKE_ADB_ASYNC_QUEUE_FLOW:-0}" == "1" ]]; then
+      if [[ "${FAKE_ADB_PROGRESS_ONLY_FLOW:-0}" == "1" ]]; then
         cat <<'LOGS'
 06-08 12:00:02.500 D/VoiceAgentE2E(1): hermes_queue_event type=job_created callId=call-1 jobId=job-1 status=queued sent=n/a
 06-08 12:00:02.600 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
-06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, responseChars=25, normalizedChars=25, elapsedMs=100
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
+06-08 12:00:03.500 D/VoiceAgentE2E(1): hermes_queue_event type=job_completed callId=call-1 jobId=job-1 status=succeeded sent=n/a
+06-08 12:00:03.600 D/VoiceAgentGemini(1): send kind=clientContent sent=true
+06-08 12:00:03.700 D/VoiceAgentE2E(1): hermes_queue_event type=still_working_text_turn_sent callId=call-1 jobId=none status=none sent=true
+06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
+06-08 12:00:05.500 D/AndroidVoiceAudioEngine(1): Voice playback active: playbackEpoch=1
+06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
+06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
+LOGS
+      elif [[ "${FAKE_ADB_MISSING_HASH_CALL_ID_FLOW:-0}" == "1" ]]; then
+        cat <<'LOGS'
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
+06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
+06-08 12:00:04.100 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-1 jobId=none status=none sent=true
+06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
+06-08 12:00:05.500 D/AndroidVoiceAudioEngine(1): Voice playback active: playbackEpoch=1
+06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
+06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
+LOGS
+      elif [[ "${FAKE_ADB_UNSAFE_HASH_CALL_ID_FLOW:-0}" == "1" ]]; then
+        cat <<'LOGS'
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call/1, responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
+06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
+06-08 12:00:04.100 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call/1 jobId=none status=none sent=true
+06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
+06-08 12:00:05.500 D/AndroidVoiceAudioEngine(1): Voice playback active: playbackEpoch=1
+06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
+06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
+LOGS
+      elif [[ "${FAKE_ADB_AMBIGUOUS_HASH_CALL_ID_FLOW:-0}" == "1" ]]; then
+        cat <<'LOGS'
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, callId=call-2, responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
+06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
+06-08 12:00:04.100 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-1 jobId=none status=none sent=true
+06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
+06-08 12:00:05.500 D/AndroidVoiceAudioEngine(1): Voice playback active: playbackEpoch=1
+06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
+06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
+LOGS
+      elif [[ "${FAKE_ADB_WRONG_FINAL_CALL_FLOW:-0}" == "1" ]]; then
+        cat <<'LOGS'
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
+06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
+06-08 12:00:04.100 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-2 jobId=none status=none sent=true
+06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
+06-08 12:00:05.500 D/AndroidVoiceAudioEngine(1): Voice playback active: playbackEpoch=1
+06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
+06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
+LOGS
+      elif [[ "${FAKE_ADB_ASYNC_QUEUE_FLOW:-0}" == "1" ]]; then
+        cat <<'LOGS'
+06-08 12:00:02.500 D/VoiceAgentE2E(1): hermes_queue_event type=job_created callId=call-1 jobId=job-1 status=queued sent=n/a
+06-08 12:00:02.600 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
 06-08 12:00:03.500 D/VoiceAgentE2E(1): hermes_queue_event type=job_completed callId=call-1 jobId=job-1 status=succeeded sent=n/a
 06-08 12:00:03.600 D/VoiceAgentGemini(1): send kind=clientContent sent=true
 06-08 12:00:03.700 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-1 jobId=none status=none sent=true
 06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
+06-08 12:00:05.500 D/AndroidVoiceAudioEngine(1): Voice playback active: playbackEpoch=1
 06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
 06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
 LOGS
       else
         cat <<'LOGS'
-06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, responseChars=25, normalizedChars=25, elapsedMs=100
+06-08 12:00:03.000 D/VoiceAgentE2E(1): hermes_tool_response_hash callId=call-1, responseChars=25, normalizedChars=25, actualHash=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, elapsedMs=100
 06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
+06-08 12:00:04.100 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-1 jobId=none status=none sent=true
 06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
+06-08 12:00:05.500 D/AndroidVoiceAudioEngine(1): Voice playback active: playbackEpoch=1
 06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
 06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
 LOGS
       fi
+    fi
+    if [[ "${FAKE_ADB_SKIP_TOOL_CALL:-0}" != "1" && "${FAKE_ADB_SKIP_FINAL_BOUNDARY:-0}" != "1" ]]; then
+      printf '06-08 12:00:07.500 D/VoiceAgentGemini(1): event kind=TurnComplete\n'
+      printf '06-08 12:00:07.600 D/AndroidVoiceAudioEngine(1): Voice playback drained: playbackEpoch=1\n'
     fi
     deadline=$((SECONDS + 5))
     while [[ ! -f "${FAKE_ADB_END_MARKER:?}" && "$SECONDS" -lt "$deadline" ]]; do
@@ -593,6 +668,7 @@ assert_contains "$manual_output" "Manual review answer artifact: $manual_log_dir
 assert_contains "$manual_output" "PIPELINE: passed"
 assert_contains "$manual_output" "CLEANUP: passed"
 assert_contains "$manual_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
+assert_file_mode "$manual_log_dir/logcat.txt" 600
 assert_file_contains_exactly "$manual_log_dir/manual-hermes-answer.txt" "manual answer from Hermes"
 assert_file_contains_exactly "$manual_log_dir/trace-id.txt" "trace-gbrain"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/hermes-answer.txt"
@@ -761,6 +837,117 @@ assert_contains "$async_queue_output" "PASS marker: queued acknowledgement sent"
 assert_contains "$async_queue_output" "PASS marker: Hermes response hash observed for manual review"
 assert_contains "$async_queue_output" "PASS marker: completed Hermes answer sent to Gemini"
 assert_contains "$async_queue_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
+
+wrong_final_call_log_dir="$TMP_DIR/wrong-final-call-log"
+set +e
+wrong_final_call_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_WRONG_FINAL_CALL_FLOW=1 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$wrong_final_call_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_FINAL_ANSWER_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+wrong_final_call_status=$?
+set -e
+
+if [[ "$wrong_final_call_status" -eq 0 ]]; then
+  printf 'Expected a final marker for a different callId to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$wrong_final_call_output" >&2
+  exit 1
+fi
+assert_contains "$wrong_final_call_output" "Missing marker after 1s: completed Hermes answer sent to Gemini"
+if [[ "$wrong_final_call_output" == *"call-1"* || "$wrong_final_call_output" == *"call-2"* ]]; then
+  printf 'Expected tested Hermes call identifiers to stay out of command output.\n' >&2
+  exit 1
+fi
+
+for invalid_call_id_case in missing unsafe ambiguous; do
+  invalid_call_id_log_dir="$TMP_DIR/invalid-call-id-$invalid_call_id_case-log"
+  invalid_call_id_env="FAKE_ADB_${invalid_call_id_case^^}_HASH_CALL_ID_FLOW"
+  set +e
+  invalid_call_id_output="$(
+    env \
+      PATH="$TMP_DIR:$PATH" \
+      "$invalid_call_id_env=1" \
+      VOICE_AGENT_E2E_SERIAL=RZ \
+      VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+      VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+      VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+      VOICE_AGENT_E2E_LOG_DIR="$invalid_call_id_log_dir" \
+      VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+      VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+      VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+      "$SCRIPT" 2>&1
+  )"
+  invalid_call_id_status=$?
+  set -e
+
+  if [[ "$invalid_call_id_status" -eq 0 ]]; then
+    printf 'Expected %s tested Hermes callId to fail.\n' "$invalid_call_id_case" >&2
+    printf 'Actual output:\n%s\n' "$invalid_call_id_output" >&2
+    exit 1
+  fi
+  assert_contains "$invalid_call_id_output" "Could not safely identify the tested Hermes call."
+done
+
+progress_only_log_dir="$TMP_DIR/progress-only-log"
+set +e
+progress_only_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_PROGRESS_ONLY_FLOW=1 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$progress_only_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_FINAL_ANSWER_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+progress_only_status=$?
+set -e
+
+if [[ "$progress_only_status" -eq 0 ]]; then
+  printf 'Expected progress-only clientContent without late_text_turn_sent to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$progress_only_output" >&2
+  exit 1
+fi
+assert_contains "$progress_only_output" "Missing marker after 1s: completed Hermes answer sent to Gemini"
+
+missing_final_boundary_log_dir="$TMP_DIR/missing-final-boundary-log"
+set +e
+missing_final_boundary_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_SKIP_FINAL_BOUNDARY=1 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$missing_final_boundary_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_FINAL_BOUNDARY_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+missing_final_boundary_status=$?
+set -e
+
+if [[ "$missing_final_boundary_status" -eq 0 ]]; then
+  printf 'Expected final playback write without post-final TurnComplete/drain to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$missing_final_boundary_output" >&2
+  exit 1
+fi
+assert_contains "$missing_final_boundary_output" "Missing marker after 1s: final Gemini TurnComplete"
 
 explicit_serial_multiple_devices_log_dir="$TMP_DIR/explicit-serial-multiple-devices-log"
 : > "$FAKE_ADB_ARGS_LOG"

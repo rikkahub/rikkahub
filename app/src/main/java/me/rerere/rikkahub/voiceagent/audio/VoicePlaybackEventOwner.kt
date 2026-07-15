@@ -15,10 +15,11 @@ internal class VoicePlaybackEventOwner {
         currentHandler?.invoke(event)
     }
 
-    fun releasePlayback(release: () -> Unit) {
-        release()
-        synchronized(lock) {
-            handler = null
+    fun releasePlayback(release: (onPlaybackEventsDrained: () -> Unit) -> Unit) {
+        release {
+            synchronized(lock) {
+                handler = null
+            }
         }
     }
 }

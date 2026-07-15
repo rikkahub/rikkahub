@@ -3,6 +3,7 @@ package me.rerere.rikkahub.voiceagent
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
+import me.rerere.rikkahub.voiceagent.audio.PlaybackEpoch
 import me.rerere.rikkahub.voiceagent.audio.VoicePlaybackEvent
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -19,9 +20,9 @@ internal class FakeVoiceAudioEngine : VoiceAudioEngine {
     var playbackSessionId: Long? = null
         private set
     private var playbackEventHandler: ((VoicePlaybackEvent) -> Unit)? = null
-    private var nextPlaybackEpoch = 0L
-    private var acceptingPlaybackEpoch: Long? = null
-    private val pendingDrainEpochs = ArrayDeque<Long>()
+    private var nextPlaybackEpoch = PlaybackEpoch(0L)
+    private var acceptingPlaybackEpoch: PlaybackEpoch? = null
+    private val pendingDrainEpochs = ArrayDeque<PlaybackEpoch>()
     var markPlaybackTurnCompleteCalls = 0
         private set
     private var captureCallback: ((ByteArray) -> Unit)? = null
@@ -79,9 +80,10 @@ internal class FakeVoiceAudioEngine : VoiceAudioEngine {
         }
         playedPcm16 += base64Pcm16
         if (acceptingPlaybackEpoch == null) {
-            nextPlaybackEpoch += 1
-            acceptingPlaybackEpoch = nextPlaybackEpoch
-            playbackEventHandler?.invoke(VoicePlaybackEvent.Active(nextPlaybackEpoch))
+            val playbackEpoch = PlaybackEpoch(nextPlaybackEpoch.value + 1L)
+            nextPlaybackEpoch = playbackEpoch
+            acceptingPlaybackEpoch = playbackEpoch
+            playbackEventHandler?.invoke(VoicePlaybackEvent.Active(playbackEpoch))
         }
         val blockedAfterAccepted = synchronized(blockedAfterAcceptedPlaybacks) {
             blockedAfterAcceptedPlaybacks.removeFirstOrNull()
@@ -151,7 +153,7 @@ internal class FakeVoiceAudioEngine : VoiceAudioEngine {
         playbackEventHandler?.invoke(VoicePlaybackEvent.Drained(epoch))
     }
 
-    private fun retirePlaybackEpochs(): List<Long> = buildList {
+    private fun retirePlaybackEpochs(): List<PlaybackEpoch> = buildList {
         acceptingPlaybackEpoch?.let(::add)
         addAll(pendingDrainEpochs)
         acceptingPlaybackEpoch = null

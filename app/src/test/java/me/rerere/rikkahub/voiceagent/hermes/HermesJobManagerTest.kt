@@ -24,6 +24,7 @@ import me.rerere.rikkahub.voiceagent.FakeVoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceToolApi
 import me.rerere.rikkahub.voiceagent.VoiceToolStatus
+import me.rerere.rikkahub.voiceagent.audio.PlaybackEpoch
 import me.rerere.rikkahub.voiceagent.hermesFailureFixture
 import me.rerere.rikkahub.voiceagent.hermesJobSnapshotFixture
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
@@ -50,7 +51,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
 
-private const val MANAGER_TEST_PLAYBACK_EPOCH = 1L
+private val MANAGER_TEST_PLAYBACK_EPOCH = PlaybackEpoch(1L)
 
 private fun HermesJobManager.completeAnnouncementTurnForTest() {
     announcer.onGeminiTurnComplete()

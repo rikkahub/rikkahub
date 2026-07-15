@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
+import me.rerere.rikkahub.voiceagent.audio.PlaybackEpoch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -13,8 +14,11 @@ class HermesAnnouncementLifecycleTest {
     private val stillWorking = AnnouncementIntent.StillWorking(callId = "c3", jobId = "j3")
     private val attached = AnnouncerState(bridgeSessionId = 7L)
 
+    private fun AnnouncerTransition.dispatches(): List<AnnouncementDispatch> =
+        effects.filterIsInstance<AnnouncerEffect.Send>().map { it.dispatch }
+
     private fun AnnouncerTransition.sends(): List<AnnouncementIntent> =
-        effects.filterIsInstance<AnnouncerEffect.Send>().map { it.intent }
+        dispatches().map { it.intent }
 
     private fun AnnouncerTransition.fallbacks(): List<AnnouncementIntent> =
         effects.filterIsInstance<AnnouncerEffect.FallbackToText>().map { it.intent }
@@ -23,8 +27,9 @@ class HermesAnnouncementLifecycleTest {
     fun `intent on an idle attached drained state sends immediately and reserves the turn`() {
         val transition = reducer.reduce(attached, AnnouncerEvent.IntentEnqueued(completion, 100L))
 
-        assertEquals(listOf(completion), transition.sends())
-        assertEquals(completion, transition.state.inFlight)
+        val dispatch = AnnouncementDispatch.Final(completion)
+        assertEquals(listOf(dispatch), transition.dispatches())
+        assertEquals(dispatch, transition.state.inFlight)
         assertEquals(GeminiTurnGate.SendReserved(), transition.state.geminiTurn)
         assertTrue(transition.state.pendingJobs.isEmpty())
         assertEquals(7L, transition.effects.filterIsInstance<AnnouncerEffect.Send>().single().sessionId)
@@ -34,7 +39,7 @@ class HermesAnnouncementLifecycleTest {
     fun `turn complete alone cannot release while playback is active`() {
         var state = attached
         state = reducer.reduce(state, AnnouncerEvent.GeminiTurnActive(10L)).state
-        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(4L, 20L)).state
+        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(PlaybackEpoch(4L), 20L)).state
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 30L)).state
 
         val transition = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(40L))
@@ -46,10 +51,10 @@ class HermesAnnouncementLifecycleTest {
     fun `playback drain alone cannot release while Gemini turn is active`() {
         var state = attached
         state = reducer.reduce(state, AnnouncerEvent.GeminiTurnActive(10L)).state
-        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(4L, 20L)).state
+        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(PlaybackEpoch(4L), 20L)).state
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 30L)).state
 
-        val transition = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(4L, 40L))
+        val transition = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(PlaybackEpoch(4L), 40L))
 
         assertTrue(transition.sends().isEmpty())
     }
@@ -58,11 +63,11 @@ class HermesAnnouncementLifecycleTest {
     fun `turn complete then matching playback drain release one intent`() {
         var state = attached
         state = reducer.reduce(state, AnnouncerEvent.GeminiTurnActive(10L)).state
-        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(4L, 20L)).state
+        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(PlaybackEpoch(4L), 20L)).state
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 30L)).state
         state = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(40L)).state
 
-        val transition = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(4L, 50L))
+        val transition = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(PlaybackEpoch(4L), 50L))
 
         assertEquals(listOf(completion), transition.sends())
         assertEquals(GeminiTurnGate.SendReserved(), transition.state.geminiTurn)
@@ -72,14 +77,117 @@ class HermesAnnouncementLifecycleTest {
     fun `matching playback drain then turn complete release one intent`() {
         var state = attached
         state = reducer.reduce(state, AnnouncerEvent.GeminiTurnActive(10L)).state
-        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(4L, 20L)).state
+        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(PlaybackEpoch(4L), 20L)).state
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 30L)).state
-        state = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(4L, 40L)).state
+        state = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(PlaybackEpoch(4L), 40L)).state
 
         val transition = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(50L))
 
         assertEquals(listOf(completion), transition.sends())
         assertEquals(GeminiTurnGate.SendReserved(), transition.state.geminiTurn)
+    }
+
+    @Test
+    fun `interruption closes an idle gate until two completion boundaries`() {
+        var state = reducer.reduce(
+            attached,
+            AnnouncerEvent.GeminiTurnInterrupted(nowMs = 10L),
+        ).state
+        assertEquals(GeminiTurnGate.InterruptedAwaitingBoundary, state.geminiTurn)
+
+        state = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(nowMs = 20L)).state
+        assertEquals(GeminiTurnGate.Active, state.geminiTurn)
+
+        state = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(nowMs = 30L)).state
+        assertEquals(GeminiTurnGate.Idle, state.geminiTurn)
+    }
+
+    @Test
+    fun `activity and repeated interruptions do not weaken interrupted state`() {
+        var state = attached.copy(geminiTurn = GeminiTurnGate.Active)
+        state = reducer.reduce(state, AnnouncerEvent.GeminiTurnInterrupted(10L)).state
+        state = reducer.reduce(state, AnnouncerEvent.GeminiTurnActive(20L)).state
+        state = reducer.reduce(state, AnnouncerEvent.GeminiTurnInterrupted(30L)).state
+
+        assertEquals(GeminiTurnGate.InterruptedAwaitingBoundary, state.geminiTurn)
+        val firstCompletion = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(40L))
+        assertEquals(GeminiTurnGate.Active, firstCompletion.state.geminiTurn)
+    }
+
+    @Test
+    fun `playback changes preserve interrupted boundary and never release`() {
+        var state = attached.copy(geminiTurn = GeminiTurnGate.InterruptedAwaitingBoundary)
+        state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 10L)).state
+
+        val playbackEvents = listOf(
+            AnnouncerEvent.PlaybackActive(PlaybackEpoch(5L), 20L),
+            AnnouncerEvent.PlaybackDrainStarted(PlaybackEpoch(5L), 30L),
+            AnnouncerEvent.PlaybackDrained(PlaybackEpoch(5L), 40L),
+        )
+        playbackEvents.forEach { event ->
+            val transition = reducer.reduce(state, event)
+            assertEquals(GeminiTurnGate.InterruptedAwaitingBoundary, transition.state.geminiTurn)
+            assertTrue(transition.sends().isEmpty())
+            assertEquals(completion, transition.state.pendingJobs.single().final)
+            state = transition.state
+        }
+    }
+
+    @Test
+    fun `quiet elapsed preserves interrupted boundary and never releases`() {
+        var state = attached.copy(
+            geminiTurn = GeminiTurnGate.InterruptedAwaitingBoundary,
+            lastInputDeltaAtMs = 0L,
+        )
+        state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 1L)).state
+
+        val transition = reducer.reduce(state, AnnouncerEvent.QuietTimerFired(2_001L))
+
+        assertEquals(GeminiTurnGate.InterruptedAwaitingBoundary, transition.state.geminiTurn)
+        assertTrue(transition.sends().isEmpty())
+        assertEquals(completion, transition.state.pendingJobs.single().final)
+    }
+
+    @Test
+    fun `watchdog fired preserves interrupted boundary and never releases`() {
+        var state = attached.copy(geminiTurn = GeminiTurnGate.InterruptedAwaitingBoundary)
+        state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 100L)).state
+
+        val transition = reducer.reduce(state, AnnouncerEvent.BlockedWatchdogFired(15_100L))
+
+        assertEquals(GeminiTurnGate.InterruptedAwaitingBoundary, transition.state.geminiTurn)
+        assertTrue(transition.sends().isEmpty())
+        assertEquals(completion, transition.state.pendingJobs.single().final)
+        assertTrue(transition.effects.any {
+            it is AnnouncerEffect.Diagnostic && it.name == "hermes_announcement_blocked_watchdog"
+        })
+    }
+
+    @Test
+    fun `interruption wins a send reservation race`() {
+        var state = reducer.reduce(
+            attached,
+            AnnouncerEvent.IntentEnqueued(completion, nowMs = 10L),
+        ).state
+        state = reducer.reduce(state, AnnouncerEvent.GeminiTurnInterrupted(20L)).state
+
+        val returned = reducer.reduce(
+            state,
+            AnnouncerEvent.SendReturned(AnnouncementSendOutcome.Sent, nowMs = 30L),
+        )
+
+        assertEquals(GeminiTurnGate.InterruptedAwaitingBoundary, returned.state.geminiTurn)
+        assertEquals(null, returned.state.inFlight)
+    }
+
+    @Test
+    fun `session retirement clears interrupted ownership`() {
+        val interrupted = attached.copy(geminiTurn = GeminiTurnGate.InterruptedAwaitingBoundary)
+
+        val retired = reducer.reduce(interrupted, AnnouncerEvent.GeminiSessionRetired(20L))
+
+        assertEquals(GeminiTurnGate.Idle, retired.state.geminiTurn)
+        assertTrue(retired.state.bridgeRetired)
     }
 
     @Test
@@ -97,7 +205,7 @@ class HermesAnnouncementLifecycleTest {
 
         val settlingEvent = reducer.reduce(
             retired.state,
-            AnnouncerEvent.PlaybackDrained(generation = 1L, nowMs = 25L),
+            AnnouncerEvent.PlaybackDrained(playbackEpoch = PlaybackEpoch(1L), nowMs = 25L),
         )
         assertTrue(settlingEvent.sends().isEmpty())
         assertEquals(completion, settlingEvent.state.pendingJobs.single().final)
@@ -206,12 +314,23 @@ class HermesAnnouncementLifecycleTest {
         )
 
         val job = ignored.state.pendingJobs.single()
-        assertEquals(progress.copy(allowTerminalRecord = true), job.progress)
+        assertEquals(progress, job.progress)
         assertEquals(completion, job.final)
+        assertEquals(AnnouncementDispatch.ProgressBeforeFinal(progress), job.nextDispatch())
         assertTrue(ignored.effects.any {
             it is AnnouncerEffect.Diagnostic &&
                 it.name == "hermes_announcement_progress_ignored_after_final"
         })
+    }
+
+    @Test
+    fun `unpaired progress derives progress-only dispatch`() {
+        val progress = AnnouncementIntent.StillWorking("c-progress", "j-progress")
+        val job = PendingAnnouncementJob(
+            key = AnnouncementJobKey("job:j-progress"),
+            progress = progress,
+        )
+        assertEquals(AnnouncementDispatch.ProgressOnly(progress), job.nextDispatch())
     }
 
     @Test
@@ -247,7 +366,7 @@ class HermesAnnouncementLifecycleTest {
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(finalB, 30L)).state
 
         var transition = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(40L))
-        assertEquals(listOf(progressA.copy(allowTerminalRecord = true)), transition.sends())
+        assertEquals(listOf(progressA), transition.sends())
         transition = reducer.reduce(
             transition.state,
             AnnouncerEvent.SendReturned(AnnouncementSendOutcome.Skipped, 50L),
@@ -263,9 +382,9 @@ class HermesAnnouncementLifecycleTest {
     @Test
     fun `stale playback drain cannot release current generation`() {
         var state = attached.copy(geminiTurn = GeminiTurnGate.Idle)
-        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(9L, 10L)).state
+        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(PlaybackEpoch(9L), 10L)).state
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 20L)).state
-        val transition = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(8L, 30L))
+        val transition = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(PlaybackEpoch(8L), 30L))
         assertTrue(transition.sends().isEmpty())
         assertFalse(transition.state.playback.drained)
         assertTrue(transition.effects.any {

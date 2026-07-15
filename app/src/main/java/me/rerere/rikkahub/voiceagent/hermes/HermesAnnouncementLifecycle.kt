@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
+import me.rerere.rikkahub.voiceagent.audio.PlaybackEpoch
+
 /**
  * Pure announcement lifecycle. The reducer owns announcement ordering and decides
  * when a proactive turn may start. Time and playback ownership arrive as events;
@@ -8,13 +10,37 @@ package me.rerere.rikkahub.voiceagent.hermes
  */
 
 sealed interface AnnouncementIntent {
-    data class Completion(val callId: String, val jobId: String?) : AnnouncementIntent
-    data class Terminal(val callId: String, val jobId: String?) : AnnouncementIntent
+    data class Completion(val callId: String, val jobId: String?) : FinalAnnouncementIntent
+    data class Terminal(val callId: String, val jobId: String?) : FinalAnnouncementIntent
     data class StillWorking(
         val callId: String,
         val jobId: String,
-        val allowTerminalRecord: Boolean = false,
     ) : AnnouncementIntent
+}
+
+sealed interface FinalAnnouncementIntent : AnnouncementIntent
+
+sealed interface AnnouncementDispatch {
+    val intent: AnnouncementIntent
+
+    sealed interface Progress : AnnouncementDispatch {
+        val progress: AnnouncementIntent.StillWorking
+        override val intent: AnnouncementIntent.StillWorking
+            get() = progress
+    }
+
+    data class ProgressOnly(
+        override val progress: AnnouncementIntent.StillWorking,
+    ) : Progress
+
+    data class ProgressBeforeFinal(
+        override val progress: AnnouncementIntent.StillWorking,
+    ) : Progress
+
+    data class Final(val final: FinalAnnouncementIntent) : AnnouncementDispatch {
+        override val intent: FinalAnnouncementIntent
+            get() = final
+    }
 }
 
 internal fun AnnouncementIntent.label(): String = when (this) {
@@ -50,19 +76,25 @@ sealed interface GeminiTurnGate {
         val completed: Boolean = false,
     ) : GeminiTurnGate
     data object Active : GeminiTurnGate
+    data object InterruptedAwaitingBoundary : GeminiTurnGate
 }
 
 data class PlaybackGate(
-    val generation: Long = 0L,
+    val playbackEpoch: PlaybackEpoch = PlaybackEpoch(0L),
     val drained: Boolean = true,
 )
 
 data class PendingAnnouncementJob(
     val key: AnnouncementJobKey,
     val progress: AnnouncementIntent.StillWorking? = null,
-    val final: AnnouncementIntent? = null,
+    val final: FinalAnnouncementIntent? = null,
 ) {
-    fun head(): AnnouncementIntent? = progress ?: final
+    fun nextDispatch(): AnnouncementDispatch? = when {
+        progress != null && final != null -> AnnouncementDispatch.ProgressBeforeFinal(progress)
+        progress != null -> AnnouncementDispatch.ProgressOnly(progress)
+        final != null -> AnnouncementDispatch.Final(final)
+        else -> null
+    }
 
     fun flatten(): List<AnnouncementIntent> = listOfNotNull(progress, final)
 }
@@ -75,7 +107,7 @@ data class AnnouncerState(
     val lastInputDeltaAtMs: Long? = null,
     val pendingJobs: List<PendingAnnouncementJob> = emptyList(),
     val finalizedJobKeys: Set<AnnouncementJobKey> = emptySet(),
-    val inFlight: AnnouncementIntent? = null,
+    val inFlight: AnnouncementDispatch? = null,
     val blockedWatchdogAtMs: Long? = null,
     val closed: Boolean = false,
 )
@@ -86,10 +118,11 @@ sealed interface AnnouncerEvent {
     data class BridgeDetached(val nowMs: Long) : AnnouncerEvent
     data class GeminiTurnActive(val nowMs: Long) : AnnouncerEvent
     data class GeminiTurnComplete(val nowMs: Long) : AnnouncerEvent
+    data class GeminiTurnInterrupted(val nowMs: Long) : AnnouncerEvent
     data class GeminiSessionRetired(val nowMs: Long) : AnnouncerEvent
-    data class PlaybackActive(val generation: Long, val nowMs: Long) : AnnouncerEvent
-    data class PlaybackDrainStarted(val generation: Long, val nowMs: Long) : AnnouncerEvent
-    data class PlaybackDrained(val generation: Long, val nowMs: Long) : AnnouncerEvent
+    data class PlaybackActive(val playbackEpoch: PlaybackEpoch, val nowMs: Long) : AnnouncerEvent
+    data class PlaybackDrainStarted(val playbackEpoch: PlaybackEpoch, val nowMs: Long) : AnnouncerEvent
+    data class PlaybackDrained(val playbackEpoch: PlaybackEpoch, val nowMs: Long) : AnnouncerEvent
     data class InputDelta(val nowMs: Long) : AnnouncerEvent
     data class QuietTimerFired(val nowMs: Long) : AnnouncerEvent
     data class BlockedWatchdogFired(val nowMs: Long) : AnnouncerEvent
@@ -107,7 +140,10 @@ sealed interface AnnouncerEffect {
     data class StartBlockedWatchdog(val delayMs: Long) : AnnouncerEffect
     data object CancelBlockedWatchdog : AnnouncerEffect
 
-    data class Send(val intent: AnnouncementIntent, val sessionId: Long) : AnnouncerEffect
+    data class Send(
+        val dispatch: AnnouncementDispatch,
+        val sessionId: Long,
+    ) : AnnouncerEffect
     data class FallbackToText(val intent: AnnouncementIntent) : AnnouncerEffect
     data class Diagnostic(val name: String, val detail: String) : AnnouncerEffect
 }
@@ -161,6 +197,14 @@ class AnnouncerReducer(
             else -> settle(state.copy(geminiTurn = state.geminiTurn.onComplete()), event.nowMs)
         }
 
+        is AnnouncerEvent.GeminiTurnInterrupted -> when {
+            state.closed -> noChange(state)
+            else -> settle(
+                state.copy(geminiTurn = GeminiTurnGate.InterruptedAwaitingBoundary),
+                event.nowMs,
+            )
+        }
+
         is AnnouncerEvent.GeminiSessionRetired -> when {
             state.closed -> noChange(state)
             // Session retirement revokes the old socket's turn ownership, but it is not a
@@ -183,7 +227,7 @@ class AnnouncerReducer(
 
         is AnnouncerEvent.PlaybackActive -> reducePlaybackEvent(
             state = state,
-            generation = event.generation,
+            playbackEpoch = event.playbackEpoch,
             nowMs = event.nowMs,
             drained = false,
         )
@@ -192,7 +236,7 @@ class AnnouncerReducer(
 
         is AnnouncerEvent.PlaybackDrained -> reducePlaybackEvent(
             state = state,
-            generation = event.generation,
+            playbackEpoch = event.playbackEpoch,
             nowMs = event.nowMs,
             drained = true,
         )
@@ -212,16 +256,16 @@ class AnnouncerReducer(
 
     private fun reducePlaybackEvent(
         state: AnnouncerState,
-        generation: Long,
+        playbackEpoch: PlaybackEpoch,
         nowMs: Long,
         drained: Boolean,
     ): AnnouncerTransition {
         if (state.closed) return noChange(state)
-        if (generation < state.playback.generation) {
-            return stalePlaybackEvent(state, generation)
+        if (playbackEpoch < state.playback.playbackEpoch) {
+            return stalePlaybackEvent(state, playbackEpoch)
         }
         return settle(
-            state.copy(playback = PlaybackGate(generation = generation, drained = drained)),
+            state.copy(playback = PlaybackGate(playbackEpoch = playbackEpoch, drained = drained)),
             nowMs,
         )
     }
@@ -231,26 +275,27 @@ class AnnouncerReducer(
         event: AnnouncerEvent.PlaybackDrainStarted,
     ): AnnouncerTransition {
         if (state.closed) return noChange(state)
-        if (event.generation < state.playback.generation) {
-            return stalePlaybackEvent(state, event.generation)
+        if (event.playbackEpoch < state.playback.playbackEpoch) {
+            return stalePlaybackEvent(state, event.playbackEpoch)
         }
         return AnnouncerTransition(
             state,
             listOf(
                 AnnouncerEffect.Diagnostic(
                     name = "hermes_announcement_playback_drain_started",
-                    detail = "generation=${event.generation}",
+                    detail = "playbackEpoch=${event.playbackEpoch.value}",
                 )
             ),
         )
     }
 
-    private fun stalePlaybackEvent(state: AnnouncerState, generation: Long) = AnnouncerTransition(
+    private fun stalePlaybackEvent(state: AnnouncerState, playbackEpoch: PlaybackEpoch) = AnnouncerTransition(
         state,
         listOf(
             AnnouncerEffect.Diagnostic(
                 name = "hermes_announcement_stale_playback_event",
-                detail = "generation=$generation, current=${state.playback.generation}",
+                detail = "playbackEpoch=${playbackEpoch.value}, " +
+                    "current=${state.playback.playbackEpoch.value}",
             )
         ),
     )
@@ -275,14 +320,14 @@ class AnnouncerReducer(
         // gates are currently safe (for example, a quiet timer event was lost), it must
         // fail closed and wait for an ordinary boundary event to call settle().
         val quietRemainingMs = quietRemainingMs(state, nowMs)
-        val head = requireNotNull(state.pendingJobs.first().head())
+        val dispatch = requireNotNull(state.pendingJobs.first().nextDispatch())
         return AnnouncerTransition(
             state.copy(blockedWatchdogAtMs = nowMs + blockedWatchdogMs),
             listOf(
                 AnnouncerEffect.Diagnostic(
                     name = "hermes_announcement_blocked_watchdog",
-                    detail = "intent=${head.label()}, gemini=${state.geminiTurn}, " +
-                        "playbackGeneration=${state.playback.generation}, " +
+                    detail = "intent=${dispatch.intent.label()}, gemini=${state.geminiTurn}, " +
+                        "playbackEpoch=${state.playback.playbackEpoch.value}, " +
                         "playbackDrained=${state.playback.drained}, quietRemainingMs=$quietRemainingMs",
                 ),
                 AnnouncerEffect.StartBlockedWatchdog(blockedWatchdogMs),
@@ -294,7 +339,7 @@ class AnnouncerReducer(
         state: AnnouncerState,
         event: AnnouncerEvent.SendReturned,
     ): AnnouncerTransition {
-        val intent = state.inFlight ?: return noChange(state)
+        val dispatch = state.inFlight ?: return noChange(state)
         val cleared = state.copy(
             inFlight = null,
             geminiTurn = state.geminiTurn.onSendReturned(event.outcome),
@@ -307,7 +352,7 @@ class AnnouncerReducer(
             AnnouncementSendOutcome.Failed,
             AnnouncementSendOutcome.AttachmentInvalidated -> {
                 val settled = if (cleared.closed) noChange(cleared) else settle(cleared, event.nowMs)
-                AnnouncerTransition(settled.state, fallbackOrDrop(intent) + settled.effects)
+                AnnouncerTransition(settled.state, fallbackOrDrop(dispatch.intent) + settled.effects)
             }
 
             AnnouncementSendOutcome.Skipped -> {
@@ -320,26 +365,30 @@ class AnnouncerReducer(
         GeminiTurnGate.Idle -> GeminiTurnGate.Active
         is GeminiTurnGate.SendReserved -> copy(activityObserved = true)
         GeminiTurnGate.Active -> this
+        GeminiTurnGate.InterruptedAwaitingBoundary -> this
     }
 
     private fun GeminiTurnGate.onComplete(): GeminiTurnGate = when (this) {
         GeminiTurnGate.Idle -> this
         is GeminiTurnGate.SendReserved -> copy(completed = true)
         GeminiTurnGate.Active -> GeminiTurnGate.Idle
+        GeminiTurnGate.InterruptedAwaitingBoundary -> GeminiTurnGate.Active
     }
 
-    private fun GeminiTurnGate.onSendReturned(outcome: AnnouncementSendOutcome): GeminiTurnGate =
-        when (this) {
-            GeminiTurnGate.Idle -> this
-            GeminiTurnGate.Active -> this
-            is GeminiTurnGate.SendReserved -> when (outcome) {
-                AnnouncementSendOutcome.Sent -> if (completed) GeminiTurnGate.Idle else GeminiTurnGate.Active
-                AnnouncementSendOutcome.Failed,
-                AnnouncementSendOutcome.Skipped,
-                AnnouncementSendOutcome.AttachmentInvalidated,
-                    -> if (activityObserved && !completed) GeminiTurnGate.Active else GeminiTurnGate.Idle
-            }
+    private fun GeminiTurnGate.onSendReturned(
+        outcome: AnnouncementSendOutcome,
+    ): GeminiTurnGate = when (this) {
+        GeminiTurnGate.Idle -> this
+        GeminiTurnGate.Active -> this
+        GeminiTurnGate.InterruptedAwaitingBoundary -> this
+        is GeminiTurnGate.SendReserved -> when (outcome) {
+            AnnouncementSendOutcome.Sent -> if (completed) GeminiTurnGate.Idle else GeminiTurnGate.Active
+            AnnouncementSendOutcome.Failed,
+            AnnouncementSendOutcome.Skipped,
+            AnnouncementSendOutcome.AttachmentInvalidated,
+                -> if (activityObserved && !completed) GeminiTurnGate.Active else GeminiTurnGate.Idle
         }
+    }
 
     private fun enqueueIntent(
         state: AnnouncerState,
@@ -348,9 +397,7 @@ class AnnouncerReducer(
         val key = intent.jobKey()
         return when (intent) {
             is AnnouncementIntent.StillWorking -> enqueueProgress(state, key, intent)
-            is AnnouncementIntent.Completion,
-            is AnnouncementIntent.Terminal,
-                -> enqueueFinal(state, key, intent)
+            is FinalAnnouncementIntent -> enqueueFinal(state, key, intent)
         }
     }
 
@@ -397,7 +444,7 @@ class AnnouncerReducer(
     private fun enqueueFinal(
         state: AnnouncerState,
         key: AnnouncementJobKey,
-        intent: AnnouncementIntent,
+        intent: FinalAnnouncementIntent,
     ): AnnouncerTransition {
         val index = state.pendingJobs.indexOfFirst { it.key == key }
         val pendingJobs = if (index < 0) {
@@ -405,10 +452,7 @@ class AnnouncerReducer(
         } else {
             state.pendingJobs.toMutableList().apply {
                 val existing = this[index]
-                this[index] = existing.copy(
-                    progress = existing.progress?.copy(allowTerminalRecord = true),
-                    final = intent,
-                )
+                this[index] = existing.copy(final = intent)
             }
         }
         return AnnouncerTransition(
@@ -496,7 +540,7 @@ class AnnouncerReducer(
             )
         }
 
-        val head = requireNotNull(state.pendingJobs.first().head())
+        val dispatch = requireNotNull(state.pendingJobs.first().nextDispatch())
         val quietRemainingMs = quietRemainingMs(state, nowMs)
         val blocked = state.geminiTurn != GeminiTurnGate.Idle ||
             !state.playback.drained ||
@@ -519,16 +563,16 @@ class AnnouncerReducer(
         effects += AnnouncerEffect.CancelQuietTimer
         effects += AnnouncerEffect.Diagnostic(
             name = "hermes_announcement_released_safe_boundary",
-            detail = head.label(),
+            detail = dispatch.intent.label(),
         )
-        effects += AnnouncerEffect.Send(head, requireNotNull(state.bridgeSessionId))
+        effects += AnnouncerEffect.Send(dispatch, requireNotNull(state.bridgeSessionId))
 
         val firstJob = state.pendingJobs.first()
-        val remainder = when {
-            firstJob.progress != null -> firstJob.copy(progress = null)
-            else -> firstJob.copy(final = null)
+        val remainder = when (dispatch) {
+            is AnnouncementDispatch.Progress -> firstJob.copy(progress = null)
+            is AnnouncementDispatch.Final -> firstJob.copy(final = null)
         }
-        val pendingJobs = if (remainder.head() == null) {
+        val pendingJobs = if (remainder.nextDispatch() == null) {
             state.pendingJobs.drop(1)
         } else {
             listOf(remainder) + state.pendingJobs.drop(1)
@@ -537,7 +581,7 @@ class AnnouncerReducer(
             state.copy(
                 geminiTurn = GeminiTurnGate.SendReserved(),
                 pendingJobs = pendingJobs,
-                inFlight = head,
+                inFlight = dispatch,
                 blockedWatchdogAtMs = null,
             ),
             effects,

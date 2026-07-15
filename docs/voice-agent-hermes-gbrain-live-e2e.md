@@ -8,10 +8,13 @@ This runbook verifies the real Voice Agent pipeline:
 4. The app sends Gemini a queued acknowledgement as the function response.
 5. Hermes retrieves an existing private Gbrain fact in the background.
 6. The app polls the job, then hashes the final Hermes response inside the app process.
-7. The shell script matches the emitted actual hash to the expected SHA-256 value.
-8. The app sends Gemini a follow-up text turn containing the completed Hermes answer.
-9. Gemini returns output audio.
-10. Android playback queues and writes the audio.
+7. The shell script matches the emitted actual hash to the expected SHA-256 value and retains that tested call's safe
+   identifier for marker correlation.
+8. The app sends Gemini a follow-up text turn containing the completed Hermes answer, and the shell requires the
+   genuine `late_text_turn_sent` marker for that exact tested call.
+9. Gemini returns output audio and Android playback becomes active with a concrete playback epoch.
+10. Android playback queues and writes the audio, then Gemini emits a post-final `TurnComplete` and playback drains the
+    matching epoch.
 
 This is a live, credentialed, device-backed check. It is not part of CI.
 `scripts/test-voice-agent-hermes-gbrain-e2e.sh` only tests the shell harness with fake ADB; it does not replace the live
@@ -38,6 +41,8 @@ Set these values in your shell or source them from a local file outside the repo
 | `VOICE_AGENT_E2E_CONVERSATION_ID` | Existing app conversation id used to start the Voice Agent service. |
 | `VOICE_AGENT_E2E_MANUAL_REVIEW` | Optional. Set to `1` to accept any Hermes response hash and write the raw Hermes answer to a private local artifact for manual review. |
 | `VOICE_AGENT_E2E_MANUAL_REVIEW_ANSWER_PATH` | Optional manual-review output path. Defaults to `build/voice-agent-e2e/manual-hermes-answer.txt`. |
+| `VOICE_AGENT_E2E_FINAL_ANSWER_TIMEOUT_SECONDS` | Optional timeout for the exact tested call's `late_text_turn_sent` marker. Defaults to 60 seconds. |
+| `VOICE_AGENT_E2E_FINAL_BOUNDARY_TIMEOUT_SECONDS` | Optional timeout for the post-final `TurnComplete` and matching playback-epoch drain. Defaults to 120 seconds. |
 
 If the Android device is connected through a remote ADB server, point `adb` at that server before running:
 
@@ -118,7 +123,7 @@ the conversation id. If `VOICE_AGENT_E2E_PCM_PATH` is unset, the script also req
 can generate PCM from `VOICE_AGENT_E2E_PROMPT_TEXT`. The script verifies the expected hash format in strict mode,
 verifies the PCM file exists after generation or explicit selection, lowercases the expected hash for marker matching,
 checks ADB readiness, checks that the target package is already installed, and writes a local scoped log to
-`build/voice-agent-e2e/logcat.txt`.
+`build/voice-agent-e2e/logcat.txt` with `0600` permissions.
 
 Before starting log capture, the script prints a preflight summary:
 
@@ -148,10 +153,16 @@ The current script behavior is:
 7. Removes the public temporary PCM after the app-private copy succeeds.
 8. Starts the Voice Agent foreground service for `VOICE_AGENT_E2E_CONVERSATION_ID`.
 9. Waits for Gemini setup, injects the app-private PCM prompt in chunks, then waits for the E2E markers.
-10. In strict mode, matches the app-emitted `actualHash` to `VOICE_AGENT_E2E_EXPECTED_HASH` in the shell.
-11. Checks forbidden markers during each wait and again at the end, so auth, crash, hash mismatch, and playback write
+10. In strict mode, matches the app-emitted `actualHash` to `VOICE_AGENT_E2E_EXPECTED_HASH` in the shell. In both modes,
+    parses the call identifier from that matched hash line, rejects missing, unsafe, overlong, or ambiguous identifiers,
+    and does not print the identifier.
+11. Requires `late_text_turn_sent sent=true` for that exact tested call before accepting any later final-response
+    marker.
+12. After final output audio, waits for `Voice playback active`, parses its numeric `playbackEpoch`, observes playback
+    queue/write, then requires a post-final Gemini `TurnComplete` and `Voice playback drained` for that exact epoch.
+13. Checks forbidden markers during each wait and again at the end, so auth, crash, hash mismatch, and playback write
    failures fail fast.
-12. On exit, removes any remaining public temporary PCM, ends the foreground service, waits for the service end marker,
+14. On exit, removes any remaining public temporary PCM, ends the foreground service, waits for the service end marker,
     removes the app-private PCM, clears app-private text artifacts under `no_backup/voice-e2e/`, and then stops log
     capture. These trap cleanup actions are best-effort; the service end marker may appear in the scoped log.
 
@@ -167,9 +178,10 @@ VOICE_AGENT_E2E_MANUAL_REVIEW=1 scripts/voice-agent-hermes-gbrain-e2e.sh
 ```
 
 Manual mode still requires the real pipeline markers: Gemini setup, debug PCM injection, `ask_hermes` tool call, Hermes
-response hash emission, Gemini tool response, Gemini output audio, and Android playback queue/write. The difference is
-that the script waits for any Hermes response hash instead of requiring it to equal `VOICE_AGENT_E2E_EXPECTED_HASH`.
-After the playback markers pass, it pulls the app-private Hermes answer artifact with `run-as` and writes it to:
+response hash emission, Gemini tool response, exact-call `late_text_turn_sent`, Gemini output audio, Android playback
+active/queue/write, post-final `TurnComplete`, and matching playback-epoch drain. The difference is that the script
+waits for any Hermes response hash instead of requiring it to equal `VOICE_AGENT_E2E_EXPECTED_HASH`. After the
+playback markers pass, it pulls the app-private Hermes answer artifact with `run-as` and writes it to:
 
 ```text
 build/voice-agent-e2e/manual-hermes-answer.txt
@@ -231,12 +243,12 @@ The announcement passes when the trace order is:
 
 1. Hermes progress or completion becomes pending.
 2. Gemini emits `TurnComplete` for the current response.
-3. `AndroidVoiceAudioEngine` logs `Voice playback drained` for the matching generation.
+3. `AndroidVoiceAudioEngine` logs `Voice playback drained` for the matching playback epoch.
 4. The app sends one Hermes progress/result client-content turn.
 5. If both progress and final are pending, the final client-content turn appears only after the progress response has
    its own `TurnComplete` and matching playback drain.
 
-Fail the run if a Hermes progress/result client-content send is followed by Gemini `Interrupted` and old-generation
+Fail the run if a Hermes progress/result client-content send is followed by Gemini `Interrupted` and stale-epoch
 playback suppression before a user input transcript. That sequence is the original coordination bug.
 
 After a successful scoped run, the harness writes the validated app trace ID to
@@ -256,10 +268,13 @@ The script passes only when all of these markers appear in the same run:
 - App sends the directive pending `ask_hermes` tool response back to Gemini.
 - Gemini's immediate spoken output, if present before Hermes completion, is only a brief pending acknowledgement such
   as "I'm checking Hermes."
-- App sends a follow-up text turn after the completed Hermes answer is ready.
+- App emits `late_text_turn_sent sent=true` for the exact call identifier parsed from the tested response-hash line.
 - Gemini emits output audio.
+- Android playback becomes active and exposes a valid numeric playback epoch.
 - Android playback queues audio.
 - Android playback writes audio.
+- Gemini emits a post-final `TurnComplete`.
+- Android playback drains the exact final playback epoch.
 
 In manual review mode, the script reaches a manual review gate instead of declaring an automatic pass. The operator must
 read the private answer artifact and report, then decide pass/fail. The report passes semantic review only when Gemini
@@ -290,24 +305,27 @@ artifact when available. The script does not fall back to reading the app databa
 
 ## Safe Artifacts
 
-`build/voice-agent-e2e/logcat.txt` is a local artifact and must not be committed. It is scoped to app-relevant tags:
+`build/voice-agent-e2e/logcat.txt` is a local artifact, is created with `0600` permissions, and must not be committed.
+It is scoped to app-relevant tags:
 `VoiceAgentCallService`, `VoiceAgentCallSession`, `VoiceAgentGemini`, `VoiceAgentE2E`, `VoiceAudioDebugInjection`,
 `AndroidVoiceAudioEngine`, and `AndroidRuntime`, but still treat it as local only.
 
-`build/voice-agent-e2e/trace-id.txt` is an optional local pointer to the validated scoped trace for the most recent
-successful run. It contains no transcript, but it still identifies private device artifacts and must not be committed.
+`build/voice-agent-e2e/trace-id.txt` is an optional `0600` local pointer to the validated scoped trace for the most
+recent successful run. It contains no transcript, but it still identifies private device artifacts and must not be
+committed.
 
-`build/voice-agent-e2e/manual-hermes-answer.txt` is created only in manual review mode. It contains the raw Hermes answer
-and must not be committed, pasted into shared logs, or distributed.
+`build/voice-agent-e2e/manual-hermes-answer.txt` is created with `0600` permissions only in manual review mode. It
+contains the raw Hermes answer and must not be committed, pasted into shared logs, or distributed.
 
-`build/voice-agent-e2e/report.txt` is created only in manual review mode. It contains raw prompt, transcript, Hermes
-call, Hermes answer, and Gemini response text and must stay local/private.
+`build/voice-agent-e2e/report.txt` is created with `0600` permissions only in manual review mode. It contains raw
+prompt, transcript, Hermes call, Hermes answer, and Gemini response text and must stay local/private.
 
-`build/voice-agent-e2e/missing-tool-call-diagnostics.txt` is created only for manual-review missing-tool-call failures.
-It contains bounded raw transcript/Hermes-call previews and must stay local/private.
+`build/voice-agent-e2e/missing-tool-call-diagnostics.txt` is created with `0600` permissions only for manual-review
+missing-tool-call failures. It contains bounded raw transcript/Hermes-call previews and must stay local/private.
 
-`build/voice-agent-e2e/generated-prompt.pcm` and `build/voice-agent-e2e/generated-prompt.txt` are created when the script
-generates PCM from text. They must not be committed, pasted into shared logs, or distributed.
+`build/voice-agent-e2e/generated-prompt.pcm` and `build/voice-agent-e2e/generated-prompt.txt` are created with `0600`
+permissions when the script generates PCM from text. They must not be committed, pasted into shared logs, or
+distributed.
 
 The E2E hash diagnostic log only includes call id, raw and normalized character counts, SHA-256 hash, and timing. It
 does not log the Hermes answer, but the hash can still reveal low-entropy answers through offline guessing.

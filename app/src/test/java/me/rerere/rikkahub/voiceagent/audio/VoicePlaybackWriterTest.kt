@@ -11,7 +11,9 @@ import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
 class VoicePlaybackWriterTest {
     @Test
@@ -60,7 +62,7 @@ class VoicePlaybackWriterTest {
 
         assertEquals(0, sinkCreations)
         val diagnostic = diagnostics.filterIsInstance<VoicePlaybackDiagnostic.StaleChunkRejected>().single()
-        assertEquals(1L, diagnostic.activeGeneration)
+        assertEquals(WriterGeneration(1L), diagnostic.activeWriterGeneration)
         assertEquals(99L, diagnostic.rejectedSessionId)
         assertEquals(100L, diagnostic.activeSessionId)
 
@@ -83,20 +85,20 @@ class VoicePlaybackWriterTest {
         assertTrue(writer.playBase64("AQID", sessionId = 100L))
 
         assertFalse(writer.markTurnComplete(sessionId = 99L))
-        assertEquals(listOf(VoicePlaybackEvent.Active(1L)), events)
+        assertEquals(listOf(VoicePlaybackEvent.Active(PlaybackEpoch(1L))), events)
 
         assertTrue(writer.playBase64("BAUG", sessionId = 100L))
-        assertEquals(listOf(VoicePlaybackEvent.Active(1L)), events)
+        assertEquals(listOf(VoicePlaybackEvent.Active(PlaybackEpoch(1L))), events)
         assertTrue(writer.markTurnComplete(sessionId = 100L))
         assertTrue(sink.awaitDrainStarted())
         assertEquals(2, sink.writes.size)
         assertEquals(
-            listOf(VoicePlaybackEvent.Active(1L), VoicePlaybackEvent.DrainStarted(1L)),
+            listOf(VoicePlaybackEvent.Active(PlaybackEpoch(1L)), VoicePlaybackEvent.DrainStarted(PlaybackEpoch(1L))),
             events,
         )
 
         sink.releaseDrain()
-        assertTrue(waitUntil { events.lastOrNull() == VoicePlaybackEvent.Drained(1L) })
+        assertTrue(waitUntil { events.lastOrNull() == VoicePlaybackEvent.Drained(PlaybackEpoch(1L)) })
         writer.release()
         scope.cancel()
     }
@@ -164,16 +166,16 @@ class VoicePlaybackWriterTest {
 
         assertFalse(writer.playBase64("BAUG", sessionId = 100L))
         assertEquals(1, sinkIndex.get())
-        assertFalse(events.contains(VoicePlaybackEvent.Active(2L)))
+        assertFalse(events.contains(VoicePlaybackEvent.Active(PlaybackEpoch(2L))))
 
         firstSink.releasePauseAndFlush()
         suppression.join(2_000L)
         assertFalse(suppression.isAlive)
-        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(1L)) })
+        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(PlaybackEpoch(1L))) })
 
         assertTrue(writer.playBase64("BAUG", sessionId = 100L))
         assertTrue(secondSink.awaitWrites(2))
-        assertTrue(events.contains(VoicePlaybackEvent.Active(2L)))
+        assertTrue(events.contains(VoicePlaybackEvent.Active(PlaybackEpoch(2L))))
         writer.release()
         scope.cancel()
     }
@@ -493,12 +495,12 @@ class VoicePlaybackWriterTest {
 
         assertEquals(2, sink.writes.size)
         assertEquals(
-            listOf(VoicePlaybackEvent.Active(1L), VoicePlaybackEvent.DrainStarted(1L)),
+            listOf(VoicePlaybackEvent.Active(PlaybackEpoch(1L)), VoicePlaybackEvent.DrainStarted(PlaybackEpoch(1L))),
             events,
         )
 
         sink.releaseDrain()
-        assertTrue(waitUntil { events.lastOrNull() == VoicePlaybackEvent.Drained(1L) })
+        assertTrue(waitUntil { events.lastOrNull() == VoicePlaybackEvent.Drained(PlaybackEpoch(1L)) })
         writer.release()
         scope.cancel()
     }
@@ -525,17 +527,17 @@ class VoicePlaybackWriterTest {
 
         writer.activateSession(200L)
         assertTrue(writer.playBase64("BAUG", sessionId = 200L))
-        assertTrue(events.contains(VoicePlaybackEvent.Active(2L)))
-        assertFalse(events.contains(VoicePlaybackEvent.Drained(2L)))
+        assertTrue(events.contains(VoicePlaybackEvent.Active(PlaybackEpoch(2L))))
+        assertFalse(events.contains(VoicePlaybackEvent.Drained(PlaybackEpoch(2L))))
 
         firstSink.releaseDrain()
-        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(1L)) })
+        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(PlaybackEpoch(1L))) })
         assertTrue(secondSink.awaitWrites(2))
-        assertFalse(events.contains(VoicePlaybackEvent.Drained(2L)))
+        assertFalse(events.contains(VoicePlaybackEvent.Drained(PlaybackEpoch(2L))))
 
         assertTrue(writer.markTurnComplete(sessionId = 200L))
-        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(2L)) })
-        assertEquals(1, events.count { it == VoicePlaybackEvent.Drained(2L) })
+        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(PlaybackEpoch(2L))) })
+        assertEquals(1, events.count { it == VoicePlaybackEvent.Drained(PlaybackEpoch(2L)) })
         writer.release()
         scope.cancel()
     }
@@ -554,21 +556,21 @@ class VoicePlaybackWriterTest {
         writer.activateSession(100L)
         assertTrue(writer.playBase64("AQID", sessionId = 100L))
         assertTrue(writer.markTurnComplete(sessionId = 100L))
-        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(1L)) })
+        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(PlaybackEpoch(1L))) })
 
         assertTrue(writer.playBase64("BAUG", sessionId = 100L))
-        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Active(2L)) })
+        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Active(PlaybackEpoch(2L))) })
         assertTrue(writer.markTurnComplete(sessionId = 100L))
-        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(2L)) })
+        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(PlaybackEpoch(2L))) })
 
         assertEquals(
             listOf(
-                VoicePlaybackEvent.Active(1L),
-                VoicePlaybackEvent.DrainStarted(1L),
-                VoicePlaybackEvent.Drained(1L),
-                VoicePlaybackEvent.Active(2L),
-                VoicePlaybackEvent.DrainStarted(2L),
-                VoicePlaybackEvent.Drained(2L),
+                VoicePlaybackEvent.Active(PlaybackEpoch(1L)),
+                VoicePlaybackEvent.DrainStarted(PlaybackEpoch(1L)),
+                VoicePlaybackEvent.Drained(PlaybackEpoch(1L)),
+                VoicePlaybackEvent.Active(PlaybackEpoch(2L)),
+                VoicePlaybackEvent.DrainStarted(PlaybackEpoch(2L)),
+                VoicePlaybackEvent.Drained(PlaybackEpoch(2L)),
             ),
             events,
         )
@@ -590,7 +592,7 @@ class VoicePlaybackWriterTest {
             createSink = { sink },
             onDiagnostic = diagnostics::add,
             onPlaybackEvent = { event ->
-                if (event == VoicePlaybackEvent.Drained(1L)) {
+                if (event == VoicePlaybackEvent.Drained(PlaybackEpoch(1L))) {
                     flushedBeforeDrained = sink.pauseAndFlushCalls == 1
                 }
             },
@@ -634,7 +636,7 @@ class VoicePlaybackWriterTest {
             diagnostics.any { it is VoicePlaybackDiagnostic.SinkRetirementFailed }
         })
 
-        assertFalse(events.contains(VoicePlaybackEvent.Drained(1L)))
+        assertFalse(events.contains(VoicePlaybackEvent.Drained(PlaybackEpoch(1L))))
         assertFalse(writer.playBase64("BAUG", sessionId = 100L))
         writer.release()
         scope.cancel()
@@ -664,7 +666,7 @@ class VoicePlaybackWriterTest {
         assertTrue(writer.playBase64("AQID", sessionId = 100L))
         assertTrue(writer.markTurnComplete(sessionId = 100L))
 
-        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(1L)) })
+        assertTrue(waitUntil { events.contains(VoicePlaybackEvent.Drained(PlaybackEpoch(1L))) })
         assertEquals(1, firstSink.pauseAndFlushCalls)
         assertTrue(diagnostics.any {
             it is VoicePlaybackDiagnostic.SinkDrainFailed &&
@@ -700,9 +702,159 @@ class VoicePlaybackWriterTest {
             diagnostics.any { it is VoicePlaybackDiagnostic.SinkRetirementFailed }
         })
 
-        assertFalse(events.contains(VoicePlaybackEvent.Drained(1L)))
+        assertFalse(events.contains(VoicePlaybackEvent.Drained(PlaybackEpoch(1L))))
         assertFalse(writer.playBase64("BAUG", sessionId = 100L))
         writer.release()
+        scope.cancel()
+    }
+
+    @Test
+    fun `failed retirement prevents an in-flight normal drain from committing drained`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val events = CopyOnWriteArrayList<VoicePlaybackEvent>()
+        val drainReadyToReturn = CountDownLatch(1)
+        val resumeDrainReturn = CountDownLatch(1)
+        val staleQueuedPlay = CountDownLatch(1)
+        val drainReturnTimedOut = AtomicBoolean(false)
+        val sink = FakeVoicePcm16Sink(
+            expectedWrites = 1,
+            pauseException = IllegalStateException("flush failed"),
+            releaseException = IllegalStateException("release failed"),
+            beforeDrainReturn = {
+                drainReadyToReturn.countDown()
+                drainReturnTimedOut.set(!resumeDrainReturn.await(2, TimeUnit.SECONDS))
+            },
+        )
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { sink },
+            onDiagnostic = { diagnostic ->
+                diagnostics += diagnostic
+                if (diagnostic is VoicePlaybackDiagnostic.StaleChunkRejected) {
+                    staleQueuedPlay.countDown()
+                }
+            },
+            onPlaybackEvent = events::add,
+        )
+        writer.activateSession(100L)
+        assertTrue(writer.playBase64("AQID", sessionId = 100L))
+        assertTrue(writer.markTurnComplete(sessionId = 100L))
+        assertTrue(drainReadyToReturn.await(2, TimeUnit.SECONDS))
+        assertTrue(writer.playBase64("BAUG", sessionId = 100L))
+
+        writer.suppress()
+        assertTrue(diagnostics.any { it is VoicePlaybackDiagnostic.SinkRetirementFailed })
+        resumeDrainReturn.countDown()
+
+        assertTrue(staleQueuedPlay.await(2, TimeUnit.SECONDS))
+        assertFalse(drainReturnTimedOut.get())
+        assertFalse(events.any { it is VoicePlaybackEvent.Drained })
+        assertFalse(writer.playBase64("BwgJ", sessionId = 100L))
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
+    fun `active callback runs after the writer state lock is released`() {
+        val scope = testScope()
+        val callbackObservedUnlocked = AtomicBoolean(false)
+        lateinit var writer: VoicePlaybackWriter
+        writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { FakeVoicePcm16Sink(expectedWrites = 1) },
+            onPlaybackEvent = { event ->
+                if (event is VoicePlaybackEvent.Active) {
+                    val completed = CountDownLatch(1)
+                    thread(start = true, name = "playback-reentrant-boundary") {
+                        writer.markTurnComplete(sessionId = 100L)
+                        completed.countDown()
+                    }
+                    callbackObservedUnlocked.set(completed.await(500, TimeUnit.MILLISECONDS))
+                }
+            },
+        )
+        writer.activateSession(100L)
+
+        assertTrue(writer.playBase64("AQID", sessionId = 100L))
+
+        assertTrue(callbackObservedUnlocked.get())
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
+    fun `throwing active callback does not kill later drain delivery`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val delivered = CopyOnWriteArrayList<VoicePlaybackEvent>()
+        var throwActive = true
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { FakeVoicePcm16Sink(expectedWrites = 1) },
+            onDiagnostic = diagnostics::add,
+            onPlaybackEvent = { event ->
+                if (event is VoicePlaybackEvent.Active && throwActive) {
+                    throwActive = false
+                    error("handler failed")
+                }
+                delivered += event
+            },
+        )
+        writer.activateSession(100L)
+        assertTrue(writer.playBase64("AQID", sessionId = 100L))
+        assertTrue(writer.markTurnComplete(sessionId = 100L))
+
+        assertTrue(waitUntil { delivered.contains(VoicePlaybackEvent.Drained(PlaybackEpoch(1L))) })
+        assertTrue(diagnostics.any {
+            it is VoicePlaybackDiagnostic.PlaybackEventHandlerFailed && it.message == "handler failed"
+        })
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
+    fun `concurrent release delivers drained before the event owner clears its handler`() {
+        val scope = testScope()
+        val owner = VoicePlaybackEventOwner()
+        val events = CopyOnWriteArrayList<VoicePlaybackEvent>()
+        val activeCallbackStarted = CountDownLatch(1)
+        val releaseActiveCallback = CountDownLatch(1)
+        val drainedDelivered = CountDownLatch(1)
+        val activeCallbackTimedOut = AtomicBoolean(false)
+        owner.setHandler { event ->
+            events += event
+            when (event) {
+                is VoicePlaybackEvent.Active -> {
+                    activeCallbackStarted.countDown()
+                    activeCallbackTimedOut.set(!releaseActiveCallback.await(2, TimeUnit.SECONDS))
+                }
+                is VoicePlaybackEvent.Drained -> drainedDelivered.countDown()
+                is VoicePlaybackEvent.DrainStarted -> Unit
+            }
+        }
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { FakeVoicePcm16Sink(expectedWrites = 1) },
+            onPlaybackEvent = owner::notify,
+        )
+        writer.activateSession(100L)
+        val play = thread(start = true, name = "playback-active-callback") {
+            writer.playBase64("AQID", sessionId = 100L)
+        }
+        assertTrue(activeCallbackStarted.await(2, TimeUnit.SECONDS))
+
+        owner.releasePlayback(writer::release)
+        releaseActiveCallback.countDown()
+
+        assertTrue(drainedDelivered.await(2, TimeUnit.SECONDS))
+        play.join(2_000L)
+        assertFalse(play.isAlive)
+        assertFalse(activeCallbackTimedOut.get())
+        assertEquals(
+            listOf(VoicePlaybackEvent.Active(PlaybackEpoch(1L)), VoicePlaybackEvent.Drained(PlaybackEpoch(1L))),
+            events,
+        )
         scope.cancel()
     }
 
@@ -728,6 +880,7 @@ class VoicePlaybackWriterTest {
         private val blockPauseAndFlush: Boolean = false,
         private val pauseException: RuntimeException? = null,
         private val releaseException: RuntimeException? = null,
+        private val beforeDrainReturn: (() -> Unit)? = null,
     ) : VoicePcm16Sink {
         private val writesLatch = CountDownLatch(expectedWrites)
         private val writeStartedLatch = CountDownLatch(1)
@@ -773,11 +926,13 @@ class VoicePlaybackWriterTest {
         override fun awaitDrained(): VoicePcm16Sink.DrainResult {
             drainStartedLatch.countDown()
             if (blockDrain) releaseDrainLatch.await(2, TimeUnit.SECONDS)
-            return if (pauseAndFlushCalls > 0 || stopAndReleaseCalls > 0) {
+            val result = if (pauseAndFlushCalls > 0 || stopAndReleaseCalls > 0) {
                 VoicePcm16Sink.DrainResult.Interrupted
             } else {
                 drainResult
             }
+            beforeDrainReturn?.invoke()
+            return result
         }
 
         override fun pauseAndFlush() {

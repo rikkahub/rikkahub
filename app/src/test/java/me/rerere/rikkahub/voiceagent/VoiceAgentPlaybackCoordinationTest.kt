@@ -165,12 +165,12 @@ class VoiceAgentPlaybackCoordinationTest {
         assertEquals(2, audio.markPlaybackTurnCompleteCalls)
         assertEquals(
             listOf(
-                "voice_playback_active" to "generation=1",
-                "voice_playback_drain_started" to "generation=1",
-                "voice_playback_drained" to "generation=1",
-                "voice_playback_active" to "generation=2",
-                "voice_playback_drain_started" to "generation=2",
-                "voice_playback_drained" to "generation=2",
+                "voice_playback_active" to "playbackEpoch=1",
+                "voice_playback_drain_started" to "playbackEpoch=1",
+                "voice_playback_drained" to "playbackEpoch=1",
+                "voice_playback_active" to "playbackEpoch=2",
+                "voice_playback_drain_started" to "playbackEpoch=2",
+                "voice_playback_drained" to "playbackEpoch=2",
             ),
             diagnostics.events.value
                 .filter { it.name.startsWith("voice_playback_") }
@@ -286,7 +286,7 @@ class VoiceAgentPlaybackCoordinationTest {
 
         assertTrue(
             diagnostics.events.value.any {
-                it.name == "voice_playback_drained" && it.detail == "generation=1"
+                it.name == "voice_playback_drained" && it.detail == "playbackEpoch=1"
             }
         )
     }
@@ -444,10 +444,12 @@ class VoiceAgentPlaybackCoordinationTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
         val audio = FakeVoiceAudioEngine()
+        val diagnostics = VoiceDiagnostics()
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
             toolApi = toolApi,
             audio = audio,
+            diagnostics = diagnostics,
             hermesAnnouncementQuietWindowMs = 0L,
             scope = this,
         )
@@ -473,6 +475,9 @@ class VoiceAgentPlaybackCoordinationTest {
         coordinator.onGeminiEvent(GeminiLiveEvent.TurnComplete)
         awaitTextTurnCount(gemini, 1)
         assertEquals(1, gemini.textTurns.size)
+        assertTrue(diagnostics.events.value.none {
+            it.name == "gemini_interrupted_turn_complete_consumed"
+        })
     }
 
     @Test
@@ -552,8 +557,7 @@ class VoiceAgentPlaybackCoordinationTest {
         assertEquals(1, audio.markPlaybackTurnCompleteCalls)
         assertTrue(
             diagnostics.events.value.none {
-                it.name == "gemini_interrupted_turn_complete_consumed" &&
-                    it.detail == "sessionId=$replacementSessionId"
+                it.name == "gemini_interrupted_turn_complete_consumed"
             }
         )
         assertTrue(
