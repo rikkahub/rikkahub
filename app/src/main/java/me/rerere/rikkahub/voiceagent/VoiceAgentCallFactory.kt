@@ -54,8 +54,8 @@ class DefaultVoiceAgentCallFactory internal constructor(
     private val geminiFactory: () -> GeminiLiveVoiceClient = {
         OkHttpGeminiLiveVoiceClient(httpClient = okHttpClient)
     },
-    private val audioFactory: (VoiceAudioRouteOwner) -> VoiceAudioEngine = {
-        AndroidVoiceAudioEngine(context = context)
+    private val audioFactory: (VoiceAudioRouteOwner) -> VoiceAudioEngine = { owner ->
+        AndroidVoiceAudioEngine(context = context, routeOwner = owner)
     },
     private val conversationStoreFactory: (Uuid) -> VoiceConversationStore = { conversationId ->
         ChatServiceVoiceConversationStore(

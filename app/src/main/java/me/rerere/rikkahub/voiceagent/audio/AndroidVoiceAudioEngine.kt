@@ -1,21 +1,11 @@
 package me.rerere.rikkahub.voiceagent.audio
 
-import android.annotation.SuppressLint
 import android.Manifest
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothHeadset
-import android.bluetooth.BluetoothManager
-import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.pm.PackageManager
-import android.media.AudioAttributes
-import android.media.AudioDeviceInfo
-import android.media.AudioFocusRequest
 import android.media.AudioFormat
-import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
-import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
@@ -43,13 +33,26 @@ private fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (t
     -> null
 }
 
-class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
+internal class VoiceAudioCaptureLifecycle {
+    private val lock = Any()
+
+    fun <T> transition(block: () -> T): T = synchronized(lock) { block() }
+
+    fun <T> callback(block: () -> T): T = synchronized(lock) { block() }
+}
+
+class AndroidVoiceAudioEngine(
+    context: Context,
+    routeOwner: VoiceAudioRouteOwner,
+) : VoiceAudioEngine {
     private val context = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
-    private val captureCallbackLock = Any()
     private val captureRecordLock = Any()
-    private val audioManager = context.getSystemService(AudioManager::class.java)
+    private val captureLifecycle = VoiceAudioCaptureLifecycle()
+    private val routeController = selectVoiceAudioRouteController(routeOwner) {
+        AndroidDirectAudioRouteController(this.context, ::notifyAudioError)
+    }
     private val playbackTracks = AndroidVoicePlaybackTracks(
         audioAttributes = ::voiceAudioAttributes,
         onAssistantPlaybackError = ::notifyAudioError,
@@ -63,43 +66,13 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     )
     private var captureJob: Job? = null
     private var audioRecord: AudioRecord? = null
-    private var audioFocusRequest: AudioFocusRequest? = null
-    private var hasSelectedCommunicationDevice = false
-    private var hasStartedBluetoothSco = false
-    private var bluetoothProfileProxyRequested = false
-    private var wantsBluetoothHeadsetVoiceRecognition = false
-    private var bluetoothVoiceRecognitionDevice: BluetoothDevice? = null
-    @Volatile
-    private var bluetoothHeadset: BluetoothHeadset? = null
-    private var previousAudioMode: Int? = null
     private var debugCaptureRegistration: VoiceAudioDebugInjector.Registration? = null
-    private var hasAudioFocus = false
     private var captureGeneration = 0L
     private var errorHandler: ((String) -> Unit)? = null
     private var released = false
-    private val bluetoothProfileListener = object : BluetoothProfile.ServiceListener {
-        override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
-            if (profile == BluetoothProfile.HEADSET) {
-                bluetoothHeadset = proxy as? BluetoothHeadset
-                Log.d(TAG, "Voice capture Bluetooth headset profile connected")
-                val headset = bluetoothHeadset
-                if (wantsBluetoothHeadsetVoiceRecognition && headset != null) {
-                    scope.launch {
-                        requestBluetoothHeadsetVoiceRecognition(headset)
-                    }
-                }
-            }
-        }
 
-        override fun onServiceDisconnected(profile: Int) {
-            if (profile == BluetoothProfile.HEADSET) {
-                bluetoothHeadset = null
-                bluetoothVoiceRecognitionDevice = null
-                bluetoothProfileProxyRequested = false
-                wantsBluetoothHeadsetVoiceRecognition = false
-                Log.d(TAG, "Voice capture Bluetooth headset profile disconnected")
-            }
-        }
+    init {
+        Log.d(TAG, "Voice audio route owner=${routeOwner.diagnosticLabel}")
     }
 
     override fun setErrorHandler(onError: ((String) -> Unit)?) {
@@ -113,6 +86,12 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     }
 
     override fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) {
+        captureLifecycle.transition {
+            startCaptureLocked(onPcm16, onDebugInjectionComplete)
+        }
+    }
+
+    private fun startCaptureLocked(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) {
         if (
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
@@ -120,9 +99,8 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             throw IllegalStateException("Microphone permission is required")
         }
 
-        stopCapture()
-        requestAudioFocusBestEffort()
-        prepareVoiceCommunicationRoutingBestEffort()
+        stopCaptureLocked()
+        routeController.beforeCapture()
 
         val generation = synchronized(lock) {
             check(!released) { "Voice audio engine is released" }
@@ -130,23 +108,12 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             captureGeneration
         }
         val bufferSize = captureBufferSize()
-        val preferredCaptureDevice = selectPreferredBluetoothCaptureDeviceOrNull()
         val recorder = runCatching {
             createCaptureRecord(bufferSize = bufferSize)
         }.getOrElse {
             throw IllegalStateException("AudioRecord creation failed", it)
         }
-        preferredCaptureDevice?.let { device ->
-            val preferredAccepted = runCatching { recorder.setPreferredDevice(device) }
-                .onFailure { Log.w(TAG, "Voice capture preferred Bluetooth device failed", it) }
-                .getOrDefault(false)
-            val communicationAccepted = setCommunicationDeviceBestEffort(device)
-            Log.d(
-                TAG,
-                "Voice capture selected route=${device.safeRouteLabel()} " +
-                    "preferredAccepted=$preferredAccepted communicationAccepted=$communicationAccepted",
-            )
-        }
+        routeController.configureRecorder(recorder)
 
         if (recorder.state != AudioRecord.STATE_INITIALIZED) {
             recorder.releaseSafely()
@@ -257,6 +224,10 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     }
 
     override fun stopCapture() {
+        captureLifecycle.transition(::stopCaptureLocked)
+    }
+
+    private fun stopCaptureLocked() {
         val job: Job?
         val recorder: AudioRecord?
         synchronized(lock) {
@@ -269,7 +240,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         }
         job?.cancel()
         recorder?.let(::stopAndReleaseRecorder)
-        clearVoiceCommunicationRoutingBestEffort()
+        routeController.afterCapture()
         waitForCaptureCallbacks()
     }
 
@@ -293,6 +264,10 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     }
 
     override fun release() {
+        captureLifecycle.transition(::releaseLocked)
+    }
+
+    private fun releaseLocked() {
         val job: Job?
         val recorder: AudioRecord?
         synchronized(lock) {
@@ -312,9 +287,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         recorder?.let(::stopAndReleaseRecorder)
         playbackEventOwner.releasePlayback(playbackWriter::release)
         playbackTracks.releaseAll()
-        clearVoiceCommunicationRoutingBestEffort()
-        closeBluetoothHeadsetProxy()
-        abandonAudioFocus()
+        routeController.close()
         waitForCaptureCallbacks()
         scope.cancel()
     }
@@ -367,7 +340,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
                 )
             },
             onInjectionComplete = {
-                synchronized(captureCallbackLock) {
+                captureLifecycle.callback {
                     if (isCurrentCapture(generation, recorder)) {
                         onInjectionComplete()
                     }
@@ -395,7 +368,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         buffer: ByteArray,
         onPcm16: (ByteArray) -> Unit,
     ) {
-        synchronized(captureCallbackLock) {
+        captureLifecycle.callback {
             if (isCurrentCapture(generation, recorder)) {
                 try {
                     onPcm16(buffer)
@@ -413,8 +386,8 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
         buffer: ByteArray,
         onPcm16: (ByteArray) -> Unit,
     ) {
-        synchronized(captureCallbackLock) {
-            if (!isCurrentCapture(generation, recorder)) return
+        captureLifecycle.callback {
+            if (!isCurrentCapture(generation, recorder)) return@callback
             try {
                 onPcm16(buffer)
             } catch (e: Exception) {
@@ -425,7 +398,7 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     }
 
     private fun waitForCaptureCallbacks() {
-        synchronized(captureCallbackLock) {
+        captureLifecycle.callback {
             // Wait for any in-flight capture callback that passed its final generation check.
         }
     }
@@ -456,287 +429,6 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             .setBufferSizeInBytes(bufferSize * 2)
             .build()
     }
-
-    private fun selectPreferredBluetoothCaptureDeviceOrNull(): AudioDeviceInfo? {
-        val manager = audioManager ?: return null
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasBluetoothConnectPermission()) {
-            Log.d(TAG, "Voice capture Bluetooth route skipped: BLUETOOTH_CONNECT not granted")
-            return null
-        }
-        val devices = runCatching {
-            manager.getDevices(AudioManager.GET_DEVICES_INPUTS).toList()
-        }.onFailure {
-            Log.w(TAG, "Voice capture route enumeration failed", it)
-        }.getOrDefault(emptyList())
-        val routeDevices = devices.map { it.toVoiceAudioRouteDevice() }
-        val selected = selectPreferredCaptureRoute(routeDevices)
-        Log.d(
-            TAG,
-            "Voice capture routes available=${routeDevices.joinToString { it.debugLabel() }} " +
-                "selected=${selected?.debugLabel() ?: "default"}",
-        )
-        return selected?.let { route -> devices.firstOrNull { it.id == route.id } }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun setCommunicationDeviceBestEffort(device: AudioDeviceInfo): Boolean {
-        val manager = audioManager ?: return false
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            return false
-        }
-        return runCatching {
-            val accepted = manager.setCommunicationDevice(device)
-            if (accepted) {
-                hasSelectedCommunicationDevice = true
-            }
-            accepted
-        }.onFailure {
-            Log.w(TAG, "Voice capture communication route failed", it)
-        }.getOrDefault(false)
-    }
-
-    private fun clearCommunicationDeviceSelection() {
-        val manager = audioManager ?: return
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || !hasSelectedCommunicationDevice) {
-            return
-        }
-        runCatching {
-            manager.clearCommunicationDevice()
-        }.onFailure {
-            Log.w(TAG, "Voice capture communication route clear failed", it)
-        }
-        hasSelectedCommunicationDevice = false
-    }
-
-    @Suppress("DEPRECATION")
-    private fun prepareVoiceCommunicationRoutingBestEffort() {
-        val manager = audioManager ?: return
-        runCatching {
-            if (previousAudioMode == null) {
-                previousAudioMode = manager.mode
-            }
-            if (manager.mode != AudioManager.MODE_IN_COMMUNICATION) {
-                manager.mode = AudioManager.MODE_IN_COMMUNICATION
-            }
-        }.onFailure {
-            Log.w(TAG, "Voice capture communication mode setup failed", it)
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !hasBluetoothConnectPermission()) {
-            Log.d(TAG, "Voice capture Bluetooth SCO skipped: BLUETOOTH_CONNECT not granted")
-            return
-        }
-        startBluetoothHeadsetVoiceRecognitionBestEffort()
-        runCatching {
-            manager.startBluetoothSco()
-            manager.isBluetoothScoOn = true
-            hasStartedBluetoothSco = true
-            Log.d(TAG, "Voice capture requested Bluetooth SCO")
-        }.onFailure {
-            Log.w(TAG, "Voice capture Bluetooth SCO request failed", it)
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun clearVoiceCommunicationRoutingBestEffort() {
-        val manager = audioManager ?: return
-        clearCommunicationDeviceSelection()
-        stopBluetoothHeadsetVoiceRecognitionBestEffort()
-        if (hasStartedBluetoothSco) {
-            runCatching {
-                manager.isBluetoothScoOn = false
-                manager.stopBluetoothSco()
-            }.onFailure {
-                Log.w(TAG, "Voice capture Bluetooth SCO stop failed", it)
-            }
-            hasStartedBluetoothSco = false
-        }
-        previousAudioMode?.let { mode ->
-            runCatching {
-                manager.mode = mode
-            }.onFailure {
-                Log.w(TAG, "Voice capture communication mode restore failed", it)
-            }
-            previousAudioMode = null
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun startBluetoothHeadsetVoiceRecognitionBestEffort() {
-        wantsBluetoothHeadsetVoiceRecognition = true
-        val headset = bluetoothHeadsetProxyOrNull()
-        if (headset == null) {
-            Log.d(TAG, "Voice capture Bluetooth headset voice recognition skipped: profile unavailable")
-            return
-        }
-        requestBluetoothHeadsetVoiceRecognition(headset)
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun requestBluetoothHeadsetVoiceRecognition(headset: BluetoothHeadset) {
-        if (!wantsBluetoothHeadsetVoiceRecognition || bluetoothVoiceRecognitionDevice != null) {
-            return
-        }
-        val device = runCatching {
-            headset.connectedDevices.firstOrNull()
-        }.onFailure {
-            Log.w(TAG, "Voice capture Bluetooth headset device lookup failed", it)
-        }.getOrNull()
-        if (device == null) {
-            Log.d(TAG, "Voice capture Bluetooth headset voice recognition skipped: no connected headset")
-            return
-        }
-        val accepted = runCatching {
-            headset.startVoiceRecognition(device)
-        }.onFailure {
-            Log.w(TAG, "Voice capture Bluetooth headset voice recognition request failed", it)
-        }.getOrDefault(false)
-        if (accepted) {
-            bluetoothVoiceRecognitionDevice = device
-        }
-        Log.d(
-            TAG,
-            "Voice capture Bluetooth headset voice recognition requested device=${device.safeBluetoothLabel()} " +
-                "accepted=$accepted",
-        )
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun stopBluetoothHeadsetVoiceRecognitionBestEffort() {
-        wantsBluetoothHeadsetVoiceRecognition = false
-        val headset = bluetoothHeadset ?: return
-        val device = bluetoothVoiceRecognitionDevice ?: return
-        runCatching {
-            headset.stopVoiceRecognition(device)
-        }.onFailure {
-            Log.w(TAG, "Voice capture Bluetooth headset voice recognition stop failed", it)
-        }
-        bluetoothVoiceRecognitionDevice = null
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun bluetoothHeadsetProxyOrNull(): BluetoothHeadset? {
-        bluetoothHeadset?.let { return it }
-        if (!bluetoothProfileProxyRequested) {
-            val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
-            bluetoothProfileProxyRequested = runCatching {
-                adapter?.getProfileProxy(context, bluetoothProfileListener, BluetoothProfile.HEADSET) == true
-            }.onFailure {
-                Log.w(TAG, "Voice capture Bluetooth headset profile request failed", it)
-            }.getOrDefault(false)
-        }
-        repeat(BLUETOOTH_HEADSET_PROFILE_WAIT_STEPS) {
-            bluetoothHeadset?.let { return it }
-            Thread.sleep(BLUETOOTH_HEADSET_PROFILE_WAIT_MS)
-        }
-        return bluetoothHeadset
-    }
-
-    private fun closeBluetoothHeadsetProxy() {
-        val headset = bluetoothHeadset ?: return
-        runCatching {
-            context.getSystemService(BluetoothManager::class.java)
-                ?.adapter
-                ?.closeProfileProxy(BluetoothProfile.HEADSET, headset)
-        }.onFailure {
-            Log.w(TAG, "Voice capture Bluetooth headset profile close failed", it)
-        }
-        bluetoothHeadset = null
-        bluetoothProfileProxyRequested = false
-        bluetoothVoiceRecognitionDevice = null
-    }
-
-    private fun requestAudioFocusBestEffort() {
-        val manager = audioManager ?: return
-        synchronized(lock) {
-            check(!released) { "Voice audio engine is released" }
-            if (hasAudioFocus) return
-        }
-
-        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
-                .setAudioAttributes(voiceAudioAttributes())
-                .setAcceptsDelayedFocusGain(false)
-                .setOnAudioFocusChangeListener { focusChange ->
-                    if (VoiceAudioFocusPolicy.isFocusChangeFatal(focusChange)) {
-                        notifyAudioError("Audio focus lost: $focusChange")
-                    } else if (focusChange < 0) {
-                        Log.w(TAG, "Recoverable audio focus change: $focusChange")
-                    }
-                }
-                .build()
-            audioFocusRequest = request
-            manager.requestAudioFocus(request)
-        } else {
-            @Suppress("DEPRECATION")
-            manager.requestAudioFocus(
-                null,
-                AudioManager.STREAM_VOICE_CALL,
-                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE,
-            )
-        }
-        if (result != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-            audioFocusRequest = null
-            if (VoiceAudioFocusPolicy.isRequestFailureFatal(result)) {
-                throw IllegalStateException("Voice Agent audio focus request failed: $result")
-            }
-            Log.w(TAG, "Voice Agent audio focus request was not granted: $result")
-            return
-        }
-        synchronized(lock) {
-            if (released) {
-                abandonAudioFocus()
-            } else {
-                hasAudioFocus = true
-            }
-        }
-    }
-
-    private fun abandonAudioFocus() {
-        val manager = audioManager ?: return
-        val request = audioFocusRequest
-        audioFocusRequest = null
-        hasAudioFocus = false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && request != null) {
-            manager.abandonAudioFocusRequest(request)
-        } else {
-            @Suppress("DEPRECATION")
-            manager.abandonAudioFocus(null)
-        }
-    }
-
-    private fun voiceAudioAttributes(): AudioAttributes =
-        AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-            .build()
-
-    private fun hasBluetoothConnectPermission(): Boolean =
-        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) ==
-            PackageManager.PERMISSION_GRANTED
-
-    private fun AudioDeviceInfo.toVoiceAudioRouteDevice(): VoiceAudioRouteDevice =
-        VoiceAudioRouteDevice(
-            id = id,
-            type = when (type) {
-                AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> VoiceAudioRouteDeviceType.BluetoothSco
-                AudioDeviceInfo.TYPE_BLE_HEADSET -> VoiceAudioRouteDeviceType.BluetoothBleHeadset
-                AudioDeviceInfo.TYPE_BUILTIN_MIC -> VoiceAudioRouteDeviceType.BuiltInMic
-                AudioDeviceInfo.TYPE_WIRED_HEADSET -> VoiceAudioRouteDeviceType.WiredHeadset
-                else -> VoiceAudioRouteDeviceType.Other
-            },
-            name = productName?.toString().orEmpty(),
-        )
-
-    private fun VoiceAudioRouteDevice.debugLabel(): String =
-        "$id:${type.name}:${name.ifBlank { "unnamed" }}"
-
-    private fun AudioDeviceInfo.safeRouteLabel(): String =
-        "${id}:${toVoiceAudioRouteDevice().type.name}:${productName?.toString().orEmpty().ifBlank { "unnamed" }}"
-
-    @SuppressLint("MissingPermission")
-    private fun BluetoothDevice.safeBluetoothLabel(): String =
-        "${name ?: "unnamed"}:${address ?: "unknown"}"
 
     private fun notifyAudioError(message: String) {
         val handler = synchronized(lock) {
