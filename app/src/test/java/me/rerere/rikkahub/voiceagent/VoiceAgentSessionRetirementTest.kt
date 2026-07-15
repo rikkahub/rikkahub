@@ -235,7 +235,7 @@ class VoiceAgentSessionRetirementTest {
         assertEquals(1, gemini.textTurns.count { it.second.contains("detached answer") })
         assertTrue(
             diagnostics.events.value.any {
-                it.name == "voice_playback_drained" && it.detail == "generation=1"
+                it.name == "voice_playback_drained" && it.detail == "playbackEpoch=1"
             }
         )
     }
@@ -290,7 +290,7 @@ class VoiceAgentSessionRetirementTest {
         assertEquals(1, gemini.textTurns.count { it.second.contains("automatic answer") })
         assertTrue(
             diagnostics.events.value.any {
-                it.name == "voice_playback_drained" && it.detail == "generation=1"
+                it.name == "voice_playback_drained" && it.detail == "playbackEpoch=1"
             }
         )
     }

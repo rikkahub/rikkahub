@@ -165,12 +165,12 @@ class VoiceAgentPlaybackCoordinationTest {
         assertEquals(2, audio.markPlaybackTurnCompleteCalls)
         assertEquals(
             listOf(
-                "voice_playback_active" to "generation=1",
-                "voice_playback_drain_started" to "generation=1",
-                "voice_playback_drained" to "generation=1",
-                "voice_playback_active" to "generation=2",
-                "voice_playback_drain_started" to "generation=2",
-                "voice_playback_drained" to "generation=2",
+                "voice_playback_active" to "playbackEpoch=1",
+                "voice_playback_drain_started" to "playbackEpoch=1",
+                "voice_playback_drained" to "playbackEpoch=1",
+                "voice_playback_active" to "playbackEpoch=2",
+                "voice_playback_drain_started" to "playbackEpoch=2",
+                "voice_playback_drained" to "playbackEpoch=2",
             ),
             diagnostics.events.value
                 .filter { it.name.startsWith("voice_playback_") }
@@ -286,7 +286,7 @@ class VoiceAgentPlaybackCoordinationTest {
 
         assertTrue(
             diagnostics.events.value.any {
-                it.name == "voice_playback_drained" && it.detail == "generation=1"
+                it.name == "voice_playback_drained" && it.detail == "playbackEpoch=1"
             }
         )
     }
