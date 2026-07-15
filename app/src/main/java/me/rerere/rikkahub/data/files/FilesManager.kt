@@ -377,6 +377,33 @@ class FilesManager(
         repository.deleteById(id) > 0
     }
 
+    suspend fun deleteAll(folder: String = FileFolders.UPLOAD): Boolean = withContext(Dispatchers.IO) {
+        val dir = File(context.filesDir, folder)
+        val entries = dir.listFiles()
+        if (dir.exists() && entries == null) {
+            return@withContext false
+        }
+
+        var allDeletedFromDisk = true
+        entries.orEmpty().forEach { entry ->
+            if (!runCatching { entry.deleteRecursively() }.getOrDefault(false)) {
+                allDeletedFromDisk = false
+            }
+        }
+
+        if (allDeletedFromDisk) {
+            repository.deleteByFolder(folder)
+            return@withContext true
+        }
+
+        repository.listByFolder(folder).first().forEach { entity ->
+            if (!getFile(entity).exists()) {
+                repository.deleteById(entity.id)
+            }
+        }
+        false
+    }
+
     private fun createTargetFile(folder: String, displayName: String, mimeType: String?): File {
         val dir = File(context.filesDir, folder)
         if (!dir.exists()) {

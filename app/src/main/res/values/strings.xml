@@ -735,6 +735,12 @@
   <string name="setting_display_page_volume_key_scroll_ratio">Scroll Amount</string>
   <string name="setting_display_page_volume_key_scroll_title">Volume Key Page Scroll</string>
   <string name="setting_files_page_cancel_action">Cancel</string>
+  <string name="setting_files_page_clean_action">Clean</string>
+  <string name="setting_files_page_clean_confirmation">All files in this category will be permanently deleted. This action cannot be undone.</string>
+  <string name="setting_files_page_clean_content_description">Clean files</string>
+  <string name="setting_files_page_clean_failed_toast">Some files could not be cleaned</string>
+  <string name="setting_files_page_clean_title">Clean files?</string>
+  <string name="setting_files_page_cleaned_toast">Files cleaned</string>
   <string name="setting_files_page_delete_action">Delete</string>
   <string name="setting_files_page_delete_content_description">Delete</string>
   <string name="setting_files_page_delete_failed_toast">Delete Failed</string>
@@ -1278,4 +1284,3 @@
   <string name="chat_page_delete_folder_confirm">Delete folder "%1$s"? Conversations inside will not be deleted, only removed from the folder.</string>
   <string name="chat_page_delete_folder_generating">Some conversations in this folder are still generating. Please stop them before deleting.</string>
 </resources>
-

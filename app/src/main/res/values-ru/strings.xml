@@ -697,6 +697,12 @@
   <string name="setting_display_page_volume_key_scroll_ratio">Величина прокрутки</string>
   <string name="setting_display_page_volume_key_scroll_title">Прокрутка страниц клавишами громкости</string>
   <string name="setting_files_page_cancel_action">Отмена</string>
+  <string name="setting_files_page_clean_action">Очистить</string>
+  <string name="setting_files_page_clean_confirmation">Все файлы в этой категории будут удалены без возможности восстановления.</string>
+  <string name="setting_files_page_clean_content_description">Очистить файлы</string>
+  <string name="setting_files_page_clean_failed_toast">Не удалось удалить некоторые файлы</string>
+  <string name="setting_files_page_clean_title">Очистить файлы?</string>
+  <string name="setting_files_page_cleaned_toast">Файлы удалены</string>
   <string name="setting_files_page_delete_action">Удалить</string>
   <string name="setting_files_page_delete_content_description">Удалить</string>
   <string name="setting_files_page_delete_failed_toast">Не удалось удалить</string>
@@ -1276,4 +1282,3 @@
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS не читает текст в скобках</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">Если включено, TTS не будет читать содержимое в скобках</string>
 </resources>
-
