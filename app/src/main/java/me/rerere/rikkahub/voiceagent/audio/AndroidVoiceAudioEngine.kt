@@ -123,6 +123,24 @@ internal fun runVoiceAudioCaptureLoop(
     }
 }
 
+internal fun ensureVoiceAudioCaptureRecorderInitialized(
+    initialized: Boolean,
+    releaseRecorder: () -> Unit,
+    clearRouteLease: () -> Unit,
+    routeLease: VoiceAudioCaptureRouteLease,
+) {
+    if (initialized) return
+    val failure = IllegalStateException("AudioRecord initialization failed")
+    listOf(
+        releaseRecorder,
+        clearRouteLease,
+        routeLease::retire,
+    ).forEach { cleanup ->
+        runCatching(cleanup).exceptionOrNull()?.let(failure::addSuppressed)
+    }
+    throw failure
+}
+
 class AndroidVoiceAudioEngine(
     context: Context,
     routeOwner: VoiceAudioRouteOwner,
@@ -212,10 +230,12 @@ class AndroidVoiceAudioEngine(
         }
         routeController.configureRecorder(recorder)
 
-        if (recorder.state != AudioRecord.STATE_INITIALIZED) {
-            recorder.releaseSafely()
-            throw IllegalStateException("AudioRecord initialization failed")
-        }
+        ensureVoiceAudioCaptureRecorderInitialized(
+            initialized = recorder.state == AudioRecord.STATE_INITIALIZED,
+            releaseRecorder = { recorder.releaseSafely() },
+            clearRouteLease = { clearCaptureRouteLease(generation, routeLease) },
+            routeLease = routeLease,
+        )
 
         val job = scope.launch(start = CoroutineStart.LAZY) {
             var captureLevelChunks = 0

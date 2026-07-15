@@ -12,6 +12,43 @@ import org.junit.Test
 
 class VoiceAudioRouteControllerTest {
     @Test
+    fun `uninitialized recorder retires installed route lease before setup error escapes`() {
+        var directResourcesAcquired = false
+        var afterCaptureCalls = 0
+        var recorderReleaseCalls = 0
+        var installedLease: VoiceAudioCaptureRouteLease? = null
+        directResourcesAcquired = true
+        val lease = VoiceAudioCaptureRouteLease {
+            afterCaptureCalls += 1
+            directResourcesAcquired = false
+        }.also { installedLease = it }
+
+        val thrown = runCatching {
+            ensureVoiceAudioCaptureRecorderInitialized(
+                initialized = false,
+                releaseRecorder = { recorderReleaseCalls += 1 },
+                clearRouteLease = {
+                    if (installedLease === lease) installedLease = null
+                },
+                routeLease = lease,
+            )
+        }.exceptionOrNull()
+
+        assertTrue(thrown is IllegalStateException)
+        assertEquals("AudioRecord initialization failed", thrown?.message)
+        assertEquals(1, recorderReleaseCalls)
+        assertEquals(null, installedLease)
+        assertFalse(directResourcesAcquired)
+        assertEquals(1, afterCaptureCalls)
+
+        lease.retire() // later stop
+        lease.retire() // later release
+
+        assertEquals(1, afterCaptureCalls)
+        assertFalse(directResourcesAcquired)
+    }
+
+    @Test
     fun `read exception autonomously retires exact capture route once`() {
         val events = mutableListOf<String>()
         val lease = VoiceAudioCaptureRouteLease { events += "afterCapture" }
