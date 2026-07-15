@@ -10,6 +10,7 @@ TMP_DIR="$(mktemp -d)"
 PROJECT_DIR="$TMP_DIR/project"
 TEST_GRADLE_USER_HOME="$TMP_DIR/gradle-user-home"
 SYNTHETIC_DSN='https://public@example.invalid/42'
+MISSING_PUBLIC_KEY_DSN='https://example.invalid/42'
 SECRET_MARKER='must-not-appear-in-gradle-output'
 INVALID_DSN_MARKER='invalid-dsn-must-not-appear-in-gradle-output'
 
@@ -37,6 +38,7 @@ assert_not_contains() { [[ "$1" != *"$2"* ]] || fail 'Gradle output exposed a fo
 assert_redacted() {
   local output="$1"
   assert_not_contains "$output" "$SYNTHETIC_DSN"
+  assert_not_contains "$output" "$MISSING_PUBLIC_KEY_DSN"
   assert_not_contains "$output" "$SECRET_MARKER"
   assert_not_contains "$output" "$INVALID_DSN_MARKER"
 }
@@ -194,6 +196,9 @@ write_local_properties
 expect_validation_failure \
   invalid-dsn 'VOICE_AGENT_SENTRY_DSN' \
   "$INVALID_DSN_MARKER" 'voice-debug' '0.5'
+expect_validation_failure \
+  missing-public-key-dsn 'VOICE_AGENT_SENTRY_DSN' \
+  "$MISSING_PUBLIC_KEY_DSN" 'voice-debug' '0.5'
 expect_validation_failure \
   blank-environment 'VOICE_AGENT_SENTRY_ENVIRONMENT' \
   "$SYNTHETIC_DSN" '' '0.5'

@@ -87,6 +87,7 @@ val validateVoiceAgentSentryDebug by tasks.registering {
         val dsn = runCatching { URI(dsnValue) }.getOrNull()
         require(
             dsn != null && dsn.scheme in setOf("http", "https") &&
+                dsn.rawUserInfo?.substringBefore(':')?.isNotBlank() == true &&
                 !dsn.host.isNullOrBlank() && dsn.path?.trim('/')?.isNotBlank() == true
         ) { "VOICE_AGENT_SENTRY_DSN is invalid for a debug APK build" }
         require(environmentValue.isNotBlank()) {

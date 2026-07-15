@@ -11,6 +11,9 @@
 ## Global Constraints
 
 - Never commit, print, or copy a real Sentry DSN.
+- A valid Sentry DSN must include a nonblank public key in URI user-info
+  (`https://public@example.invalid/42`); a URI-shaped value without `public@`
+  must fail build validation.
 - Resolution precedence is Gradle project property, `local.properties`, process environment, then `~/.config/voice-lab/local.env`.
 - Parse the shared environment file as data; never source or execute it.
 - Debug APK assemble, package, and install tasks fail closed. Unit tests, Gradle help, and release-only tasks do not require personal debug credentials.
@@ -48,6 +51,7 @@ REAL_HOME="$HOME"
 GRADLE_USER_HOME_VALUE="${GRADLE_USER_HOME:-$REAL_HOME/.gradle}"
 TMP_DIR="$(mktemp -d)"
 SYNTHETIC_DSN='https://public@example.invalid/42'
+MISSING_PUBLIC_KEY_DSN='https://example.invalid/42'
 SECRET_MARKER='must-not-appear-in-gradle-output'
 trap 'rm -rf "$TMP_DIR"' EXIT
 
@@ -94,6 +98,16 @@ write_env_file "$file_home" "$SYNTHETIC_DSN" 'voice-debug' '1.0'
 file_output="$(run_clean_gradle "$file_home" :app:validateVoiceAgentSentryDebug)"
 assert_contains "$file_output" 'Voice Agent Sentry debug configuration verified'
 assert_not_contains "$file_output" "$SYNTHETIC_DSN"
+
+missing_public_key_home="$(new_home missing-public-key)"
+write_env_file "$missing_public_key_home" "$MISSING_PUBLIC_KEY_DSN" 'voice-debug' '0.5'
+set +e
+missing_public_key_output="$(run_clean_gradle "$missing_public_key_home" :app:validateVoiceAgentSentryDebug)"
+missing_public_key_status=$?
+set -e
+[[ "$missing_public_key_status" -ne 0 ]] || fail 'Missing-public-key Sentry DSN unexpectedly passed.'
+assert_contains "$missing_public_key_output" 'VOICE_AGENT_SENTRY_DSN'
+assert_not_contains "$missing_public_key_output" "$MISSING_PUBLIC_KEY_DSN"
 
 env_home="$(new_home env)"
 write_env_file "$env_home" "$SYNTHETIC_DSN" 'voice-debug' 'invalid-file-rate'
@@ -217,6 +231,7 @@ fun validateVoiceAgentSentryDebugConfiguration() {
     val dsn = runCatching { URI(voiceAgentSentryDsn) }.getOrNull()
     require(
         dsn != null && dsn.scheme in setOf("http", "https") &&
+            dsn.rawUserInfo?.substringBefore(':')?.isNotBlank() == true &&
             !dsn.host.isNullOrBlank() && dsn.path?.trim('/')?.isNotBlank() == true
     ) { "VOICE_AGENT_SENTRY_DSN is invalid for a debug APK build" }
     require(voiceAgentSentryEnvironment.isNotBlank()) {
