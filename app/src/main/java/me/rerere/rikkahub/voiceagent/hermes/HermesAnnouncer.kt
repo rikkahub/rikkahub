@@ -292,6 +292,17 @@ class HermesAnnouncer(
         events.trySend(event)
     }
 
+    fun onGeminiTurnInterrupted() {
+        commitGeminiTurnInterrupted(prepareGeminiTurnInterrupted())
+    }
+
+    internal fun prepareGeminiTurnInterrupted(): AnnouncerEvent.GeminiTurnInterrupted =
+        AnnouncerEvent.GeminiTurnInterrupted(nowMs())
+
+    internal fun commitGeminiTurnInterrupted(event: AnnouncerEvent.GeminiTurnInterrupted) {
+        events.trySend(event)
+    }
+
     fun onGeminiTurnComplete() {
         commitGeminiTurnComplete(prepareGeminiTurnComplete())
     }

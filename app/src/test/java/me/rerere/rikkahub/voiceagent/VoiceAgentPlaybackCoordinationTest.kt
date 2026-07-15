@@ -444,10 +444,12 @@ class VoiceAgentPlaybackCoordinationTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
         val audio = FakeVoiceAudioEngine()
+        val diagnostics = VoiceDiagnostics()
         val coordinator = VoiceAgentCoordinator(
             gemini = gemini,
             toolApi = toolApi,
             audio = audio,
+            diagnostics = diagnostics,
             hermesAnnouncementQuietWindowMs = 0L,
             scope = this,
         )
@@ -473,6 +475,9 @@ class VoiceAgentPlaybackCoordinationTest {
         coordinator.onGeminiEvent(GeminiLiveEvent.TurnComplete)
         awaitTextTurnCount(gemini, 1)
         assertEquals(1, gemini.textTurns.size)
+        assertTrue(diagnostics.events.value.none {
+            it.name == "gemini_interrupted_turn_complete_consumed"
+        })
     }
 
     @Test
@@ -552,8 +557,7 @@ class VoiceAgentPlaybackCoordinationTest {
         assertEquals(1, audio.markPlaybackTurnCompleteCalls)
         assertTrue(
             diagnostics.events.value.none {
-                it.name == "gemini_interrupted_turn_complete_consumed" &&
-                    it.detail == "sessionId=$replacementSessionId"
+                it.name == "gemini_interrupted_turn_complete_consumed"
             }
         )
         assertTrue(
