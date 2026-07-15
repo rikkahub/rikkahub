@@ -8,6 +8,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.voiceagent.audio.AndroidVoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.gemini.OkHttpGeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
@@ -36,6 +37,7 @@ interface VoiceAgentCallFactory {
     fun create(
         conversationId: Uuid,
         config: VoiceAgentLaunchConfig,
+        routeOwner: VoiceAudioRouteOwner,
         scope: CoroutineScope,
     ): ManagedVoiceCallSession
 }
@@ -52,7 +54,7 @@ class DefaultVoiceAgentCallFactory internal constructor(
     private val geminiFactory: () -> GeminiLiveVoiceClient = {
         OkHttpGeminiLiveVoiceClient(httpClient = okHttpClient)
     },
-    private val audioFactory: () -> VoiceAudioEngine = {
+    private val audioFactory: (VoiceAudioRouteOwner) -> VoiceAudioEngine = {
         AndroidVoiceAudioEngine(context = context)
     },
     private val conversationStoreFactory: (Uuid) -> VoiceConversationStore = { conversationId ->
@@ -88,6 +90,7 @@ class DefaultVoiceAgentCallFactory internal constructor(
     override fun create(
         conversationId: Uuid,
         config: VoiceAgentLaunchConfig,
+        routeOwner: VoiceAudioRouteOwner,
         scope: CoroutineScope,
     ): ManagedVoiceCallSession {
         val baseTraceContext = newVoiceTraceContext()
@@ -117,7 +120,7 @@ class DefaultVoiceAgentCallFactory internal constructor(
                 sessionApi = sessionApiFactory(mobileApi),
                 toolApi = toolApiFactory(mobileApi),
                 gemini = geminiFactory(),
-                audio = audioFactory(),
+                audio = audioFactory(routeOwner),
                 conversationStore = conversationStoreFactory(conversationId),
                 contextProvider = contextProviderFactory(config.voiceModelId),
                 observability = observability,
@@ -128,6 +131,7 @@ class DefaultVoiceAgentCallFactory internal constructor(
                     conversationId = conversationId,
                     packageName = context.packageName,
                     voiceModelId = config.voiceModelId,
+                    routeOwner = routeOwner,
                     startedAtEpochMs = metadataEpochNowMs(),
                 ),
                 metadataEpochNowMs = metadataEpochNowMs,
@@ -151,6 +155,7 @@ internal fun buildDefaultVoiceE2ESessionMetadata(
     conversationId: Uuid,
     packageName: String,
     voiceModelId: String,
+    routeOwner: VoiceAudioRouteOwner,
     startedAtEpochMs: Long,
 ): VoiceE2ESessionMetadata = VoiceE2ESessionMetadata(
     voiceTraceId = traceContext.traceId,
@@ -161,6 +166,7 @@ internal fun buildDefaultVoiceE2ESessionMetadata(
     versionCode = BuildConfig.VERSION_CODE,
     debuggable = BuildConfig.DEBUG,
     voiceModelId = voiceModelId,
+    audioRouteOwner = routeOwner.diagnosticLabel,
     providerModel = null,
     status = "created",
     startedAtEpochMs = startedAtEpochMs,

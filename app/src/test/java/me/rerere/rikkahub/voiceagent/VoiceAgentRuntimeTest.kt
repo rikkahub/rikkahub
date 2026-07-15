@@ -20,6 +20,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveCodec
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
@@ -3567,6 +3568,7 @@ class VoiceAgentRuntimeTest {
             blockedConnect = gemini.blockNextConnectCompletion()
             var sessionMobileApi: HermesVoiceApi? = null
             var toolMobileApi: HermesVoiceApi? = null
+            var audioRouteOwner: VoiceAudioRouteOwner? = null
             val factory = DefaultVoiceAgentCallFactory(
                 context = context,
                 chatService = null,
@@ -3583,7 +3585,10 @@ class VoiceAgentRuntimeTest {
                     FakeVoiceToolApi()
                 },
                 geminiFactory = { gemini },
-                audioFactory = { FakeVoiceAudioEngine() },
+                audioFactory = { owner ->
+                    audioRouteOwner = owner
+                    FakeVoiceAudioEngine()
+                },
                 conversationStoreFactory = {
                     InMemoryVoiceConversationStore(Conversation.ofId(id = conversationId))
                 },
@@ -3594,10 +3599,12 @@ class VoiceAgentRuntimeTest {
             val session = factory.create(
                 conversationId = conversationId,
                 config = fakeLaunchConfig(voiceModelId = "factory-gemini"),
+                routeOwner = VoiceAudioRouteOwner.Telecom,
                 scope = sessionScope,
             )
             assertTrue(sessionMobileApi != null)
             assertSame(sessionMobileApi, toolMobileApi)
+            assertEquals(VoiceAudioRouteOwner.Telecom, audioRouteOwner)
 
             session.start()
             gemini.awaitConnectCount(1)
@@ -3618,6 +3625,7 @@ class VoiceAgentRuntimeTest {
             assertEquals(BuildConfig.VERSION_NAME, started.string("versionName"))
             assertEquals(BuildConfig.VERSION_CODE, started.string("versionCode"))
             assertEquals("factory-gemini", started.string("voiceModelId"))
+            assertEquals("telecom", started.string("audioRouteOwner"))
             assertEquals("1700000010000", started.getValue("startedAtEpochMs").jsonPrimitive.content)
             assertEquals(BuildConfig.DEBUG, started.boolean("debuggable"))
             assertEquals(BuildConfig.VOICE_AGENT_SENTRY_DSN.isNotBlank(), started.boolean("sentryDsnConfigured"))
@@ -5692,6 +5700,7 @@ private fun testSessionMetadata(
     versionCode = versionCode,
     debuggable = debuggable,
     voiceModelId = voiceModelId,
+    audioRouteOwner = "telecom",
     providerModel = providerModel,
     status = status,
     startedAtEpochMs = startedAtEpochMs,

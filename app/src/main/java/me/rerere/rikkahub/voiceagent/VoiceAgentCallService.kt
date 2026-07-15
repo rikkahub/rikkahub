@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import org.koin.android.ext.android.inject
 import kotlin.uuid.Uuid
 
@@ -92,6 +93,7 @@ class VoiceAgentCallService : Service() {
                         val startedNewSession = manager.start(
                             conversationId = id,
                             config = result.config,
+                            routeOwner = VoiceAudioRouteOwner.DirectFallback,
                             scope = serviceScope,
                         )
                         VoiceAgentLog.d(TAG, "manager start returned startedNewSession=$startedNewSession")

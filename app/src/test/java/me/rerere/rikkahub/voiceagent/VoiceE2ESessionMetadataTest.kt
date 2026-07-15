@@ -7,6 +7,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -26,6 +27,7 @@ class VoiceE2ESessionMetadataTest {
             versionCode = "123",
             debuggable = true,
             voiceModelId = "voice-model",
+            audioRouteOwner = "telecom",
             providerModel = "provider-model",
             status = "started",
             startedAtEpochMs = 1_700_000_000_000,
@@ -49,6 +51,7 @@ class VoiceE2ESessionMetadataTest {
                 "versionCode",
                 "debuggable",
                 "voiceModelId",
+                "audioRouteOwner",
                 "providerModel",
                 "status",
                 "startedAtEpochMs",
@@ -68,6 +71,7 @@ class VoiceE2ESessionMetadataTest {
         assertEquals("123", jsonObject.getValue("versionCode").jsonPrimitive.content)
         assertTrue(jsonObject.getValue("debuggable").jsonPrimitive.boolean)
         assertEquals("voice-model", jsonObject.getValue("voiceModelId").jsonPrimitive.content)
+        assertEquals("telecom", jsonObject.getValue("audioRouteOwner").jsonPrimitive.content)
         assertEquals("provider-model", jsonObject.getValue("providerModel").jsonPrimitive.content)
         assertEquals("started", jsonObject.getValue("status").jsonPrimitive.content)
         assertEquals(1_700_000_000_000, jsonObject.getValue("startedAtEpochMs").jsonPrimitive.long)
@@ -92,6 +96,7 @@ class VoiceE2ESessionMetadataTest {
             conversationId = Uuid.parse("00000000-0000-0000-0000-000000000123"),
             packageName = "me.rerere.rikkahub.debug",
             voiceModelId = "gemini-flash",
+            routeOwner = VoiceAudioRouteOwner.DirectFallback,
             startedAtEpochMs = 1_700_000_005_000,
         )
         val jsonObject = Json.parseToJsonElement(metadata.toJson()).jsonObject
@@ -106,6 +111,7 @@ class VoiceE2ESessionMetadataTest {
         assertEquals(BuildConfig.VERSION_NAME, jsonObject.getValue("versionName").jsonPrimitive.content)
         assertEquals(BuildConfig.VERSION_CODE, jsonObject.getValue("versionCode").jsonPrimitive.content)
         assertEquals("gemini-flash", jsonObject.getValue("voiceModelId").jsonPrimitive.content)
+        assertEquals("direct_fallback", jsonObject.getValue("audioRouteOwner").jsonPrimitive.content)
         assertEquals(1_700_000_005_000, jsonObject.getValue("startedAtEpochMs").jsonPrimitive.long)
         assertEquals("created", jsonObject.getValue("status").jsonPrimitive.content)
         assertEquals(JsonNull, jsonObject.getValue("providerModel"))

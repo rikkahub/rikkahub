@@ -12,6 +12,7 @@ data class VoiceE2ESessionMetadata(
     val versionCode: String,
     val debuggable: Boolean,
     val voiceModelId: String,
+    val audioRouteOwner: String,
     val providerModel: String?,
     val status: String,
     val startedAtEpochMs: Long,
@@ -30,6 +31,7 @@ data class VoiceE2ESessionMetadata(
         put("versionCode", versionCode)
         put("debuggable", debuggable)
         put("voiceModelId", voiceModelId)
+        put("audioRouteOwner", audioRouteOwner)
         put("providerModel", providerModel)
         put("status", status)
         put("startedAtEpochMs", startedAtEpochMs)

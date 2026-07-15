@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import kotlin.uuid.Uuid
 
 class VoiceAgentCallManager(
@@ -14,20 +15,28 @@ class VoiceAgentCallManager(
     private val lock = Any()
     private val _state = MutableStateFlow(VoiceAgentUiState())
     private val _activeConversationId = MutableStateFlow<Uuid?>(null)
+    private val _activeRouteOwner = MutableStateFlow<VoiceAudioRouteOwner?>(null)
     private var activeSession: ManagedVoiceCallSession? = null
     private var activeLaunchConfig: VoiceAgentLaunchConfig? = null
     private var stateCollectionJob: Job? = null
     private var callStatus: VoiceCallStatus = VoiceCallStatus.Idle
 
     val activeConversationId: StateFlow<Uuid?> = _activeConversationId.asStateFlow()
+    val activeRouteOwner: StateFlow<VoiceAudioRouteOwner?> = _activeRouteOwner.asStateFlow()
     val state: StateFlow<VoiceAgentUiState> = _state.asStateFlow()
 
-    fun start(conversationId: Uuid, config: VoiceAgentLaunchConfig, scope: CoroutineScope): Boolean {
+    fun start(
+        conversationId: Uuid,
+        config: VoiceAgentLaunchConfig,
+        routeOwner: VoiceAudioRouteOwner,
+        scope: CoroutineScope,
+    ): Boolean {
         synchronized(lock) {
             if (
                 activeSession != null &&
                 _activeConversationId.value == conversationId &&
-                activeLaunchConfig == config
+                activeLaunchConfig == config &&
+                _activeRouteOwner.value == routeOwner
             ) {
                 return false
             }
@@ -38,11 +47,17 @@ class VoiceAgentCallManager(
         }
         previousSession?.end()
 
-        val session = factory.create(conversationId = conversationId, config = config, scope = scope)
+        val session = factory.create(
+            conversationId = conversationId,
+            config = config,
+            routeOwner = routeOwner,
+            scope = scope,
+        )
         synchronized(lock) {
             activeSession = session
             activeLaunchConfig = config
             _activeConversationId.value = conversationId
+            _activeRouteOwner.value = routeOwner
             _state.value = session.state.value.copy(call = callStatus)
             stateCollectionJob = scope.launch {
                 session.state.collect { sessionState ->
@@ -53,6 +68,17 @@ class VoiceAgentCallManager(
         }
         session.start()
         return true
+    }
+
+    fun routeOwnerForActiveSession(
+        conversationId: Uuid,
+        config: VoiceAgentLaunchConfig,
+    ): VoiceAudioRouteOwner? = synchronized(lock) {
+        _activeRouteOwner.value.takeIf {
+            activeSession != null &&
+                _activeConversationId.value == conversationId &&
+                activeLaunchConfig == config
+        }
     }
 
     fun interrupt() = synchronized(lock) { activeSession }?.interrupt()
@@ -104,6 +130,7 @@ class VoiceAgentCallManager(
             activeSession = null
             activeLaunchConfig = null
             _activeConversationId.value = null
+            _activeRouteOwner.value = null
         }
     }
 }
