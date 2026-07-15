@@ -95,6 +95,54 @@ class VoiceAgentPlaybackCoordinationTest {
     }
 
     @Test
+    fun `scoped rejected playback completion keeps Hermes final blocked`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val audioDelegate = FakeVoiceAudioEngine()
+        val audio = object : VoiceAudioEngine by audioDelegate {
+            override fun markPlaybackTurnComplete(sessionId: Long?): Boolean = false
+        }
+        val diagnostics = VoiceDiagnostics()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = audio,
+            diagnostics = diagnostics,
+            hermesAnnouncementQuietWindowMs = 0L,
+            scope = this,
+        )
+        val sessionId = coordinator.nextSessionId()
+        audioDelegate.activatePlaybackSession(sessionId)
+        gemini.activateOutboundSession(sessionId)
+        assertTrue(
+            coordinator.attachHermesBridge(
+                coordinator.createHermesSessionBridge(sessionId),
+                sessionId = sessionId,
+            )
+        )
+
+        coordinator.onGeminiEvent(sessionId, GeminiLiveEvent.InputTranscript("keep scoped turn active"))
+        coordinator.onGeminiEvent(
+            sessionId,
+            voiceToolCall(callId = "call-scoped-rejected", name = "ask_hermes", arg = "reject scoped"),
+        )
+        assertEquals("call-scoped-rejected" to "reject scoped", toolApi.awaitRequest("call-scoped-rejected"))
+        toolApi.complete(response(callId = "call-scoped-rejected", answer = "must stay scoped"))
+        coordinator.awaitToolJobsWithTimeout()
+
+        coordinator.onGeminiEvent(sessionId, GeminiLiveEvent.TurnComplete)
+        delay(20)
+
+        assertTrue(gemini.textTurns.isEmpty())
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "stale_gemini_turn_complete" &&
+                    it.detail == "sessionId=$sessionId, playbackAccepted=false"
+            }
+        )
+    }
+
+    @Test
     fun `coordinator forwards exact playback epochs across multiple responses`() = runTest {
         val audio = FakeVoiceAudioEngine()
         val diagnostics = VoiceDiagnostics()
@@ -310,6 +358,56 @@ class VoiceAgentPlaybackCoordinationTest {
         coordinator.onGeminiEvent(GeminiLiveEvent.TurnComplete)
         awaitTextTurnCount(gemini, 1)
         assertEquals(1, gemini.textTurns.size)
+    }
+
+    @Test
+    fun `scoped interruption requires the following response completion and drain`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val audio = FakeVoiceAudioEngine()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = audio,
+            hermesAnnouncementQuietWindowMs = 0L,
+            scope = this,
+        )
+        val sessionId = coordinator.nextSessionId()
+        audio.activatePlaybackSession(sessionId)
+        gemini.activateOutboundSession(sessionId)
+        assertTrue(
+            coordinator.attachHermesBridge(
+                coordinator.createHermesSessionBridge(sessionId),
+                sessionId = sessionId,
+            )
+        )
+
+        coordinator.onGeminiEvent(
+            sessionId,
+            voiceToolCall(callId = "call-scoped-barge", name = "ask_hermes", arg = "scoped barge"),
+        )
+        assertEquals("call-scoped-barge" to "scoped barge", toolApi.awaitRequest("call-scoped-barge"))
+        coordinator.onGeminiEvent(sessionId, GeminiLiveEvent.OutputAudio("old-scoped-response"))
+        toolApi.complete(response(callId = "call-scoped-barge", answer = "scoped answer"))
+        coordinator.awaitToolJobsWithTimeout()
+
+        coordinator.onGeminiEvent(sessionId, GeminiLiveEvent.Interrupted())
+        audio.awaitSuppressPlaybackCalls(1)
+        coordinator.onGeminiEvent(sessionId, GeminiLiveEvent.TurnComplete)
+        delay(20)
+        assertTrue(gemini.textTurns.isEmpty())
+
+        coordinator.onGeminiEvent(sessionId, GeminiLiveEvent.InputTranscript("new scoped input"))
+        coordinator.onGeminiEvent(sessionId, GeminiLiveEvent.OutputAudio("new scoped response"))
+        coordinator.onGeminiEvent(sessionId, GeminiLiveEvent.TurnComplete)
+        delay(20)
+        assertTrue(gemini.textTurns.isEmpty())
+
+        audio.completePlaybackDrain()
+        awaitTextTurnCount(gemini, 1)
+        assertEquals(1, gemini.textTurns.size)
+        assertEquals(sessionId, gemini.textTurns.single().first)
+        assertTrue(gemini.textTurns.single().second.contains("scoped answer"))
     }
 
     @Test

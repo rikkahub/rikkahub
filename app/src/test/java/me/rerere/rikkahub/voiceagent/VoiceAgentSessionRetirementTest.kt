@@ -9,7 +9,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
+import me.rerere.rikkahub.voiceagent.hermes.HermesToolRecordWriter
+import me.rerere.rikkahub.voiceagent.hermes.VoiceToolRecordStatus
 import me.rerere.rikkahub.voiceagent.hermes.hermesQueueRecords
 import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesResponse
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
@@ -18,10 +21,86 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlin.uuid.Uuid
 
 class VoiceAgentSessionRetirementTest {
+    @Test
+    fun `call session rejects stale attachment before activation and replacement replays once`() = runTest {
+        val writer = HermesToolRecordWriter()
+        val conversationStore = FakeVoiceConversationStore(
+            writer.upsertHermesTool(
+                conversation = Conversation.ofId(Uuid.random()),
+                callId = "call-activation-race",
+                prompt = "activation race",
+                status = VoiceToolRecordStatus.Complete("preserved activation answer"),
+                jobId = "job-activation-race",
+                announceOnWrite = false,
+            )
+        )
+        val sessionApi = FakeVoiceSessionApi()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val audio = FakeVoiceAudioEngine()
+        val diagnostics = VoiceDiagnostics()
+        val firstAttachmentPreparing = CountDownLatch(1)
+        val releaseFirstAttachment = CountDownLatch(1)
+        val blockFirstClock = AtomicBoolean(true)
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = sessionApi,
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = audio,
+            conversationStore = conversationStore,
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList())
+            ),
+            diagnostics = diagnostics,
+            hermesAnnouncementNowMs = {
+                if (blockFirstClock.compareAndSet(true, false)) {
+                    firstAttachmentPreparing.countDown()
+                    releaseFirstAttachment.await(1, TimeUnit.SECONDS)
+                }
+                System.currentTimeMillis()
+            },
+            scope = CoroutineScope(coroutineContext + Dispatchers.Default),
+        )
+
+        try {
+            session.start()
+            assertTrue(firstAttachmentPreparing.await(500, TimeUnit.MILLISECONDS))
+            assertEquals(0, audio.startCaptureCalls)
+            assertEquals(null, audio.playbackSessionId)
+
+            session.reconnect()
+            assertEquals(0, audio.startCaptureCalls)
+            assertEquals(null, audio.playbackSessionId)
+            releaseFirstAttachment.countDown()
+
+            gemini.awaitConnectCount(2)
+            withTimeout(500) {
+                while (gemini.textTurns.none { it.second.contains("preserved activation answer") }) {
+                    delay(10)
+                }
+            }
+
+            assertEquals(1, audio.startCaptureCalls)
+            assertEquals(3L, audio.playbackSessionId)
+            assertEquals(1, gemini.textTurns.count { it.second.contains("preserved activation answer") })
+            assertTrue(gemini.textTurns.single().first == 3L)
+            assertTrue(
+                diagnostics.events.value.any {
+                    it.name == "stale_hermes_bridge_attach" && it.detail == "sessionId=1"
+                }
+            )
+        } finally {
+            releaseFirstAttachment.countDown()
+            session.closeNow()
+        }
+    }
+
     @Test
     fun `retirement rejects attachment admitted after an earlier ownership check`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()

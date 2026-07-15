@@ -42,6 +42,7 @@ class VoiceAgentCallSession internal constructor(
     private val reconnectPolicy: VoiceReconnectPolicy = VoiceReconnectPolicy(),
     private val nowMs: () -> Long = ::defaultReconnectClockMs,
     private val metadataEpochNowMs: () -> Long = System::currentTimeMillis,
+    hermesAnnouncementNowMs: () -> Long = System::currentTimeMillis,
     private val scope: CoroutineScope,
 ) : ManagedVoiceCallSession {
     constructor(
@@ -83,6 +84,7 @@ class VoiceAgentCallSession internal constructor(
         observability = observability,
         traceContext = traceContext,
         conversationStore = conversationStore,
+        hermesAnnouncementNowMs = hermesAnnouncementNowMs,
         writeVoiceE2EArtifact = voiceE2EArtifacts::write,
         scope = scope,
     )
