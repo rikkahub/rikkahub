@@ -1,7 +1,10 @@
 package me.rerere.rikkahub.voiceagent
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
@@ -184,6 +187,50 @@ class VoiceAgentCallStartupTest {
     }
 
     @Test
+    fun `throwing stale disconnect still consumes old attempt without touching newer active attempt`() = runTest {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val oldAttempt = registry.beginAttempt()
+        val disconnectError = IllegalStateException("old Telecom disconnect failed")
+        val oldCall = BlockingThrowingFakeTelecomCall(disconnectError)
+        assertTrue(registry.activate(oldAttempt, oldCall))
+        registry.acknowledgeOutcome(oldAttempt)
+        val oldResolution = VoiceAgentAudioRouteResolution(
+            owner = VoiceAudioRouteOwner.Telecom,
+            telecomAttemptId = oldAttempt,
+        )
+        val factory = StartupFakeCallFactory(StartupFakeManagedSession())
+        val manager = VoiceAgentCallManager(factory)
+        val startup = VoiceAgentCallStartup(manager, registry) { oldResolution }
+        val staleStartup = async(Dispatchers.Default) {
+            startup.start(Uuid.random(), fakeLaunchConfig(), this@runTest) { false }
+        }
+
+        assertTrue(oldCall.disconnectEntered.await(1, TimeUnit.SECONDS))
+        try {
+            val newerAttempt = registry.beginAttempt()
+            val newerCall = FakeTelecomCall()
+            assertTrue(registry.activate(newerAttempt, newerCall))
+
+            oldCall.releaseDisconnect.countDown()
+            val thrown = runCatching { staleStartup.await() }.exceptionOrNull()
+
+            assertTrue(thrown is IllegalStateException)
+            assertEquals(disconnectError.message, thrown?.message)
+            assertEquals(emptyList<StartupCreatedCall>(), factory.created)
+            assertEquals(null, manager.activeConversationId.value)
+            assertEquals(1, oldCall.disconnectCalls)
+            assertFalse(registry.hasAttemptRecord(oldAttempt))
+            assertEquals(0, newerCall.disconnectCalls)
+            assertTrue(registry.hasActiveConnection())
+            assertTrue(registry.hasAttemptRecord(newerAttempt))
+            assertEquals(VoiceAgentTelecomOutcome.Active, registry.observeOutcome(newerAttempt))
+            registry.acknowledgeOutcome(newerAttempt)
+        } finally {
+            oldCall.releaseDisconnect.countDown()
+        }
+    }
+
+    @Test
     fun `stale retained Telecom resolution has no attempt and leaves claimed call connected`() = runTest {
         val registry = VoiceAgentTelecomCallRegistry()
         val attempt = registry.beginAttempt()
@@ -268,6 +315,21 @@ private class FakeTelecomCall : VoiceAgentTelecomCall {
 
     override fun disconnectFromApp() {
         disconnectCalls += 1
+    }
+}
+
+private class BlockingThrowingFakeTelecomCall(
+    private val disconnectError: Throwable,
+) : VoiceAgentTelecomCall {
+    val disconnectEntered = CountDownLatch(1)
+    val releaseDisconnect = CountDownLatch(1)
+    var disconnectCalls = 0
+
+    override fun disconnectFromApp() {
+        disconnectCalls += 1
+        disconnectEntered.countDown()
+        check(releaseDisconnect.await(1, TimeUnit.SECONDS)) { "timed out waiting to throw disconnect error" }
+        throw disconnectError
     }
 }
 

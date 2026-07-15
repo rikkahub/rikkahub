@@ -39,14 +39,23 @@ class VoiceAgentCallStartup internal constructor(
         if (!isCurrent()) {
             resolution.telecomAttemptId?.let { attemptId ->
                 withContext(NonCancellable) {
-                    telecomRegistry.retireAttempt(
-                        attemptId,
-                        VoiceAgentTelecomFailure(
-                            diagnosticName = "telecom_startup_stale",
-                            detail = "Telecom startup attempt ${attemptId.value} became stale",
-                        ),
-                    )
-                    telecomRegistry.awaitOutcome(attemptId)
+                    val retirementError = runCatching {
+                        telecomRegistry.retireAttempt(
+                            attemptId,
+                            VoiceAgentTelecomFailure(
+                                diagnosticName = "telecom_startup_stale",
+                                detail = "Telecom startup attempt ${attemptId.value} became stale",
+                            ),
+                        )
+                    }.exceptionOrNull()
+                    val acknowledgementError = runCatching {
+                        telecomRegistry.awaitOutcome(attemptId)
+                    }.exceptionOrNull()
+                    retirementError?.let { error ->
+                        acknowledgementError?.let(error::addSuppressed)
+                        throw error
+                    }
+                    acknowledgementError?.let { throw it }
                 }
             }
             return VoiceAgentCallStartupResult.Stale(resolution)
