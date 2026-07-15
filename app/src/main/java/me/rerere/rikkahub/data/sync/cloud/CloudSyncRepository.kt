@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
@@ -27,6 +28,8 @@ import me.rerere.rikkahub.data.db.dao.SyncStateDAO
 import me.rerere.rikkahub.data.db.entity.SyncEntityRevisionEntity
 import me.rerere.rikkahub.data.db.entity.SyncOutboxEntity
 import me.rerere.rikkahub.data.db.entity.SyncStateEntity
+import me.rerere.rikkahub.data.event.AppEvent
+import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.utils.JsonInstant
 import okhttp3.OkHttpClient
@@ -58,6 +61,7 @@ class CloudSyncRepository(
     private val revisionDao: SyncEntityRevisionDAO,
     private val settingsStore: SettingsStore,
     private val okHttpClient: OkHttpClient,
+    private val appEventBus: AppEventBus,
 ) {
     // Set after Koin creates domain sync helpers to avoid ctor cycles.
     var settingsDomainSync: SettingsDomainSync? = null
@@ -69,6 +73,7 @@ class CloudSyncRepository(
     var fileDomainSync: FileDomainSync? = null
     private val syncMutex = Mutex()
     private var pendingSyncJob: Job? = null
+    private var foregroundPollingJob: Job? = null
     @Volatile
     private var syncRescheduleRequested = false
     @Volatile
@@ -146,6 +151,39 @@ class CloudSyncRepository(
                 }
             }
         }
+    }
+
+    /**
+     * Keep an active device current while the app is visible. The initial request
+     * runs the full repair/reconcile cycle; later polls only push the outbox and
+     * pull the change log, so idle polling stays cheap.
+     */
+    fun startForegroundSyncPolling() {
+        if (foregroundPollingJob?.isActive == true) return
+        foregroundPollingJob = appScope.launch {
+            // Let Settings/DataStore settle briefly after process start.
+            delay(FOREGROUND_INITIAL_SYNC_DELAY_MS)
+            requestSync()
+            while (isActive) {
+                delay(FOREGROUND_SYNC_POLL_INTERVAL_MS)
+                when (val outcome = runIncrementalSyncCycle()) {
+                    is CloudSyncOutcome.Retryable -> {
+                        Log.w(TAG, "foreground incremental sync retryable: ${outcome.message}")
+                        CloudSyncWorker.enqueue(appContext)
+                    }
+                    is CloudSyncOutcome.Failed -> {
+                        Log.w(TAG, "foreground incremental sync failed: ${outcome.message}")
+                    }
+                    CloudSyncOutcome.Success -> Log.d(TAG, "foreground incremental sync ok")
+                    CloudSyncOutcome.Skipped -> Unit
+                }
+            }
+        }
+    }
+
+    fun stopForegroundSyncPolling() {
+        foregroundPollingJob?.cancel()
+        foregroundPollingJob = null
     }
 
     /**
@@ -535,6 +573,67 @@ class CloudSyncRepository(
         }
     }
 
+    /** Lightweight foreground cycle: no bootstrap reconciliation or file scan. */
+    private suspend fun runIncrementalSyncCycle(): CloudSyncOutcome {
+        if (!syncMutex.tryLock()) {
+            Log.d(TAG, "incremental sync skipped; sync cycle already running")
+            return CloudSyncOutcome.Skipped
+        }
+        return try {
+            val state = ensureState()
+            val mode = SyncMode.fromStorage(state.syncMode)
+            if (mode != SyncMode.AUTO) return CloudSyncOutcome.Skipped
+
+            val settings = settingsStore.settingsFlow.value
+            val config = settings.perryConfig
+            val token = settings.perryDeviceToken
+            if (!config.isConfigured() || token.isBlank() || state.deviceId.isNullOrBlank()) {
+                return CloudSyncOutcome.Skipped
+            }
+
+            withContext(Dispatchers.IO) {
+                val client = PerryApiClient(
+                    okHttpClient,
+                    config.normalizedBaseUrl(),
+                    deviceToken = token,
+                )
+                pushOutbox(client, state.deviceId)
+                pullChanges(client)
+                val now = System.currentTimeMillis()
+                stateDao.updateCursor(
+                    cursor = ensureState().changeCursor,
+                    lastSuccessAt = now,
+                    updatedAt = now,
+                )
+                _connectionStatus.value = ConnectionStatus.ONLINE
+                CloudSyncOutcome.Success
+            }
+        } catch (e: PerryApiException) {
+            Log.w(TAG, "incremental sync failed: ${e.code} ${e.message}")
+            stateDao.updateError(e.message, System.currentTimeMillis())
+            when (e.httpStatus) {
+                401, 403 -> {
+                    _connectionStatus.value = ConnectionStatus.AUTH_REQUIRED
+                    CloudSyncOutcome.Failed(e.message ?: e.code)
+                }
+                409 -> CloudSyncOutcome.Failed(e.message ?: "conflict")
+                else -> CloudSyncOutcome.Retryable(e.message ?: e.code)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            Log.w(TAG, "incremental sync network error: ${e.message}")
+            stateDao.updateError(e.message, System.currentTimeMillis())
+            CloudSyncOutcome.Retryable(e.message ?: "network error")
+        } catch (e: Exception) {
+            Log.e(TAG, "incremental sync cycle failed", e)
+            stateDao.updateError(e.message, System.currentTimeMillis())
+            CloudSyncOutcome.Retryable(e.message ?: "sync error")
+        } finally {
+            syncMutex.unlock()
+        }
+    }
+
     private suspend fun runSyncCycleLocked(): CloudSyncOutcome {
         val state = ensureState()
         val mode = SyncMode.fromStorage(state.syncMode)
@@ -592,6 +691,7 @@ class CloudSyncRepository(
                 runCatching {
                     val snap = client.bootstrap()
                     reconcileSettingsAndAssistants(snap)
+                    reconcileConversations(snap, client)
                     Log.i(
                         TAG,
                         "reconcile bootstrap: settings=${snap.settings.size} " +
@@ -773,12 +873,8 @@ class CloudSyncRepository(
             }
             }
             Log.i(TAG, "pushOutbox result applied=$applied conflicts=$conflicts rejected=$rejected")
-            if (response.cursor > 0) {
-                val st = ensureState()
-                if (response.cursor > st.changeCursor) {
-                    stateDao.upsert(st.copy(changeCursor = response.cursor, updatedAt = now))
-                }
-            }
+            // The mutation cursor is the server's global head, not proof that this
+            // device applied all preceding changes. Only pullChanges may advance it.
             // Continue loop if more ready items appeared (or batch was full).
             if (batch.size < 50 && applied == 0 && conflicts == 0) break
         }
@@ -885,6 +981,66 @@ class CloudSyncRepository(
         }
     }
 
+    /**
+     * Bootstrap is also a repair index for clients affected by the former mutation
+     * cursor bug. A newer conversation revision means its node change-log entries
+     * may have been skipped, so reload that conversation's complete node snapshot.
+     */
+    private suspend fun reconcileConversations(
+        bootstrap: SyncBootstrapResponse,
+        client: PerryApiClient,
+    ) {
+        val changedIds = mutableSetOf<String>()
+        withRemoteApply {
+            bootstrap.conversations.forEach { element ->
+                val obj = element as? JsonObject ?: return@forEach
+                val id = (obj["id"] as? JsonPrimitive)?.contentOrNull ?: return@forEach
+                val remoteRevision = (obj["revision"] as? JsonPrimitive)
+                    ?.contentOrNull
+                    ?.toLongOrNull()
+                    ?: return@forEach
+                val localRevision = revisionDao
+                    .get(ConversationDomainSync.ENTITY_CONVERSATION, id)
+                    ?.revision
+                    ?: 0L
+                val body = obj["payload"] as? JsonObject
+                val remoteNodeIds = (body?.get("node_ids") as? kotlinx.serialization.json.JsonArray)
+                    ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+                val localNodeIds = remoteNodeIds?.let {
+                    messageNodeDomainSync?.getLocalNodeIds(id)
+                }
+                val nodeSetMismatch = remoteNodeIds != null &&
+                    remoteNodeIds.toSet() != localNodeIds?.toSet()
+                if (remoteRevision <= localRevision && !nodeSetMismatch) return@forEach
+                if (hasPendingOutbox(ConversationDomainSync.ENTITY_CONVERSATION, id)) {
+                    Log.d(TAG, "reconcile skip conversation $id; local outbox pending")
+                    return@forEach
+                }
+
+                conversationDomainSync?.applyRemotePayload(
+                    entityId = id,
+                    operation = "upsert",
+                    payload = obj,
+                    revision = remoteRevision,
+                )
+                messageNodeDomainSync?.hydrateConversationSnapshot(
+                    client = client,
+                    conversationId = id,
+                    expectedNodeIds = remoteNodeIds?.toSet(),
+                )
+                changedIds += id
+                Log.i(
+                    TAG,
+                    "reconciled conversation $id rev=$remoteRevision (was $localRevision) " +
+                        "nodeSetMismatch=$nodeSetMismatch",
+                )
+            }
+        }
+        if (changedIds.isNotEmpty()) {
+            appEventBus.emit(AppEvent.ConversationsSynced(changedIds))
+        }
+    }
+
     private suspend fun applyBootstrap(bootstrap: SyncBootstrapResponse) {
         withRemoteApply {
             var settings = settingsStore.settingsFlow.value
@@ -985,6 +1141,7 @@ class CloudSyncRepository(
     }
 
     private suspend fun applyChangeBatch(changes: List<SyncChangeItem>) {
+        val changedConversationIds = mutableSetOf<String>()
         withRemoteApply {
             var settings = settingsStore.settingsFlow.value
             var assistants = settings.assistants.toMutableList()
@@ -1064,6 +1221,7 @@ class CloudSyncRepository(
                             revision = change.revision,
                         )
                         rememberRevision(change.entityType, change.entityId, change.revision)
+                        changedConversationIds += change.entityId
                     }
                     MessageNodeDomainSync.ENTITY_MESSAGE_NODE -> {
                         messageNodeDomainSync?.applyRemotePayload(
@@ -1073,6 +1231,11 @@ class CloudSyncRepository(
                             revision = change.revision,
                         )
                         rememberRevision(change.entityType, change.entityId, change.revision)
+                        val root = change.payload as? JsonObject
+                        val body = root?.get("payload") as? JsonObject ?: root
+                        (body?.get("conversation_id") as? JsonPrimitive)
+                            ?.contentOrNull
+                            ?.let(changedConversationIds::add)
                     }
                     MemoryDomainSync.ENTITY_MEMORY -> {
                         memoryDomainSync?.applyRemotePayload(
@@ -1106,6 +1269,9 @@ class CloudSyncRepository(
             if (dirty) {
                 settingsStore.update(settings.copy(assistants = assistants))
             }
+        }
+        if (changedConversationIds.isNotEmpty()) {
+            appEventBus.emit(AppEvent.ConversationsSynced(changedConversationIds))
         }
     }
 
@@ -1237,5 +1403,7 @@ class CloudSyncRepository(
     companion object {
         private const val TAG = "CloudSyncRepository"
         private const val SYNC_DEBOUNCE_MS = 800L
+        private const val FOREGROUND_INITIAL_SYNC_DELAY_MS = 400L
+        private const val FOREGROUND_SYNC_POLL_INTERVAL_MS = 10_000L
     }
 }

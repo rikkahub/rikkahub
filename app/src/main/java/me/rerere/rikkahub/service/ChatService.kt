@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -153,6 +154,28 @@ class ChatService(
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val _sessionsVersion = MutableStateFlow(0L)
+
+    init {
+        appScope.launch {
+            appEventBus.events
+                .filterIsInstance<AppEvent.ConversationsSynced>()
+                .collect { event ->
+                    event.conversationIds.forEach { rawId ->
+                        val id = runCatching { Uuid.parse(rawId) }.getOrNull() ?: return@forEach
+                        val session = sessions[id] ?: return@forEach
+                        if (session.getJob()?.isActive == true) {
+                            Log.d(TAG, "skip synced reload for active generation: $id")
+                            return@forEach
+                        }
+                        conversationRepo.getConversationById(id)?.let { synced ->
+                            conversationRepo.reindexConversation(synced)
+                            updateConversation(id, synced)
+                            Log.d(TAG, "reloaded synced conversation: $id")
+                        }
+                    }
+                }
+        }
+    }
 
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())

@@ -265,3 +265,130 @@ async def test_message_node_index_conflict_tombstones_other(
     items = listed.json()["items"]
     assert len(items) == 1
     assert items[0]["id"] == node_b
+
+
+@pytest.mark.asyncio
+async def test_conversation_node_ids_prune_removed_nodes(
+    client: AsyncClient,
+    bootstrap_headers: dict[str, str],
+) -> None:
+    device = await _register(client, bootstrap_headers, "dev-node-prune")
+    headers = _auth(device["device_token"])
+    conv_id = str(uuid4())
+    assistant_id = str(uuid4())
+    node_ids = [str(uuid4()), str(uuid4())]
+    await _create_conversation(client, headers, device["device_id"], conv_id, assistant_id)
+
+    for index, node_id in enumerate(node_ids):
+        response = await client.post(
+            "/v1/sync/mutations",
+            json={
+                "device_id": device["device_id"],
+                "mutations": [
+                    {
+                        "mutation_id": str(uuid4()),
+                        "entity_type": "message_node",
+                        "entity_id": node_id,
+                        "operation": "upsert",
+                        "base_revision": 0,
+                        "payload": {
+                            "payload": {
+                                "conversation_id": conv_id,
+                                "node_index": index,
+                                "select_index": 0,
+                                "messages": [{"role": "user", "parts": []}],
+                            }
+                        },
+                    }
+                ],
+            },
+            headers=headers,
+        )
+        assert response.json()["results"][0]["status"] == "applied"
+
+    legacy_update = await client.post(
+        "/v1/sync/mutations",
+        json={
+            "device_id": device["device_id"],
+            "mutations": [
+                {
+                    "mutation_id": str(uuid4()),
+                    "entity_type": "conversation",
+                    "entity_id": conv_id,
+                    "operation": "upsert",
+                    "base_revision": 1,
+                    "payload": {
+                        "payload": {
+                            "assistant_id": assistant_id,
+                            "title": "Legacy client metadata update",
+                            "create_at_ms": 1000,
+                            "update_at_ms": 2000,
+                            "is_pinned": False,
+                            "folder_id": "",
+                            "sync_enabled": True,
+                        }
+                    },
+                }
+            ],
+        },
+        headers=headers,
+    )
+    assert legacy_update.json()["results"][0]["status"] == "applied"
+    before_prune = await client.get(f"/v1/conversations/{conv_id}/nodes", headers=headers)
+    assert {item["id"] for item in before_prune.json()["items"]} == set(node_ids)
+
+    replacement_id = str(uuid4())
+    compressed = await client.post(
+        "/v1/sync/mutations",
+        json={
+            "device_id": device["device_id"],
+            "mutations": [
+                {
+                    "mutation_id": str(uuid4()),
+                    "entity_type": "conversation",
+                    "entity_id": conv_id,
+                    "operation": "upsert",
+                    "base_revision": 2,
+                    "payload": {
+                        "payload": {
+                            "assistant_id": assistant_id,
+                            "title": "Compressed",
+                            "create_at_ms": 1000,
+                            "update_at_ms": 3000,
+                            "is_pinned": False,
+                            "folder_id": "",
+                            "sync_enabled": True,
+                            "node_ids": [node_ids[1], replacement_id],
+                        }
+                    },
+                },
+                {
+                    "mutation_id": str(uuid4()),
+                    "entity_type": "message_node",
+                    "entity_id": replacement_id,
+                    "operation": "upsert",
+                    "base_revision": 0,
+                    "payload": {
+                        "payload": {
+                            "conversation_id": conv_id,
+                            "node_index": 2,
+                            "select_index": 0,
+                            "messages": [{"role": "assistant", "parts": []}],
+                        }
+                    },
+                },
+            ],
+        },
+        headers=headers,
+    )
+    assert [result["status"] for result in compressed.json()["results"]] == [
+        "applied",
+        "applied",
+    ]
+
+    listed = await client.get(f"/v1/conversations/{conv_id}/nodes", headers=headers)
+    assert [item["id"] for item in listed.json()["items"]] == [node_ids[1], replacement_id]
+
+    bootstrap = await client.get("/v1/sync/bootstrap", headers=headers)
+    conversation = next(item for item in bootstrap.json()["conversations"] if item["id"] == conv_id)
+    assert conversation["payload"]["node_ids"] == [node_ids[1], replacement_id]

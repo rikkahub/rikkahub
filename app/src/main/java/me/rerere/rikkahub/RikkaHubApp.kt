@@ -101,16 +101,12 @@ class RikkaHubApp : Application() {
     private fun registerCloudSyncOnForeground() {
         ProcessLifecycleOwner.get().lifecycle.addObserver(
             LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_START) {
-                    get<AppScope>().launch {
-                        runCatching {
-                            // Let Settings/DataStore settle briefly after process start.
-                            delay(400)
-                            get<CloudSyncRepository>().requestSync()
-                        }.onFailure {
-                            Log.e(TAG, "foreground cloud sync failed", it)
-                        }
-                    }
+                when (event) {
+                    Lifecycle.Event.ON_START -> get<CloudSyncRepository>()
+                        .startForegroundSyncPolling()
+                    Lifecycle.Event.ON_STOP -> get<CloudSyncRepository>()
+                        .stopForegroundSyncPolling()
+                    else -> Unit
                 }
             }
         )

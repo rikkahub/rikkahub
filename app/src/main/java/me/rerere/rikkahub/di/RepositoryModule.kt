@@ -110,6 +110,7 @@ val repositoryModule = module {
             revisionDao = get(),
             settingsStore = get(),
             okHttpClient = get(),
+            appEventBus = get(),
         )
     }
 
@@ -155,6 +156,7 @@ val repositoryModule = module {
             revisionDao = get(),
             messageNodeDAO = get(),
             conversationDAO = get(),
+            database = get(),
         )
         get<CloudSyncRepository>().messageNodeDomainSync = domain
         get<ConversationRepository>().messageNodeDomainSync = domain

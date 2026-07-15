@@ -295,7 +295,10 @@ class ConversationRepository(
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
         messageFtsManager.indexConversation(conversation)
-        conversationDomainSync?.enqueueUpsert(entity)
+        conversationDomainSync?.enqueueUpsert(
+            entity,
+            conversation.messageNodes.map { it.id.toString() },
+        )
         messageNodeDomainSync?.enqueueConversationNodes(
             conversationId = conversation.id.toString(),
             nodes = conversation.messageNodes,
@@ -312,7 +315,10 @@ class ConversationRepository(
             saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
         }
         messageFtsManager.indexConversation(conversation)
-        conversationDomainSync?.enqueueUpsert(entity)
+        conversationDomainSync?.enqueueUpsert(
+            entity,
+            conversation.messageNodes.map { it.id.toString() },
+        )
         // Stable save point: enqueue full node set (includes branches).
         messageNodeDomainSync?.enqueueConversationNodes(
             conversationId = conversation.id.toString(),
@@ -349,6 +355,10 @@ class ConversationRepository(
         keyword: String,
         sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
     ) = messageFtsManager.search(keyword, sort)
+
+    suspend fun reindexConversation(conversation: Conversation) {
+        messageFtsManager.indexConversation(conversation)
+    }
 
     suspend fun rebuildAllIndexes(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }) {
         messageFtsManager.deleteAll()

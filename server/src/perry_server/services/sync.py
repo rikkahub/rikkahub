@@ -350,6 +350,13 @@ def _extract_conversation_fields(payload: dict[str, Any]) -> dict[str, Any]:
         if "lorebook_ids" in src
         else src.get("lorebookIds") or [],
     }
+    node_ids_raw = src.get("node_ids") if "node_ids" in src else src.get("nodeIds")
+    node_ids = None
+    if node_ids_raw is not None:
+        if not isinstance(node_ids_raw, list):
+            raise ValueError("node_ids must be a list")
+        node_ids = [UUID(str(value)) for value in node_ids_raw]
+        stored["node_ids"] = [str(value) for value in node_ids]
     return {
         "assistant_id": UUID(assistant_id),
         "title": title,
@@ -359,6 +366,7 @@ def _extract_conversation_fields(payload: dict[str, Any]) -> dict[str, Any]:
         "folder_id": folder_id,
         "sync_enabled": sync_enabled,
         "payload_json": json.dumps(stored, ensure_ascii=False, separators=(",", ":")),
+        "node_ids": node_ids,
     }
 
 
@@ -1202,6 +1210,13 @@ async def _apply_conversation_mutation(
     conversation.updated_by_device = device_id
     conversation.deleted_at = None
     await session.flush()
+    await _prune_conversation_nodes(
+        session,
+        user_id=user_id,
+        device_id=device_id,
+        conversation_id=conversation_id,
+        keep_ids=fields["node_ids"],
+    )
     await _append_change(
         session,
         user_id=user_id,
@@ -1220,6 +1235,45 @@ async def _apply_conversation_mutation(
         revision=conversation.revision,
         server_payload=_conversation_payload(conversation),
     )
+
+
+async def _prune_conversation_nodes(
+    session: AsyncSession,
+    *,
+    user_id: UUID,
+    device_id: UUID,
+    conversation_id: UUID,
+    keep_ids: list[UUID] | None,
+) -> None:
+    """Apply the client's authoritative node set after whole-conversation saves."""
+    if keep_ids is None:
+        return
+    keep = set(keep_ids)
+    result = await session.execute(
+        select(MessageNode).where(
+            MessageNode.user_id == user_id,
+            MessageNode.conversation_id == conversation_id,
+            MessageNode.deleted_at.is_(None),
+        )
+    )
+    for node in result.scalars().all():
+        if node.id in keep:
+            continue
+        node.revision += 1
+        node.deleted_at = _now()
+        node.updated_at = _now()
+        node.updated_by_device = device_id
+        await session.flush()
+        await _append_change(
+            session,
+            user_id=user_id,
+            device_id=device_id,
+            entity_type="message_node",
+            entity_id=str(node.id),
+            operation="delete",
+            revision=node.revision,
+            payload=_message_node_payload(node),
+        )
 
 
 async def _apply_message_node_mutation(

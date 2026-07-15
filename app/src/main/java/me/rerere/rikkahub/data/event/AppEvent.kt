@@ -7,6 +7,9 @@ sealed class AppEvent {
     data class Speak(val text: String) : AppEvent()
     data object OpenUsageAccessSettings : AppEvent()
 
+    /** Remote sync changed persisted conversation data; active idle sessions must reload it. */
+    data class ConversationsSynced(val conversationIds: Set<String>) : AppEvent()
+
     /** MCP OAuth 授权完成后经 deep link 回传的结果。 */
     data class McpOAuthCallback(
         val state: String?,

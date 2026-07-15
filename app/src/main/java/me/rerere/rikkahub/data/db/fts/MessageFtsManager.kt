@@ -66,17 +66,19 @@ class MessageFtsManager(private val database: AppDatabase) {
         keyword: String,
         sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
     ): List<MessageSearchResult> = withContext(Dispatchers.IO) {
+        val query = keyword.toFtsLiteralQuery()
+        if (query.isEmpty()) return@withContext emptyList()
         val results = mutableListOf<MessageSearchResult>()
         val cursor = db.query(
             """
             SELECT node_id, message_id, conversation_id, title, update_at,
                    simple_snippet(message_fts, 0, '[', ']', '...', 30) AS snippet
             FROM message_fts
-            WHERE text MATCH jieba_query(?)
+            WHERE text MATCH ?
             ORDER BY ${sort.orderBy}
             LIMIT 50
             """.trimIndent(),
-            arrayOf(keyword)
+            arrayOf(query)
         )
         Log.i(TAG, "search: $keyword")
         cursor.use {
@@ -96,6 +98,13 @@ class MessageFtsManager(private val database: AppDatabase) {
         results
     }
 }
+
+/** Treat every whitespace-delimited search term as text, never as FTS5 syntax. */
+internal fun String.toFtsLiteralQuery(): String =
+    trim()
+        .split(Regex("\\s+"))
+        .filter(String::isNotEmpty)
+        .joinToString(" AND ") { term -> "\"${term.replace("\"", "\"\"")}\"" }
 
 private fun UIMessage.extractFtsText(): String =
     parts.filterIsInstance<UIMessagePart.Text>()

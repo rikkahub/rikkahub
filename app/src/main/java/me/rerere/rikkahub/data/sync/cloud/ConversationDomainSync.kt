@@ -24,12 +24,15 @@ class ConversationDomainSync(
     private val revisionDao: SyncEntityRevisionDAO,
     private val conversationDAO: ConversationDAO,
 ) {
-    suspend fun enqueueUpsert(entity: ConversationEntity) {
+    suspend fun enqueueUpsert(
+        entity: ConversationEntity,
+        nodeIds: List<String>? = null,
+    ) {
         if (cloudSyncRepository.isSuppressingLocalEnqueue) return
         if (!entity.syncEnabled) return
         val rev = revisionDao.get(ENTITY_CONVERSATION, entity.id)?.revision
             ?: entity.remoteRevision
-        val payload = buildMutationPayload(entity)
+        val payload = buildMutationPayload(entity, nodeIds)
         val mutationId = cloudSyncRepository.enqueueMutation(
             entityType = ENTITY_CONVERSATION,
             entityId = entity.id,
@@ -193,7 +196,10 @@ class ConversationDomainSync(
         return runCatching { JsonInstant.encodeToString(element) }.getOrDefault("[]")
     }
 
-    private fun buildMutationPayload(entity: ConversationEntity): JsonObject {
+    private fun buildMutationPayload(
+        entity: ConversationEntity,
+        nodeIds: List<String>? = null,
+    ): JsonObject {
         val modeIds = runCatching {
             JsonInstant.decodeFromString<List<String>>(entity.modeInjectionIds)
         }.getOrDefault(emptyList())
@@ -224,6 +230,12 @@ class ConversationDomainSync(
                 "lorebook_ids",
                 buildJsonArray { loreIds.forEach { add(JsonPrimitive(it)) } },
             )
+            if (nodeIds != null) {
+                put(
+                    "node_ids",
+                    buildJsonArray { nodeIds.forEach { add(JsonPrimitive(it)) } },
+                )
+            }
         }
         return buildJsonObject {
             put("payload", body)

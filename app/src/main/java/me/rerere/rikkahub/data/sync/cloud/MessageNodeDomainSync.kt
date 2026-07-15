@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.sync.cloud
 
 import android.util.Log
+import androidx.room.withTransaction
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -9,6 +10,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.dao.SyncEntityRevisionDAO
@@ -26,7 +28,11 @@ class MessageNodeDomainSync(
     private val revisionDao: SyncEntityRevisionDAO,
     private val messageNodeDAO: MessageNodeDAO,
     private val conversationDAO: ConversationDAO,
+    private val database: AppDatabase,
 ) {
+    suspend fun getLocalNodeIds(conversationId: String): List<String> =
+        messageNodeDAO.getIdsByConversation(conversationId)
+
     suspend fun enqueueUpsert(
         conversationId: String,
         nodeIndex: Int,
@@ -98,44 +104,93 @@ class MessageNodeDomainSync(
             val parent = conversationDAO.getConversationById(conversationId) ?: continue
             if (!parent.syncEnabled || parent.deletedAt != null) continue
             if (messageNodeDAO.countByConversation(conversationId) > 0) continue
-            var beforeIndex: Int? = null
-            var pages = 0
-            var gotAny = false
-            while (pages < 40) {
-                pages++
-                val page = client.listMessageNodes(
-                    conversationId = conversationId,
-                    beforeIndex = beforeIndex,
-                    limit = 200,
-                )
-                if (page.items.isEmpty()) break
-                gotAny = true
-                for (item in page.items) {
-                    if (item.deletedAt != null) continue
-                    val payload = buildJsonObject {
-                        put("conversation_id", JsonPrimitive(item.conversationId))
-                        put("node_index", JsonPrimitive(item.nodeIndex))
-                        put("select_index", JsonPrimitive(item.selectIndex))
-                        put("messages", item.messages ?: JsonArray(emptyList()))
-                    }
-                    applyRemotePayload(
-                        entityId = item.id,
-                        operation = "upsert",
-                        payload = payload,
-                        revision = item.revision,
-                    )
-                    hydratedNodes++
-                }
-                if (!page.hasMore) break
-                beforeIndex = page.oldestIndex ?: page.items.minOfOrNull { it.nodeIndex } ?: break
-            }
-            if (gotAny) hydratedConversations++
+            val items = downloadConversationSnapshot(client, conversationId)
+            if (items.isEmpty()) continue
+            replaceConversationSnapshot(conversationId, items)
+            hydratedConversations++
+            hydratedNodes += items.size
         }
         if (hydratedConversations > 0) {
             Log.i(
                 TAG,
                 "hydrated nodes conversations=$hydratedConversations nodes=$hydratedNodes",
             )
+        }
+    }
+
+    /**
+     * Replace one local conversation body from the authoritative server snapshot.
+     * Used to repair devices whose cursor was advanced by the old mutation-head bug.
+     */
+    suspend fun hydrateConversationSnapshot(
+        client: PerryApiClient,
+        conversationId: String,
+        expectedNodeIds: Set<String>? = null,
+    ): Int {
+        val parent = conversationDAO.getConversationById(conversationId) ?: return 0
+        if (!parent.syncEnabled || parent.deletedAt != null) return 0
+
+        val items = downloadConversationSnapshot(client, conversationId)
+        val actualNodeIds = items.mapTo(mutableSetOf()) { it.id }
+        check(expectedNodeIds == null || actualNodeIds == expectedNodeIds) {
+            "conversation $conversationId snapshot does not match bootstrap node_ids " +
+                "(expected=${expectedNodeIds?.size}, actual=${actualNodeIds.size})"
+        }
+        replaceConversationSnapshot(conversationId, items)
+        Log.i(TAG, "hydrated conversation snapshot $conversationId nodes=${items.size}")
+        return items.size
+    }
+
+    private suspend fun downloadConversationSnapshot(
+        client: PerryApiClient,
+        conversationId: String,
+    ): List<MessageNodeDto> {
+        val items = linkedMapOf<String, MessageNodeDto>()
+        var beforeIndex: Int? = null
+        val seenCursors = mutableSetOf<Int>()
+        while (true) {
+            val page = client.listMessageNodes(
+                conversationId = conversationId,
+                beforeIndex = beforeIndex,
+                limit = 200,
+            )
+            page.items
+                .asSequence()
+                .filter { it.deletedAt == null }
+                .forEach { items[it.id] = it }
+            if (!page.hasMore) break
+            check(page.items.isNotEmpty()) {
+                "conversation $conversationId returned an empty page with has_more=true"
+            }
+            val nextCursor = page.oldestIndex ?: page.items.minOf { it.nodeIndex }
+            check(seenCursors.add(nextCursor) && nextCursor != beforeIndex) {
+                "conversation $conversationId snapshot pagination did not advance"
+            }
+            beforeIndex = nextCursor
+        }
+        return items.values.sortedBy { it.nodeIndex }
+    }
+
+    private suspend fun replaceConversationSnapshot(
+        conversationId: String,
+        items: List<MessageNodeDto>,
+    ) {
+        database.withTransaction {
+            messageNodeDAO.deleteByConversation(conversationId)
+            items.forEach { item ->
+                val payload = buildJsonObject {
+                    put("conversation_id", JsonPrimitive(item.conversationId))
+                    put("node_index", JsonPrimitive(item.nodeIndex))
+                    put("select_index", JsonPrimitive(item.selectIndex))
+                    put("messages", item.messages ?: JsonArray(emptyList()))
+                }
+                applyRemotePayload(
+                    entityId = item.id,
+                    operation = "upsert",
+                    payload = payload,
+                    revision = item.revision,
+                )
+            }
         }
     }
 
