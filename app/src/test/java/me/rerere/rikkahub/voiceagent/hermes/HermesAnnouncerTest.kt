@@ -470,6 +470,100 @@ class HermesAnnouncerTest {
         runCurrent()
     }
 
+    @Test
+    fun `registry event timestamps are evaluated outside the registry lock`() = runTest {
+        val observations = mutableListOf<Pair<String, Boolean>>()
+        lateinit var callbackOwner: HermesAnnouncer
+        var operation = ""
+        val clock = {
+            observations += operation to Thread.holdsLock(registryLock(callbackOwner))
+            testScheduler.currentTime
+        }
+        val scopedBridge = RecordingBridge()
+        val scopedAnnouncer = announcer(
+            queueStore = store(emptyConversation()),
+            nowMs = clock,
+        )
+        callbackOwner = scopedAnnouncer
+
+        operation = "attach-scoped"
+        scopedAnnouncer.attachScoped(scopedBridge, sessionId = 7L)
+        operation = "retire"
+        scopedAnnouncer.onGeminiSessionRetired()
+        operation = "detach"
+        scopedAnnouncer.detachScoped(scopedBridge)
+
+        val defaultAnnouncer = announcer(
+            queueStore = store(emptyConversation()),
+            defaultBridge = { RecordingBridge() },
+            nowMs = clock,
+        )
+        callbackOwner = defaultAnnouncer
+        operation = "attach-default"
+        defaultAnnouncer.attachDefaultIfNeeded()
+
+        assertEquals(
+            listOf(
+                "attach-scoped" to false,
+                "retire" to false,
+                "detach" to false,
+                "attach-default" to false,
+            ),
+            observations,
+        )
+    }
+
+    @Test
+    fun `scoped attach during default creation wins without a phantom default event`() = runTest {
+        val scoped = RecordingBridge()
+        val unusedDefaultCandidate = RecordingBridge()
+        lateinit var subject: HermesAnnouncer
+        var providerLockHeld: Boolean? = null
+        subject = announcer(
+            queueStore = store(emptyConversation()),
+            defaultBridge = {
+                providerLockHeld = Thread.holdsLock(registryLock(subject))
+                subject.attachScoped(scoped, sessionId = 7L)
+                unusedDefaultCandidate
+            },
+        )
+
+        subject.attachDefaultIfNeeded()
+        runCurrent()
+
+        assertEquals(false, providerLockHeld)
+        assertSame(scoped, subject.currentAttachment()?.bridge)
+        assertEquals(7L, announcerState(subject).bridgeSessionId)
+        assertTrue(unusedDefaultCandidate.completions.isEmpty())
+        assertTrue(unusedDefaultCandidate.terminals.isEmpty())
+        assertTrue(unusedDefaultCandidate.stillWorking.isEmpty())
+    }
+
+    @Test
+    fun `close during default creation wins and leaves the candidate unused`() = runTest {
+        val unusedDefaultCandidate = RecordingBridge()
+        lateinit var subject: HermesAnnouncer
+        var providerLockHeld: Boolean? = null
+        subject = announcer(
+            queueStore = store(emptyConversation()),
+            defaultBridge = {
+                providerLockHeld = Thread.holdsLock(registryLock(subject))
+                subject.close()
+                unusedDefaultCandidate
+            },
+        )
+
+        subject.attachDefaultIfNeeded()
+        runCurrent()
+
+        assertEquals(false, providerLockHeld)
+        assertNull(subject.currentAttachment())
+        assertTrue(announcerState(subject).closed)
+        assertTrue(unusedDefaultCandidate.completions.isEmpty())
+        assertTrue(unusedDefaultCandidate.terminals.isEmpty())
+        assertTrue(unusedDefaultCandidate.stillWorking.isEmpty())
+    }
+
     // 9b (review fix)
     @Test
     fun `attachScoped after close is a no-op`() = runTest {
@@ -828,6 +922,7 @@ class HermesAnnouncerTest {
         bridgeSendTimeoutMs: Long = HermesAnnouncer.DEFAULT_BRIDGE_SEND_TIMEOUT_MS,
         quietWindowMs: Long = 0L,
         blockedWatchdogMs: Long = HermesAnnouncer.DEFAULT_BLOCKED_WATCHDOG_MS,
+        nowMs: () -> Long = { testScheduler.currentTime },
         beforeAnnouncementAdmission: suspend () -> Unit = {},
     ): HermesAnnouncer = HermesAnnouncer(
         scope = backgroundScope,
@@ -838,7 +933,7 @@ class HermesAnnouncerTest {
         bridgeSendTimeoutMs = bridgeSendTimeoutMs,
         quietWindowMs = quietWindowMs,
         blockedWatchdogMs = blockedWatchdogMs,
-        nowMs = { testScheduler.currentTime },
+        nowMs = nowMs,
         beforeAnnouncementAdmission = beforeAnnouncementAdmission,
     )
 
@@ -868,6 +963,12 @@ class HermesAnnouncerTest {
         HermesAnnouncer::class.java.getDeclaredField("lock").run {
             isAccessible = true
             requireNotNull(get(announcer))
+        }
+
+    private fun announcerState(announcer: HermesAnnouncer): AnnouncerState =
+        HermesAnnouncer::class.java.getDeclaredField("state").run {
+            isAccessible = true
+            get(announcer) as AnnouncerState
         }
 
     /** A conversation store whose [update] suspends (yields) first, like the production store. */

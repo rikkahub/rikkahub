@@ -120,6 +120,7 @@ class HermesAnnouncer(
     // --- bridge registry ---
 
     fun attachScoped(bridge: HermesSessionBridge, sessionId: Long) {
+        val eventNowMs = nowMs()
         val attached: Boolean
         synchronized(lock) {
             if (closed) {
@@ -139,7 +140,7 @@ class HermesAnnouncer(
                 // blocks, and the consumer never posts registry events while holding `lock`
                 // (see the effect-failure SendReturned post above, which doesn't touch `lock`),
                 // so there's no lock-order hazard.
-                events.trySend(AnnouncerEvent.BridgeAttached(sessionId, nowMs()))
+                events.trySend(AnnouncerEvent.BridgeAttached(sessionId, eventNowMs))
             }
         }
         if (attached) {
@@ -148,6 +149,7 @@ class HermesAnnouncer(
     }
 
     fun detachScoped(bridge: HermesSessionBridge) {
+        val eventNowMs = nowMs()
         var detached = false
         var fallbackToDefault = false
         synchronized(lock) {
@@ -160,7 +162,7 @@ class HermesAnnouncer(
             fallbackToDefault = detached && !closed && !scopedBridgeEverAttached && defaultBridge != null
             if (detached && !fallbackToDefault) {
                 // See attachScoped for why this is posted inside the lock.
-                events.trySend(AnnouncerEvent.BridgeDetached(nowMs()))
+                events.trySend(AnnouncerEvent.BridgeDetached(eventNowMs))
             }
         }
         if (!detached) return
@@ -173,12 +175,21 @@ class HermesAnnouncer(
 
     fun attachDefaultIfNeeded() {
         val provider = defaultBridge ?: return
+        val candidate = synchronized(lock) {
+            if (closed || scopedBridgeEverAttached || attachment != null) return
+            defaultInstance
+        } ?: provider()
+        val eventNowMs = nowMs()
         val attached: Boolean
         synchronized(lock) {
             if (closed || scopedBridgeEverAttached || attachment != null) {
                 attached = false
             } else {
-                val default = defaultInstance ?: provider().also { defaultInstance = it }
+                // Candidate creation is deliberately outside the registry lock. A concurrent
+                // close/scoped attach wins this recheck; HermesSessionBridge owns no closeable
+                // resource, so a losing fresh candidate can be discarded safely. If another
+                // default candidate installed and detached meanwhile, reuse that cached winner.
+                val default = defaultInstance ?: candidate.also { defaultInstance = it }
                 attachment = HermesBridgeAttachment(
                     bridge = default,
                     sessionId = HermesJobManager.UNBOUND_BRIDGE_SESSION_ID,
@@ -186,7 +197,10 @@ class HermesAnnouncer(
                 attached = true
                 // See attachScoped for why this is posted inside the lock.
                 events.trySend(
-                    AnnouncerEvent.BridgeAttached(HermesJobManager.UNBOUND_BRIDGE_SESSION_ID, nowMs())
+                    AnnouncerEvent.BridgeAttached(
+                        HermesJobManager.UNBOUND_BRIDGE_SESSION_ID,
+                        eventNowMs,
+                    )
                 )
             }
         }
@@ -244,12 +258,13 @@ class HermesAnnouncer(
     }
 
     fun onGeminiSessionRetired() {
+        val eventNowMs = nowMs()
         synchronized(lock) {
             // Revoke proactive speech immediately as well as gating future reducer sends.
             // Direct tool responses have a separate lifetime: an already accepted Hermes
             // call may still deliver its queued acknowledgement while reconnect cleanup runs.
             attachment?.announcementsActive = false
-            events.trySend(AnnouncerEvent.GeminiSessionRetired(nowMs()))
+            events.trySend(AnnouncerEvent.GeminiSessionRetired(eventNowMs))
         }
     }
 
