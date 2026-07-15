@@ -700,8 +700,9 @@ Create local fake factory/session/config helpers, then prove:
 - Active produces exactly one manager start with `Telecom`;
 - failed/timeout resolution produces exactly one manager start with
   `DirectFallback` and preserves the typed failure; and
-- a generation-stale Telecom result performs no manager start and disconnects
-  the unclaimed live Telecom call.
+- a generation-stale Telecom result performs no manager start, retires only
+  the exact attempt ID carried by the resolution, and awaits/acknowledges that
+  attempt so its unclaimed live Telecom call is disconnected;
 - an older stale Telecom result cannot disconnect a newer attempt's active call;
   it retires and acknowledges only the attempt ID carried by that older
   resolution.
@@ -749,10 +750,26 @@ class VoiceAgentCallStartup internal constructor(
             ?.let(::VoiceAgentAudioRouteResolution)
             ?: resolveRoute()
         if (!isCurrent()) {
-            if (resolution.owner == VoiceAudioRouteOwner.Telecom &&
-                manager.routeOwnerForActiveSession(conversationId, config) == null
-            ) {
-                telecomRegistry.disconnectActive()
+            resolution.telecomAttemptId?.let { attemptId ->
+                withContext(NonCancellable) {
+                    val retirementError = runCatching {
+                        telecomRegistry.retireAttempt(
+                            attemptId,
+                            VoiceAgentTelecomFailure(
+                                diagnosticName = "telecom_startup_stale",
+                                detail = "Telecom startup attempt ${attemptId.value} became stale",
+                            ),
+                        )
+                    }.exceptionOrNull()
+                    val acknowledgementError = runCatching {
+                        telecomRegistry.awaitOutcome(attemptId)
+                    }.exceptionOrNull()
+                    retirementError?.let { error ->
+                        acknowledgementError?.let(error::addSuppressed)
+                        throw error
+                    }
+                    acknowledgementError?.let { throw it }
+                }
             }
             return VoiceAgentCallStartupResult.Stale(resolution)
         }
@@ -777,8 +794,12 @@ resolutions carry `null`.
 
 On a stale result, never call global `disconnectActive()`. If the resolution
 carries an attempt ID, enter `NonCancellable`, call `retireAttempt` for that ID
-with `telecom_startup_stale`, then await/acknowledge that same attempt. This
-must not affect a newer pending or active attempt.
+with `telecom_startup_stale`, then call `awaitOutcome` to await and acknowledge
+that same attempt. Keep retirement and await/acknowledgement in independent
+`runCatching` blocks so await/acknowledgement still runs if retirement throws.
+If both operations fail, preserve the retirement error and attach the
+await/acknowledgement error as suppressed. This exact-attempt cleanup must not
+affect a newer pending or active attempt.
 
 - [ ] **Step 4: Reorder service startup**
 
@@ -1148,7 +1169,10 @@ git diff --check
 git status --short
 ```
 
-Expected: no whitespace errors or unrelated changes. Preserve the pre-existing user-owned untracked `docs/superpowers/plans/2026-07-14-hermes-announcement-safe-playback.md`.
+Expected: no whitespace errors or unrelated changes. Do not add, edit, delete,
+or move the unrelated
+`docs/superpowers/plans/2026-07-14-hermes-announcement-safe-playback.md`; if it
+is present, leave it unchanged, and if it is absent, leave it absent.
 
 ### Task 7: Install and verify both ownership paths on the phone
 
@@ -1223,7 +1247,8 @@ Capture logcat as above. Expected: `audioRouteOwner=direct_fallback` and a Telec
 
 ```bash
 git status --short
-git log -7 --oneline
+git log --oneline 1f9bf814..HEAD
 ```
 
-Expected: all implementation commits are present; only known user-owned untracked files remain.
+Expected: the explicit feature range lists every implementation commit after
+base `1f9bf814`; only known user-owned untracked files remain.

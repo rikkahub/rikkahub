@@ -93,7 +93,7 @@ For a new Voice Agent session:
 1. `VoiceAgentCallService` enters microphone foreground-service mode.
 2. It resolves launch configuration and begins Telecom setup.
 3. `VoiceAgentTelecomAdapter` registers the self-managed account and requests the outgoing call.
-4. `VoiceAgentCallRegistry` exposes an awaitable connection outcome rather than only a synchronous `hasActiveConnection` snapshot.
+4. `VoiceAgentTelecomCallRegistry` exposes an awaitable connection outcome rather than only a synchronous `hasActiveConnection` snapshot.
 5. The service waits for an active connection, an explicit rejection, or a bounded timeout.
 6. An active connection selects `Telecom`; failure or timeout selects `DirectFallback` and records the concrete reason.
 7. Only then does the manager create and start the managed voice session with the selected owner.
