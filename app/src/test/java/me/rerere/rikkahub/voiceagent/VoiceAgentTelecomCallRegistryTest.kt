@@ -79,10 +79,27 @@ class VoiceAgentTelecomCallRegistryTest {
         registry.activate(attempt, call)
         registry.clear(call)
 
+        assertAttemptDoesNotRetainCall(registry, attempt, call)
         assertEquals(
             VoiceAgentTelecomOutcome.Active,
             withTimeoutOrNull(100) { registry.awaitOutcome(attempt) },
         )
+        assertAttemptWasConsumed(registry, attempt)
+    }
+
+    @Test
+    fun `superseded active outcome remains awaitable without retaining call`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val activeAttempt = registry.beginAttempt()
+        val call = FakeTelecomCall()
+        registry.activate(activeAttempt, call)
+
+        registry.beginAttempt()
+
+        assertEquals(1, call.disconnectCalls)
+        assertAttemptDoesNotRetainCall(registry, activeAttempt, call)
+        assertEquals(VoiceAgentTelecomOutcome.Active, registry.awaitOutcome(activeAttempt))
+        assertAttemptWasConsumed(registry, activeAttempt)
     }
 
     @Test
@@ -250,6 +267,32 @@ class VoiceAgentTelecomCallRegistryTest {
 
         assertEquals(1, call.disconnectCalls)
         assertEquals(false, registry.hasActiveConnection())
+    }
+
+    private suspend fun assertAttemptWasConsumed(
+        registry: VoiceAgentTelecomCallRegistry,
+        attemptId: VoiceAgentTelecomAttemptId,
+    ) {
+        val error = runCatching { registry.awaitOutcome(attemptId) }.exceptionOrNull()
+        assertTrue(error is IllegalArgumentException)
+    }
+
+    private fun assertAttemptDoesNotRetainCall(
+        registry: VoiceAgentTelecomCallRegistry,
+        attemptId: VoiceAgentTelecomAttemptId,
+        call: VoiceAgentTelecomCall,
+    ) {
+        val attemptsField = registry.javaClass.getDeclaredField("attempts").apply { isAccessible = true }
+        val attempts = attemptsField.get(registry) as Map<*, *>
+        val record = requireNotNull(attempts[attemptId])
+        val phaseField = record.javaClass.getDeclaredField("phase").apply { isAccessible = true }
+        val phase = phaseField.get(record)
+        val retainedByPhase = phase.javaClass.declaredFields.any { field ->
+            field.isAccessible = true
+            field.get(phase) === call
+        }
+
+        assertFalse("terminal attempt phase retained the Telecom call", retainedByPhase)
     }
 
     private class FakeTelecomCall(

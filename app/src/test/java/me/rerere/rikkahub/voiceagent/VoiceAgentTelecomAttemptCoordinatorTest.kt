@@ -42,8 +42,8 @@ class VoiceAgentTelecomAttemptCoordinatorTest {
         yield()
 
         val failure = VoiceAgentTelecomFailure("telecom_start_failed", "denied")
-        assertEquals(VoiceAgentTelecomOutcome.Failed(failure), registry.awaitOutcome(attempt))
         assertEquals(listOf(VoiceAgentTelecomOutcome.Failed(failure)), outcomes)
+        assertAttemptWasConsumed(registry, attempt)
     }
 
     @Test
@@ -64,6 +64,7 @@ class VoiceAgentTelecomAttemptCoordinatorTest {
 
         assertEquals(1, stale.disconnectCalls)
         assertEquals(emptyList<VoiceAgentTelecomOutcome>(), outcomes)
+        assertAttemptWasConsumed(registry, attempt)
     }
 
     @Test
@@ -81,6 +82,14 @@ class VoiceAgentTelecomAttemptCoordinatorTest {
         yield()
 
         assertEquals(emptyList<VoiceAgentTelecomOutcome>(), outcomes)
+    }
+
+    private suspend fun assertAttemptWasConsumed(
+        registry: VoiceAgentTelecomCallRegistry,
+        attemptId: VoiceAgentTelecomAttemptId,
+    ) {
+        val error = runCatching { registry.awaitOutcome(attemptId) }.exceptionOrNull()
+        assertEquals(IllegalArgumentException::class.java, error?.javaClass)
     }
 
     private class FakeTelecomCall : VoiceAgentTelecomCall {

@@ -11,10 +11,12 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
@@ -317,7 +319,6 @@ internal class VoiceAgentTelecomAttemptCoordinator(
     private val scope: CoroutineScope,
     private val startCall: (VoiceAgentTelecomAttemptId) -> Result<Unit>,
 ) {
-    private var outcomeJob: Job? = null
     private var currentAttemptId: VoiceAgentTelecomAttemptId? = null
 
     fun start(
@@ -327,8 +328,10 @@ internal class VoiceAgentTelecomAttemptCoordinator(
         retire()
         val attemptId = registry.beginAttempt()
         currentAttemptId = attemptId
-        outcomeJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            val outcome = registry.awaitOutcome(attemptId)
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            val outcome = withContext(NonCancellable) {
+                registry.awaitOutcome(attemptId)
+            }
             if (currentAttemptId == attemptId && isCurrent()) {
                 onOutcome(outcome)
             }
@@ -346,8 +349,6 @@ internal class VoiceAgentTelecomAttemptCoordinator(
     }
 
     fun retire() {
-        outcomeJob?.cancel()
-        outcomeJob = null
         currentAttemptId = null
         registry.disconnectActive()
     }

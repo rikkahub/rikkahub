@@ -10,13 +10,21 @@ import android.telecom.CallEndpointException
 import android.telecom.Connection
 import android.telecom.DisconnectCause
 import androidx.annotation.RequiresApi
+import java.util.concurrent.CountDownLatch
 
 class VoiceAgentTelecomConnection(
     private val context: Context,
-    private val onDisconnected: (VoiceAgentTelecomConnection) -> Unit,
+    onRetiring: (VoiceAgentTelecomConnection) -> Unit,
+    onRetired: (VoiceAgentTelecomConnection) -> Unit,
 ) : Connection(), VoiceAgentTelecomCall {
     private var requestedBluetoothEndpointId: ParcelUuid? = null
     private var requestedLegacyBluetoothRoute = false
+    private val retirement = VoiceAgentTelecomRetirement(
+        onRetiring = { onRetiring(this) },
+        setDisconnected = ::setDisconnected,
+        destroy = ::destroy,
+        onRetired = { onRetired(this) },
+    )
 
     override fun onDisconnect() {
         context.startService(voiceAgentCallEndIntent(context))
@@ -91,9 +99,7 @@ class VoiceAgentTelecomConnection(
     }
 
     private fun disconnect(cause: DisconnectCause) {
-        onDisconnected(this)
-        setDisconnected(cause)
-        destroy()
+        retirement.retire(cause)
     }
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -156,5 +162,66 @@ class VoiceAgentTelecomConnection(
 
     private companion object {
         const val TAG = "VoiceAgentTelecomConnection"
+    }
+}
+
+internal class VoiceAgentTelecomRetirement<Cause>(
+    private val onRetiring: () -> Unit,
+    private val setDisconnected: (Cause) -> Unit,
+    private val destroy: () -> Unit,
+    private val onRetired: () -> Unit,
+) {
+    private val lock = Any()
+    private val retirementCompleted = CountDownLatch(1)
+    private var retiringThread: Thread? = null
+
+    fun retire(cause: Cause) {
+        val ownsRetirement = synchronized(lock) {
+            if (retiringThread != null) {
+                false
+            } else {
+                retiringThread = Thread.currentThread()
+                true
+            }
+        }
+        if (!ownsRetirement) {
+            if (retiringThread !== Thread.currentThread()) {
+                awaitRetirementUninterruptibly()
+            }
+            return
+        }
+
+        try {
+            try {
+                onRetiring()
+            } finally {
+                try {
+                    setDisconnected(cause)
+                } finally {
+                    destroy()
+                }
+            }
+        } finally {
+            try {
+                onRetired()
+            } finally {
+                retirementCompleted.countDown()
+            }
+        }
+    }
+
+    private fun awaitRetirementUninterruptibly() {
+        var interrupted = false
+        while (true) {
+            try {
+                retirementCompleted.await()
+                break
+            } catch (_: InterruptedException) {
+                interrupted = true
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt()
+        }
     }
 }
