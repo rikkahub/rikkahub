@@ -302,6 +302,37 @@ class VoiceAgentTelecomCallRegistryTest {
     }
 
     @Test
+    fun `throwing active supersession terminalizes exact replacement attempt`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val previous = registry.beginAttempt()
+        val disconnectError = IllegalStateException("framework retirement failed")
+        val previousCall = FakeTelecomCall { throw disconnectError }
+        registry.activate(previous, previousCall)
+        registry.awaitOutcome(previous)
+
+        val thrown = runCatching { registry.beginAttempt() }.exceptionOrNull()
+
+        assertTrue(thrown is VoiceAgentTelecomAttemptStartException)
+        val startError = thrown as VoiceAgentTelecomAttemptStartException
+        assertEquals(VoiceAgentTelecomAttemptId(2), startError.attemptId)
+        assertEquals(
+            VoiceAgentTelecomFailure(
+                diagnosticName = "telecom_supersession_cleanup_failed",
+                detail = "framework retirement failed",
+            ),
+            startError.failure,
+        )
+        assertEquals(disconnectError, startError.cause)
+        assertEquals(1, previousCall.disconnectCalls)
+        assertFalse(registry.hasActiveConnection())
+        assertEquals(
+            VoiceAgentTelecomOutcome.Failed(startError.failure),
+            registry.awaitOutcome(startError.attemptId),
+        )
+        assertAttemptWasConsumed(registry, startError.attemptId)
+    }
+
+    @Test
     fun `clear only removes the matching active call`() {
         val registry = VoiceAgentTelecomCallRegistry()
         val first = FakeTelecomCall()

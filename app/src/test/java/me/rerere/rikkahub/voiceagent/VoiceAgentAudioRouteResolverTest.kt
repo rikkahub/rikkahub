@@ -70,6 +70,33 @@ class VoiceAgentAudioRouteResolverTest {
     }
 
     @Test
+    fun `throwing previous-call supersession returns contained fallback and consumes replacement`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val previous = registry.beginAttempt()
+        val previousCall = ThrowingResolverCall()
+        registry.activate(previous, previousCall)
+        registry.awaitOutcome(previous)
+        val gateway = FakeTelecomGateway()
+
+        val result = VoiceAgentAudioRouteResolver(gateway, registry, 100).resolve()
+
+        assertEquals(VoiceAudioRouteOwner.DirectFallback, result.owner)
+        assertEquals(
+            VoiceAgentTelecomFailure(
+                diagnosticName = "telecom_supersession_cleanup_failed",
+                detail = "framework retirement failed",
+            ),
+            result.failure,
+        )
+        assertEquals(null, result.telecomAttemptId)
+        assertEquals(0, gateway.registerCalls)
+        assertEquals(0, gateway.startCalls)
+        assertEquals(1, previousCall.disconnectCalls)
+        assertFalse(registry.hasActiveConnection())
+        assertAllAttemptsConsumed(registry)
+    }
+
+    @Test
     fun `ConnectionService rejection is preserved`() = runBlocking {
         val registry = VoiceAgentTelecomCallRegistry()
         val gateway = FakeTelecomGateway(onStart = { id ->
@@ -323,9 +350,16 @@ private class FakeTelecomGateway(
     private val startResult: Result<Unit> = Result.success(Unit),
     private val onStart: (VoiceAgentTelecomAttemptId) -> Unit = {},
 ) : VoiceAgentTelecomGateway {
-    override fun register(): Result<Unit> = registerResult
+    var registerCalls = 0
+    var startCalls = 0
+
+    override fun register(): Result<Unit> {
+        registerCalls += 1
+        return registerResult
+    }
 
     override fun startCall(attemptId: VoiceAgentTelecomAttemptId): Result<Unit> {
+        startCalls += 1
         onStart(attemptId)
         return startResult
     }

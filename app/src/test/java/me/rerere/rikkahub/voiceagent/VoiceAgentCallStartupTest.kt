@@ -22,6 +22,73 @@ import kotlin.uuid.Uuid
 
 class VoiceAgentCallStartupTest {
     @Test
+    fun `failed Telecom startup preserves matching session and live call for retry`() = runTest {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val telecomCall = FakeTelecomCall()
+        assertTrue(registry.activate(attempt, telecomCall))
+        registry.acknowledgeOutcome(attempt)
+        val session = StartupFakeManagedSession()
+        val factory = StartupFakeCallFactory(session)
+        val manager = VoiceAgentCallManager(factory)
+        val conversationId = Uuid.random()
+        val config = fakeLaunchConfig()
+        manager.start(conversationId, config, VoiceAudioRouteOwner.Telecom, this)
+        val cleanup = voiceAgentFailedStartCleanupPlan(
+            preserveSessionRequested = true,
+            routeOwner = manager.activeRouteOwner.value,
+            hasActiveTelecomCall = registry.hasActiveConnection(),
+        )
+        if (cleanup.retireTelecomCall) registry.disconnectActive()
+        if (!cleanup.preserveSession) manager.closeNow()
+        var resolveCalls = 0
+        val startup = VoiceAgentCallStartup(manager, registry) {
+            resolveCalls += 1
+            VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.DirectFallback)
+        }
+
+        val retry = startup.start(conversationId, config, this) { true }
+
+        assertEquals(false, cleanup.retireTelecomCall)
+        assertEquals(true, cleanup.preserveSession)
+        assertEquals(0, telecomCall.disconnectCalls)
+        assertTrue(registry.hasActiveConnection())
+        assertEquals(0, resolveCalls)
+        assertEquals(false, (retry as VoiceAgentCallStartupResult.Started).startedNewSession)
+        assertEquals(VoiceAudioRouteOwner.Telecom, retry.resolution.owner)
+    }
+
+    @Test
+    fun `failed Telecom startup without a live call closes session so retry resolves`() = runTest {
+        val firstSession = StartupFakeManagedSession()
+        val secondSession = StartupFakeManagedSession()
+        val factory = StartupFakeCallFactory(firstSession, secondSession)
+        val manager = VoiceAgentCallManager(factory)
+        val conversationId = Uuid.random()
+        val config = fakeLaunchConfig()
+        manager.start(conversationId, config, VoiceAudioRouteOwner.Telecom, this)
+        val cleanup = voiceAgentFailedStartCleanupPlan(
+            preserveSessionRequested = true,
+            routeOwner = manager.activeRouteOwner.value,
+            hasActiveTelecomCall = false,
+        )
+        if (!cleanup.preserveSession) manager.closeNow()
+        var resolveCalls = 0
+        val startup = VoiceAgentCallStartup(manager, VoiceAgentTelecomCallRegistry()) {
+            resolveCalls += 1
+            VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.DirectFallback)
+        }
+
+        val retry = startup.start(conversationId, config, this) { true }
+
+        assertEquals(false, cleanup.preserveSession)
+        assertEquals(1, firstSession.closeNowCalls)
+        assertEquals(1, resolveCalls)
+        assertEquals(true, (retry as VoiceAgentCallStartupResult.Started).startedNewSession)
+        assertEquals(VoiceAudioRouteOwner.DirectFallback, retry.resolution.owner)
+    }
+
+    @Test
     fun `matching active session retains immutable owner without resolving again`() = runTest {
         val session = StartupFakeManagedSession()
         val factory = StartupFakeCallFactory(session)
@@ -270,6 +337,7 @@ private class StartupFakeManagedSession(
 ) : ManagedVoiceCallSession {
     override val state = MutableStateFlow(VoiceAgentUiState())
     var startCalls = 0
+    var closeNowCalls = 0
 
     override fun start() {
         startCalls += 1
@@ -282,7 +350,9 @@ private class StartupFakeManagedSession(
     override fun recordDiagnostic(name: String, detail: String) = Unit
     override fun end() = Unit
     override suspend fun endAndDrain() = Unit
-    override fun closeNow() = Unit
+    override fun closeNow() {
+        closeNowCalls += 1
+    }
 }
 
 private class StartupFakeCallFactory(

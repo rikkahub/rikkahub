@@ -14,6 +14,12 @@ data class VoiceAgentTelecomFailure(
     val detail: String,
 )
 
+class VoiceAgentTelecomAttemptStartException(
+    val attemptId: VoiceAgentTelecomAttemptId,
+    val failure: VoiceAgentTelecomFailure,
+    cause: Throwable,
+) : IllegalStateException(failure.detail, cause)
+
 sealed interface VoiceAgentTelecomOutcome {
     data object Active : VoiceAgentTelecomOutcome
 
@@ -69,8 +75,25 @@ class VoiceAgentTelecomCallRegistry {
             currentAttemptId = id
             id
         }
-        previousConnection?.disconnectFromApp()
+        val supersessionError = runCatching {
+            previousConnection?.disconnectFromApp()
+        }.exceptionOrNull()
         supersededOutcome?.let { supersededCompletion?.complete(it) }
+        if (supersessionError != null) {
+            val failure = VoiceAgentTelecomFailure(
+                diagnosticName = "telecom_supersession_cleanup_failed",
+                detail = supersessionError.message ?: supersessionError.javaClass.simpleName,
+            )
+            val completion = synchronized(lock) {
+                attempts[id]?.takeIf { record ->
+                    currentAttemptId == id && record.phase == AttemptPhase.Pending
+                }?.also { record ->
+                    record.phase = AttemptPhase.Failed(failure)
+                }?.completion
+            }
+            completion?.complete(VoiceAgentTelecomOutcome.Failed(failure))
+            throw VoiceAgentTelecomAttemptStartException(id, failure, supersessionError)
+        }
         return id
     }
 

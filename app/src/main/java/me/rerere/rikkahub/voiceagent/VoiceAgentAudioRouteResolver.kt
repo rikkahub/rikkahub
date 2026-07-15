@@ -39,7 +39,18 @@ class VoiceAgentAudioRouteResolver internal constructor(
     ) : this(gateway, registry, timeoutMs, DefaultVoiceAgentTelecomOutcomeTimeout)
 
     suspend fun resolve(): VoiceAgentAudioRouteResolution {
-        val attempt = registry.beginAttempt()
+        val attempt = try {
+            registry.beginAttempt()
+        } catch (error: VoiceAgentTelecomAttemptStartException) {
+            val outcome = withContext(NonCancellable) {
+                registry.awaitOutcome(error.attemptId)
+            }
+            val failure = (outcome as VoiceAgentTelecomOutcome.Failed).failure
+            return VoiceAgentAudioRouteResolution(
+                owner = VoiceAudioRouteOwner.DirectFallback,
+                failure = failure,
+            )
+        }
         try {
             gateway.register().exceptionOrNull()?.let {
                 return fallback(attempt, "telecom_register_failed", it)

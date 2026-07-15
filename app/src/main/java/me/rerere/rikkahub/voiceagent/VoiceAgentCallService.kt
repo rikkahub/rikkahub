@@ -44,13 +44,17 @@ class VoiceAgentCallService : Service() {
     }
 
     override fun onDestroy() {
-        notificationJob?.cancel()
-        notificationJob = null
-        endJob = null
-        retireTelecomCall()
-        manager.closeNow()
-        serviceScope.cancel()
-        super.onDestroy()
+        runVoiceAgentCleanupStages(
+            {
+                notificationJob?.cancel()
+                notificationJob = null
+                endJob = null
+            },
+            ::retireTelecomCall,
+            manager::closeNow,
+            serviceScope::cancel,
+            { super.onDestroy() },
+        )
     }
 
     private fun startCall(intent: Intent) {
@@ -206,49 +210,82 @@ class VoiceAgentCallService : Service() {
         val endGeneration = callGeneration
         val session = manager.detachForEndAndDrain()
         if (session == null && endingConversationId == null) {
-            retireTelecomCall()
-            VoiceAgentLog.d(TAG, "end completed conversationId=none")
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+            runVoiceAgentCleanupStages(
+                ::retireTelecomCall,
+                { VoiceAgentLog.d(TAG, "end completed conversationId=none") },
+                { stopForeground(STOP_FOREGROUND_REMOVE) },
+                ::stopSelf,
+            )
             return
         }
         endJob = serviceScope.launch {
             if (endGeneration != callGeneration) {
                 return@launch
             }
-            try {
-                retireTelecomCall()
-                session?.endAndDrain()
-                VoiceAgentLog.d(TAG, "end completed conversationId=${endingConversationId ?: "none"}")
-            } finally {
-                if (endGeneration == callGeneration) {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                    endJob = null
-                }
-            }
+            runVoiceAgentSuspendCleanupStages(
+                { retireTelecomCall() },
+                { session?.endAndDrain() },
+                { VoiceAgentLog.d(TAG, "end completed conversationId=${endingConversationId ?: "none"}") },
+                {
+                    if (endGeneration == callGeneration) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                    }
+                },
+                {
+                    if (endGeneration == callGeneration) {
+                        stopSelf()
+                    }
+                },
+                {
+                    if (endGeneration == callGeneration) {
+                        endJob = null
+                    }
+                },
+            )
         }
     }
 
     private fun tearDownFailedStart(conversationId: String, error: Throwable, preserveSession: Boolean = false) {
         val detail = error.message ?: error.javaClass.simpleName
+        val cleanupPlan = voiceAgentFailedStartCleanupPlan(
+            preserveSessionRequested = preserveSession,
+            routeOwner = manager.activeRouteOwner.value,
+            hasActiveTelecomCall = telecomCallRegistry.hasActiveConnection(),
+        )
         VoiceAgentLog.w(
             TAG,
-            "tearing down failed start preserveSession=$preserveSession detail=${detail.redactForVoiceAgentLog()}",
+            "tearing down failed start preserveSession=${cleanupPlan.preserveSession} " +
+                "detail=${detail.redactForVoiceAgentLog()}",
         )
-        notificationJob?.cancel()
-        notificationJob = null
-        manager.recordDiagnostic("voice_call_start_failed", detail)
-        retireTelecomCall()
-        if (!preserveSession) {
-            manager.closeNow()
-        }
-        manager.updateCallStatus(VoiceCallStatus.Degraded("Voice call startup failed: $detail"))
-        startForegroundFor(conversationId, manager.state.value)
-        if (!preserveSession) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
-        }
+        runVoiceAgentCleanupStages(
+            {
+                notificationJob?.cancel()
+                notificationJob = null
+            },
+            { manager.recordDiagnostic("voice_call_start_failed", detail) },
+            {
+                if (cleanupPlan.retireTelecomCall) {
+                    retireTelecomCall()
+                }
+            },
+            {
+                if (!cleanupPlan.preserveSession) {
+                    manager.closeNow()
+                }
+            },
+            { manager.updateCallStatus(VoiceCallStatus.Degraded("Voice call startup failed: $detail")) },
+            { startForegroundFor(conversationId, manager.state.value) },
+            {
+                if (!cleanupPlan.preserveSession) {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                }
+            },
+            {
+                if (!cleanupPlan.preserveSession) {
+                    stopSelf()
+                }
+            },
+        )
     }
 
     private fun retireTelecomCall() {
@@ -282,6 +319,35 @@ internal fun shouldPublishVoiceCallBackgroundCapable(
     owner: VoiceAudioRouteOwner,
     current: VoiceCallStatus,
 ): Boolean = owner == VoiceAudioRouteOwner.Telecom && current !is VoiceCallStatus.Degraded
+
+internal data class VoiceAgentFailedStartCleanupPlan(
+    val preserveSession: Boolean,
+    val retireTelecomCall: Boolean,
+)
+
+internal fun voiceAgentFailedStartCleanupPlan(
+    preserveSessionRequested: Boolean,
+    routeOwner: VoiceAudioRouteOwner?,
+    hasActiveTelecomCall: Boolean,
+): VoiceAgentFailedStartCleanupPlan = when {
+    !preserveSessionRequested -> VoiceAgentFailedStartCleanupPlan(
+        preserveSession = false,
+        retireTelecomCall = true,
+    )
+    routeOwner == VoiceAudioRouteOwner.Telecom && hasActiveTelecomCall ->
+        VoiceAgentFailedStartCleanupPlan(
+            preserveSession = true,
+            retireTelecomCall = false,
+        )
+    routeOwner == VoiceAudioRouteOwner.Telecom -> VoiceAgentFailedStartCleanupPlan(
+        preserveSession = false,
+        retireTelecomCall = true,
+    )
+    else -> VoiceAgentFailedStartCleanupPlan(
+        preserveSession = true,
+        retireTelecomCall = true,
+    )
+}
 
 internal fun Throwable.toVoiceAgentLogDetail(): String =
     "${javaClass.simpleName}: ${(message ?: "").redactForVoiceAgentLog()}"

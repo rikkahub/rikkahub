@@ -9,6 +9,7 @@ import android.media.MediaRecorder
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
+import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,87 @@ internal class VoiceAudioCaptureLifecycle {
     fun <T> callback(block: () -> T): T = synchronized(lock) { block() }
 }
 
+internal class VoiceAudioCaptureRouteLease(
+    private val afterCapture: () -> Unit,
+) {
+    private val lock = Any()
+    private val retirementCompleted = CountDownLatch(1)
+    private var retiringThread: Thread? = null
+
+    fun retire() {
+        val ownsRetirement = synchronized(lock) {
+            if (retiringThread != null) {
+                false
+            } else {
+                retiringThread = Thread.currentThread()
+                true
+            }
+        }
+        if (!ownsRetirement) {
+            if (retiringThread !== Thread.currentThread()) {
+                awaitRetirementUninterruptibly()
+            }
+            return
+        }
+        try {
+            afterCapture()
+        } finally {
+            retirementCompleted.countDown()
+        }
+    }
+
+    private fun awaitRetirementUninterruptibly() {
+        var interrupted = false
+        while (true) {
+            try {
+                retirementCompleted.await()
+                break
+            } catch (_: InterruptedException) {
+                interrupted = true
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt()
+    }
+}
+
+internal fun runVoiceAudioCaptureLoop(
+    bufferSize: Int,
+    shouldContinue: () -> Boolean,
+    read: (ByteArray) -> Int,
+    onPcm16: (ByteArray) -> Unit,
+    onReadException: (RuntimeException) -> Unit,
+    onNegativeRead: (Int) -> Unit,
+    onPcmCallbackException: (Exception) -> Unit,
+    onTerminated: () -> Unit,
+) {
+    val buffer = ByteArray(bufferSize)
+    try {
+        while (shouldContinue()) {
+            val readCount = try {
+                read(buffer)
+            } catch (error: RuntimeException) {
+                onReadException(error)
+                break
+            }
+            when (readCount) {
+                in 1..buffer.size -> try {
+                    onPcm16(buffer.copyOf(readCount))
+                } catch (error: Exception) {
+                    onPcmCallbackException(error)
+                    break
+                }
+                0 -> Unit
+                else -> {
+                    onNegativeRead(readCount)
+                    break
+                }
+            }
+        }
+    } finally {
+        onTerminated()
+    }
+}
+
 class AndroidVoiceAudioEngine(
     context: Context,
     routeOwner: VoiceAudioRouteOwner,
@@ -66,6 +148,7 @@ class AndroidVoiceAudioEngine(
     )
     private var captureJob: Job? = null
     private var audioRecord: AudioRecord? = null
+    private var captureRouteLease: VoiceAudioCaptureRouteLease? = null
     private var debugCaptureRegistration: VoiceAudioDebugInjector.Registration? = null
     private var captureGeneration = 0L
     private var errorHandler: ((String) -> Unit)? = null
@@ -101,16 +184,30 @@ class AndroidVoiceAudioEngine(
 
         stopCaptureLocked()
         routeController.beforeCapture()
-
-        val generation = synchronized(lock) {
-            check(!released) { "Voice audio engine is released" }
-            captureGeneration += 1
-            captureGeneration
+        val routeLease = VoiceAudioCaptureRouteLease(routeController::afterCapture)
+        val generation = try {
+            synchronized(lock) {
+                check(!released) { "Voice audio engine is released" }
+                captureGeneration += 1
+                captureRouteLease = routeLease
+                captureGeneration
+            }
+        } catch (error: Throwable) {
+            routeLease.retire()
+            throw error
         }
-        val bufferSize = captureBufferSize()
+        val bufferSize = try {
+            captureBufferSize()
+        } catch (error: Throwable) {
+            clearCaptureRouteLease(generation, routeLease)
+            routeLease.retire()
+            throw error
+        }
         val recorder = runCatching {
             createCaptureRecord(bufferSize = bufferSize)
         }.getOrElse {
+            clearCaptureRouteLease(generation, routeLease)
+            routeLease.retire()
             throw IllegalStateException("AudioRecord creation failed", it)
         }
         routeController.configureRecorder(recorder)
@@ -121,45 +218,42 @@ class AndroidVoiceAudioEngine(
         }
 
         val job = scope.launch(start = CoroutineStart.LAZY) {
-            val buffer = ByteArray(bufferSize)
             var captureLevelChunks = 0
-            try {
-                captureLoop@ while (isActive && isCurrentCapture(generation, recorder)) {
-                    val read = try {
-                        recorder.read(buffer, 0, buffer.size)
-                    } catch (e: RuntimeException) {
-                        if (isCurrentCapture(generation, recorder)) {
-                            Log.w(TAG, "AudioRecord read failed", e)
-                            notifyAudioError("AudioRecord read failed: ${e.message ?: e.javaClass.simpleName}")
-                        }
-                        break@captureLoop
+            runVoiceAudioCaptureLoop(
+                bufferSize = bufferSize,
+                shouldContinue = { isActive && isCurrentCapture(generation, recorder) },
+                read = { buffer -> recorder.read(buffer, 0, buffer.size) },
+                onPcm16 = { pcm16 ->
+                    captureLevelChunks += 1
+                    logCaptureLevelIfNeeded(chunk = captureLevelChunks, pcm16 = pcm16)
+                    deliverCaptureBuffer(generation, recorder, pcm16, onPcm16)
+                },
+                onReadException = { error ->
+                    if (isCurrentCapture(generation, recorder)) {
+                        Log.w(TAG, "AudioRecord read failed", error)
+                        notifyAudioError(
+                            "AudioRecord read failed: ${error.message ?: error.javaClass.simpleName}",
+                        )
                     }
-
-                    when (read) {
-                        in 1..buffer.size -> {
-                            val pcm16 = buffer.copyOf(read)
-                            captureLevelChunks += 1
-                            logCaptureLevelIfNeeded(chunk = captureLevelChunks, pcm16 = pcm16)
-                            deliverCaptureBuffer(generation, recorder, pcm16, onPcm16)
-                        }
-                        0 -> Unit
-                        else -> {
-                            if (isCurrentCapture(generation, recorder)) {
-                                try {
-                                    throw IllegalStateException("AudioRecord read error: $read")
-                                } catch (e: IllegalStateException) {
-                                    Log.w(TAG, "Stopping capture after AudioRecord read failure", e)
-                                    notifyAudioError(e.message ?: e.javaClass.simpleName)
-                                }
-                            }
-                            break@captureLoop
-                        }
+                },
+                onNegativeRead = { read ->
+                    if (isCurrentCapture(generation, recorder)) {
+                        val error = IllegalStateException("AudioRecord read error: $read")
+                        Log.w(TAG, "Stopping capture after AudioRecord read failure", error)
+                        notifyAudioError(error.message ?: error.javaClass.simpleName)
                     }
-                }
-            } finally {
-                stopAndReleaseRecorder(recorder)
-                clearRecorder(recorder)
-            }
+                },
+                onPcmCallbackException = { error ->
+                    if (isCurrentCapture(generation, recorder)) {
+                        Log.w(TAG, "Stopping capture after PCM callback failure", error)
+                    }
+                },
+                onTerminated = {
+                    stopAndReleaseRecorder(recorder)
+                    clearRecorder(generation, recorder)
+                    routeLease.retire()
+                },
+            )
         }
 
         var published = false
@@ -174,6 +268,8 @@ class AndroidVoiceAudioEngine(
         if (!published || !isCurrentCapture(generation, recorder)) {
             job.cancel()
             releaseRecorder(recorder)
+            clearCaptureRouteLease(generation, routeLease)
+            routeLease.retire()
             return
         }
 
@@ -193,6 +289,8 @@ class AndroidVoiceAudioEngine(
                 }
                 job.cancel()
                 recorder.releaseSafely()
+                clearCaptureRouteLease(generation, routeLease)
+                routeLease.retire()
                 if (stillCurrent) {
                     throw IllegalStateException("AudioRecord start failed", e)
                 }
@@ -206,6 +304,8 @@ class AndroidVoiceAudioEngine(
                 }
                 job.cancel()
                 recorder.releaseSafely()
+                clearCaptureRouteLease(generation, routeLease)
+                routeLease.retire()
                 if (stillCurrent) {
                     throw IllegalStateException("AudioRecord start failed")
                 }
@@ -219,6 +319,8 @@ class AndroidVoiceAudioEngine(
                 job.cancel()
                 recorder.stopSafely()
                 recorder.releaseSafely()
+                clearCaptureRouteLease(generation, routeLease)
+                routeLease.retire()
             }
         }
     }
@@ -230,17 +332,20 @@ class AndroidVoiceAudioEngine(
     private fun stopCaptureLocked() {
         val job: Job?
         val recorder: AudioRecord?
+        val routeLease: VoiceAudioCaptureRouteLease?
         synchronized(lock) {
             captureGeneration += 1
             job = captureJob
             captureJob = null
             recorder = audioRecord
             audioRecord = null
+            routeLease = captureRouteLease
+            captureRouteLease = null
             unregisterDebugCaptureLocked()
         }
         job?.cancel()
         recorder?.let(::stopAndReleaseRecorder)
-        routeController.afterCapture()
+        routeLease?.retire()
         waitForCaptureCallbacks()
     }
 
@@ -270,6 +375,7 @@ class AndroidVoiceAudioEngine(
     private fun releaseLocked() {
         val job: Job?
         val recorder: AudioRecord?
+        val routeLease: VoiceAudioCaptureRouteLease?
         synchronized(lock) {
             if (released) {
                 return
@@ -280,11 +386,14 @@ class AndroidVoiceAudioEngine(
             captureJob = null
             recorder = audioRecord
             audioRecord = null
+            routeLease = captureRouteLease
+            captureRouteLease = null
             unregisterDebugCaptureLocked()
         }
         playbackTracks.markReleased()
         job?.cancel()
         recorder?.let(::stopAndReleaseRecorder)
+        routeLease?.retire()
         playbackEventOwner.releasePlayback(playbackWriter::release)
         playbackTracks.releaseAll()
         routeController.close()
@@ -297,17 +406,16 @@ class AndroidVoiceAudioEngine(
             if (captureGeneration == generation && audioRecord === recorder) {
                 captureJob = null
                 audioRecord = null
+                captureRouteLease = null
                 unregisterDebugCaptureLocked()
             }
         }
     }
 
-    private fun clearRecorder(recorder: AudioRecord) {
+    private fun clearCaptureRouteLease(generation: Long, routeLease: VoiceAudioCaptureRouteLease) {
         synchronized(lock) {
-            if (audioRecord === recorder) {
-                captureJob = null
-                audioRecord = null
-                unregisterDebugCaptureLocked()
+            if (captureGeneration == generation && captureRouteLease === routeLease) {
+                captureRouteLease = null
             }
         }
     }
@@ -370,12 +478,7 @@ class AndroidVoiceAudioEngine(
     ) {
         captureLifecycle.callback {
             if (isCurrentCapture(generation, recorder)) {
-                try {
-                    onPcm16(buffer)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Stopping capture after PCM callback failure", e)
-                    invalidateCapture(generation, recorder)
-                }
+                onPcm16(buffer)
             }
         }
     }
