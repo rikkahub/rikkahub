@@ -1225,17 +1225,25 @@ git commit -m "refactor(voiceagent): derive progress dispatch from queue"
 - [ ] **Step 1: Run structural searches**
 
 ```bash
-if rg -n 'interruptedResponseSessionId|gemini_interrupted_turn_complete_consumed|allowTerminalRecord' \
+if rg -n 'interruptedResponseSessionId|allowTerminalRecord' \
   app/src/main app/src/test; then
   exit 1
 fi
+if rg -n 'gemini_interrupted_turn_complete_consumed' app/src/main; then
+  exit 1
+fi
+consumed_test_matches="$(
+  rg -n 'gemini_interrupted_turn_complete_consumed' app/src/test || true
+)"
+test "$(printf '%s\n' "$consumed_test_matches" | sed '/^$/d' | wc -l)" -eq 2
+printf '%s\n' "$consumed_test_matches"
 if rg -n 'VoicePlaybackEvent.*generation|playbackGeneration|PlaybackGate\(generation' \
   app/src/main app/src/test; then
   exit 1
 fi
 ```
 
-Expected: no matches.
+Expected: the retired interruption state and terminal-record flag have no matches; the consumed diagnostic has no production matches and exactly two test matches, both the explicit negative assertions; the ambiguous playback-generation search has no matches.
 
 - [ ] **Step 2: Run all Android unit tests freshly**
 

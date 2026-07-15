@@ -68,6 +68,21 @@ assert_file_does_not_exist() {
   fi
 }
 
+assert_file_mode() {
+  local path="$1"
+  local expected="$2"
+  if [[ ! -f "$path" ]]; then
+    printf 'Expected file to exist: %s\n' "$path" >&2
+    exit 1
+  fi
+  local actual
+  actual="$(stat -c '%a' "$path")"
+  if [[ "$actual" != "$expected" ]]; then
+    printf 'Expected file %s to have mode %s, got %s\n' "$path" "$expected" "$actual" >&2
+    exit 1
+  fi
+}
+
 assert_last_line_after() {
   local path="$1"
   local earlier="$2"
@@ -606,6 +621,7 @@ assert_contains "$manual_output" "Manual review answer artifact: $manual_log_dir
 assert_contains "$manual_output" "PIPELINE: passed"
 assert_contains "$manual_output" "CLEANUP: passed"
 assert_contains "$manual_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
+assert_file_mode "$manual_log_dir/logcat.txt" 600
 assert_file_contains_exactly "$manual_log_dir/manual-hermes-answer.txt" "manual answer from Hermes"
 assert_file_contains_exactly "$manual_log_dir/trace-id.txt" "trace-gbrain"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/hermes-answer.txt"

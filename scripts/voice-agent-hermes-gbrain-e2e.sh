@@ -529,6 +529,9 @@ fi
 
 mkdir -p "$LOG_DIR"
 rm -f "$LOG_FILE"
+umask 077
+: > "$LOG_FILE"
+chmod 600 "$LOG_FILE"
 rm -f "$MANUAL_REVIEW_ANSWER_FILE"
 if [[ -n "${VOICE_AGENT_E2E_PCM_PATH:-}" && "$GENERATED_PCM_FROM_PROMPT" == "0" ]]; then
   if [[ -n "${VOICE_AGENT_E2E_PROMPT_TEXT:-}" ]]; then
