@@ -7,23 +7,25 @@ import android.telecom.PhoneAccountHandle
 import org.koin.android.ext.android.inject
 
 class VoiceAgentConnectionService : ConnectionService() {
-    private val callManager: VoiceAgentCallManager by inject()
     private val telecomCallRegistry: VoiceAgentTelecomCallRegistry by inject()
 
     override fun onCreateOutgoingConnection(
         connectionManagerPhoneAccount: PhoneAccountHandle?,
         request: ConnectionRequest?,
     ): Connection {
+        val attemptId = request?.address.voiceAgentTelecomAttemptIdOrNull()
         val connection = VoiceAgentTelecomConnection(
             context = applicationContext,
             onDisconnected = telecomCallRegistry::clear,
         ).apply {
             setAudioModeIsVoip(true)
             setInitializing()
-            setActive()
         }
-        telecomCallRegistry.replace(connection)
-        callManager.updateCallStatus(VoiceCallStatus.BackgroundCapable)
+        if (attemptId != null && telecomCallRegistry.activate(attemptId, connection)) {
+            connection.setActive()
+        } else if (attemptId == null) {
+            connection.disconnectFromApp()
+        }
         return connection
     }
 
@@ -32,7 +34,14 @@ class VoiceAgentConnectionService : ConnectionService() {
         request: ConnectionRequest?,
     ) {
         val detail = "Android Telecom rejected Voice Agent call"
-        callManager.recordDiagnostic("telecom_outgoing_failed", detail)
-        callManager.updateCallStatus(VoiceCallStatus.Degraded(detail))
+        request?.address.voiceAgentTelecomAttemptIdOrNull()?.let { attemptId ->
+            telecomCallRegistry.fail(
+                attemptId,
+                VoiceAgentTelecomFailure(
+                    diagnosticName = "telecom_outgoing_failed",
+                    detail = detail,
+                ),
+            )
+        }
     }
 }

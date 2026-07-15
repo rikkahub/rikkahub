@@ -10,6 +10,8 @@ import android.telecom.PhoneAccount
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 
+private const val VOICE_AGENT_CALL_URI_SCHEME = "rikkahub-voice"
+
 class VoiceAgentTelecomAdapter(
     private val context: Context,
 ) {
@@ -28,7 +30,13 @@ class VoiceAgentTelecomAdapter(
         telecomManager.registerPhoneAccount(account)
     }
 
-    fun startCall(): Result<Unit> = runCatching {
+    fun startCall(attemptId: VoiceAgentTelecomAttemptId): Result<Unit> =
+        startCall(Uri.fromParts(VOICE_AGENT_CALL_URI_SCHEME, "voice-agent-${attemptId.value}", null))
+
+    fun startCall(): Result<Unit> =
+        startCall(Uri.fromParts(VOICE_AGENT_CALL_URI_SCHEME, "voice-agent", null))
+
+    private fun startCall(address: Uri): Result<Unit> = runCatching {
         val telecomManager = requireTelecomManager()
         val extras = Bundle().apply {
             putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
@@ -36,14 +44,16 @@ class VoiceAgentTelecomAdapter(
         check(context.checkSelfPermission(Manifest.permission.MANAGE_OWN_CALLS) == PackageManager.PERMISSION_GRANTED) {
             "MANAGE_OWN_CALLS permission is required to start a Voice Agent call"
         }
-        telecomManager.placeCall(Uri.fromParts(VOICE_AGENT_CALL_URI_SCHEME, "voice-agent", null), extras)
+        telecomManager.placeCall(address, extras)
     }
 
     private fun requireTelecomManager(): TelecomManager =
         context.getSystemService(TelecomManager::class.java)
             ?: error("TelecomManager unavailable")
-
-    private companion object {
-        const val VOICE_AGENT_CALL_URI_SCHEME = "rikkahub-voice"
-    }
 }
+
+internal fun Uri?.voiceAgentTelecomAttemptIdOrNull(): VoiceAgentTelecomAttemptId? =
+    this?.schemeSpecificPart
+        ?.removePrefix("voice-agent-")
+        ?.toLongOrNull()
+        ?.let(::VoiceAgentTelecomAttemptId)
