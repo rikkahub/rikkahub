@@ -115,6 +115,55 @@ class HermesAnnouncementLifecycleTest {
     }
 
     @Test
+    fun `playback changes preserve interrupted boundary and never release`() {
+        var state = attached.copy(geminiTurn = GeminiTurnGate.InterruptedAwaitingBoundary)
+        state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 10L)).state
+
+        val playbackEvents = listOf(
+            AnnouncerEvent.PlaybackActive(PlaybackEpoch(5L), 20L),
+            AnnouncerEvent.PlaybackDrainStarted(PlaybackEpoch(5L), 30L),
+            AnnouncerEvent.PlaybackDrained(PlaybackEpoch(5L), 40L),
+        )
+        playbackEvents.forEach { event ->
+            val transition = reducer.reduce(state, event)
+            assertEquals(GeminiTurnGate.InterruptedAwaitingBoundary, transition.state.geminiTurn)
+            assertTrue(transition.sends().isEmpty())
+            assertEquals(completion, transition.state.pendingJobs.single().final)
+            state = transition.state
+        }
+    }
+
+    @Test
+    fun `quiet elapsed preserves interrupted boundary and never releases`() {
+        var state = attached.copy(
+            geminiTurn = GeminiTurnGate.InterruptedAwaitingBoundary,
+            lastInputDeltaAtMs = 0L,
+        )
+        state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 1L)).state
+
+        val transition = reducer.reduce(state, AnnouncerEvent.QuietTimerFired(2_001L))
+
+        assertEquals(GeminiTurnGate.InterruptedAwaitingBoundary, transition.state.geminiTurn)
+        assertTrue(transition.sends().isEmpty())
+        assertEquals(completion, transition.state.pendingJobs.single().final)
+    }
+
+    @Test
+    fun `watchdog fired preserves interrupted boundary and never releases`() {
+        var state = attached.copy(geminiTurn = GeminiTurnGate.InterruptedAwaitingBoundary)
+        state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 100L)).state
+
+        val transition = reducer.reduce(state, AnnouncerEvent.BlockedWatchdogFired(15_100L))
+
+        assertEquals(GeminiTurnGate.InterruptedAwaitingBoundary, transition.state.geminiTurn)
+        assertTrue(transition.sends().isEmpty())
+        assertEquals(completion, transition.state.pendingJobs.single().final)
+        assertTrue(transition.effects.any {
+            it is AnnouncerEffect.Diagnostic && it.name == "hermes_announcement_blocked_watchdog"
+        })
+    }
+
+    @Test
     fun `interruption wins a send reservation race`() {
         var state = reducer.reduce(
             attached,
