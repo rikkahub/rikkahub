@@ -270,6 +270,7 @@ LOGS
 06-08 12:00:03.600 D/VoiceAgentGemini(1): send kind=clientContent sent=true
 06-08 12:00:03.700 D/VoiceAgentE2E(1): hermes_queue_event type=still_working_text_turn_sent callId=call-1 jobId=none status=none sent=true
 06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
+06-08 12:00:05.500 D/AndroidVoiceAudioEngine(1): Voice playback active: playbackEpoch=1
 06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
 06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
 LOGS
@@ -282,6 +283,7 @@ LOGS
 06-08 12:00:03.600 D/VoiceAgentGemini(1): send kind=clientContent sent=true
 06-08 12:00:03.700 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-1 jobId=none status=none sent=true
 06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
+06-08 12:00:05.500 D/AndroidVoiceAudioEngine(1): Voice playback active: playbackEpoch=1
 06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
 06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
 LOGS
@@ -291,10 +293,15 @@ LOGS
 06-08 12:00:04.000 D/VoiceAgentGemini(1): send kind=toolResponse sent=true
 06-08 12:00:04.100 D/VoiceAgentE2E(1): hermes_queue_event type=late_text_turn_sent callId=call-1 jobId=none status=none sent=true
 06-08 12:00:05.000 D/VoiceAgentGemini(1): event kind=OutputAudio
+06-08 12:00:05.500 D/AndroidVoiceAudioEngine(1): Voice playback active: playbackEpoch=1
 06-08 12:00:06.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
 06-08 12:00:07.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
 LOGS
       fi
+    fi
+    if [[ "${FAKE_ADB_SKIP_TOOL_CALL:-0}" != "1" && "${FAKE_ADB_SKIP_FINAL_BOUNDARY:-0}" != "1" ]]; then
+      printf '06-08 12:00:07.500 D/VoiceAgentGemini(1): event kind=TurnComplete\n'
+      printf '06-08 12:00:07.600 D/AndroidVoiceAudioEngine(1): Voice playback drained: playbackEpoch=1\n'
     fi
     deadline=$((SECONDS + 5))
     while [[ ! -f "${FAKE_ADB_END_MARKER:?}" && "$SECONDS" -lt "$deadline" ]]; do
@@ -816,6 +823,32 @@ if [[ "$progress_only_status" -eq 0 ]]; then
   exit 1
 fi
 assert_contains "$progress_only_output" "Missing marker after 1s: completed Hermes answer sent to Gemini"
+
+missing_final_boundary_log_dir="$TMP_DIR/missing-final-boundary-log"
+set +e
+missing_final_boundary_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  FAKE_ADB_SKIP_FINAL_BOUNDARY=1 \
+  VOICE_AGENT_E2E_SERIAL=RZ \
+  VOICE_AGENT_E2E_ADB_READY_SCRIPT="$TMP_DIR/adb-ready.sh" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_CONVERSATION_ID=conversation-1 \
+  VOICE_AGENT_E2E_LOG_DIR="$missing_final_boundary_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS=5 \
+  VOICE_AGENT_E2E_FINAL_BOUNDARY_TIMEOUT_SECONDS=1 \
+  "$SCRIPT" 2>&1
+)"
+missing_final_boundary_status=$?
+set -e
+
+if [[ "$missing_final_boundary_status" -eq 0 ]]; then
+  printf 'Expected final playback write without post-final TurnComplete/drain to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$missing_final_boundary_output" >&2
+  exit 1
+fi
+assert_contains "$missing_final_boundary_output" "Missing marker after 1s: final Gemini TurnComplete"
 
 explicit_serial_multiple_devices_log_dir="$TMP_DIR/explicit-serial-multiple-devices-log"
 : > "$FAKE_ADB_ARGS_LOG"

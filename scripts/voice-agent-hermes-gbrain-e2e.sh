@@ -35,6 +35,7 @@ ADB_READY_SCRIPT="${VOICE_AGENT_E2E_ADB_READY_SCRIPT:-scripts/adb-device-ready.s
 GEMINI_TOOL_CALL_TIMEOUT_SECONDS="${VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS:-240}"
 HERMES_RESPONSE_TIMEOUT_SECONDS="${VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS:-360}"
 FINAL_ANSWER_TIMEOUT_SECONDS="${VOICE_AGENT_E2E_FINAL_ANSWER_TIMEOUT_SECONDS:-60}"
+FINAL_BOUNDARY_TIMEOUT_SECONDS="${VOICE_AGENT_E2E_FINAL_BOUNDARY_TIMEOUT_SECONDS:-120}"
 CALL_STARTED=0
 PIPELINE_STATUS="not_started"
 CLEANUP_STATUS="not_started"
@@ -649,8 +650,26 @@ wait_for_log "completed Hermes answer sent to Gemini" \
   'VoiceAgentE2E.*hermes_queue_event type=late_text_turn_sent .*sent=true' \
   "$FINAL_ANSWER_TIMEOUT_SECONDS"
 wait_for_log "Gemini output audio received" 'VoiceAgentGemini.*event kind=OutputAudio' 120
+wait_for_log "final voice playback active" \
+  'AndroidVoiceAudioEngine.*Voice playback active: playbackEpoch=[0-9]+' \
+  60
+final_playback_active_line=$((LOG_SEARCH_START_LINE - 1))
+FINAL_PLAYBACK_EPOCH="$(
+  sed -n "${final_playback_active_line}p" "$LOG_FILE" |
+    sed -nE 's/.*Voice playback active: playbackEpoch=([0-9]+).*/\1/p'
+)"
+if [[ ! "$FINAL_PLAYBACK_EPOCH" =~ ^[0-9]+$ ]]; then
+  printf 'Could not parse final playback epoch from scoped log.\n' >&2
+  exit 1
+fi
 wait_for_log "Voice playback queued" 'AndroidVoiceAudioEngine.*Voice playback queued' 60
 wait_for_log "Voice playback wrote" 'AndroidVoiceAudioEngine.*Voice playback wrote' 60
+wait_for_log "final Gemini TurnComplete" \
+  'VoiceAgentGemini.*event kind=TurnComplete' \
+  "$FINAL_BOUNDARY_TIMEOUT_SECONDS"
+wait_for_log "final voice playback drained" \
+  "AndroidVoiceAudioEngine.*Voice playback drained: playbackEpoch=$FINAL_PLAYBACK_EPOCH$" \
+  "$FINAL_BOUNDARY_TIMEOUT_SECONDS"
 
 fail_if_log "Voice Lab 403" 'Voice Lab request failed 403'
 fail_if_log "Cloudflare auth HTML" 'Cloudflare|cf-error|Access denied'
