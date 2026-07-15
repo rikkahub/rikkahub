@@ -1,7 +1,8 @@
 package me.rerere.rikkahub.voiceagent
 
 import kotlinx.coroutines.CoroutineScope
-import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlin.uuid.Uuid
 
 sealed interface VoiceAgentCallStartupResult {
@@ -36,11 +37,17 @@ class VoiceAgentCallStartup internal constructor(
             ?.let(::VoiceAgentAudioRouteResolution)
             ?: resolveRoute()
         if (!isCurrent()) {
-            if (
-                resolution.owner == VoiceAudioRouteOwner.Telecom &&
-                manager.routeOwnerForActiveSession(conversationId, config) == null
-            ) {
-                telecomRegistry.disconnectActive()
+            resolution.telecomAttemptId?.let { attemptId ->
+                withContext(NonCancellable) {
+                    telecomRegistry.retireAttempt(
+                        attemptId,
+                        VoiceAgentTelecomFailure(
+                            diagnosticName = "telecom_startup_stale",
+                            detail = "Telecom startup attempt ${attemptId.value} became stale",
+                        ),
+                    )
+                    telecomRegistry.awaitOutcome(attemptId)
+                }
             }
             return VoiceAgentCallStartupResult.Stale(resolution)
         }

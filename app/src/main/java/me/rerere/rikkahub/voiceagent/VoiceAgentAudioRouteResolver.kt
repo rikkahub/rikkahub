@@ -9,6 +9,7 @@ import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 data class VoiceAgentAudioRouteResolution(
     val owner: VoiceAudioRouteOwner,
     val failure: VoiceAgentTelecomFailure? = null,
+    val telecomAttemptId: VoiceAgentTelecomAttemptId? = null,
 )
 
 internal fun interface VoiceAgentTelecomOutcomeTimeout {
@@ -49,7 +50,10 @@ class VoiceAgentAudioRouteResolver internal constructor(
             return when (val outcome = outcomeTimeout.awaitOutcome(timeoutMs) { registry.observeOutcome(attempt) }) {
                 VoiceAgentTelecomOutcome.Active -> {
                     registry.acknowledgeOutcome(attempt)
-                    VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.Telecom)
+                    VoiceAgentAudioRouteResolution(
+                        owner = VoiceAudioRouteOwner.Telecom,
+                        telecomAttemptId = attempt,
+                    )
                 }
                 is VoiceAgentTelecomOutcome.Failed -> {
                     registry.acknowledgeOutcome(attempt)
@@ -96,7 +100,10 @@ class VoiceAgentAudioRouteResolver internal constructor(
             registry.awaitOutcome(attempt)
         }
         return when (retired) {
-            VoiceAgentTelecomOutcome.Active -> VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.Telecom)
+            VoiceAgentTelecomOutcome.Active -> VoiceAgentAudioRouteResolution(
+                owner = VoiceAudioRouteOwner.Telecom,
+                telecomAttemptId = attempt,
+            )
             is VoiceAgentTelecomOutcome.Failed -> VoiceAgentAudioRouteResolution(
                 VoiceAudioRouteOwner.DirectFallback,
                 retired.failure,

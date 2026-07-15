@@ -33,6 +33,7 @@ class VoiceAgentAudioRouteResolverTest {
 
         assertEquals(VoiceAudioRouteOwner.Telecom, result.owner)
         assertEquals(null, result.failure)
+        assertEquals(VoiceAgentTelecomAttemptId(1), result.telecomAttemptId)
         assertTrue(registry.hasActiveConnection())
         assertAllAttemptsConsumed(registry)
     }
@@ -49,6 +50,7 @@ class VoiceAgentAudioRouteResolverTest {
 
         assertEquals(VoiceAudioRouteOwner.DirectFallback, result.owner)
         assertEquals("telecom_register_failed", result.failure?.diagnosticName)
+        assertEquals(null, result.telecomAttemptId)
         assertAllAttemptsConsumed(registry)
     }
 
@@ -110,6 +112,7 @@ class VoiceAgentAudioRouteResolverTest {
 
         assertEquals(VoiceAudioRouteOwner.Telecom, result.owner)
         assertEquals(null, result.failure)
+        assertEquals(VoiceAgentTelecomAttemptId(1), result.telecomAttemptId)
         assertTrue(registry.hasActiveConnection())
         assertAllAttemptsConsumed(registry)
     }
@@ -140,6 +143,7 @@ class VoiceAgentAudioRouteResolverTest {
 
         assertEquals(VoiceAudioRouteOwner.Telecom, result.owner)
         assertEquals(null, result.failure)
+        assertEquals(requireNotNull(attempt), result.telecomAttemptId)
         assertTrue(registry.hasActiveConnection())
         assertEquals(0, call.disconnectCalls)
         assertAllAttemptsConsumed(registry)

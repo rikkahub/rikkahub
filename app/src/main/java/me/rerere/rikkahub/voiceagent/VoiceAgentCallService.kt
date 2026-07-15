@@ -107,7 +107,12 @@ class VoiceAgentCallService : Service() {
                                 VoiceCallStatus.Degraded("Telecom unavailable: ${failure.detail}"),
                             )
                         }
-                        if (routeResolution.owner == VoiceAudioRouteOwner.Telecom) {
+                        if (
+                            shouldPublishVoiceCallBackgroundCapable(
+                                owner = routeResolution.owner,
+                                current = manager.state.value.call,
+                            )
+                        ) {
                             manager.updateCallStatus(VoiceCallStatus.BackgroundCapable)
                         }
                         notificationJob = serviceScope.launch {
@@ -272,6 +277,11 @@ class VoiceAgentCallService : Service() {
 
 internal fun shouldStartForegroundForVoiceAgentEnd(activeConversationId: Uuid?): Boolean =
     true
+
+internal fun shouldPublishVoiceCallBackgroundCapable(
+    owner: VoiceAudioRouteOwner,
+    current: VoiceCallStatus,
+): Boolean = owner == VoiceAudioRouteOwner.Telecom && current !is VoiceCallStatus.Degraded
 
 internal fun Throwable.toVoiceAgentLogDetail(): String =
     "${javaClass.simpleName}: ${(message ?: "").redactForVoiceAgentLog()}"

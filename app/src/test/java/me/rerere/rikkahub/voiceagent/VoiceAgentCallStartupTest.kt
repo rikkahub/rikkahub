@@ -134,7 +134,10 @@ class VoiceAgentCallStartupTest {
         registry.acknowledgeOutcome(attempt)
         val factory = StartupFakeCallFactory(StartupFakeManagedSession())
         val manager = VoiceAgentCallManager(factory)
-        val resolution = VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.Telecom)
+        val resolution = VoiceAgentAudioRouteResolution(
+            owner = VoiceAudioRouteOwner.Telecom,
+            telecomAttemptId = attempt,
+        )
         val startup = VoiceAgentCallStartup(manager, registry) { resolution }
 
         val result = startup.start(Uuid.random(), fakeLaunchConfig(), this) { false }
@@ -144,7 +147,75 @@ class VoiceAgentCallStartupTest {
         assertEquals(null, manager.activeConversationId.value)
         assertEquals(1, telecomCall.disconnectCalls)
         assertFalse(registry.hasActiveConnection())
+        assertFalse(registry.hasAttemptRecord(attempt))
     }
+
+    @Test
+    fun `older stale Telecom result retires only its attempt after newer attempt becomes active`() = runTest {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val oldAttempt = registry.beginAttempt()
+        val oldCall = FakeTelecomCall()
+        assertTrue(registry.activate(oldAttempt, oldCall))
+        registry.acknowledgeOutcome(oldAttempt)
+        val oldResolution = VoiceAgentAudioRouteResolution(
+            owner = VoiceAudioRouteOwner.Telecom,
+            telecomAttemptId = oldAttempt,
+        )
+
+        val newerAttempt = registry.beginAttempt()
+        val newerCall = FakeTelecomCall()
+        assertTrue(registry.activate(newerAttempt, newerCall))
+        val factory = StartupFakeCallFactory(StartupFakeManagedSession())
+        val manager = VoiceAgentCallManager(factory)
+        val startup = VoiceAgentCallStartup(manager, registry) { oldResolution }
+
+        val result = startup.start(Uuid.random(), fakeLaunchConfig(), this) { false }
+
+        assertEquals(VoiceAgentCallStartupResult.Stale(oldResolution), result)
+        assertEquals(emptyList<StartupCreatedCall>(), factory.created)
+        assertEquals(null, manager.activeConversationId.value)
+        assertEquals(1, oldCall.disconnectCalls)
+        assertEquals(0, newerCall.disconnectCalls)
+        assertTrue(registry.hasActiveConnection())
+        assertFalse(registry.hasAttemptRecord(oldAttempt))
+        assertTrue(registry.hasAttemptRecord(newerAttempt))
+        assertEquals(VoiceAgentTelecomOutcome.Active, registry.observeOutcome(newerAttempt))
+        registry.acknowledgeOutcome(newerAttempt)
+    }
+
+    @Test
+    fun `stale retained Telecom resolution has no attempt and leaves claimed call connected`() = runTest {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val telecomCall = FakeTelecomCall()
+        assertTrue(registry.activate(attempt, telecomCall))
+        val session = StartupFakeManagedSession()
+        val factory = StartupFakeCallFactory(session)
+        val manager = VoiceAgentCallManager(factory)
+        val conversationId = Uuid.random()
+        val config = fakeLaunchConfig()
+        manager.start(conversationId, config, VoiceAudioRouteOwner.Telecom, this)
+        val startup = VoiceAgentCallStartup(manager, registry) {
+            error("retained session must not resolve a new route")
+        }
+
+        val result = startup.start(conversationId, config, this) { false }
+
+        val stale = result as VoiceAgentCallStartupResult.Stale
+        assertEquals(VoiceAudioRouteOwner.Telecom, stale.resolution.owner)
+        assertEquals(null, stale.resolution.telecomAttemptId)
+        assertEquals(1, factory.created.size)
+        assertEquals(0, telecomCall.disconnectCalls)
+        assertTrue(registry.hasActiveConnection())
+        assertTrue(registry.hasAttemptRecord(attempt))
+        registry.acknowledgeOutcome(attempt)
+    }
+}
+
+private fun VoiceAgentTelecomCallRegistry.hasAttemptRecord(attemptId: VoiceAgentTelecomAttemptId): Boolean {
+    val attemptsField = javaClass.getDeclaredField("attempts").apply { isAccessible = true }
+    val attempts = attemptsField.get(this) as Map<*, *>
+    return attemptId in attempts
 }
 
 private class StartupFakeManagedSession(
