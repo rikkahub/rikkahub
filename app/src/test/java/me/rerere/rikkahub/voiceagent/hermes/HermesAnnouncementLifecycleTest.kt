@@ -84,6 +84,60 @@ class HermesAnnouncementLifecycleTest {
     }
 
     @Test
+    fun `interruption closes an idle gate until two completion boundaries`() {
+        var state = reducer.reduce(
+            attached,
+            AnnouncerEvent.GeminiTurnInterrupted(nowMs = 10L),
+        ).state
+        assertEquals(GeminiTurnGate.InterruptedAwaitingBoundary, state.geminiTurn)
+
+        state = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(nowMs = 20L)).state
+        assertEquals(GeminiTurnGate.Active, state.geminiTurn)
+
+        state = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(nowMs = 30L)).state
+        assertEquals(GeminiTurnGate.Idle, state.geminiTurn)
+    }
+
+    @Test
+    fun `activity and repeated interruptions do not weaken interrupted state`() {
+        var state = attached.copy(geminiTurn = GeminiTurnGate.Active)
+        state = reducer.reduce(state, AnnouncerEvent.GeminiTurnInterrupted(10L)).state
+        state = reducer.reduce(state, AnnouncerEvent.GeminiTurnActive(20L)).state
+        state = reducer.reduce(state, AnnouncerEvent.GeminiTurnInterrupted(30L)).state
+
+        assertEquals(GeminiTurnGate.InterruptedAwaitingBoundary, state.geminiTurn)
+        val firstCompletion = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(40L))
+        assertEquals(GeminiTurnGate.Active, firstCompletion.state.geminiTurn)
+    }
+
+    @Test
+    fun `interruption wins a send reservation race`() {
+        var state = reducer.reduce(
+            attached,
+            AnnouncerEvent.IntentEnqueued(completion, nowMs = 10L),
+        ).state
+        state = reducer.reduce(state, AnnouncerEvent.GeminiTurnInterrupted(20L)).state
+
+        val returned = reducer.reduce(
+            state,
+            AnnouncerEvent.SendReturned(AnnouncementSendOutcome.Sent, nowMs = 30L),
+        )
+
+        assertEquals(GeminiTurnGate.InterruptedAwaitingBoundary, returned.state.geminiTurn)
+        assertEquals(null, returned.state.inFlight)
+    }
+
+    @Test
+    fun `session retirement clears interrupted ownership`() {
+        val interrupted = attached.copy(geminiTurn = GeminiTurnGate.InterruptedAwaitingBoundary)
+
+        val retired = reducer.reduce(interrupted, AnnouncerEvent.GeminiSessionRetired(20L))
+
+        assertEquals(GeminiTurnGate.Idle, retired.state.geminiTurn)
+        assertTrue(retired.state.bridgeRetired)
+    }
+
+    @Test
     fun `session retirement clears old turn ownership without releasing on the old bridge`() {
         var state = attached.copy(geminiTurn = GeminiTurnGate.Active)
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 10L)).state

@@ -52,6 +52,7 @@ sealed interface GeminiTurnGate {
         val completed: Boolean = false,
     ) : GeminiTurnGate
     data object Active : GeminiTurnGate
+    data object InterruptedAwaitingBoundary : GeminiTurnGate
 }
 
 data class PlaybackGate(
@@ -88,6 +89,7 @@ sealed interface AnnouncerEvent {
     data class BridgeDetached(val nowMs: Long) : AnnouncerEvent
     data class GeminiTurnActive(val nowMs: Long) : AnnouncerEvent
     data class GeminiTurnComplete(val nowMs: Long) : AnnouncerEvent
+    data class GeminiTurnInterrupted(val nowMs: Long) : AnnouncerEvent
     data class GeminiSessionRetired(val nowMs: Long) : AnnouncerEvent
     data class PlaybackActive(val playbackEpoch: PlaybackEpoch, val nowMs: Long) : AnnouncerEvent
     data class PlaybackDrainStarted(val playbackEpoch: PlaybackEpoch, val nowMs: Long) : AnnouncerEvent
@@ -161,6 +163,14 @@ class AnnouncerReducer(
         is AnnouncerEvent.GeminiTurnComplete -> when {
             state.closed -> noChange(state)
             else -> settle(state.copy(geminiTurn = state.geminiTurn.onComplete()), event.nowMs)
+        }
+
+        is AnnouncerEvent.GeminiTurnInterrupted -> when {
+            state.closed -> noChange(state)
+            else -> settle(
+                state.copy(geminiTurn = GeminiTurnGate.InterruptedAwaitingBoundary),
+                event.nowMs,
+            )
         }
 
         is AnnouncerEvent.GeminiSessionRetired -> when {
@@ -323,26 +333,30 @@ class AnnouncerReducer(
         GeminiTurnGate.Idle -> GeminiTurnGate.Active
         is GeminiTurnGate.SendReserved -> copy(activityObserved = true)
         GeminiTurnGate.Active -> this
+        GeminiTurnGate.InterruptedAwaitingBoundary -> this
     }
 
     private fun GeminiTurnGate.onComplete(): GeminiTurnGate = when (this) {
         GeminiTurnGate.Idle -> this
         is GeminiTurnGate.SendReserved -> copy(completed = true)
         GeminiTurnGate.Active -> GeminiTurnGate.Idle
+        GeminiTurnGate.InterruptedAwaitingBoundary -> GeminiTurnGate.Active
     }
 
-    private fun GeminiTurnGate.onSendReturned(outcome: AnnouncementSendOutcome): GeminiTurnGate =
-        when (this) {
-            GeminiTurnGate.Idle -> this
-            GeminiTurnGate.Active -> this
-            is GeminiTurnGate.SendReserved -> when (outcome) {
-                AnnouncementSendOutcome.Sent -> if (completed) GeminiTurnGate.Idle else GeminiTurnGate.Active
-                AnnouncementSendOutcome.Failed,
-                AnnouncementSendOutcome.Skipped,
-                AnnouncementSendOutcome.AttachmentInvalidated,
-                    -> if (activityObserved && !completed) GeminiTurnGate.Active else GeminiTurnGate.Idle
-            }
+    private fun GeminiTurnGate.onSendReturned(
+        outcome: AnnouncementSendOutcome,
+    ): GeminiTurnGate = when (this) {
+        GeminiTurnGate.Idle -> this
+        GeminiTurnGate.Active -> this
+        GeminiTurnGate.InterruptedAwaitingBoundary -> this
+        is GeminiTurnGate.SendReserved -> when (outcome) {
+            AnnouncementSendOutcome.Sent -> if (completed) GeminiTurnGate.Idle else GeminiTurnGate.Active
+            AnnouncementSendOutcome.Failed,
+            AnnouncementSendOutcome.Skipped,
+            AnnouncementSendOutcome.AttachmentInvalidated,
+                -> if (activityObserved && !completed) GeminiTurnGate.Active else GeminiTurnGate.Idle
         }
+    }
 
     private fun enqueueIntent(
         state: AnnouncerState,
