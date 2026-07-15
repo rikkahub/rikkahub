@@ -22,7 +22,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-internal data class DirectAudioFocusHandle(val platformValue: Any?)
+internal interface DirectAudioFocusHandle
 
 internal data class DirectAudioFocusAcquisition(
     val result: Int,
@@ -32,15 +32,16 @@ internal data class DirectAudioFocusAcquisition(
 internal data class DirectAudioCaptureDevice(
     val routeDevice: VoiceAudioRouteDevice,
     val safeLabel: String,
-    val platformValue: Any? = null,
+    val handle: DirectAudioCaptureDeviceHandle,
 )
 
-internal data class DirectBluetoothHeadset(val platformValue: Any?)
+internal interface DirectAudioCaptureDeviceHandle
 
-internal data class DirectBluetoothDevice(
-    val platformValue: Any?,
-    val safeLabel: String,
-)
+internal interface DirectBluetoothHeadset
+
+internal interface DirectBluetoothDevice {
+    val safeLabel: String
+}
 
 internal fun interface DirectAudioRecorder {
     fun setPreferredDevice(device: DirectAudioCaptureDevice): Boolean
@@ -473,16 +474,18 @@ private class SystemDirectAudioRoutePlatform(
         }
         return DirectAudioFocusAcquisition(
             result = result,
-            handle = DirectAudioFocusHandle(request ?: LegacyAudioFocusHandle)
+            handle = AndroidDirectAudioFocusHandle(request)
                 .takeIf { result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED },
         )
     }
 
     override fun abandonAudioFocus(handle: DirectAudioFocusHandle) {
         val manager = audioManager ?: return
-        val request = handle.platformValue as? AudioFocusRequest
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && request != null) {
-            manager.abandonAudioFocusRequest(request)
+        val androidHandle = requireNotNull(handle as? AndroidDirectAudioFocusHandle) {
+            "Unexpected direct audio focus handle"
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            manager.abandonAudioFocusRequest(requireNotNull(androidHandle.request))
         } else {
             @Suppress("DEPRECATION")
             manager.abandonAudioFocus(null)
@@ -513,7 +516,7 @@ private class SystemDirectAudioRoutePlatform(
             DirectAudioCaptureDevice(
                 routeDevice = routeDevice,
                 safeLabel = routeDevice.debugLabel(),
-                platformValue = device,
+                handle = AndroidDirectAudioCaptureDeviceHandle(device),
             )
         }
     }
@@ -553,7 +556,9 @@ private class SystemDirectAudioRoutePlatform(
         val androidListener = object : BluetoothProfile.ServiceListener {
             override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
                 if (profile == BluetoothProfile.HEADSET) {
-                    (proxy as? BluetoothHeadset)?.let { listener.onConnected(DirectBluetoothHeadset(it)) }
+                    (proxy as? BluetoothHeadset)?.let {
+                        listener.onConnected(AndroidDirectBluetoothHeadset(it))
+                    }
                 }
             }
 
@@ -574,7 +579,9 @@ private class SystemDirectAudioRoutePlatform(
     }
 
     override fun closeBluetoothHeadsetProxy(headset: DirectBluetoothHeadset) {
-        val androidHeadset = headset.platformValue as? BluetoothHeadset ?: return
+        val androidHeadset = requireNotNull(headset as? AndroidDirectBluetoothHeadset) {
+            "Unexpected direct Bluetooth headset handle"
+        }.headset
         context.getSystemService(BluetoothManager::class.java)
             ?.adapter
             ?.closeProfileProxy(BluetoothProfile.HEADSET, androidHeadset)
@@ -582,9 +589,11 @@ private class SystemDirectAudioRoutePlatform(
 
     @SuppressLint("MissingPermission")
     override fun connectedBluetoothDevices(headset: DirectBluetoothHeadset): List<DirectBluetoothDevice> {
-        val androidHeadset = headset.platformValue as? BluetoothHeadset ?: return emptyList()
+        val androidHeadset = requireNotNull(headset as? AndroidDirectBluetoothHeadset) {
+            "Unexpected direct Bluetooth headset handle"
+        }.headset
         return androidHeadset.connectedDevices.map { device ->
-            DirectBluetoothDevice(device, device.safeBluetoothLabel())
+            AndroidDirectBluetoothDevice(device, device.safeBluetoothLabel())
         }
     }
 
@@ -592,12 +601,12 @@ private class SystemDirectAudioRoutePlatform(
     override fun startVoiceRecognition(
         headset: DirectBluetoothHeadset,
         device: DirectBluetoothDevice,
-    ): Boolean = (headset.platformValue as? BluetoothHeadset)
-        ?.startVoiceRecognition(device.requireBluetoothDevice()) == true
+    ): Boolean = headset.requireAndroidHeadset()
+        .startVoiceRecognition(device.requireBluetoothDevice())
 
     @SuppressLint("MissingPermission")
     override fun stopVoiceRecognition(headset: DirectBluetoothHeadset, device: DirectBluetoothDevice) {
-        (headset.platformValue as? BluetoothHeadset)?.stopVoiceRecognition(device.requireBluetoothDevice())
+        headset.requireAndroidHeadset().stopVoiceRecognition(device.requireBluetoothDevice())
     }
 
     override fun dispatch(block: () -> Unit) {
@@ -610,10 +619,19 @@ private class SystemDirectAudioRoutePlatform(
     }
 
     private fun DirectAudioCaptureDevice.requireAudioDeviceInfo(): AudioDeviceInfo =
-        requireNotNull(platformValue as? AudioDeviceInfo) { "Android capture device is missing" }
+        requireNotNull(handle as? AndroidDirectAudioCaptureDeviceHandle) {
+            "Unexpected direct capture device handle"
+        }.device
 
     private fun DirectBluetoothDevice.requireBluetoothDevice(): BluetoothDevice =
-        requireNotNull(platformValue as? BluetoothDevice) { "Android Bluetooth device is missing" }
+        requireNotNull(this as? AndroidDirectBluetoothDevice) {
+            "Unexpected direct Bluetooth device handle"
+        }.device
+
+    private fun DirectBluetoothHeadset.requireAndroidHeadset(): BluetoothHeadset =
+        requireNotNull(this as? AndroidDirectBluetoothHeadset) {
+            "Unexpected direct Bluetooth headset handle"
+        }.headset
 
     private fun AudioDeviceInfo.toVoiceAudioRouteDevice(): VoiceAudioRouteDevice =
         VoiceAudioRouteDevice(
@@ -638,9 +656,25 @@ private class SystemDirectAudioRoutePlatform(
     private companion object {
         const val BLUETOOTH_HEADSET_PROFILE_WAIT_STEPS = 10
         const val BLUETOOTH_HEADSET_PROFILE_WAIT_MS = 100L
-        val LegacyAudioFocusHandle = Any()
     }
 }
+
+private data class AndroidDirectAudioFocusHandle(
+    val request: AudioFocusRequest?,
+) : DirectAudioFocusHandle
+
+private data class AndroidDirectAudioCaptureDeviceHandle(
+    val device: AudioDeviceInfo,
+) : DirectAudioCaptureDeviceHandle
+
+private data class AndroidDirectBluetoothHeadset(
+    val headset: BluetoothHeadset,
+) : DirectBluetoothHeadset
+
+private data class AndroidDirectBluetoothDevice(
+    val device: BluetoothDevice,
+    override val safeLabel: String,
+) : DirectBluetoothDevice
 
 internal fun voiceAudioAttributes(): AudioAttributes =
     AudioAttributes.Builder()

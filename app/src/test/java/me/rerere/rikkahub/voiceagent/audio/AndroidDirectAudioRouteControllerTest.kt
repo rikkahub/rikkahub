@@ -167,6 +167,25 @@ class AndroidDirectAudioRouteControllerTest {
     }
 
     @Test
+    fun `queued headset voice recognition does not mutate Android after close`() {
+        val platform = FakeDirectAudioRoutePlatform().apply {
+            dispatchImmediately = false
+        }
+        val controller = controller(platform)
+        controller.beforeCapture()
+
+        platform.deliverHeadset()
+        assertEquals(1, platform.pendingDispatchCount)
+        controller.close()
+        val mutationsAfterClose = platform.androidMutations.toList()
+
+        platform.drainDispatches()
+
+        assertTrue(platform.voiceRecognitionStarts.isEmpty())
+        assertEquals(mutationsAfterClose, platform.androidMutations)
+    }
+
+    @Test
     fun `repeated cleanup releases every acquired resource exactly once`() {
         val platform = FakeDirectAudioRoutePlatform().apply {
             communicationDeviceAccepted = true
@@ -235,7 +254,7 @@ private class FakeDirectAudioRecorder(
 
 private class FakeDirectAudioRoutePlatform : DirectAudioRoutePlatform {
     override val available = true
-    val focusHandle = DirectAudioFocusHandle("focus")
+    val focusHandle: DirectAudioFocusHandle = FakeDirectAudioFocusHandle
     val captureDevice = DirectAudioCaptureDevice(
         routeDevice = VoiceAudioRouteDevice(
             id = 7,
@@ -243,9 +262,10 @@ private class FakeDirectAudioRoutePlatform : DirectAudioRoutePlatform {
             name = "headset microphone",
         ),
         safeLabel = "7:BluetoothSco:headset microphone",
+        handle = FakeDirectAudioCaptureDeviceHandle,
     )
-    val headset = DirectBluetoothHeadset("headset")
-    val bluetoothDevice = DirectBluetoothDevice("device", "headset:00:11")
+    val headset: DirectBluetoothHeadset = FakeDirectBluetoothHeadset
+    val bluetoothDevice: DirectBluetoothDevice = FakeDirectBluetoothDevice("headset:00:11")
     val androidMutations = mutableListOf<String>()
     var focusResult = AudioManager.AUDIOFOCUS_REQUEST_GRANTED
     var onRequestFocus: () -> Unit = {}
@@ -254,6 +274,7 @@ private class FakeDirectAudioRoutePlatform : DirectAudioRoutePlatform {
     var throwWhenDisablingSco = false
     var deliverHeadsetDuringRequest = false
     var voiceRecognitionAccepted = false
+    var dispatchImmediately = true
     var focusRequests = 0
     val abandonedFocus = mutableListOf<DirectAudioFocusHandle>()
     var setCommunicationModeCalls = 0
@@ -270,6 +291,10 @@ private class FakeDirectAudioRoutePlatform : DirectAudioRoutePlatform {
     var closeCalls = 0
     private var headsetListener: DirectBluetoothHeadsetListener? = null
     private var communicationMode = false
+    private val pendingDispatches = ArrayDeque<() -> Unit>()
+
+    val pendingDispatchCount: Int
+        get() = pendingDispatches.size
 
     override fun requestAudioFocus(onFocusChange: (Int) -> Unit): DirectAudioFocusAcquisition {
         focusRequests += 1
@@ -367,7 +392,9 @@ private class FakeDirectAudioRoutePlatform : DirectAudioRoutePlatform {
         androidMutations += "stopVoiceRecognition"
     }
 
-    override fun dispatch(block: () -> Unit) = block()
+    override fun dispatch(block: () -> Unit) {
+        if (dispatchImmediately) block() else pendingDispatches.addLast(block)
+    }
 
     override fun close() {
         closeCalls += 1
@@ -380,4 +407,20 @@ private class FakeDirectAudioRoutePlatform : DirectAudioRoutePlatform {
     fun disconnectHeadset() {
         requireNotNull(headsetListener).onDisconnected()
     }
+
+    fun drainDispatches() {
+        while (pendingDispatches.isNotEmpty()) {
+            pendingDispatches.removeFirst().invoke()
+        }
+    }
 }
+
+private data object FakeDirectAudioFocusHandle : DirectAudioFocusHandle
+
+private data object FakeDirectAudioCaptureDeviceHandle : DirectAudioCaptureDeviceHandle
+
+private data object FakeDirectBluetoothHeadset : DirectBluetoothHeadset
+
+private data class FakeDirectBluetoothDevice(
+    override val safeLabel: String,
+) : DirectBluetoothDevice

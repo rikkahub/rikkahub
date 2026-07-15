@@ -2,6 +2,7 @@ package me.rerere.rikkahub.voiceagent
 
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import kotlinx.coroutines.CoroutineStart
@@ -10,9 +11,44 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VoiceAgentTelecomRetirementTest {
+    @Test
+    fun `shared single flight retirement preserves one owner reentrancy and waiter interruption`() {
+        val retirement = SingleFlightRetirement()
+        val ownerEntered = CountDownLatch(1)
+        val releaseOwner = CountDownLatch(1)
+        val ownerCalls = AtomicInteger()
+        val owner = thread {
+            retirement.retire {
+                ownerCalls.incrementAndGet()
+                retirement.retire { ownerCalls.incrementAndGet() }
+                ownerEntered.countDown()
+                releaseOwner.await()
+            }
+        }
+        ownerEntered.await()
+        val waiterReturned = CountDownLatch(1)
+        val waiterInterrupted = AtomicBoolean()
+        val waiter = thread {
+            Thread.currentThread().interrupt()
+            retirement.retire { ownerCalls.incrementAndGet() }
+            waiterInterrupted.set(Thread.currentThread().isInterrupted)
+            waiterReturned.countDown()
+        }
+
+        assertFalse(waiterReturned.await(100, java.util.concurrent.TimeUnit.MILLISECONDS))
+        releaseOwner.countDown()
+        owner.join()
+        waiter.join()
+
+        assertEquals(1, ownerCalls.get())
+        assertEquals(0L, waiterReturned.count)
+        assertTrue(waiterInterrupted.get())
+    }
+
     @Test
     fun `retirement is one shot and callback follows framework retirement`() {
         val events = mutableListOf<String>()

@@ -35,6 +35,15 @@ fail() { printf '%s\n' "$1" >&2; exit 1; }
 assert_contains() { [[ "$1" == *"$2"* ]] || fail "Expected output to contain: $2"; }
 assert_not_contains() { [[ "$1" != *"$2"* ]] || fail 'Gradle output exposed a forbidden test fixture.'; }
 
+assert_occurs_before() {
+  local output="$1" first="$2" second="$3" first_line second_line
+  first_line="$(printf '%s\n' "$output" | awk -v task="$first" '$1 == task { print NR; exit }')"
+  second_line="$(printf '%s\n' "$output" | awk -v task="$second" '$1 == task { print NR; exit }')"
+  [[ -n "$first_line" ]] || fail "Expected output to contain: $first"
+  [[ -n "$second_line" ]] || fail "Expected output to contain: $second"
+  (( first_line < second_line )) || fail "Expected $first to run before $second"
+}
+
 assert_redacted() {
   local output="$1"
   assert_not_contains "$output" "$SYNTHETIC_DSN"
@@ -227,8 +236,25 @@ for protected_task in \
 do
   dry_run_output="$(run_clean_gradle "$file_home" ":app:$protected_task" --dry-run)"
   assert_contains "$dry_run_output" ':app:validateVoiceAgentSentryDebug'
+  assert_occurs_before "$dry_run_output" \
+    ':app:validateVoiceAgentSentryDebug' ":app:$protected_task"
   assert_redacted "$dry_run_output"
 done
+
+rm -rf -- "$PROJECT_DIR/app/build/outputs/apk/debug"
+set +e
+missing_package_output="$(run_clean_gradle "$missing_home" \
+  :app:packageDebugUniversalApk --console=plain)"
+missing_package_status=$?
+set -e
+[[ "$missing_package_status" -ne 0 ]] || fail 'Protected debug packaging unexpectedly passed without Sentry configuration.'
+assert_contains "$missing_package_output" ':app:validateVoiceAgentSentryDebug FAILED'
+assert_contains "$missing_package_output" 'VOICE_AGENT_SENTRY_DSN is required for debug APK builds'
+assert_not_contains "$missing_package_output" '> Task :app:packageDebugUniversalApk'
+assert_redacted "$missing_package_output"
+if find "$PROJECT_DIR/app/build" -type f -iname '*debug*.apk' -print -quit 2>/dev/null | grep -q .; then
+  fail 'Protected debug packaging created an APK after Sentry validation failed.'
+fi
 
 independent_output="$(run_clean_gradle "$missing_home" \
   :app:assembleDebugUnitTest :app:assembleRelease --dry-run)"

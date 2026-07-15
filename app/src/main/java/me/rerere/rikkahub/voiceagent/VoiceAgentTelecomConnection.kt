@@ -10,7 +10,6 @@ import android.telecom.CallEndpointException
 import android.telecom.Connection
 import android.telecom.DisconnectCause
 import androidx.annotation.RequiresApi
-import java.util.concurrent.CountDownLatch
 
 class VoiceAgentTelecomConnection(
     private val context: Context,
@@ -171,57 +170,23 @@ internal class VoiceAgentTelecomRetirement<Cause>(
     private val destroy: () -> Unit,
     private val onRetired: () -> Unit,
 ) {
-    private val lock = Any()
-    private val retirementCompleted = CountDownLatch(1)
-    private var retiringThread: Thread? = null
+    private val singleFlight = SingleFlightRetirement()
 
     fun retire(cause: Cause) {
-        val ownsRetirement = synchronized(lock) {
-            if (retiringThread != null) {
-                false
-            } else {
-                retiringThread = Thread.currentThread()
-                true
-            }
-        }
-        if (!ownsRetirement) {
-            if (retiringThread !== Thread.currentThread()) {
-                awaitRetirementUninterruptibly()
-            }
-            return
-        }
-
-        try {
+        singleFlight.retire {
             try {
-                onRetiring()
-            } finally {
                 try {
-                    setDisconnected(cause)
+                    onRetiring()
                 } finally {
-                    destroy()
+                    try {
+                        setDisconnected(cause)
+                    } finally {
+                        destroy()
+                    }
                 }
-            }
-        } finally {
-            try {
-                onRetired()
             } finally {
-                retirementCompleted.countDown()
+                onRetired()
             }
-        }
-    }
-
-    private fun awaitRetirementUninterruptibly() {
-        var interrupted = false
-        while (true) {
-            try {
-                retirementCompleted.await()
-                break
-            } catch (_: InterruptedException) {
-                interrupted = true
-            }
-        }
-        if (interrupted) {
-            Thread.currentThread().interrupt()
         }
     }
 }

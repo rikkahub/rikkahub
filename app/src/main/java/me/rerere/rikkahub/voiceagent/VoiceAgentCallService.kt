@@ -219,28 +219,16 @@ class VoiceAgentCallService : Service() {
             return
         }
         endJob = serviceScope.launch {
-            if (endGeneration != callGeneration) {
-                return@launch
-            }
-            runVoiceAgentSuspendCleanupStages(
-                { retireTelecomCall() },
-                { session?.endAndDrain() },
-                { VoiceAgentLog.d(TAG, "end completed conversationId=${endingConversationId ?: "none"}") },
-                {
-                    if (endGeneration == callGeneration) {
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                    }
+            runVoiceAgentEndCleanupForGeneration(
+                isCurrent = { endGeneration == callGeneration },
+                retireTelecomCall = { retireTelecomCall() },
+                endAndDrain = { session?.endAndDrain() },
+                onCompleted = {
+                    VoiceAgentLog.d(TAG, "end completed conversationId=${endingConversationId ?: "none"}")
                 },
-                {
-                    if (endGeneration == callGeneration) {
-                        stopSelf()
-                    }
-                },
-                {
-                    if (endGeneration == callGeneration) {
-                        endJob = null
-                    }
-                },
+                stopForeground = { stopForeground(STOP_FOREGROUND_REMOVE) },
+                stopSelf = { stopSelf() },
+                clearEndJob = { endJob = null },
             )
         }
     }
@@ -310,6 +298,26 @@ class VoiceAgentCallService : Service() {
         const val TAG = "VoiceAgentCallService"
         const val FALLBACK_END_NOTIFICATION_CONVERSATION_ID = "voice-agent"
     }
+}
+
+internal suspend fun runVoiceAgentEndCleanupForGeneration(
+    isCurrent: () -> Boolean,
+    retireTelecomCall: suspend () -> Unit,
+    endAndDrain: suspend () -> Unit,
+    onCompleted: suspend () -> Unit,
+    stopForeground: suspend () -> Unit,
+    stopSelf: suspend () -> Unit,
+    clearEndJob: suspend () -> Unit,
+) {
+    if (!isCurrent()) return
+    runVoiceAgentSuspendCleanupStages(
+        retireTelecomCall,
+        endAndDrain,
+        onCompleted,
+        { if (isCurrent()) stopForeground() },
+        { if (isCurrent()) stopSelf() },
+        { if (isCurrent()) clearEndJob() },
+    )
 }
 
 internal fun shouldStartForegroundForVoiceAgentEnd(activeConversationId: Uuid?): Boolean =

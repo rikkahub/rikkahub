@@ -9,7 +9,6 @@ import android.media.MediaRecorder
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
-import java.util.concurrent.CountDownLatch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.voiceagent.SingleFlightRetirement
 
 private fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (this) {
     is VoicePlaybackDiagnostic.MalformedChunk -> "Malformed playback chunk: $message"
@@ -45,43 +45,12 @@ internal class VoiceAudioCaptureLifecycle {
 internal class VoiceAudioCaptureRouteLease(
     private val afterCapture: () -> Unit,
 ) {
-    private val lock = Any()
-    private val retirementCompleted = CountDownLatch(1)
-    private var retiringThread: Thread? = null
+    private val singleFlight = SingleFlightRetirement()
 
     fun retire() {
-        val ownsRetirement = synchronized(lock) {
-            if (retiringThread != null) {
-                false
-            } else {
-                retiringThread = Thread.currentThread()
-                true
-            }
-        }
-        if (!ownsRetirement) {
-            if (retiringThread !== Thread.currentThread()) {
-                awaitRetirementUninterruptibly()
-            }
-            return
-        }
-        try {
+        singleFlight.retire {
             afterCapture()
-        } finally {
-            retirementCompleted.countDown()
         }
-    }
-
-    private fun awaitRetirementUninterruptibly() {
-        var interrupted = false
-        while (true) {
-            try {
-                retirementCompleted.await()
-                break
-            } catch (_: InterruptedException) {
-                interrupted = true
-            }
-        }
-        if (interrupted) Thread.currentThread().interrupt()
     }
 }
 
