@@ -233,8 +233,13 @@ internal class VoicePlaybackWriter(
         when (result) {
             VoicePcm16Sink.DrainResult.Drained -> {
                 synchronized(lock) {
-                    val completed = epochWriterGenerations.remove(command.playbackEpoch) == command.writerGeneration
+                    val completed = !released &&
+                        !retirementInProgress &&
+                        !playbackRetirementFailed &&
+                        generation == command.writerGeneration &&
+                        epochWriterGenerations[command.playbackEpoch] == command.writerGeneration
                     if (completed) {
+                        epochWriterGenerations.remove(command.playbackEpoch)
                         playbackEvents.enqueue(VoicePlaybackEvent.Drained(command.playbackEpoch))
                     }
                 }
