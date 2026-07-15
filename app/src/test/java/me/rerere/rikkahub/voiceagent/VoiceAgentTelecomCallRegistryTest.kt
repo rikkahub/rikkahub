@@ -1,7 +1,17 @@
 package me.rerere.rikkahub.voiceagent
 
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.concurrent.thread
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VoiceAgentTelecomCallRegistryTest {
@@ -17,6 +27,39 @@ class VoiceAgentTelecomCallRegistryTest {
     }
 
     @Test
+    fun `active outcome is published only after activation callback returns`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val call = FakeTelecomCall()
+        val callbackEntered = CountDownLatch(1)
+        val releaseCallback = CountDownLatch(1)
+        val accepted = AtomicBoolean()
+        val outcome = async(start = CoroutineStart.UNDISPATCHED) {
+            registry.awaitOutcome(attempt)
+        }
+
+        val activation = thread {
+            accepted.set(
+                registry.activate(attempt, call) {
+                    callbackEntered.countDown()
+                    releaseCallback.await()
+                },
+            )
+        }
+
+        callbackEntered.await()
+        assertFalse(registry.hasActiveConnection())
+        assertFalse(outcome.isCompleted)
+
+        releaseCallback.countDown()
+        activation.join()
+
+        assertTrue(accepted.get())
+        assertEquals(VoiceAgentTelecomOutcome.Active, outcome.await())
+        assertTrue(registry.hasActiveConnection())
+    }
+
+    @Test
     fun `matching failure completes pending attempt`() = runBlocking {
         val registry = VoiceAgentTelecomCallRegistry()
         val attempt = registry.beginAttempt()
@@ -25,6 +68,125 @@ class VoiceAgentTelecomCallRegistryTest {
         registry.fail(attempt, failure)
 
         assertEquals(VoiceAgentTelecomOutcome.Failed(failure), registry.awaitOutcome(attempt))
+    }
+
+    @Test
+    fun `active outcome remains awaitable after matching clear`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val call = FakeTelecomCall()
+
+        registry.activate(attempt, call)
+        registry.clear(call)
+
+        assertEquals(
+            VoiceAgentTelecomOutcome.Active,
+            withTimeoutOrNull(100) { registry.awaitOutcome(attempt) },
+        )
+    }
+
+    @Test
+    fun `failed outcome remains awaitable after cleanup and newer attempt`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val failure = VoiceAgentTelecomFailure("telecom_outgoing_failed", "rejected")
+
+        registry.fail(attempt, failure)
+        registry.disconnectActive()
+        registry.beginAttempt()
+
+        assertEquals(
+            VoiceAgentTelecomOutcome.Failed(failure),
+            withTimeoutOrNull(100) { registry.awaitOutcome(attempt) },
+        )
+    }
+
+    @Test
+    fun `new attempt completes superseded pending attempt`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val superseded = registry.beginAttempt()
+
+        val replacement = registry.beginAttempt()
+
+        assertEquals(
+            VoiceAgentTelecomOutcome.Failed(
+                VoiceAgentTelecomFailure(
+                    diagnosticName = "telecom_attempt_superseded",
+                    detail = "Telecom attempt ${superseded.value} superseded by attempt ${replacement.value}",
+                ),
+            ),
+            withTimeoutOrNull(100) { registry.awaitOutcome(superseded) },
+        )
+    }
+
+    @Test
+    fun `cleanup during activation retires connection before completing failure`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val events = Collections.synchronizedList(mutableListOf<String>())
+        val call = FakeTelecomCall { events += "disconnect" }
+        val callbackEntered = CountDownLatch(1)
+        val releaseCallback = CountDownLatch(1)
+        val accepted = AtomicBoolean(true)
+        val outcome = async(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
+            registry.awaitOutcome(attempt).also { events += "outcome" }
+        }
+        val activation = thread {
+            accepted.set(
+                registry.activate(attempt, call) {
+                    callbackEntered.countDown()
+                    releaseCallback.await()
+                    events += "setActive"
+                },
+            )
+        }
+
+        callbackEntered.await()
+        registry.disconnectActive()
+
+        assertEquals(0, call.disconnectCalls)
+        assertFalse(outcome.isCompleted)
+
+        releaseCallback.countDown()
+        activation.join()
+        val failed = outcome.await() as VoiceAgentTelecomOutcome.Failed
+
+        assertFalse(accepted.get())
+        assertEquals("telecom_attempt_cancelled", failed.failure.diagnosticName)
+        assertEquals(listOf("setActive", "disconnect", "outcome"), events)
+        assertFalse(registry.hasActiveConnection())
+    }
+
+    @Test
+    fun `failure during activation is deferred until connection retires`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val failure = VoiceAgentTelecomFailure("telecom_outgoing_failed", "rejected")
+        val call = FakeTelecomCall()
+        val callbackEntered = CountDownLatch(1)
+        val releaseCallback = CountDownLatch(1)
+        val outcome = async(start = CoroutineStart.UNDISPATCHED) {
+            registry.awaitOutcome(attempt)
+        }
+        val activation = thread {
+            registry.activate(attempt, call) {
+                callbackEntered.countDown()
+                releaseCallback.await()
+            }
+        }
+
+        callbackEntered.await()
+        registry.fail(attempt, failure)
+
+        assertEquals(0, call.disconnectCalls)
+        assertFalse(outcome.isCompleted)
+
+        releaseCallback.countDown()
+        activation.join()
+
+        assertEquals(1, call.disconnectCalls)
+        assertEquals(VoiceAgentTelecomOutcome.Failed(failure), outcome.await())
+        assertFalse(registry.hasActiveConnection())
     }
 
     @Test

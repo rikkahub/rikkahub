@@ -21,11 +21,12 @@ class VoiceAgentConnectionService : ConnectionService() {
             setAudioModeIsVoip(true)
             setInitializing()
         }
-        if (attemptId != null && telecomCallRegistry.activate(attemptId, connection)) {
-            connection.setActive()
-        } else if (attemptId == null) {
-            connection.disconnectFromApp()
-        }
+        activateVoiceAgentTelecomConnection(
+            registry = telecomCallRegistry,
+            attemptId = attemptId,
+            connection = connection,
+            makeActive = connection::setActive,
+        )
         return connection
     }
 
@@ -34,14 +35,34 @@ class VoiceAgentConnectionService : ConnectionService() {
         request: ConnectionRequest?,
     ) {
         val detail = "Android Telecom rejected Voice Agent call"
-        request?.address.voiceAgentTelecomAttemptIdOrNull()?.let { attemptId ->
-            telecomCallRegistry.fail(
-                attemptId,
-                VoiceAgentTelecomFailure(
-                    diagnosticName = "telecom_outgoing_failed",
-                    detail = detail,
-                ),
-            )
-        }
+        failVoiceAgentTelecomAttempt(
+            registry = telecomCallRegistry,
+            attemptId = request?.address.voiceAgentTelecomAttemptIdOrNull(),
+            failure = VoiceAgentTelecomFailure(
+                diagnosticName = "telecom_outgoing_failed",
+                detail = detail,
+            ),
+        )
     }
+}
+
+internal fun activateVoiceAgentTelecomConnection(
+    registry: VoiceAgentTelecomCallRegistry,
+    attemptId: VoiceAgentTelecomAttemptId?,
+    connection: VoiceAgentTelecomCall,
+    makeActive: () -> Unit,
+): Boolean {
+    if (attemptId == null) {
+        connection.disconnectFromApp()
+        return false
+    }
+    return registry.activate(attemptId, connection, makeActive)
+}
+
+internal fun failVoiceAgentTelecomAttempt(
+    registry: VoiceAgentTelecomCallRegistry,
+    attemptId: VoiceAgentTelecomAttemptId?,
+    failure: VoiceAgentTelecomFailure,
+) {
+    attemptId?.let { registry.fail(it, failure) }
 }

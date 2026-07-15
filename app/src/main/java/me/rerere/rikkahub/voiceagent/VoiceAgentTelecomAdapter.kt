@@ -10,7 +10,8 @@ import android.telecom.PhoneAccount
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 
-private const val VOICE_AGENT_CALL_URI_SCHEME = "rikkahub-voice"
+internal const val VOICE_AGENT_CALL_URI_SCHEME = "rikkahub-voice"
+private const val VOICE_AGENT_CALL_URI_PREFIX = "voice-agent-"
 
 class VoiceAgentTelecomAdapter(
     private val context: Context,
@@ -31,10 +32,13 @@ class VoiceAgentTelecomAdapter(
     }
 
     fun startCall(attemptId: VoiceAgentTelecomAttemptId): Result<Unit> =
-        startCall(Uri.fromParts(VOICE_AGENT_CALL_URI_SCHEME, "voice-agent-${attemptId.value}", null))
-
-    fun startCall(): Result<Unit> =
-        startCall(Uri.fromParts(VOICE_AGENT_CALL_URI_SCHEME, "voice-agent", null))
+        startCall(
+            Uri.fromParts(
+                VOICE_AGENT_CALL_URI_SCHEME,
+                attemptId.toVoiceAgentTelecomSchemeSpecificPart(),
+                null,
+            ),
+        )
 
     private fun startCall(address: Uri): Result<Unit> = runCatching {
         val telecomManager = requireTelecomManager()
@@ -53,7 +57,22 @@ class VoiceAgentTelecomAdapter(
 }
 
 internal fun Uri?.voiceAgentTelecomAttemptIdOrNull(): VoiceAgentTelecomAttemptId? =
-    this?.schemeSpecificPart
-        ?.removePrefix("voice-agent-")
-        ?.toLongOrNull()
-        ?.let(::VoiceAgentTelecomAttemptId)
+    voiceAgentTelecomAttemptIdOrNull(
+        scheme = this?.scheme,
+        schemeSpecificPart = this?.schemeSpecificPart,
+    )
+
+internal fun VoiceAgentTelecomAttemptId.toVoiceAgentTelecomSchemeSpecificPart(): String =
+    "$VOICE_AGENT_CALL_URI_PREFIX$value"
+
+internal fun voiceAgentTelecomAttemptIdOrNull(
+    scheme: String?,
+    schemeSpecificPart: String?,
+): VoiceAgentTelecomAttemptId? {
+    if (scheme != VOICE_AGENT_CALL_URI_SCHEME) return null
+    if (schemeSpecificPart?.startsWith(VOICE_AGENT_CALL_URI_PREFIX) != true) return null
+    val rawId = schemeSpecificPart.removePrefix(VOICE_AGENT_CALL_URI_PREFIX)
+    if (rawId.isEmpty() || rawId.any { it !in '0'..'9' }) return null
+    val value = rawId.toLongOrNull()?.takeIf { it > 0 } ?: return null
+    return VoiceAgentTelecomAttemptId(value)
+}
