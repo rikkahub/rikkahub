@@ -144,7 +144,11 @@ class WorkspaceDetailVM(
         }
     }
 
-    fun shareFile(entry: WorkspaceFileEntry, cacheDir: File, onReady: (File) -> Unit) {
+    /**
+     * 把当前区域下的文件导出到 cacheDir 的临时文件, 完成后回调 [onReady].
+     * 供分享 / 图片预览 / 交给系统应用打开等复用 (它们都需要一个 FileProvider 可访问的真实 File).
+     */
+    fun exportToCacheFile(entry: WorkspaceFileEntry, cacheDir: File, onReady: (File) -> Unit) {
         viewModelScope.launch {
             runCatching {
                 val dir = File(cacheDir, "workspace_share").apply { mkdirs() }
@@ -159,7 +163,7 @@ class WorkspaceDetailVM(
                 }
                 file
             }.onSuccess(onReady).onFailure { error ->
-                _state.update { it.copy(error = error.message ?: "分享文件失败") }
+                _state.update { it.copy(error = error.message ?: "导出文件失败") }
             }
         }
     }

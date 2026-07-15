@@ -697,6 +697,12 @@
   <string name="setting_display_page_volume_key_scroll_ratio">捲動幅度</string>
   <string name="setting_display_page_volume_key_scroll_title">音量鍵翻頁</string>
   <string name="setting_files_page_cancel_action">取消</string>
+  <string name="setting_files_page_clean_action">清理</string>
+  <string name="setting_files_page_clean_confirmation">將永久刪除此分類中的全部檔案，此操作無法復原。</string>
+  <string name="setting_files_page_clean_content_description">清理檔案</string>
+  <string name="setting_files_page_clean_failed_toast">部分檔案清理失敗</string>
+  <string name="setting_files_page_clean_title">清理檔案？</string>
+  <string name="setting_files_page_cleaned_toast">檔案已清理</string>
   <string name="setting_files_page_delete_action">刪除</string>
   <string name="setting_files_page_delete_content_description">刪除</string>
   <string name="setting_files_page_delete_failed_toast">刪除失敗</string>
@@ -1274,4 +1280,3 @@
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 不朗讀括號內的內容</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">啟用後，TTS 將不朗讀括號內的內容</string>
 </resources>
-

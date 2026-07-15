@@ -697,6 +697,12 @@
   <string name="setting_display_page_volume_key_scroll_ratio">スクロロール量</string>
   <string name="setting_display_page_volume_key_scroll_title">音量キーでページスクロール</string>
   <string name="setting_files_page_cancel_action">キャンセル</string>
+  <string name="setting_files_page_clean_action">クリーンアップ</string>
+  <string name="setting_files_page_clean_confirmation">このカテゴリのすべてのファイルを完全に削除します。この操作は元に戻せません。</string>
+  <string name="setting_files_page_clean_content_description">ファイルをクリーンアップ</string>
+  <string name="setting_files_page_clean_failed_toast">一部のファイルを削除できませんでした</string>
+  <string name="setting_files_page_clean_title">ファイルをクリーンアップしますか？</string>
+  <string name="setting_files_page_cleaned_toast">ファイルをクリーンアップしました</string>
   <string name="setting_files_page_delete_action">削除</string>
   <string name="setting_files_page_delete_content_description">削除</string>
   <string name="setting_files_page_delete_failed_toast">削除に失敗しました</string>
@@ -1276,4 +1282,3 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 括弧内を読み上げない</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">有効にすると、TTS は括弧内の内容を読み上げません</string>
 </resources>
-

@@ -334,7 +334,18 @@ private fun ChatPageContent(
                     },
                     enableSearch = enableWebSearch,
                     onToggleSearch = {
-                        vm.updateSettings(setting.copy(enableWebSearch = !enableWebSearch))
+                        val current = setting.getCurrentAssistant()
+                        vm.updateSettings(
+                            setting.copy(
+                                assistants = setting.assistants.map { assistant ->
+                                    if (assistant.id == current.id) {
+                                        assistant.copy(enableWebSearch = !enableWebSearch)
+                                    } else {
+                                        assistant
+                                    }
+                                }
+                            )
+                        )
                     },
                     onSendClick = {
                         if (currentChatModel == null) {
