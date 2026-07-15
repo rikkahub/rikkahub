@@ -10,9 +10,9 @@ class VoicePlaybackEventOwnerTest {
         val owner = VoicePlaybackEventOwner()
         owner.setHandler(events::add)
 
-        owner.notify(VoicePlaybackEvent.Active(1L))
+        owner.notify(VoicePlaybackEvent.Active(PlaybackEpoch(1L)))
 
-        assertEquals(listOf(VoicePlaybackEvent.Active(1L)), events)
+        assertEquals(listOf(VoicePlaybackEvent.Active(PlaybackEpoch(1L))), events)
     }
 
     @Test
@@ -22,12 +22,12 @@ class VoicePlaybackEventOwnerTest {
         owner.setHandler(events::add)
 
         owner.releasePlayback { onPlaybackEventsDrained ->
-            owner.notify(VoicePlaybackEvent.Drained(1L))
+            owner.notify(VoicePlaybackEvent.Drained(PlaybackEpoch(1L)))
             onPlaybackEventsDrained()
         }
-        owner.notify(VoicePlaybackEvent.Active(2L))
+        owner.notify(VoicePlaybackEvent.Active(PlaybackEpoch(2L)))
 
-        assertEquals(listOf(VoicePlaybackEvent.Drained(1L)), events)
+        assertEquals(listOf(VoicePlaybackEvent.Drained(PlaybackEpoch(1L))), events)
     }
 
     @Test
@@ -40,10 +40,10 @@ class VoicePlaybackEventOwnerTest {
         owner.releasePlayback { onPlaybackEventsDrained ->
             completePlaybackEvents = onPlaybackEventsDrained
         }
-        owner.notify(VoicePlaybackEvent.Active(1L))
+        owner.notify(VoicePlaybackEvent.Active(PlaybackEpoch(1L)))
         completePlaybackEvents()
-        owner.notify(VoicePlaybackEvent.Drained(1L))
+        owner.notify(VoicePlaybackEvent.Drained(PlaybackEpoch(1L)))
 
-        assertEquals(listOf(VoicePlaybackEvent.Active(1L)), events)
+        assertEquals(listOf(VoicePlaybackEvent.Active(PlaybackEpoch(1L))), events)
     }
 }

@@ -11,17 +11,17 @@ class PlaybackEventDispatcherTest {
             onEvent = delivered::add,
             onFailure = { _, failure -> throw AssertionError(failure) },
         )
-        dispatcher.enqueue(VoicePlaybackEvent.Active(1L))
-        dispatcher.enqueue(VoicePlaybackEvent.DrainStarted(1L))
-        dispatcher.enqueue(VoicePlaybackEvent.Drained(1L))
+        dispatcher.enqueue(VoicePlaybackEvent.Active(PlaybackEpoch(1L)))
+        dispatcher.enqueue(VoicePlaybackEvent.DrainStarted(PlaybackEpoch(1L)))
+        dispatcher.enqueue(VoicePlaybackEvent.Drained(PlaybackEpoch(1L)))
 
         dispatcher.drain()
 
         assertEquals(
             listOf(
-                VoicePlaybackEvent.Active(1L),
-                VoicePlaybackEvent.DrainStarted(1L),
-                VoicePlaybackEvent.Drained(1L),
+                VoicePlaybackEvent.Active(PlaybackEpoch(1L)),
+                VoicePlaybackEvent.DrainStarted(PlaybackEpoch(1L)),
+                VoicePlaybackEvent.Drained(PlaybackEpoch(1L)),
             ),
             delivered,
         )
@@ -34,19 +34,19 @@ class PlaybackEventDispatcherTest {
         dispatcher = PlaybackEventDispatcher(
             onEvent = { event ->
                 delivered += event
-                if (event == VoicePlaybackEvent.Active(1L)) {
-                    dispatcher.enqueue(VoicePlaybackEvent.Drained(1L))
+                if (event == VoicePlaybackEvent.Active(PlaybackEpoch(1L))) {
+                    dispatcher.enqueue(VoicePlaybackEvent.Drained(PlaybackEpoch(1L)))
                     dispatcher.drain()
                 }
             },
             onFailure = { _, failure -> throw AssertionError(failure) },
         )
-        dispatcher.enqueue(VoicePlaybackEvent.Active(1L))
+        dispatcher.enqueue(VoicePlaybackEvent.Active(PlaybackEpoch(1L)))
 
         dispatcher.drain()
 
         assertEquals(
-            listOf(VoicePlaybackEvent.Active(1L), VoicePlaybackEvent.Drained(1L)),
+            listOf(VoicePlaybackEvent.Active(PlaybackEpoch(1L)), VoicePlaybackEvent.Drained(PlaybackEpoch(1L))),
             delivered,
         )
     }
@@ -62,16 +62,16 @@ class PlaybackEventDispatcherTest {
             },
             onFailure = { event, failure -> failures += event to failure.message.orEmpty() },
         )
-        dispatcher.enqueue(VoicePlaybackEvent.Active(1L))
-        dispatcher.enqueue(VoicePlaybackEvent.Drained(1L))
+        dispatcher.enqueue(VoicePlaybackEvent.Active(PlaybackEpoch(1L)))
+        dispatcher.enqueue(VoicePlaybackEvent.Drained(PlaybackEpoch(1L)))
 
         dispatcher.drain()
 
         assertEquals(
-            listOf(VoicePlaybackEvent.Active(1L) to "active failed"),
+            listOf(VoicePlaybackEvent.Active(PlaybackEpoch(1L)) to "active failed"),
             failures,
         )
-        assertEquals(listOf(VoicePlaybackEvent.Drained(1L)), delivered)
+        assertEquals(listOf(VoicePlaybackEvent.Drained(PlaybackEpoch(1L))), delivered)
     }
 
     @Test
@@ -81,24 +81,24 @@ class PlaybackEventDispatcherTest {
         dispatcher = PlaybackEventDispatcher(
             onEvent = { event ->
                 delivered += "start:$event"
-                if (event == VoicePlaybackEvent.Active(1L)) {
-                    dispatcher.enqueue(VoicePlaybackEvent.Drained(1L))
+                if (event == VoicePlaybackEvent.Active(PlaybackEpoch(1L))) {
+                    dispatcher.enqueue(VoicePlaybackEvent.Drained(PlaybackEpoch(1L)))
                     dispatcher.drainThrough { delivered += "complete" }
                 }
                 delivered += "end:$event"
             },
             onFailure = { _, failure -> throw AssertionError(failure) },
         )
-        dispatcher.enqueue(VoicePlaybackEvent.Active(1L))
+        dispatcher.enqueue(VoicePlaybackEvent.Active(PlaybackEpoch(1L)))
 
         dispatcher.drain()
 
         assertEquals(
             listOf(
-                "start:${VoicePlaybackEvent.Active(1L)}",
-                "end:${VoicePlaybackEvent.Active(1L)}",
-                "start:${VoicePlaybackEvent.Drained(1L)}",
-                "end:${VoicePlaybackEvent.Drained(1L)}",
+                "start:${VoicePlaybackEvent.Active(PlaybackEpoch(1L))}",
+                "end:${VoicePlaybackEvent.Active(PlaybackEpoch(1L))}",
+                "start:${VoicePlaybackEvent.Drained(PlaybackEpoch(1L))}",
+                "end:${VoicePlaybackEvent.Drained(PlaybackEpoch(1L))}",
                 "complete",
             ),
             delivered,

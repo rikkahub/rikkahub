@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
+import me.rerere.rikkahub.voiceagent.audio.PlaybackEpoch
 import me.rerere.rikkahub.voiceagent.audio.VoicePlaybackEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
@@ -187,23 +188,23 @@ class VoiceAgentCoordinator(
     private fun handlePlaybackEvent(event: VoicePlaybackEvent) {
         when (event) {
             is VoicePlaybackEvent.Active -> {
-                hermesJobManager.announcer.onPlaybackActive(event.generation)
-                recordPlaybackDiagnosticSafely("voice_playback_active", event.generation)
+                hermesJobManager.announcer.onPlaybackActive(event.playbackEpoch)
+                recordPlaybackDiagnosticSafely("voice_playback_active", event.playbackEpoch)
             }
             is VoicePlaybackEvent.DrainStarted -> {
-                hermesJobManager.announcer.onPlaybackDrainStarted(event.generation)
-                recordPlaybackDiagnosticSafely("voice_playback_drain_started", event.generation)
+                hermesJobManager.announcer.onPlaybackDrainStarted(event.playbackEpoch)
+                recordPlaybackDiagnosticSafely("voice_playback_drain_started", event.playbackEpoch)
             }
             is VoicePlaybackEvent.Drained -> {
-                hermesJobManager.announcer.onPlaybackDrained(event.generation)
-                recordPlaybackDiagnosticSafely("voice_playback_drained", event.generation)
+                hermesJobManager.announcer.onPlaybackDrained(event.playbackEpoch)
+                recordPlaybackDiagnosticSafely("voice_playback_drained", event.playbackEpoch)
             }
         }
     }
 
-    private fun recordPlaybackDiagnosticSafely(name: String, generation: Long) {
+    private fun recordPlaybackDiagnosticSafely(name: String, playbackEpoch: PlaybackEpoch) {
         runCatching {
-            diagnostics.record(name, "generation=$generation")
+            diagnostics.record(name, "playbackEpoch=${playbackEpoch.value}")
         }
     }
 

@@ -748,11 +748,11 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     private fun notifyPlaybackEvent(event: VoicePlaybackEvent) {
         when (event) {
             is VoicePlaybackEvent.Active ->
-                Log.d(TAG, "Voice playback active: generation=${event.generation}")
+                Log.d(TAG, "Voice playback active: playbackEpoch=${event.playbackEpoch.value}")
             is VoicePlaybackEvent.DrainStarted ->
-                Log.d(TAG, "Voice playback drain started: generation=${event.generation}")
+                Log.d(TAG, "Voice playback drain started: playbackEpoch=${event.playbackEpoch.value}")
             is VoicePlaybackEvent.Drained ->
-                Log.d(TAG, "Voice playback drained: generation=${event.generation}")
+                Log.d(TAG, "Voice playback drained: playbackEpoch=${event.playbackEpoch.value}")
         }
         playbackEventOwner.notify(event)
     }
@@ -772,16 +772,26 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
     private fun handlePlaybackDiagnostic(diagnostic: VoicePlaybackDiagnostic) {
         when (diagnostic) {
             is VoicePlaybackDiagnostic.ChunkQueued -> {
-                Log.d(TAG, "Voice playback queued: bytes=${diagnostic.bytes} generation=${diagnostic.generation}")
+                Log.d(
+                    TAG,
+                    "Voice playback queued: bytes=${diagnostic.bytes} " +
+                        "writerGeneration=${diagnostic.writerGeneration.value}",
+                )
             }
             is VoicePlaybackDiagnostic.ChunkWritten -> {
-                Log.d(TAG, "Voice playback wrote: bytes=${diagnostic.bytes} generation=${diagnostic.generation}")
+                Log.d(
+                    TAG,
+                    "Voice playback wrote: bytes=${diagnostic.bytes} " +
+                        "writerGeneration=${diagnostic.writerGeneration.value}",
+                )
             }
             is VoicePlaybackDiagnostic.StaleChunkRejected -> {
                 Log.d(
                     TAG,
-                    "Voice playback stale chunk rejected: generation=${diagnostic.generation} " +
-                        "active=${diagnostic.activeGeneration} session=${diagnostic.rejectedSessionId} " +
+                    "Voice playback stale chunk rejected: " +
+                        "writerGeneration=${diagnostic.writerGeneration.value} " +
+                        "activeWriterGeneration=${diagnostic.activeWriterGeneration.value} " +
+                        "session=${diagnostic.rejectedSessionId} " +
                         "activeSession=${diagnostic.activeSessionId}",
                 )
             }
@@ -813,7 +823,10 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
                 )
             }
             is VoicePlaybackDiagnostic.PlaybackSuppressed -> {
-                Log.d(TAG, "Voice playback suppressed: generation=${diagnostic.generation}")
+                Log.d(
+                    TAG,
+                    "Voice playback suppressed: writerGeneration=${diagnostic.writerGeneration.value}",
+                )
             }
             VoicePlaybackDiagnostic.Released -> {
                 Log.d(TAG, "Voice playback released")

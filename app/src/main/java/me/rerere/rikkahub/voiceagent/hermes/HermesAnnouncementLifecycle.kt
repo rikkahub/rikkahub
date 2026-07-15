@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
+import me.rerere.rikkahub.voiceagent.audio.PlaybackEpoch
+
 /**
  * Pure announcement lifecycle. The reducer owns announcement ordering and decides
  * when a proactive turn may start. Time and playback ownership arrive as events;
@@ -53,7 +55,7 @@ sealed interface GeminiTurnGate {
 }
 
 data class PlaybackGate(
-    val generation: Long = 0L,
+    val playbackEpoch: PlaybackEpoch = PlaybackEpoch(0L),
     val drained: Boolean = true,
 )
 
@@ -87,9 +89,9 @@ sealed interface AnnouncerEvent {
     data class GeminiTurnActive(val nowMs: Long) : AnnouncerEvent
     data class GeminiTurnComplete(val nowMs: Long) : AnnouncerEvent
     data class GeminiSessionRetired(val nowMs: Long) : AnnouncerEvent
-    data class PlaybackActive(val generation: Long, val nowMs: Long) : AnnouncerEvent
-    data class PlaybackDrainStarted(val generation: Long, val nowMs: Long) : AnnouncerEvent
-    data class PlaybackDrained(val generation: Long, val nowMs: Long) : AnnouncerEvent
+    data class PlaybackActive(val playbackEpoch: PlaybackEpoch, val nowMs: Long) : AnnouncerEvent
+    data class PlaybackDrainStarted(val playbackEpoch: PlaybackEpoch, val nowMs: Long) : AnnouncerEvent
+    data class PlaybackDrained(val playbackEpoch: PlaybackEpoch, val nowMs: Long) : AnnouncerEvent
     data class InputDelta(val nowMs: Long) : AnnouncerEvent
     data class QuietTimerFired(val nowMs: Long) : AnnouncerEvent
     data class BlockedWatchdogFired(val nowMs: Long) : AnnouncerEvent
@@ -183,7 +185,7 @@ class AnnouncerReducer(
 
         is AnnouncerEvent.PlaybackActive -> reducePlaybackEvent(
             state = state,
-            generation = event.generation,
+            playbackEpoch = event.playbackEpoch,
             nowMs = event.nowMs,
             drained = false,
         )
@@ -192,7 +194,7 @@ class AnnouncerReducer(
 
         is AnnouncerEvent.PlaybackDrained -> reducePlaybackEvent(
             state = state,
-            generation = event.generation,
+            playbackEpoch = event.playbackEpoch,
             nowMs = event.nowMs,
             drained = true,
         )
@@ -212,16 +214,16 @@ class AnnouncerReducer(
 
     private fun reducePlaybackEvent(
         state: AnnouncerState,
-        generation: Long,
+        playbackEpoch: PlaybackEpoch,
         nowMs: Long,
         drained: Boolean,
     ): AnnouncerTransition {
         if (state.closed) return noChange(state)
-        if (generation < state.playback.generation) {
-            return stalePlaybackEvent(state, generation)
+        if (playbackEpoch < state.playback.playbackEpoch) {
+            return stalePlaybackEvent(state, playbackEpoch)
         }
         return settle(
-            state.copy(playback = PlaybackGate(generation = generation, drained = drained)),
+            state.copy(playback = PlaybackGate(playbackEpoch = playbackEpoch, drained = drained)),
             nowMs,
         )
     }
@@ -231,26 +233,27 @@ class AnnouncerReducer(
         event: AnnouncerEvent.PlaybackDrainStarted,
     ): AnnouncerTransition {
         if (state.closed) return noChange(state)
-        if (event.generation < state.playback.generation) {
-            return stalePlaybackEvent(state, event.generation)
+        if (event.playbackEpoch < state.playback.playbackEpoch) {
+            return stalePlaybackEvent(state, event.playbackEpoch)
         }
         return AnnouncerTransition(
             state,
             listOf(
                 AnnouncerEffect.Diagnostic(
                     name = "hermes_announcement_playback_drain_started",
-                    detail = "generation=${event.generation}",
+                    detail = "playbackEpoch=${event.playbackEpoch.value}",
                 )
             ),
         )
     }
 
-    private fun stalePlaybackEvent(state: AnnouncerState, generation: Long) = AnnouncerTransition(
+    private fun stalePlaybackEvent(state: AnnouncerState, playbackEpoch: PlaybackEpoch) = AnnouncerTransition(
         state,
         listOf(
             AnnouncerEffect.Diagnostic(
                 name = "hermes_announcement_stale_playback_event",
-                detail = "generation=$generation, current=${state.playback.generation}",
+                detail = "playbackEpoch=${playbackEpoch.value}, " +
+                    "current=${state.playback.playbackEpoch.value}",
             )
         ),
     )
@@ -282,7 +285,7 @@ class AnnouncerReducer(
                 AnnouncerEffect.Diagnostic(
                     name = "hermes_announcement_blocked_watchdog",
                     detail = "intent=${head.label()}, gemini=${state.geminiTurn}, " +
-                        "playbackGeneration=${state.playback.generation}, " +
+                        "playbackEpoch=${state.playback.playbackEpoch.value}, " +
                         "playbackDrained=${state.playback.drained}, quietRemainingMs=$quietRemainingMs",
                 ),
                 AnnouncerEffect.StartBlockedWatchdog(blockedWatchdogMs),

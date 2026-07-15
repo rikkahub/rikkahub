@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.InMemoryVoiceConversationStore
 import me.rerere.rikkahub.voiceagent.SynchronizedVoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
+import me.rerere.rikkahub.voiceagent.audio.PlaybackEpoch
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
 import kotlinx.coroutines.yield
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
@@ -172,9 +173,9 @@ class HermesAnnouncerTest {
         runCurrent()
         assertEquals(listOf("call-complete"), bridge.completions)
 
-        announcer.onPlaybackActive(1L)
+        announcer.onPlaybackActive(PlaybackEpoch(1L))
         announcer.onGeminiTurnComplete()
-        announcer.onPlaybackDrained(1L)
+        announcer.onPlaybackDrained(PlaybackEpoch(1L))
         runCurrent()
 
         assertEquals(listOf("call-complete"), bridge.completions)
@@ -205,7 +206,7 @@ class HermesAnnouncerTest {
         val announcer = announcer(queueStore = store)
 
         announcer.onGeminiTurnActive()
-        announcer.onPlaybackActive(3L)
+        announcer.onPlaybackActive(PlaybackEpoch(3L))
         announcer.attachScoped(bridge, sessionId = 7L)
         announcer.enqueueStillWorking(callId = "call-run", jobId = "job-run")
         runCurrent()
@@ -219,7 +220,7 @@ class HermesAnnouncerTest {
             announced = false,
         )
         announcer.onGeminiTurnComplete()
-        announcer.onPlaybackDrained(3L)
+        announcer.onPlaybackDrained(PlaybackEpoch(3L))
         runCurrent()
 
         assertTrue(bridge.stillWorking.isEmpty())
@@ -233,7 +234,7 @@ class HermesAnnouncerTest {
         val announcer = announcer(queueStore = store)
 
         announcer.onGeminiTurnActive()
-        announcer.onPlaybackActive(5L)
+        announcer.onPlaybackActive(PlaybackEpoch(5L))
         announcer.attachScoped(bridge, sessionId = 7L)
         announcer.enqueueStillWorking(callId = "call-paired", jobId = "job-paired")
         runCurrent()
@@ -249,17 +250,17 @@ class HermesAnnouncerTest {
         runCurrent()
 
         announcer.onGeminiTurnComplete()
-        announcer.onPlaybackDrained(5L)
+        announcer.onPlaybackDrained(PlaybackEpoch(5L))
         runCurrent()
 
         assertEquals(listOf("call-paired"), bridge.stillWorking)
         assertTrue(bridge.completions.isEmpty())
 
-        announcer.onPlaybackActive(6L)
+        announcer.onPlaybackActive(PlaybackEpoch(6L))
         announcer.onGeminiTurnComplete()
         runCurrent()
         assertTrue(bridge.completions.isEmpty())
-        announcer.onPlaybackDrained(6L)
+        announcer.onPlaybackDrained(PlaybackEpoch(6L))
         runCurrent()
 
         assertEquals(listOf("call-paired"), bridge.stillWorking)
@@ -267,7 +268,7 @@ class HermesAnnouncerTest {
         assertTrue(store.latestRecord("call-paired", "job-paired")!!.resultAnnounced)
 
         announcer.onGeminiTurnComplete()
-        announcer.onPlaybackDrained(7L)
+        announcer.onPlaybackDrained(PlaybackEpoch(7L))
         runCurrent()
         assertEquals(1, bridge.stillWorking.size)
         assertEquals(1, bridge.completions.size)
@@ -282,7 +283,7 @@ class HermesAnnouncerTest {
 
         // Audio active before the completion is enqueued, so it holds instead of sending;
         // detaching with no default then drains it to the visible-text fallback.
-        announcer.onPlaybackActive(1L)
+        announcer.onPlaybackActive(PlaybackEpoch(1L))
         announcer.attachScoped(bridge, sessionId = 7L)
         announcer.enqueueCompletion(callId = "call-1", jobId = "job-1")
         announcer.detachScoped(bridge)
@@ -436,9 +437,9 @@ class HermesAnnouncerTest {
 
         // The Sent outcome reserves a turn; an explicit safe boundary proves the queue
         // was never wedged by the contained mark failure.
-        announcer.onPlaybackActive(1L)
+        announcer.onPlaybackActive(PlaybackEpoch(1L))
         announcer.onGeminiTurnComplete()
-        announcer.onPlaybackDrained(1L)
+        announcer.onPlaybackDrained(PlaybackEpoch(1L))
         runCurrent()
         assertTrue(bridge.completions.contains("call-2"))
         assertTrue(store.latestRecord(callId = "call-2", jobId = "job-2")!!.resultAnnounced)
@@ -505,7 +506,7 @@ class HermesAnnouncerTest {
         val bridge = RecordingBridge()
         val announcer = announcer(queueStore = store)
 
-        announcer.onPlaybackActive(1L)
+        announcer.onPlaybackActive(PlaybackEpoch(1L))
         announcer.attachScoped(bridge, sessionId = 7L)
         announcer.enqueueCompletion(callId = "call-1", jobId = "job-1")
         announcer.close()
@@ -546,7 +547,7 @@ class HermesAnnouncerTest {
         )
 
         announcer.onGeminiTurnActive()
-        announcer.onPlaybackActive(1L)
+        announcer.onPlaybackActive(PlaybackEpoch(1L))
         announcer.attachScoped(bridge, sessionId = 7L)
         runCurrent()
         assertTrue(bridge.completions.isEmpty())
@@ -557,7 +558,7 @@ class HermesAnnouncerTest {
         assertTrue(diagnostics.any { it.first == "hermes_announcement_blocked_watchdog" })
 
         announcer.onGeminiTurnComplete()
-        announcer.onPlaybackDrained(1L)
+        announcer.onPlaybackDrained(PlaybackEpoch(1L))
         runCurrent()
         assertEquals(listOf("call-1"), bridge.completions)
     }
@@ -577,12 +578,12 @@ class HermesAnnouncerTest {
         runCurrent()
         assertEquals(listOf("call-a"), bridge.completions)
 
-        announcer.onPlaybackActive(1L)
+        announcer.onPlaybackActive(PlaybackEpoch(1L))
         announcer.onGeminiTurnComplete()
         runCurrent()
         assertEquals(listOf("call-a"), bridge.completions)
 
-        announcer.onPlaybackDrained(1L)
+        announcer.onPlaybackDrained(PlaybackEpoch(1L))
         runCurrent()
         assertEquals(listOf("call-a", "call-b"), bridge.completions)
     }
@@ -597,7 +598,7 @@ class HermesAnnouncerTest {
         // Audio active holds the completion instead of sending it. close()+awaitClosed() must
         // drain the held intent to the visible-text fallback before the barrier returns — no
         // runCurrent() here, awaitClosed() is itself the drain point.
-        announcer.onPlaybackActive(1L)
+        announcer.onPlaybackActive(PlaybackEpoch(1L))
         announcer.attachScoped(bridge, sessionId = 7L)
         announcer.enqueueCompletion(callId = "call-1", jobId = "job-1")
         announcer.close()

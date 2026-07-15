@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.voiceagent.hermes
 
+import me.rerere.rikkahub.voiceagent.audio.PlaybackEpoch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -34,7 +35,7 @@ class HermesAnnouncementLifecycleTest {
     fun `turn complete alone cannot release while playback is active`() {
         var state = attached
         state = reducer.reduce(state, AnnouncerEvent.GeminiTurnActive(10L)).state
-        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(4L, 20L)).state
+        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(PlaybackEpoch(4L), 20L)).state
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 30L)).state
 
         val transition = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(40L))
@@ -46,10 +47,10 @@ class HermesAnnouncementLifecycleTest {
     fun `playback drain alone cannot release while Gemini turn is active`() {
         var state = attached
         state = reducer.reduce(state, AnnouncerEvent.GeminiTurnActive(10L)).state
-        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(4L, 20L)).state
+        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(PlaybackEpoch(4L), 20L)).state
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 30L)).state
 
-        val transition = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(4L, 40L))
+        val transition = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(PlaybackEpoch(4L), 40L))
 
         assertTrue(transition.sends().isEmpty())
     }
@@ -58,11 +59,11 @@ class HermesAnnouncementLifecycleTest {
     fun `turn complete then matching playback drain release one intent`() {
         var state = attached
         state = reducer.reduce(state, AnnouncerEvent.GeminiTurnActive(10L)).state
-        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(4L, 20L)).state
+        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(PlaybackEpoch(4L), 20L)).state
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 30L)).state
         state = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(40L)).state
 
-        val transition = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(4L, 50L))
+        val transition = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(PlaybackEpoch(4L), 50L))
 
         assertEquals(listOf(completion), transition.sends())
         assertEquals(GeminiTurnGate.SendReserved(), transition.state.geminiTurn)
@@ -72,9 +73,9 @@ class HermesAnnouncementLifecycleTest {
     fun `matching playback drain then turn complete release one intent`() {
         var state = attached
         state = reducer.reduce(state, AnnouncerEvent.GeminiTurnActive(10L)).state
-        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(4L, 20L)).state
+        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(PlaybackEpoch(4L), 20L)).state
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 30L)).state
-        state = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(4L, 40L)).state
+        state = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(PlaybackEpoch(4L), 40L)).state
 
         val transition = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(50L))
 
@@ -97,7 +98,7 @@ class HermesAnnouncementLifecycleTest {
 
         val settlingEvent = reducer.reduce(
             retired.state,
-            AnnouncerEvent.PlaybackDrained(generation = 1L, nowMs = 25L),
+            AnnouncerEvent.PlaybackDrained(playbackEpoch = PlaybackEpoch(1L), nowMs = 25L),
         )
         assertTrue(settlingEvent.sends().isEmpty())
         assertEquals(completion, settlingEvent.state.pendingJobs.single().final)
@@ -263,9 +264,9 @@ class HermesAnnouncementLifecycleTest {
     @Test
     fun `stale playback drain cannot release current generation`() {
         var state = attached.copy(geminiTurn = GeminiTurnGate.Idle)
-        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(9L, 10L)).state
+        state = reducer.reduce(state, AnnouncerEvent.PlaybackActive(PlaybackEpoch(9L), 10L)).state
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(completion, 20L)).state
-        val transition = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(8L, 30L))
+        val transition = reducer.reduce(state, AnnouncerEvent.PlaybackDrained(PlaybackEpoch(8L), 30L))
         assertTrue(transition.sends().isEmpty())
         assertFalse(transition.state.playback.drained)
         assertTrue(transition.effects.any {

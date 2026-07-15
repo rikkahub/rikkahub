@@ -9,6 +9,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import me.rerere.rikkahub.voiceagent.audio.PlaybackEpoch
 import me.rerere.rikkahub.voiceagent.telemetry.HermesTelemetryLogSanitizer
 
 /**
@@ -319,16 +320,16 @@ class HermesAnnouncer(
         }
     }
 
-    fun onPlaybackActive(generation: Long) {
-        events.trySend(AnnouncerEvent.PlaybackActive(generation, nowMs()))
+    fun onPlaybackActive(playbackEpoch: PlaybackEpoch) {
+        events.trySend(AnnouncerEvent.PlaybackActive(playbackEpoch, nowMs()))
     }
 
-    fun onPlaybackDrainStarted(generation: Long) {
-        events.trySend(AnnouncerEvent.PlaybackDrainStarted(generation, nowMs()))
+    fun onPlaybackDrainStarted(playbackEpoch: PlaybackEpoch) {
+        events.trySend(AnnouncerEvent.PlaybackDrainStarted(playbackEpoch, nowMs()))
     }
 
-    fun onPlaybackDrained(generation: Long) {
-        events.trySend(AnnouncerEvent.PlaybackDrained(generation, nowMs()))
+    fun onPlaybackDrained(playbackEpoch: PlaybackEpoch) {
+        events.trySend(AnnouncerEvent.PlaybackDrained(playbackEpoch, nowMs()))
     }
 
     fun close() {
