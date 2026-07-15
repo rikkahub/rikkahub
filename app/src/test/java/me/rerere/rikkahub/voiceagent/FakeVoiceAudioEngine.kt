@@ -32,6 +32,7 @@ internal class FakeVoiceAudioEngine : VoiceAudioEngine {
     private val blockedAfterAcceptedPlaybacks = mutableListOf<BlockedPlayback>()
     private val blockedSuppressions = mutableListOf<BlockedPlayback>()
     private val blockedTurnCompletions = mutableListOf<BlockedPlayback>()
+    private val blockedAfterReleaseDrains = mutableListOf<BlockedPlayback>()
 
     override fun setErrorHandler(onError: ((String) -> Unit)?) {
         errorHandler = onError
@@ -135,6 +136,13 @@ internal class FakeVoiceAudioEngine : VoiceAudioEngine {
         val retiredEpochs = retirePlaybackEpochs()
         releaseCalls += 1
         retiredEpochs.forEach { playbackEventHandler?.invoke(VoicePlaybackEvent.Drained(it)) }
+        val blocked = synchronized(blockedAfterReleaseDrains) {
+            blockedAfterReleaseDrains.removeFirstOrNull()
+        }
+        if (blocked != null) {
+            blocked.started.countDown()
+            blocked.release.await(500, TimeUnit.MILLISECONDS)
+        }
         playbackEventHandler = null
     }
 
@@ -194,6 +202,14 @@ internal class FakeVoiceAudioEngine : VoiceAudioEngine {
         return BlockedPlayback().also { blocked ->
             synchronized(blockedTurnCompletions) {
                 blockedTurnCompletions += blocked
+            }
+        }
+    }
+
+    fun blockAfterNextReleaseDrain(): BlockedPlayback {
+        return BlockedPlayback().also { blocked ->
+            synchronized(blockedAfterReleaseDrains) {
+                blockedAfterReleaseDrains += blocked
             }
         }
     }

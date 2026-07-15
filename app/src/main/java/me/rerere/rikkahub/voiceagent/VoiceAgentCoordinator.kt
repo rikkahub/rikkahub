@@ -421,8 +421,8 @@ class VoiceAgentCoordinator(
             }
             hermesQueueStatusProjectionJob?.cancel()
             hermesQueueStatusProjectionJob = null
-            audio.release()
             hermesJobManager.announcer.close()
+            audio.release()
             gemini.close()
             audio.setErrorHandler(null)
             if (ownsSessionScope) {

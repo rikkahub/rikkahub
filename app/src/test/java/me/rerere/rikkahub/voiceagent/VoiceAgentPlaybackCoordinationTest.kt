@@ -7,6 +7,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.withTimeout
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesResponse
@@ -291,6 +292,52 @@ class VoiceAgentPlaybackCoordinationTest {
     }
 
     @Test
+    fun `coordinator close revokes Hermes before release drain and falls back once`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val audio = FakeVoiceAudioEngine()
+        val conversationStore = FakeVoiceConversationStore()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = audio,
+            conversationStore = conversationStore,
+            hermesAnnouncementQuietWindowMs = 0L,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            voiceToolCall(callId = "call-close-drain", name = "ask_hermes", arg = "close drain")
+        )
+        assertEquals("call-close-drain" to "close drain", toolApi.awaitRequest("call-close-drain"))
+        coordinator.onGeminiEvent(GeminiLiveEvent.OutputAudio("active-at-close"))
+        coordinator.onGeminiEvent(GeminiLiveEvent.TurnComplete)
+        toolApi.complete(response(callId = "call-close-drain", answer = "close fallback answer"))
+        coordinator.awaitToolJobsWithTimeout()
+        delay(20)
+        assertTrue(gemini.textTurns.isEmpty())
+
+        val blockedRelease = audio.blockAfterNextReleaseDrain()
+        val closeJob = launch(Dispatchers.Default) { coordinator.close() }
+        assertTrue(blockedRelease.started.await(500, TimeUnit.MILLISECONDS))
+        try {
+            delay(50)
+            assertTrue(gemini.textTurns.isEmpty())
+        } finally {
+            blockedRelease.release.countDown()
+            closeJob.join()
+        }
+        withTimeout(500) {
+            while (conversationStore.visibleHermesResults("Hermes finished: close drain") != 1) {
+                delay(10)
+            }
+        }
+
+        assertTrue(gemini.textTurns.isEmpty())
+        assertEquals(1, conversationStore.visibleHermesResults("Hermes finished: close drain"))
+    }
+
+    @Test
     fun `Hermes completion waits for turn complete and physical playback`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val toolApi = FakeVoiceToolApi()
@@ -322,6 +369,41 @@ class VoiceAgentPlaybackCoordinationTest {
             }
         }
         assertEquals(1, gemini.textTurns.size)
+    }
+
+    @Test
+    fun `GenerationComplete cannot replace turn completion and matching playback drain`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val audio = FakeVoiceAudioEngine()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = audio,
+            hermesAnnouncementQuietWindowMs = 0L,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(
+            voiceToolCall(callId = "call-generation", name = "ask_hermes", arg = "generation gate")
+        )
+        assertEquals("call-generation" to "generation gate", toolApi.awaitRequest("call-generation"))
+        coordinator.onGeminiEvent(GeminiLiveEvent.OutputAudio("generation audio"))
+        toolApi.complete(response(callId = "call-generation", answer = "generation answer"))
+        coordinator.awaitToolJobsWithTimeout()
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.GenerationComplete)
+        delay(20)
+        assertTrue(gemini.textTurns.isEmpty())
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.TurnComplete)
+        delay(20)
+        assertTrue(gemini.textTurns.isEmpty())
+
+        audio.completePlaybackDrain()
+        awaitTextTurnCount(gemini, 1)
+        assertEquals(1, gemini.textTurns.size)
+        assertTrue(gemini.textTurns.single().second.contains("generation answer"))
     }
 
     @Test
@@ -468,6 +550,11 @@ class VoiceAgentPlaybackCoordinationTest {
 
     private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking(block = block)
 }
+
+private fun FakeVoiceConversationStore.visibleHermesResults(prefix: String): Int = conversation.value.currentMessages
+    .flatMap { it.parts }
+    .filterIsInstance<UIMessagePart.Text>()
+    .count { it.text.startsWith(prefix) }
 
 private fun coordinatorToolJobsLock(coordinator: VoiceAgentCoordinator): Any =
     VoiceAgentCoordinator::class.java.getDeclaredField("toolJobsLock").run {
