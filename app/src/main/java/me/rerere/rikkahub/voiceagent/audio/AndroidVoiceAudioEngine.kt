@@ -37,6 +37,7 @@ private fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (t
     is VoicePlaybackDiagnostic.ChunkQueued,
     is VoicePlaybackDiagnostic.ChunkWritten,
     is VoicePlaybackDiagnostic.StaleChunkRejected,
+    is VoicePlaybackDiagnostic.PlaybackEventHandlerFailed,
     is VoicePlaybackDiagnostic.PlaybackSuppressed,
     VoicePlaybackDiagnostic.Released,
     -> null
@@ -803,6 +804,13 @@ class AndroidVoiceAudioEngine(context: Context) : VoiceAudioEngine {
             is VoicePlaybackDiagnostic.SinkRetirementFailed -> {
                 Log.w(TAG, "AudioTrack retirement failed: ${diagnostic.message}")
                 diagnostic.audioErrorMessageOrNull()?.let(::notifyAudioError)
+            }
+            is VoicePlaybackDiagnostic.PlaybackEventHandlerFailed -> {
+                Log.w(
+                    TAG,
+                    "Voice playback event handler failed: event=${diagnostic.event} " +
+                        "message=${diagnostic.message}",
+                )
             }
             is VoicePlaybackDiagnostic.PlaybackSuppressed -> {
                 Log.d(TAG, "Voice playback suppressed: generation=${diagnostic.generation}")

@@ -73,4 +73,35 @@ class PlaybackEventDispatcherTest {
         )
         assertEquals(listOf(VoicePlaybackEvent.Drained(1L)), delivered)
     }
+
+    @Test
+    fun `reentrant completion boundary runs after the handler and queued events`() {
+        val delivered = mutableListOf<String>()
+        lateinit var dispatcher: PlaybackEventDispatcher
+        dispatcher = PlaybackEventDispatcher(
+            onEvent = { event ->
+                delivered += "start:$event"
+                if (event == VoicePlaybackEvent.Active(1L)) {
+                    dispatcher.enqueue(VoicePlaybackEvent.Drained(1L))
+                    dispatcher.drainThrough { delivered += "complete" }
+                }
+                delivered += "end:$event"
+            },
+            onFailure = { _, failure -> throw AssertionError(failure) },
+        )
+        dispatcher.enqueue(VoicePlaybackEvent.Active(1L))
+
+        dispatcher.drain()
+
+        assertEquals(
+            listOf(
+                "start:${VoicePlaybackEvent.Active(1L)}",
+                "end:${VoicePlaybackEvent.Active(1L)}",
+                "start:${VoicePlaybackEvent.Drained(1L)}",
+                "end:${VoicePlaybackEvent.Drained(1L)}",
+                "complete",
+            ),
+            delivered,
+        )
+    }
 }

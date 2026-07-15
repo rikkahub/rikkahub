@@ -19,6 +19,10 @@ internal sealed interface VoicePlaybackDiagnostic {
     data class SinkWriteFailed(val message: String) : VoicePlaybackDiagnostic
     data class SinkDrainFailed(val message: String) : VoicePlaybackDiagnostic
     data class SinkRetirementFailed(val message: String) : VoicePlaybackDiagnostic
+    data class PlaybackEventHandlerFailed(
+        val event: VoicePlaybackEvent,
+        val message: String,
+    ) : VoicePlaybackDiagnostic
     data class PlaybackSuppressed(val generation: Long) : VoicePlaybackDiagnostic
     data object Released : VoicePlaybackDiagnostic
 }
@@ -32,6 +36,17 @@ internal class VoicePlaybackWriter(
     private val lock = Any()
     private val retirementLock = Any()
     private val commands = Channel<PlaybackCommand>(Channel.UNLIMITED)
+    private val playbackEvents = PlaybackEventDispatcher(
+        onEvent = onPlaybackEvent,
+        onFailure = { event, failure ->
+            onDiagnostic(
+                VoicePlaybackDiagnostic.PlaybackEventHandlerFailed(
+                    event = event,
+                    message = failure.message ?: failure.javaClass.simpleName,
+                ),
+            )
+        },
+    )
     private val worker = scope.launch {
         for (command in commands) {
             when (command) {
@@ -90,12 +105,13 @@ internal class VoicePlaybackWriter(
                     null
                 } else {
                     if (existingEpoch == null) {
-                        onPlaybackEvent(VoicePlaybackEvent.Active(playbackEpoch))
+                        playbackEvents.enqueue(VoicePlaybackEvent.Active(playbackEpoch))
                     }
                     command
                 }
             }
         }
+        playbackEvents.drain()
         if (enqueued == null) {
             staleActiveGeneration?.let { activeGeneration ->
                 onDiagnostic(
@@ -154,7 +170,7 @@ internal class VoicePlaybackWriter(
         onDiagnostic(VoicePlaybackDiagnostic.PlaybackSuppressed(retiredGeneration + 1))
     }
 
-    fun release() {
+    fun release(onPlaybackEventsDrained: () -> Unit = {}) {
         retireCurrentWriterGeneration {
             if (released) return
             released = true
@@ -163,6 +179,7 @@ internal class VoicePlaybackWriter(
         commands.close()
         worker.cancel()
         onDiagnostic(VoicePlaybackDiagnostic.Released)
+        playbackEvents.drainThrough(onPlaybackEventsDrained)
     }
 
     private fun playCommand(command: PlaybackCommand.Play) {
@@ -204,9 +221,10 @@ internal class VoicePlaybackWriter(
     private fun drainCommand(command: PlaybackCommand.Drain) {
         val sink = synchronized(lock) {
             if (released || generation != command.writerGeneration) return
-            onPlaybackEvent(VoicePlaybackEvent.DrainStarted(command.playbackEpoch))
+            playbackEvents.enqueue(VoicePlaybackEvent.DrainStarted(command.playbackEpoch))
             activeSink
         }
+        playbackEvents.drain()
         val result = if (sink == null) {
             VoicePcm16Sink.DrainResult.Drained
         } else {
@@ -216,8 +234,11 @@ internal class VoicePlaybackWriter(
             VoicePcm16Sink.DrainResult.Drained -> {
                 synchronized(lock) {
                     val completed = epochWriterGenerations.remove(command.playbackEpoch) == command.writerGeneration
-                    if (completed) onPlaybackEvent(VoicePlaybackEvent.Drained(command.playbackEpoch))
+                    if (completed) {
+                        playbackEvents.enqueue(VoicePlaybackEvent.Drained(command.playbackEpoch))
+                    }
                 }
+                playbackEvents.drain()
             }
             VoicePcm16Sink.DrainResult.Interrupted -> Unit
             is VoicePcm16Sink.DrainResult.Failed -> {
@@ -339,11 +360,12 @@ internal class VoicePlaybackWriter(
         synchronized(lock) {
             retirement.playbackEpochs.forEach { epoch ->
                 if (epochWriterGenerations.remove(epoch) == retirement.writerGeneration) {
-                    onPlaybackEvent(VoicePlaybackEvent.Drained(epoch))
+                    playbackEvents.enqueue(VoicePlaybackEvent.Drained(epoch))
                 }
             }
             retirementInProgress = false
         }
+        playbackEvents.drain()
     }
 
     private fun retireDetachedSink(sink: VoicePcm16Sink) {

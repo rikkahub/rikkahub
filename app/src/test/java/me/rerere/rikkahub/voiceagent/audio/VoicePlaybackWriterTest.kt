@@ -11,7 +11,9 @@ import org.junit.Test
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
 class VoicePlaybackWriterTest {
     @Test
@@ -703,6 +705,107 @@ class VoicePlaybackWriterTest {
         assertFalse(events.contains(VoicePlaybackEvent.Drained(1L)))
         assertFalse(writer.playBase64("BAUG", sessionId = 100L))
         writer.release()
+        scope.cancel()
+    }
+
+    @Test
+    fun `active callback runs after the writer state lock is released`() {
+        val scope = testScope()
+        val callbackObservedUnlocked = AtomicBoolean(false)
+        lateinit var writer: VoicePlaybackWriter
+        writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { FakeVoicePcm16Sink(expectedWrites = 1) },
+            onPlaybackEvent = { event ->
+                if (event is VoicePlaybackEvent.Active) {
+                    val completed = CountDownLatch(1)
+                    thread(start = true, name = "playback-reentrant-boundary") {
+                        writer.markTurnComplete(sessionId = 100L)
+                        completed.countDown()
+                    }
+                    callbackObservedUnlocked.set(completed.await(500, TimeUnit.MILLISECONDS))
+                }
+            },
+        )
+        writer.activateSession(100L)
+
+        assertTrue(writer.playBase64("AQID", sessionId = 100L))
+
+        assertTrue(callbackObservedUnlocked.get())
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
+    fun `throwing active callback does not kill later drain delivery`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val delivered = CopyOnWriteArrayList<VoicePlaybackEvent>()
+        var throwActive = true
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { FakeVoicePcm16Sink(expectedWrites = 1) },
+            onDiagnostic = diagnostics::add,
+            onPlaybackEvent = { event ->
+                if (event is VoicePlaybackEvent.Active && throwActive) {
+                    throwActive = false
+                    error("handler failed")
+                }
+                delivered += event
+            },
+        )
+        writer.activateSession(100L)
+        assertTrue(writer.playBase64("AQID", sessionId = 100L))
+        assertTrue(writer.markTurnComplete(sessionId = 100L))
+
+        assertTrue(waitUntil { delivered.contains(VoicePlaybackEvent.Drained(1L)) })
+        assertTrue(diagnostics.any {
+            it is VoicePlaybackDiagnostic.PlaybackEventHandlerFailed && it.message == "handler failed"
+        })
+        writer.release()
+        scope.cancel()
+    }
+
+    @Test
+    fun `concurrent release delivers drained before the event owner clears its handler`() {
+        val scope = testScope()
+        val owner = VoicePlaybackEventOwner()
+        val events = CopyOnWriteArrayList<VoicePlaybackEvent>()
+        val activeCallbackStarted = CountDownLatch(1)
+        val releaseActiveCallback = CountDownLatch(1)
+        val drainedDelivered = CountDownLatch(1)
+        owner.setHandler { event ->
+            events += event
+            when (event) {
+                is VoicePlaybackEvent.Active -> {
+                    activeCallbackStarted.countDown()
+                    assertTrue(releaseActiveCallback.await(2, TimeUnit.SECONDS))
+                }
+                is VoicePlaybackEvent.Drained -> drainedDelivered.countDown()
+                is VoicePlaybackEvent.DrainStarted -> Unit
+            }
+        }
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = { FakeVoicePcm16Sink(expectedWrites = 1) },
+            onPlaybackEvent = owner::notify,
+        )
+        writer.activateSession(100L)
+        val play = thread(start = true, name = "playback-active-callback") {
+            writer.playBase64("AQID", sessionId = 100L)
+        }
+        assertTrue(activeCallbackStarted.await(2, TimeUnit.SECONDS))
+
+        owner.releasePlayback(writer::release)
+        releaseActiveCallback.countDown()
+
+        assertTrue(drainedDelivered.await(2, TimeUnit.SECONDS))
+        play.join(2_000L)
+        assertFalse(play.isAlive)
+        assertEquals(
+            listOf(VoicePlaybackEvent.Active(1L), VoicePlaybackEvent.Drained(1L)),
+            events,
+        )
         scope.cancel()
     }
 
