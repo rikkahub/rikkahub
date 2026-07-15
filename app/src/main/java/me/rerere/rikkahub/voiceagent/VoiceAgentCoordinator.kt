@@ -462,8 +462,26 @@ class VoiceAgentCoordinator(
     fun createHermesSessionBridge(sessionId: Long): HermesSessionBridge =
         hermesBridgeFactory.create(sessionId = sessionId)
 
-    fun attachHermesBridge(bridge: HermesSessionBridge, sessionId: Long) {
-        hermesJobManager.announcer.attachScoped(bridge = bridge, sessionId = sessionId)
+    fun attachHermesBridge(bridge: HermesSessionBridge, sessionId: Long): Boolean {
+        val prepared = hermesJobManager.announcer.prepareScopedAttachment(
+            bridge = bridge,
+            sessionId = sessionId,
+        )
+        val attached = synchronized(toolJobsLock) {
+            if (activeSessionId != sessionId || closed || closing) {
+                false
+            } else {
+                // Linearize attachment with retirement under the existing lock order:
+                // toolJobsLock -> announcer registry lock. The commit only mutates registry
+                // fields and posts to the non-blocking actor channel; it invokes no callback.
+                hermesJobManager.announcer.commitScopedAttachment(prepared)
+            }
+        }
+        hermesJobManager.announcer.finishScopedAttachment(attached)
+        if (!attached) {
+            diagnostics.record("stale_hermes_bridge_attach", "sessionId=$sessionId")
+        }
+        return attached
     }
 
     fun detachHermesBridge(bridge: HermesSessionBridge) {
@@ -678,7 +696,7 @@ class VoiceAgentCoordinator(
         var interruptedBoundaryConsumed = false
         val turnAccepted = synchronized(toolJobsLock) {
             val ownsTurn = if (sessionId == null) {
-                acceptsUnscopedGeminiEvents && !closed && !closing
+                playbackAccepted && acceptsUnscopedGeminiEvents && !closed && !closing
             } else {
                 playbackAccepted && activeSessionId == sessionId && !closed && !closing
             }

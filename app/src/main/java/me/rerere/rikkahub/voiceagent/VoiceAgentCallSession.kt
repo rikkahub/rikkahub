@@ -417,7 +417,9 @@ class VoiceAgentCallSession internal constructor(
             hermesBridge = bridge
             if (consumePendingActivationReconnectIfAny(currentSessionId)) return false
             ensureActiveSession(currentSessionId, automaticReconnectJob)
-            coordinator.attachHermesBridge(bridge = bridge, sessionId = currentSessionId)
+            if (!coordinator.attachHermesBridge(bridge = bridge, sessionId = currentSessionId)) {
+                return false
+            }
             if (consumePendingActivationReconnectIfAny(currentSessionId)) return false
             ensureActiveSession(currentSessionId, automaticReconnectJob)
             coordinator.resumeHermesJobs()

@@ -6,6 +6,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.hermesvoice.MobileHermesResponse
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
@@ -15,6 +16,44 @@ import org.junit.Test
 import java.util.concurrent.TimeUnit
 
 class VoiceAgentPlaybackCoordinationTest {
+    @Test
+    fun `unscoped rejected playback completion keeps Hermes final blocked`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val audioDelegate = FakeVoiceAudioEngine()
+        val audio = object : VoiceAudioEngine by audioDelegate {
+            override fun markPlaybackTurnComplete(sessionId: Long?): Boolean = false
+        }
+        val diagnostics = VoiceDiagnostics()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = audio,
+            diagnostics = diagnostics,
+            hermesAnnouncementQuietWindowMs = 0L,
+            scope = this,
+        )
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.InputTranscript("keep the turn active"))
+        coordinator.onGeminiEvent(
+            voiceToolCall(callId = "call-rejected", name = "ask_hermes", arg = "reject boundary")
+        )
+        assertEquals("call-rejected" to "reject boundary", toolApi.awaitRequest("call-rejected"))
+        toolApi.complete(response(callId = "call-rejected", answer = "must stay queued"))
+        coordinator.awaitToolJobsWithTimeout()
+
+        coordinator.onGeminiEvent(GeminiLiveEvent.TurnComplete)
+        delay(20)
+
+        assertTrue(gemini.textTurns.isEmpty())
+        assertTrue(
+            diagnostics.events.value.any {
+                it.name == "stale_gemini_turn_complete" &&
+                    it.detail == "sessionId=none, playbackAccepted=false"
+            }
+        )
+    }
+
     @Test
     fun `coordinator forwards exact playback epochs across multiple responses`() = runTest {
         val audio = FakeVoiceAudioEngine()

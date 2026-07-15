@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.voiceagent
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -21,6 +22,76 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class VoiceAgentSessionRetirementTest {
+    @Test
+    fun `retirement rejects attachment admitted after an earlier ownership check`() = runTest {
+        val gemini = FakeGeminiLiveVoiceClient()
+        val toolApi = FakeVoiceToolApi()
+        val conversationStore = FakeVoiceConversationStore()
+        val coordinator = VoiceAgentCoordinator(
+            gemini = gemini,
+            toolApi = toolApi,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = conversationStore,
+            hermesAnnouncementQuietWindowMs = 0L,
+            scope = CoroutineScope(coroutineContext + Dispatchers.Default),
+        )
+        val retiredSessionId = coordinator.nextSessionId()
+        gemini.activateOutboundSession(retiredSessionId)
+        coordinator.onGeminiEvent(
+            retiredSessionId,
+            GeminiLiveEvent.InputTranscript("keep the final pending"),
+        )
+        coordinator.onGeminiEvent(
+            voiceToolCall(callId = "call-stale-attach", name = "ask_hermes", arg = "attach race")
+        )
+        assertEquals("call-stale-attach" to "attach race", toolApi.awaitRequest("call-stale-attach"))
+        toolApi.complete(response(callId = "call-stale-attach", answer = "preserved answer"))
+        conversationStore.awaitHermesToolStatus("call-stale-attach", "complete")
+        delay(20)
+        assertTrue(gemini.textTurns.isEmpty())
+
+        val ownershipChecked = CountDownLatch(1)
+        val resumeAttachment = CountDownLatch(1)
+        val staleAttachmentAccepted = CompletableDeferred<Boolean>()
+        val staleBridge = coordinator.createHermesSessionBridge(retiredSessionId)
+        val staleAttachment = launch(Dispatchers.Default) {
+            check(coordinator.isActiveSession(retiredSessionId))
+            ownershipChecked.countDown()
+            resumeAttachment.await(500, TimeUnit.MILLISECONDS)
+            staleAttachmentAccepted.complete(
+                coordinator.attachHermesBridge(staleBridge, sessionId = retiredSessionId)
+            )
+        }
+        assertTrue(ownershipChecked.await(500, TimeUnit.MILLISECONDS))
+
+        coordinator.prepareFor(SessionTransition.Reconnect)
+        resumeAttachment.countDown()
+        staleAttachment.join()
+
+        assertFalse(staleAttachmentAccepted.await())
+        delay(20)
+        assertTrue(gemini.textTurns.none { it.first == retiredSessionId })
+
+        val replacementSessionId = coordinator.nextSessionId()
+        gemini.activateOutboundSession(replacementSessionId)
+        assertTrue(
+            coordinator.attachHermesBridge(
+                coordinator.createHermesSessionBridge(replacementSessionId),
+                sessionId = replacementSessionId,
+            )
+        )
+        withTimeout(500) {
+            while (gemini.textTurns.none { it.first == replacementSessionId }) delay(10)
+        }
+
+        assertEquals(1, gemini.textTurns.count { it.second.contains("preserved answer") })
+        assertTrue(
+            gemini.textTurns.single().let { (sessionId, text) ->
+                sessionId == replacementSessionId && text.contains("preserved answer")
+            }
+        )
+    }
+
     @Test
     fun `session reconnect announces detached Hermes completion through new session bridge`() = runTest {
         val sessionApi = FakeVoiceSessionApi()

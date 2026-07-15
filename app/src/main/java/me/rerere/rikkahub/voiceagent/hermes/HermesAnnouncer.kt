@@ -26,6 +26,12 @@ class HermesBridgeAttachment internal constructor(
     internal var announcementsActive: Boolean = true
 }
 
+internal data class PreparedHermesBridgeAttachment(
+    val bridge: HermesSessionBridge,
+    val sessionId: Long,
+    val eventNowMs: Long,
+)
+
 /**
  * The single owner of proactive Hermes announcements AND of bridge attachment.
  * One consumer coroutine drains announcement events through the pure
@@ -120,17 +126,35 @@ class HermesAnnouncer(
     // --- bridge registry ---
 
     fun attachScoped(bridge: HermesSessionBridge, sessionId: Long) {
-        val eventNowMs = nowMs()
+        val prepared = prepareScopedAttachment(bridge = bridge, sessionId = sessionId)
+        val attached = commitScopedAttachment(prepared)
+        finishScopedAttachment(attached)
+    }
+
+    internal fun prepareScopedAttachment(
+        bridge: HermesSessionBridge,
+        sessionId: Long,
+    ): PreparedHermesBridgeAttachment = PreparedHermesBridgeAttachment(
+        bridge = bridge,
+        sessionId = sessionId,
+        eventNowMs = nowMs(),
+    )
+
+    /** Registry-only commit: safe to call while the coordinator ownership lock is held. */
+    internal fun commitScopedAttachment(prepared: PreparedHermesBridgeAttachment): Boolean {
         val attached: Boolean
         synchronized(lock) {
             if (closed) {
                 attached = false
             } else {
-                if (sessionId != HermesJobManager.UNBOUND_BRIDGE_SESSION_ID) {
+                if (prepared.sessionId != HermesJobManager.UNBOUND_BRIDGE_SESSION_ID) {
                     scopedBridgeEverAttached = true
                 }
                 attachment?.active = false
-                attachment = HermesBridgeAttachment(bridge = bridge, sessionId = sessionId)
+                attachment = HermesBridgeAttachment(
+                    bridge = prepared.bridge,
+                    sessionId = prepared.sessionId,
+                )
                 attached = true
                 // Post the registry-mutation event while still holding `lock` so a concurrent
                 // attach/detach on another thread can't preempt between the mutation and the
@@ -140,9 +164,16 @@ class HermesAnnouncer(
                 // blocks, and the consumer never posts registry events while holding `lock`
                 // (see the effect-failure SendReturned post above, which doesn't touch `lock`),
                 // so there's no lock-order hazard.
-                events.trySend(AnnouncerEvent.BridgeAttached(sessionId, eventNowMs))
+                events.trySend(
+                    AnnouncerEvent.BridgeAttached(prepared.sessionId, prepared.eventNowMs)
+                )
             }
         }
+        return attached
+    }
+
+    /** Store-backed replay must remain outside both registry and coordinator ownership locks. */
+    internal fun finishScopedAttachment(attached: Boolean) {
         if (attached) {
             enqueueReplayIntents()
         }
