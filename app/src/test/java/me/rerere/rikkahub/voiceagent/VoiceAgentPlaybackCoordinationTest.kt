@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.withTimeout
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
@@ -16,6 +17,45 @@ import org.junit.Test
 import java.util.concurrent.TimeUnit
 
 class VoiceAgentPlaybackCoordinationTest {
+    @Test
+    fun `coordinator evaluates announcer lifecycle clock outside ownership lock`() = runTest {
+        val audio = FakeVoiceAudioEngine()
+        val observations = mutableListOf<Pair<String, Boolean>>()
+        var operation = "construction"
+        var coordinator: VoiceAgentCoordinator? = null
+        val subject = VoiceAgentCoordinator(
+            gemini = FakeGeminiLiveVoiceClient(),
+            toolApi = FakeVoiceToolApi(),
+            audio = audio,
+            hermesAnnouncementNowMs = {
+                coordinator?.let { owner ->
+                    observations += operation to Thread.holdsLock(coordinatorToolJobsLock(owner))
+                }
+                observations.size.toLong()
+            },
+            scope = this,
+            dispatcher = StandardTestDispatcher(),
+        )
+        coordinator = subject
+        val sessionId = subject.nextSessionId()
+        audio.activatePlaybackSession(sessionId)
+
+        operation = "turn-active"
+        subject.onGeminiEvent(sessionId, GeminiLiveEvent.InputTranscript("active"))
+        operation = "turn-complete"
+        subject.onGeminiEvent(sessionId, GeminiLiveEvent.TurnComplete)
+        operation = "retirement"
+        subject.invalidateActiveSession()
+
+        assertTrue(observations.any { it.first == "turn-active" })
+        assertTrue(observations.any { it.first == "turn-complete" })
+        assertTrue(observations.any { it.first == "retirement" })
+        assertTrue(
+            "announcer clock ran under toolJobsLock: $observations",
+            observations.all { (_, lockHeld) -> !lockHeld },
+        )
+    }
+
     @Test
     fun `unscoped rejected playback completion keeps Hermes final blocked`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
@@ -330,3 +370,9 @@ class VoiceAgentPlaybackCoordinationTest {
 
     private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking(block = block)
 }
+
+private fun coordinatorToolJobsLock(coordinator: VoiceAgentCoordinator): Any =
+    VoiceAgentCoordinator::class.java.getDeclaredField("toolJobsLock").run {
+        isAccessible = true
+        requireNotNull(get(coordinator))
+    }

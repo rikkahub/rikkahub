@@ -281,21 +281,41 @@ class HermesAnnouncer(
     }
 
     fun onGeminiTurnActive() {
-        events.trySend(AnnouncerEvent.GeminiTurnActive(nowMs()))
+        commitGeminiTurnActive(prepareGeminiTurnActive())
+    }
+
+    internal fun prepareGeminiTurnActive(): AnnouncerEvent.GeminiTurnActive =
+        AnnouncerEvent.GeminiTurnActive(nowMs())
+
+    internal fun commitGeminiTurnActive(event: AnnouncerEvent.GeminiTurnActive) {
+        events.trySend(event)
     }
 
     fun onGeminiTurnComplete() {
-        events.trySend(AnnouncerEvent.GeminiTurnComplete(nowMs()))
+        commitGeminiTurnComplete(prepareGeminiTurnComplete())
+    }
+
+    internal fun prepareGeminiTurnComplete(): AnnouncerEvent.GeminiTurnComplete =
+        AnnouncerEvent.GeminiTurnComplete(nowMs())
+
+    internal fun commitGeminiTurnComplete(event: AnnouncerEvent.GeminiTurnComplete) {
+        events.trySend(event)
     }
 
     fun onGeminiSessionRetired() {
-        val eventNowMs = nowMs()
+        commitGeminiSessionRetired(prepareGeminiSessionRetired())
+    }
+
+    internal fun prepareGeminiSessionRetired(): AnnouncerEvent.GeminiSessionRetired =
+        AnnouncerEvent.GeminiSessionRetired(nowMs())
+
+    internal fun commitGeminiSessionRetired(event: AnnouncerEvent.GeminiSessionRetired) {
         synchronized(lock) {
             // Revoke proactive speech immediately as well as gating future reducer sends.
             // Direct tool responses have a separate lifetime: an already accepted Hermes
             // call may still deliver its queued acknowledgement while reconnect cleanup runs.
             attachment?.announcementsActive = false
-            events.trySend(AnnouncerEvent.GeminiSessionRetired(eventNowMs))
+            events.trySend(event)
         }
     }
 

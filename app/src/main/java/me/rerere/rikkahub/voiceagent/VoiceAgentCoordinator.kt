@@ -233,6 +233,7 @@ class VoiceAgentCoordinator(
     }
 
     fun invalidateActiveSession() {
+        val retirement = hermesJobManager.announcer.prepareGeminiSessionRetired()
         val retiredSessionId = synchronized(toolJobsLock) {
             val retiredSessionId = activeSessionId
             activeSessionId += 1
@@ -241,7 +242,7 @@ class VoiceAgentCoordinator(
             // Posted while holding the same ownership lock used by scoped activity and
             // TurnComplete. This gives retirement a total order with in-flight callbacks:
             // an old event is either posted before this reset or rejected after it.
-            hermesJobManager.announcer.onGeminiSessionRetired()
+            hermesJobManager.announcer.commitGeminiSessionRetired(retirement)
             retiredSessionId
         }
         diagnostics.record("gemini_session_retired", "sessionId=$retiredSessionId")
@@ -397,8 +398,8 @@ class VoiceAgentCoordinator(
             synchronized(toolJobsLock) {
                 if (closed || closing) return
                 closing = true
-                diagnostics.record("coordinator_closing")
             }
+            diagnostics.record("coordinator_closing")
             synchronized(eventLock) {
                 // Barrier: waits for any in-flight non-tool event (see route()) to finish before resources are released.
             }
@@ -669,11 +670,11 @@ class VoiceAgentCoordinator(
     }
 
     /**
-     * Orders scoped Gemini activity against session retirement. Posting while holding
-     * [toolJobsLock] is safe because the announcer tap is a non-blocking channel send and
-     * never calls back into the coordinator.
+     * Orders scoped Gemini activity against session retirement. The injected timestamp is
+     * prepared before [toolJobsLock]; only the callback-free channel post happens inside it.
      */
     private fun markGeminiTurnActive(sessionId: Long?, event: GeminiLiveEvent): Boolean {
+        val turnActive = hermesJobManager.announcer.prepareGeminiTurnActive()
         val accepted = synchronized(toolJobsLock) {
             val ownsTurn = if (sessionId == null) {
                 acceptsUnscopedGeminiEvents && !closed && !closing
@@ -681,7 +682,7 @@ class VoiceAgentCoordinator(
                 activeSessionId == sessionId && !closed && !closing
             }
             if (ownsTurn) {
-                hermesJobManager.announcer.onGeminiTurnActive()
+                hermesJobManager.announcer.commitGeminiTurnActive(turnActive)
             }
             ownsTurn
         }
@@ -693,6 +694,11 @@ class VoiceAgentCoordinator(
 
     private fun handleTurnComplete(sessionId: Long?) {
         val playbackAccepted = audio.markPlaybackTurnComplete(sessionId)
+        val turnComplete = if (playbackAccepted) {
+            hermesJobManager.announcer.prepareGeminiTurnComplete()
+        } else {
+            null
+        }
         var interruptedBoundaryConsumed = false
         val turnAccepted = synchronized(toolJobsLock) {
             val ownsTurn = if (sessionId == null) {
@@ -706,7 +712,9 @@ class VoiceAgentCoordinator(
                     interruptedResponseSessionId = null
                     interruptedBoundaryConsumed = true
                 } else {
-                    hermesJobManager.announcer.onGeminiTurnComplete()
+                    hermesJobManager.announcer.commitGeminiTurnComplete(
+                        requireNotNull(turnComplete)
+                    )
                 }
             }
             ownsTurn
