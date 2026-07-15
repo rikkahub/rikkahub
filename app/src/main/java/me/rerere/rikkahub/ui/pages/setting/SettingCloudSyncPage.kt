@@ -63,8 +63,10 @@ fun SettingCloudSyncPage(
     val connectionStatus by vm.connectionStatus.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val statusText by vm.statusText.collectAsStateWithLifecycle()
+    val draftConfig by vm.draftConfig.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val config = settings.perryConfig
+    // Prefer draft so first-keystroke host/token are used on Register without DataStore race.
+    val config = draftConfig
     val mode = SyncMode.fromStorage(syncState?.syncMode)
     var bootstrapVisible by remember { mutableStateOf(false) }
     var tokenVisible by remember { mutableStateOf(false) }

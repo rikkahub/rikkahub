@@ -40,10 +40,32 @@ class SettingCloudSyncVM(
     private val _statusText = MutableStateFlow<String?>(null)
     val statusText: StateFlow<String?> = _statusText.asStateFlow()
 
-    fun updateConfig(transform: (PerryServerConfig) -> PerryServerConfig) {
+    /**
+     * UI-local draft so host/bootstrap edits are available immediately on Register,
+     * without racing DataStore write + Settings.dummy() first composition.
+     */
+    private val _draftConfig = MutableStateFlow(PerryServerConfig())
+    val draftConfig: StateFlow<PerryServerConfig> = _draftConfig.asStateFlow()
+
+    init {
         viewModelScope.launch {
-            // awaitReady inside update(): first open used Settings.dummy() and dropped host/token.
-            settingsStore.update { it.copy(perryConfig = transform(it.perryConfig)) }
+            settingsStore.settingsFlow.collect { s ->
+                if (s.init) return@collect
+                // Only adopt persisted config when draft is still empty/default (first load).
+                val d = _draftConfig.value
+                if (d.host.isBlank() && d.bootstrapToken.isBlank()) {
+                    _draftConfig.value = s.perryConfig
+                }
+            }
+        }
+    }
+
+    fun updateConfig(transform: (PerryServerConfig) -> PerryServerConfig) {
+        val next = transform(_draftConfig.value)
+        _draftConfig.value = next
+        viewModelScope.launch {
+            // Persist in background; Register uses draft immediately.
+            settingsStore.update { it.copy(perryConfig = next) }
         }
     }
 
@@ -51,15 +73,17 @@ class SettingCloudSyncVM(
         viewModelScope.launch {
             _busy.value = true
             try {
-                // Flush any in-flight TextField updates before reading bootstrap token.
-                kotlinx.coroutines.delay(50)
-                settingsStore.awaitReady()
-                val result = cloudSyncRepository.registerThisDevice()
+                val draft = _draftConfig.value
+                // Persist draft first so registerThisDevice / other readers see host+token.
+                settingsStore.update { it.copy(perryConfig = draft) }
+                val result = cloudSyncRepository.registerThisDevice(overrideConfig = draft)
                 _statusText.value = result.fold(
                     onSuccess = { "Registered device ${it.deviceId}" },
                     onFailure = { it.message ?: "Register failed" },
                 )
                 if (result.isSuccess) {
+                    // Draft token was cleared server-side after success.
+                    _draftConfig.value = settingsStore.settingsFlow.value.perryConfig
                     cloudSyncRepository.testConnection()
                 }
             } finally {

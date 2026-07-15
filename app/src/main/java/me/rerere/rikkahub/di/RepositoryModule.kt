@@ -188,6 +188,7 @@ val repositoryModule = module {
             cloudSyncRepository = get(),
             revisionDao = get(),
             filesRepository = get(),
+            appContext = get(),
         )
         get<CloudSyncRepository>().fileDomainSync = domain
         get<FilesRepository>().fileDomainSync = domain

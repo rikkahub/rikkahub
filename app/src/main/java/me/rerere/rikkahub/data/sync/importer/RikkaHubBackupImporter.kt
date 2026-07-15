@@ -144,7 +144,15 @@ class RikkaHubBackupImporter(
                 if (options.syncToCloud) {
                     // Defer requestSync until import finishes so conversation floods do not
                     // cancel/starve settings+assistant push mid-import.
-                    cloudSyncRepository.withBulkEnqueue { work() }
+                    cloudSyncRepository.withBulkEnqueue {
+                        work()
+                        // Register skill files into managed_files + outbox after disk copy.
+                        runCatching {
+                            cloudSyncRepository.fileDomainSync?.seedSkillsFromDisk()
+                        }.onFailure {
+                            Log.w(TAG, "seedSkillsFromDisk failed: ${it.message}")
+                        }
+                    }
                     // Force-push settings that already had a server revision (e.g. providers
                     // after first bootstrap) plus all assistants. seedLocalSnapshot alone
                     // skips keys with known revision and races with async SettingsDomainSync.

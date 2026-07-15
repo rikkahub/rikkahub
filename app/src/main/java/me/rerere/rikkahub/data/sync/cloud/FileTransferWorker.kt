@@ -55,15 +55,39 @@ class FileTransferWorker(
             ManagedFileEntity.UPLOAD_FAILED,
         )
         val pending = filesRepository.listByStatuses(statuses, limit = BATCH_LIMIT)
-        if (pending.isEmpty()) return false
+            // Only rows that actually have local bytes should enter upload progress UI.
+            .filter { filesManager.getFile(it).let { f -> f.exists() && f.length() > 0L } }
+        if (pending.isEmpty()) {
+            // Clean ghost pending rows so they stop reappearing in the queue.
+            val ghosts = filesRepository.listByStatuses(statuses, limit = BATCH_LIMIT)
+            for (g in ghosts) {
+                val f = filesManager.getFile(g)
+                if (!f.exists() || f.length() <= 0L) {
+                    filesRepository.upsertQuiet(
+                        g.copy(
+                            uploadStatus = if (g.remoteRevision > 0L || g.objectKey.isNotBlank()) {
+                                ManagedFileEntity.UPLOAD_REMOTE_ONLY
+                            } else {
+                                ManagedFileEntity.UPLOAD_FAILED
+                            },
+                            updatedAt = System.currentTimeMillis(),
+                        ),
+                    )
+                }
+            }
+            return false
+        }
 
-        val remainingHint = filesRepository.listByStatuses(statuses, limit = 500).size
+        val remainingHint = filesRepository.listByStatuses(statuses, limit = 500)
+            .count { filesManager.getFile(it).let { f -> f.exists() && f.length() > 0L } }
+        if (remainingHint <= 0) return false
         uploadProgressTracker.setQueue(remaining = remainingHint, isDownload = false)
 
         for (entity in pending) {
             uploadOne(entity)
         }
-        return filesRepository.listByStatuses(statuses, limit = 1).isNotEmpty()
+        return filesRepository.listByStatuses(statuses, limit = 8)
+            .any { filesManager.getFile(it).let { f -> f.exists() && f.length() > 0L } }
     }
 
     /** @return true if more downloads remain after this batch */
@@ -84,7 +108,18 @@ class FileTransferWorker(
     private suspend fun uploadOne(entity: ManagedFileEntity) {
         val file = filesManager.getFile(entity)
         if (!file.exists() || file.length() <= 0L) {
-            Log.w(TAG, "skip upload missing file ${entity.id}")
+            // Ghost rows from remote apply / stale import: never "upload", demote to remote_only.
+            Log.w(TAG, "skip upload missing local bytes ${entity.id}; mark remote_only")
+            filesRepository.upsertQuiet(
+                entity.copy(
+                    uploadStatus = if (entity.remoteRevision > 0L || entity.objectKey.isNotBlank()) {
+                        ManagedFileEntity.UPLOAD_REMOTE_ONLY
+                    } else {
+                        ManagedFileEntity.UPLOAD_FAILED
+                    },
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
             return
         }
         val client = cloudSyncRepository.createAuthenticatedClient() ?: return
@@ -104,11 +139,21 @@ class FileTransferWorker(
             )
         )
         try {
+            val initDisplay = if (
+                entity.folder == me.rerere.rikkahub.data.files.FileFolders.SKILLS &&
+                entity.relativePath.startsWith("${me.rerere.rikkahub.data.files.FileFolders.SKILLS}/")
+            ) {
+                entity.relativePath.removePrefix(
+                    "${me.rerere.rikkahub.data.files.FileFolders.SKILLS}/",
+                )
+            } else {
+                entity.displayName
+            }
             val init = client.initFile(
                 FileInitRequest(
                     id = entity.id,
                     folder = entity.folder,
-                    displayName = entity.displayName,
+                    displayName = initDisplay,
                     mimeType = entity.mimeType,
                     sizeBytes = size,
                     sha256 = sha,

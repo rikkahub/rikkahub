@@ -377,11 +377,13 @@ class CloudSyncRepository(
         return if (cause != null && cause != base) "$base | cause=$cause" else base
     }
 
-    suspend fun registerThisDevice(): Result<DeviceRegisterResponse> {
+    suspend fun registerThisDevice(
+        overrideConfig: PerryServerConfig? = null,
+    ): Result<DeviceRegisterResponse> {
         return runCatching {
             // Never read Settings.dummy() from first page composition.
             val settings = settingsStore.awaitReady()
-            val config = settings.perryConfig
+            val config = overrideConfig ?: settings.perryConfig
             require(config.isConfigured()) { "Server host is empty" }
             require(config.bootstrapToken.isNotBlank()) { "Bootstrap token is empty" }
             val name = config.deviceName.ifBlank { android.os.Build.MODEL }
@@ -400,21 +402,23 @@ class CloudSyncRepository(
                 )
             )
             settingsStore.update {
+                // Persist the config used for this registration (may be UI draft override).
+                val savedConfig = config.copy(
+                    deviceName = name,
+                    // Clear bootstrap token after successful registration
+                    bootstrapToken = "",
+                )
                 val refreshed = PerryCatalog.refreshPerryCredentials(
                     providers = it.providers,
                     resolveBaseUrl = { monelId ->
-                        PerryApiClient(okHttpClient, it.perryConfig.normalizedBaseUrl())
+                        PerryApiClient(okHttpClient, savedConfig.normalizedBaseUrl())
                             .aiProviderBaseUrl(monelId)
                     },
                     deviceToken = registered.deviceToken,
                 )
                 it.copy(
                     perryDeviceToken = registered.deviceToken,
-                    perryConfig = it.perryConfig.copy(
-                        deviceName = name,
-                        // Clear bootstrap token after successful registration
-                        bootstrapToken = "",
-                    ),
+                    perryConfig = savedConfig,
                     providers = refreshed,
                 )
             }
@@ -571,13 +575,14 @@ class CloudSyncRepository(
                     if (bootstrap.favorites.isEmpty()) {
                         favoriteDomainSync?.seedLocalFavorites()
                     }
-                    if (bootstrap.files.isEmpty()) {
-                        fileDomainSync?.seedLocalFiles()
-                    }
+                    // Always seed local files/skills that lack a server revision
+                    // (skills live on disk and may be missing from empty bootstrap.files).
+                    fileDomainSync?.seedLocalFiles()
                 } else {
                     // Upgrade path: device already past bootstrap but missing
                     // revisions for new sync keys (providers). Push once.
                     settingsDomainSync?.seedLocalSnapshot(settingsStore.settingsFlow.value)
+                    fileDomainSync?.seedLocalFiles()
                 }
                 // Push local outbox first so A exports land before B reconciles.
                 pushOutbox(client, state.deviceId!!)
