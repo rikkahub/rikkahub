@@ -34,6 +34,7 @@ ADB_LONG_TIMEOUT_SECONDS="${VOICE_AGENT_E2E_ADB_LONG_TIMEOUT_SECONDS:-120}"
 ADB_READY_SCRIPT="${VOICE_AGENT_E2E_ADB_READY_SCRIPT:-scripts/adb-device-ready.sh}"
 GEMINI_TOOL_CALL_TIMEOUT_SECONDS="${VOICE_AGENT_E2E_GEMINI_TOOL_CALL_TIMEOUT_SECONDS:-240}"
 HERMES_RESPONSE_TIMEOUT_SECONDS="${VOICE_AGENT_E2E_HERMES_RESPONSE_TIMEOUT_SECONDS:-360}"
+FINAL_ANSWER_TIMEOUT_SECONDS="${VOICE_AGENT_E2E_FINAL_ANSWER_TIMEOUT_SECONDS:-60}"
 CALL_STARTED=0
 PIPELINE_STATUS="not_started"
 CLEANUP_STATUS="not_started"
@@ -642,8 +643,8 @@ else
     "$HERMES_RESPONSE_TIMEOUT_SECONDS"
 fi
 wait_for_log "completed Hermes answer sent to Gemini" \
-  'VoiceAgentE2E.*hermes_queue_event type=late_text_turn_sent .*sent=true|VoiceAgentGemini.*send kind=clientContent sent=true|VoiceAgentGemini.*send kind=toolResponse sent=true' \
-  60
+  'VoiceAgentE2E.*hermes_queue_event type=late_text_turn_sent .*sent=true' \
+  "$FINAL_ANSWER_TIMEOUT_SECONDS"
 wait_for_log "Gemini output audio received" 'VoiceAgentGemini.*event kind=OutputAudio' 120
 wait_for_log "Voice playback queued" 'AndroidVoiceAudioEngine.*Voice playback queued' 60
 wait_for_log "Voice playback wrote" 'AndroidVoiceAudioEngine.*Voice playback wrote' 60
