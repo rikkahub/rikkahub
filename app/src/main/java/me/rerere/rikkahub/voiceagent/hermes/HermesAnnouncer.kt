@@ -408,7 +408,7 @@ class HermesAnnouncer(
 
             AnnouncerEffect.CancelBlockedWatchdog -> blockedWatchdogTimer?.cancel()
 
-            is AnnouncerEffect.Send -> executeSend(effect.intent)
+            is AnnouncerEffect.Send -> executeSend(effect.dispatch)
 
             is AnnouncerEffect.FallbackToText -> when (val intent = effect.intent) {
                 is AnnouncementIntent.Completion ->
@@ -422,7 +422,7 @@ class HermesAnnouncer(
         }
     }
 
-    private suspend fun executeSend(intent: AnnouncementIntent) {
+    private suspend fun executeSend(dispatch: AnnouncementDispatch) {
         val current = currentAttachment()
         if (current == null) {
             events.trySend(
@@ -430,10 +430,12 @@ class HermesAnnouncer(
             )
             return
         }
-        val outcome = when (intent) {
-            is AnnouncementIntent.Completion -> sendCompletion(intent, current)
-            is AnnouncementIntent.Terminal -> sendTerminal(intent, current)
-            is AnnouncementIntent.StillWorking -> sendStillWorking(intent, current)
+        val outcome = when (dispatch) {
+            is AnnouncementDispatch.Progress -> sendStillWorking(dispatch, current)
+            is AnnouncementDispatch.Final -> when (val final = dispatch.final) {
+                is AnnouncementIntent.Completion -> sendCompletion(final, current)
+                is AnnouncementIntent.Terminal -> sendTerminal(final, current)
+            }
         }
         events.trySend(AnnouncerEvent.SendReturned(outcome, nowMs()))
     }
@@ -531,14 +533,15 @@ class HermesAnnouncer(
     }
 
     private suspend fun sendStillWorking(
-        intent: AnnouncementIntent.StillWorking,
+        dispatch: AnnouncementDispatch.Progress,
         current: HermesBridgeAttachment,
     ): AnnouncementSendOutcome {
+        val intent = dispatch.progress
         val record = queueStore.latestRecord(callId = intent.callId, jobId = intent.jobId)
         if (
             record == null ||
             record.stillWorkingAnnounced ||
-            (record.status.isTerminal && !intent.allowTerminalRecord)
+            (record.status.isTerminal && dispatch is AnnouncementDispatch.ProgressOnly)
         ) {
             return AnnouncementSendOutcome.Skipped
         }

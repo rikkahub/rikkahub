@@ -10,13 +10,37 @@ import me.rerere.rikkahub.voiceagent.audio.PlaybackEpoch
  */
 
 sealed interface AnnouncementIntent {
-    data class Completion(val callId: String, val jobId: String?) : AnnouncementIntent
-    data class Terminal(val callId: String, val jobId: String?) : AnnouncementIntent
+    data class Completion(val callId: String, val jobId: String?) : FinalAnnouncementIntent
+    data class Terminal(val callId: String, val jobId: String?) : FinalAnnouncementIntent
     data class StillWorking(
         val callId: String,
         val jobId: String,
-        val allowTerminalRecord: Boolean = false,
     ) : AnnouncementIntent
+}
+
+sealed interface FinalAnnouncementIntent : AnnouncementIntent
+
+sealed interface AnnouncementDispatch {
+    val intent: AnnouncementIntent
+
+    sealed interface Progress : AnnouncementDispatch {
+        val progress: AnnouncementIntent.StillWorking
+        override val intent: AnnouncementIntent.StillWorking
+            get() = progress
+    }
+
+    data class ProgressOnly(
+        override val progress: AnnouncementIntent.StillWorking,
+    ) : Progress
+
+    data class ProgressBeforeFinal(
+        override val progress: AnnouncementIntent.StillWorking,
+    ) : Progress
+
+    data class Final(val final: FinalAnnouncementIntent) : AnnouncementDispatch {
+        override val intent: FinalAnnouncementIntent
+            get() = final
+    }
 }
 
 internal fun AnnouncementIntent.label(): String = when (this) {
@@ -63,9 +87,14 @@ data class PlaybackGate(
 data class PendingAnnouncementJob(
     val key: AnnouncementJobKey,
     val progress: AnnouncementIntent.StillWorking? = null,
-    val final: AnnouncementIntent? = null,
+    val final: FinalAnnouncementIntent? = null,
 ) {
-    fun head(): AnnouncementIntent? = progress ?: final
+    fun nextDispatch(): AnnouncementDispatch? = when {
+        progress != null && final != null -> AnnouncementDispatch.ProgressBeforeFinal(progress)
+        progress != null -> AnnouncementDispatch.ProgressOnly(progress)
+        final != null -> AnnouncementDispatch.Final(final)
+        else -> null
+    }
 
     fun flatten(): List<AnnouncementIntent> = listOfNotNull(progress, final)
 }
@@ -78,7 +107,7 @@ data class AnnouncerState(
     val lastInputDeltaAtMs: Long? = null,
     val pendingJobs: List<PendingAnnouncementJob> = emptyList(),
     val finalizedJobKeys: Set<AnnouncementJobKey> = emptySet(),
-    val inFlight: AnnouncementIntent? = null,
+    val inFlight: AnnouncementDispatch? = null,
     val blockedWatchdogAtMs: Long? = null,
     val closed: Boolean = false,
 )
@@ -111,7 +140,10 @@ sealed interface AnnouncerEffect {
     data class StartBlockedWatchdog(val delayMs: Long) : AnnouncerEffect
     data object CancelBlockedWatchdog : AnnouncerEffect
 
-    data class Send(val intent: AnnouncementIntent, val sessionId: Long) : AnnouncerEffect
+    data class Send(
+        val dispatch: AnnouncementDispatch,
+        val sessionId: Long,
+    ) : AnnouncerEffect
     data class FallbackToText(val intent: AnnouncementIntent) : AnnouncerEffect
     data class Diagnostic(val name: String, val detail: String) : AnnouncerEffect
 }
@@ -288,13 +320,13 @@ class AnnouncerReducer(
         // gates are currently safe (for example, a quiet timer event was lost), it must
         // fail closed and wait for an ordinary boundary event to call settle().
         val quietRemainingMs = quietRemainingMs(state, nowMs)
-        val head = requireNotNull(state.pendingJobs.first().head())
+        val dispatch = requireNotNull(state.pendingJobs.first().nextDispatch())
         return AnnouncerTransition(
             state.copy(blockedWatchdogAtMs = nowMs + blockedWatchdogMs),
             listOf(
                 AnnouncerEffect.Diagnostic(
                     name = "hermes_announcement_blocked_watchdog",
-                    detail = "intent=${head.label()}, gemini=${state.geminiTurn}, " +
+                    detail = "intent=${dispatch.intent.label()}, gemini=${state.geminiTurn}, " +
                         "playbackEpoch=${state.playback.playbackEpoch.value}, " +
                         "playbackDrained=${state.playback.drained}, quietRemainingMs=$quietRemainingMs",
                 ),
@@ -307,7 +339,7 @@ class AnnouncerReducer(
         state: AnnouncerState,
         event: AnnouncerEvent.SendReturned,
     ): AnnouncerTransition {
-        val intent = state.inFlight ?: return noChange(state)
+        val dispatch = state.inFlight ?: return noChange(state)
         val cleared = state.copy(
             inFlight = null,
             geminiTurn = state.geminiTurn.onSendReturned(event.outcome),
@@ -320,7 +352,7 @@ class AnnouncerReducer(
             AnnouncementSendOutcome.Failed,
             AnnouncementSendOutcome.AttachmentInvalidated -> {
                 val settled = if (cleared.closed) noChange(cleared) else settle(cleared, event.nowMs)
-                AnnouncerTransition(settled.state, fallbackOrDrop(intent) + settled.effects)
+                AnnouncerTransition(settled.state, fallbackOrDrop(dispatch.intent) + settled.effects)
             }
 
             AnnouncementSendOutcome.Skipped -> {
@@ -365,9 +397,7 @@ class AnnouncerReducer(
         val key = intent.jobKey()
         return when (intent) {
             is AnnouncementIntent.StillWorking -> enqueueProgress(state, key, intent)
-            is AnnouncementIntent.Completion,
-            is AnnouncementIntent.Terminal,
-                -> enqueueFinal(state, key, intent)
+            is FinalAnnouncementIntent -> enqueueFinal(state, key, intent)
         }
     }
 
@@ -414,7 +444,7 @@ class AnnouncerReducer(
     private fun enqueueFinal(
         state: AnnouncerState,
         key: AnnouncementJobKey,
-        intent: AnnouncementIntent,
+        intent: FinalAnnouncementIntent,
     ): AnnouncerTransition {
         val index = state.pendingJobs.indexOfFirst { it.key == key }
         val pendingJobs = if (index < 0) {
@@ -422,10 +452,7 @@ class AnnouncerReducer(
         } else {
             state.pendingJobs.toMutableList().apply {
                 val existing = this[index]
-                this[index] = existing.copy(
-                    progress = existing.progress?.copy(allowTerminalRecord = true),
-                    final = intent,
-                )
+                this[index] = existing.copy(final = intent)
             }
         }
         return AnnouncerTransition(
@@ -513,7 +540,7 @@ class AnnouncerReducer(
             )
         }
 
-        val head = requireNotNull(state.pendingJobs.first().head())
+        val dispatch = requireNotNull(state.pendingJobs.first().nextDispatch())
         val quietRemainingMs = quietRemainingMs(state, nowMs)
         val blocked = state.geminiTurn != GeminiTurnGate.Idle ||
             !state.playback.drained ||
@@ -536,16 +563,16 @@ class AnnouncerReducer(
         effects += AnnouncerEffect.CancelQuietTimer
         effects += AnnouncerEffect.Diagnostic(
             name = "hermes_announcement_released_safe_boundary",
-            detail = head.label(),
+            detail = dispatch.intent.label(),
         )
-        effects += AnnouncerEffect.Send(head, requireNotNull(state.bridgeSessionId))
+        effects += AnnouncerEffect.Send(dispatch, requireNotNull(state.bridgeSessionId))
 
         val firstJob = state.pendingJobs.first()
-        val remainder = when {
-            firstJob.progress != null -> firstJob.copy(progress = null)
-            else -> firstJob.copy(final = null)
+        val remainder = when (dispatch) {
+            is AnnouncementDispatch.Progress -> firstJob.copy(progress = null)
+            is AnnouncementDispatch.Final -> firstJob.copy(final = null)
         }
-        val pendingJobs = if (remainder.head() == null) {
+        val pendingJobs = if (remainder.nextDispatch() == null) {
             state.pendingJobs.drop(1)
         } else {
             listOf(remainder) + state.pendingJobs.drop(1)
@@ -554,7 +581,7 @@ class AnnouncerReducer(
             state.copy(
                 geminiTurn = GeminiTurnGate.SendReserved(),
                 pendingJobs = pendingJobs,
-                inFlight = head,
+                inFlight = dispatch,
                 blockedWatchdogAtMs = null,
             ),
             effects,

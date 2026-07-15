@@ -14,8 +14,11 @@ class HermesAnnouncementLifecycleTest {
     private val stillWorking = AnnouncementIntent.StillWorking(callId = "c3", jobId = "j3")
     private val attached = AnnouncerState(bridgeSessionId = 7L)
 
+    private fun AnnouncerTransition.dispatches(): List<AnnouncementDispatch> =
+        effects.filterIsInstance<AnnouncerEffect.Send>().map { it.dispatch }
+
     private fun AnnouncerTransition.sends(): List<AnnouncementIntent> =
-        effects.filterIsInstance<AnnouncerEffect.Send>().map { it.intent }
+        dispatches().map { it.intent }
 
     private fun AnnouncerTransition.fallbacks(): List<AnnouncementIntent> =
         effects.filterIsInstance<AnnouncerEffect.FallbackToText>().map { it.intent }
@@ -24,8 +27,9 @@ class HermesAnnouncementLifecycleTest {
     fun `intent on an idle attached drained state sends immediately and reserves the turn`() {
         val transition = reducer.reduce(attached, AnnouncerEvent.IntentEnqueued(completion, 100L))
 
-        assertEquals(listOf(completion), transition.sends())
-        assertEquals(completion, transition.state.inFlight)
+        val dispatch = AnnouncementDispatch.Final(completion)
+        assertEquals(listOf(dispatch), transition.dispatches())
+        assertEquals(dispatch, transition.state.inFlight)
         assertEquals(GeminiTurnGate.SendReserved(), transition.state.geminiTurn)
         assertTrue(transition.state.pendingJobs.isEmpty())
         assertEquals(7L, transition.effects.filterIsInstance<AnnouncerEffect.Send>().single().sessionId)
@@ -261,12 +265,23 @@ class HermesAnnouncementLifecycleTest {
         )
 
         val job = ignored.state.pendingJobs.single()
-        assertEquals(progress.copy(allowTerminalRecord = true), job.progress)
+        assertEquals(progress, job.progress)
         assertEquals(completion, job.final)
+        assertEquals(AnnouncementDispatch.ProgressBeforeFinal(progress), job.nextDispatch())
         assertTrue(ignored.effects.any {
             it is AnnouncerEffect.Diagnostic &&
                 it.name == "hermes_announcement_progress_ignored_after_final"
         })
+    }
+
+    @Test
+    fun `unpaired progress derives progress-only dispatch`() {
+        val progress = AnnouncementIntent.StillWorking("c-progress", "j-progress")
+        val job = PendingAnnouncementJob(
+            key = AnnouncementJobKey("job:j-progress"),
+            progress = progress,
+        )
+        assertEquals(AnnouncementDispatch.ProgressOnly(progress), job.nextDispatch())
     }
 
     @Test
@@ -302,7 +317,7 @@ class HermesAnnouncementLifecycleTest {
         state = reducer.reduce(state, AnnouncerEvent.IntentEnqueued(finalB, 30L)).state
 
         var transition = reducer.reduce(state, AnnouncerEvent.GeminiTurnComplete(40L))
-        assertEquals(listOf(progressA.copy(allowTerminalRecord = true)), transition.sends())
+        assertEquals(listOf(progressA), transition.sends())
         transition = reducer.reduce(
             transition.state,
             AnnouncerEvent.SendReturned(AnnouncementSendOutcome.Skipped, 50L),
