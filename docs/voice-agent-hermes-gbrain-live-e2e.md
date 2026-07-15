@@ -221,6 +221,30 @@ CLEANUP: failed - service end marker not observed
 
 Treat that as a successful live pipeline with a cleanup failure that still needs investigation.
 
+## Hermes Announcement Safe-Playback Check
+
+For this coordination regression, use a prompt that makes Gemini speak long enough for Hermes progress or completion
+to arrive during playback. The run is valid for this check only when the trace shows the Hermes result became ready
+before the current Gemini turn and playback finished.
+
+The announcement passes when the trace order is:
+
+1. Hermes progress or completion becomes pending.
+2. Gemini emits `TurnComplete` for the current response.
+3. `AndroidVoiceAudioEngine` logs `Voice playback drained` for the matching generation.
+4. The app sends one Hermes progress/result client-content turn.
+5. If both progress and final are pending, the final client-content turn appears only after the progress response has
+   its own `TurnComplete` and matching playback drain.
+
+Fail the run if a Hermes progress/result client-content send is followed by Gemini `Interrupted` and old-generation
+playback suppression before a user input transcript. That sequence is the original coordination bug.
+
+After a successful scoped run, the harness writes the validated app trace ID to
+`build/voice-agent-e2e/trace-id.txt` with local-only permissions before app-private cleanup removes the device pointer.
+Missing or unsafe device trace IDs preserve the base-directory artifact fallback and intentionally produce no local
+trace-ID file. Use the local ID to pull only that run's trace, and inspect event names/order rather than sharing raw
+transcripts, prompts, answers, audio, or secrets.
+
 ## Pass Criteria
 
 The script passes only when all of these markers appear in the same run:
@@ -269,6 +293,9 @@ artifact when available. The script does not fall back to reading the app databa
 `build/voice-agent-e2e/logcat.txt` is a local artifact and must not be committed. It is scoped to app-relevant tags:
 `VoiceAgentCallService`, `VoiceAgentCallSession`, `VoiceAgentGemini`, `VoiceAgentE2E`, `VoiceAudioDebugInjection`,
 `AndroidVoiceAudioEngine`, and `AndroidRuntime`, but still treat it as local only.
+
+`build/voice-agent-e2e/trace-id.txt` is an optional local pointer to the validated scoped trace for the most recent
+successful run. It contains no transcript, but it still identifies private device artifacts and must not be committed.
 
 `build/voice-agent-e2e/manual-hermes-answer.txt` is created only in manual review mode. It contains the raw Hermes answer
 and must not be committed, pasted into shared logs, or distributed.

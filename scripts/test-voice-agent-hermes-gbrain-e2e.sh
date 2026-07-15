@@ -60,6 +60,14 @@ assert_file_contains() {
   fi
 }
 
+assert_file_does_not_exist() {
+  local path="$1"
+  if [[ -e "$path" ]]; then
+    printf 'Expected file not to exist: %s\n' "$path" >&2
+    exit 1
+  fi
+}
+
 assert_last_line_after() {
   local path="$1"
   local earlier="$2"
@@ -532,6 +540,28 @@ if [[ "$after_invalid_package_adb_lines" != "$before_invalid_package_adb_lines" 
   exit 1
 fi
 
+stale_trace_log_dir="$TMP_DIR/stale-trace-log"
+mkdir -p "$stale_trace_log_dir"
+printf 'old-trace' > "$stale_trace_log_dir/trace-id.txt"
+set +e
+stale_trace_output="$(
+  PATH="$TMP_DIR:$PATH" \
+  VOICE_AGENT_E2E_PCM_PATH="$TMP_DIR/prompt.pcm" \
+  VOICE_AGENT_E2E_LOG_DIR="$stale_trace_log_dir" \
+  VOICE_AGENT_E2E_MANUAL_REVIEW=1 \
+  "$SCRIPT" 2>&1
+)"
+stale_trace_status=$?
+set -e
+
+if [[ "$stale_trace_status" -eq 0 ]]; then
+  printf 'Expected missing conversation id run to fail.\n' >&2
+  printf 'Actual output:\n%s\n' "$stale_trace_output" >&2
+  exit 1
+fi
+assert_contains "$stale_trace_output" "Missing required environment variable: VOICE_AGENT_E2E_CONVERSATION_ID"
+assert_file_does_not_exist "$stale_trace_log_dir/trace-id.txt"
+
 expected_hash="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 manual_log_dir="$TMP_DIR/manual-log"
 
@@ -564,6 +594,7 @@ assert_contains "$manual_output" "PIPELINE: passed"
 assert_contains "$manual_output" "CLEANUP: passed"
 assert_contains "$manual_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
 assert_file_contains_exactly "$manual_log_dir/manual-hermes-answer.txt" "manual answer from Hermes"
+assert_file_contains_exactly "$manual_log_dir/trace-id.txt" "trace-gbrain"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/hermes-answer.txt"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/input-transcript.txt"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "rm -f no_backup/voice-e2e/output-transcript.txt"
@@ -621,6 +652,7 @@ fi
 assert_contains "$fallback_manual_output" "Manual review answer artifact: $fallback_manual_log_dir/manual-hermes-answer.txt"
 assert_contains "$fallback_manual_output" "Voice Agent Hermes/Gbrain live E2E reached manual review gate."
 assert_file_contains_exactly "$fallback_manual_log_dir/manual-hermes-answer.txt" "manual answer from Hermes"
+assert_file_does_not_exist "$fallback_manual_log_dir/trace-id.txt"
 assert_file_contains "$fallback_manual_log_dir/report.txt" "Please ask Hermes if he is connected to G-Brain."
 assert_file_contains "$fallback_manual_log_dir/report.txt" "Is Hermes connected to G-Brain? Answer yes or no."
 assert_file_contains "$fallback_manual_log_dir/report.txt" "Yes, Hermes is connected to G-Brain."
@@ -661,6 +693,7 @@ if [[ "$unsafe_fallback_manual_status" -ne 0 ]]; then
   exit 1
 fi
 assert_contains "$unsafe_fallback_manual_output" "Manual review answer artifact: $unsafe_fallback_manual_log_dir/manual-hermes-answer.txt"
+assert_file_does_not_exist "$unsafe_fallback_manual_log_dir/trace-id.txt"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/latest-trace-id.txt"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/hermes-answer.txt"
 assert_file_contains "$FAKE_ADB_ARGS_LOG" "cat no_backup/voice-e2e/input-transcript.txt"

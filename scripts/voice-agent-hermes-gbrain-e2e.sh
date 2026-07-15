@@ -18,6 +18,7 @@ APP_HERMES_CALL_ARTIFACT="hermes-call.txt"
 DEVICE_TMP_PCM="/data/local/tmp/rikkahub-voice-agent-e2e-prompt.pcm"
 LOG_DIR="${VOICE_AGENT_E2E_LOG_DIR:-build/voice-agent-e2e}"
 LOG_FILE="$LOG_DIR/logcat.txt"
+TRACE_ID_FILE="$LOG_DIR/trace-id.txt"
 DEFAULT_PROMPT_TEXT="Call the ask Hermes tool. Ask Hermes: are you connected to G Brain? Do not answer yourself."
 FLITE_VOICE="${VOICE_AGENT_E2E_FLITE_VOICE:-slt}"
 PROMPT_TEXT="${VOICE_AGENT_E2E_PROMPT_TEXT:-$DEFAULT_PROMPT_TEXT}"
@@ -444,6 +445,29 @@ clear_app_text_artifacts() {
     "$APP_HERMES_CALL_ARTIFACT"
 }
 
+publish_scoped_trace_id() {
+  local artifact_dir
+  local temp_path
+  local trace_id
+  artifact_dir="$(resolve_app_artifact_dir)"
+  if [[ "$artifact_dir" == "$APP_ARTIFACT_BASE_DIR" ]]; then
+    return 0
+  fi
+
+  trace_id="${artifact_dir#"$APP_ARTIFACT_BASE_DIR"/}"
+  if ! safe_voice_trace_id "$trace_id"; then
+    return 0
+  fi
+
+  umask 077
+  temp_path="$(mktemp "$LOG_DIR/trace-id.XXXXXX")"
+  register_report_temp_file "$temp_path"
+  printf '%s\n' "$trace_id" > "$temp_path"
+  chmod 600 "$temp_path"
+  mv -f "$temp_path" "$TRACE_ID_FILE"
+  chmod 600 "$TRACE_ID_FILE"
+}
+
 cleanup() {
   local status=$?
   for temp_path in "${REPORT_TEMP_CLEANUP_PATHS[@]}"; do
@@ -477,6 +501,9 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
+
+mkdir -p "$LOG_DIR"
+rm -f "$TRACE_ID_FILE"
 
 require_env VOICE_AGENT_E2E_CONVERSATION_ID
 
@@ -633,6 +660,7 @@ if [[ "$MANUAL_REVIEW" == "0" ]] &&
   exit 1
 fi
 
+publish_scoped_trace_id
 PIPELINE_STATUS="passed"
 if [[ "$MANUAL_REVIEW" == "1" ]]; then
   extract_manual_review_answer
