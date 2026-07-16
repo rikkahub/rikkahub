@@ -270,23 +270,28 @@ class VoiceAgentTelecomCallRegistryTest {
         val activation = thread {
             accepted.set(registry.activate(requireNotNull(attempt), call))
         }
+        var retirement: Thread? = null
 
         try {
             assertTrue(selectionCommitted.await(1, TimeUnit.SECONDS))
             assertEquals(attempt, committedAttempt.get())
             assertEquals(VoiceAgentTelecomOutcome.Active, committedOutcome.get())
-            val retirement = thread {
+            val retirementThread = thread {
                 registry.retireOwnedAttempt(requireNotNull(attempt))
             }
-            retirement.join()
+            retirement = retirementThread
+            retirementThread.join(1_000)
 
+            assertFalse("retirement waited for outcome notification", retirementThread.isAlive)
             assertEquals(1, call.disconnectCalls)
             assertFalse(outcome.isCompleted)
         } finally {
             releaseNotification.countDown()
+            retirement?.join(1_000)
+            activation.join(1_000)
         }
-        activation.join()
 
+        assertFalse("activation did not finish after notification release", activation.isAlive)
         assertTrue(accepted.get())
         assertEquals(VoiceAgentTelecomOutcome.Active, outcome.await())
     }
