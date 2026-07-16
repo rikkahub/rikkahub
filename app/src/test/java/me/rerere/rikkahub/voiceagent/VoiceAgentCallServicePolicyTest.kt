@@ -3,75 +3,148 @@ package me.rerere.rikkahub.voiceagent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
 
 class VoiceAgentCallServicePolicyTest {
     @Test
-    fun `failed start preserves requested active exact Telecom session`() = runPolicyTest {
-        val fixture = PolicyTelecomRouteFixture()
-        val session = PolicyManagedSession()
-        val manager = VoiceAgentCallManager(PolicyVoiceAgentCallFactory(session))
+    fun `Error through production failed-start boundary preserves live exact Telecom session`() = runPolicyTest {
+        val route = LifecycleTelecomRoute()
+        val session = LifecycleManagedSession()
+        val manager = VoiceAgentCallManager(LifecycleCallFactory(session))
         val conversationId = Uuid.random()
-        manager.start(conversationId, fakePolicyLaunchConfig(), fixture.lease, this)
+        val host = RecordingLifecycleHost()
+        val lifecycle = VoiceAgentCallServiceLifecycle(manager, this, host)
+        lifecycle.beginStart()
+        manager.start(conversationId, lifecycleLaunchConfig(), route.lease, this)
 
-        val preserveSessionRequested = true
-        val preserveSession = preserveSessionRequested && manager.canPreserveActiveSession(conversationId)
-        if (!preserveSession) manager.closeNow()
+        val handled = lifecycle.handleStartupTerminal(
+            conversationId,
+            VoiceSessionStatus.Error("startup failed"),
+        )
 
-        assertTrue(preserveSession)
-        assertTrue(fixture.registry.isOwnedAttemptActive(fixture.attempt))
+        assertTrue(handled)
+        assertEquals(conversationId, manager.activeConversationId.value)
+        assertEquals(0, route.retireCalls)
         assertEquals(0, session.closeNowCalls)
         manager.closeNow()
     }
 
     @Test
-    fun `failed start closes a retired Telecom session without touching newer attempt`() = runPolicyTest {
-        val fixture = PolicyTelecomRouteFixture()
-        val session = PolicyManagedSession()
-        val manager = VoiceAgentCallManager(PolicyVoiceAgentCallFactory(session))
+    fun `Error through production failed-start boundary closes retired Telecom without replacement`() = runPolicyTest {
+        val route = LifecycleTelecomRoute()
+        val session = LifecycleManagedSession()
+        val manager = VoiceAgentCallManager(LifecycleCallFactory(session))
         val conversationId = Uuid.random()
-        manager.start(conversationId, fakePolicyLaunchConfig(), fixture.lease, this)
-        val newer = fixture.activateNewerAttempt()
+        val host = RecordingLifecycleHost()
+        val lifecycle = VoiceAgentCallServiceLifecycle(manager, this, host)
+        lifecycle.beginStart()
+        manager.start(conversationId, lifecycleLaunchConfig(), route.lease, this)
+        val replacement = route.activateReplacement()
 
-        val preserveSessionRequested = true
-        val preserveSession = preserveSessionRequested && manager.canPreserveActiveSession(conversationId)
-        if (!preserveSession) manager.closeNow()
+        val handled = lifecycle.handleStartupTerminal(
+            conversationId,
+            VoiceSessionStatus.Error("startup failed"),
+        )
 
-        assertFalse(preserveSession)
+        assertTrue(handled)
+        assertEquals(null, manager.activeConversationId.value)
         assertEquals(1, session.closeNowCalls)
-        assertEquals(0, newer.call.disconnectCalls)
-        assertTrue(fixture.registry.isOwnedAttemptActive(newer.attempt))
-        fixture.registry.retireOwnedAttempt(newer.attempt)
+        assertEquals(0, replacement.disconnectCalls)
     }
 
     @Test
-    fun `failed start preserves requested direct fallback session`() = runPolicyTest {
-        val session = PolicyManagedSession()
-        val manager = VoiceAgentCallManager(PolicyVoiceAgentCallFactory(session))
+    fun `Error through production failed-start boundary preserves live direct session`() = runPolicyTest {
+        val session = LifecycleManagedSession()
+        val manager = VoiceAgentCallManager(LifecycleCallFactory(session))
         val conversationId = Uuid.random()
+        val host = RecordingLifecycleHost()
+        val lifecycle = VoiceAgentCallServiceLifecycle(manager, this, host)
+        lifecycle.beginStart()
         manager.start(
             conversationId,
-            fakePolicyLaunchConfig(),
+            lifecycleLaunchConfig(),
             DirectFallbackVoiceAgentRouteLease(
                 VoiceAgentTelecomFailure("telecom_unavailable", "Telecom unavailable"),
             ),
             this,
         )
 
-        val preserveSessionRequested = true
-        val preserveSession = preserveSessionRequested && manager.canPreserveActiveSession(conversationId)
-        if (!preserveSession) manager.closeNow()
+        val handled = lifecycle.handleStartupTerminal(
+            conversationId,
+            VoiceSessionStatus.Error("startup failed"),
+        )
 
-        assertTrue(preserveSession)
+        assertTrue(handled)
+        assertEquals(conversationId, manager.activeConversationId.value)
         assertEquals(0, session.closeNowCalls)
         manager.closeNow()
+    }
+
+    @Test
+    fun `Ended through production failed-start boundary closes non-preserved session`() = runPolicyTest {
+        val session = LifecycleManagedSession()
+        val manager = VoiceAgentCallManager(LifecycleCallFactory(session))
+        val conversationId = Uuid.random()
+        val host = RecordingLifecycleHost()
+        val lifecycle = VoiceAgentCallServiceLifecycle(manager, this, host)
+        lifecycle.beginStart()
+        manager.start(
+            conversationId,
+            lifecycleLaunchConfig(),
+            DirectFallbackVoiceAgentRouteLease(VoiceAgentTelecomFailure("fallback", "fallback")),
+            this,
+        )
+
+        val handled = lifecycle.handleStartupTerminal(conversationId, VoiceSessionStatus.Ended)
+
+        assertTrue(handled)
+        assertEquals(null, manager.activeConversationId.value)
+        assertEquals(1, session.closeNowCalls)
+        assertEquals(1, host.stopForegroundCalls)
+        assertEquals(1, host.stopSelfCalls)
+    }
+
+    @Test
+    fun `close failure still runs diagnostic status foreground and stop stages in order`() = runPolicyTest {
+        val events = mutableListOf<String>()
+        val closeFailure = IllegalStateException("close failed")
+        val session = LifecycleManagedSession(events = events, closeNowFailure = closeFailure)
+        val manager = VoiceAgentCallManager(LifecycleCallFactory(session))
+        val conversationId = Uuid.random()
+        val host = RecordingLifecycleHost(events = events)
+        val lifecycle = VoiceAgentCallServiceLifecycle(manager, this, host)
+        lifecycle.beginStart()
+        manager.start(
+            conversationId,
+            lifecycleLaunchConfig(),
+            DirectFallbackVoiceAgentRouteLease(VoiceAgentTelecomFailure("fallback", "fallback")),
+            this,
+        )
+
+        lifecycle.handleStartupTerminal(conversationId, VoiceSessionStatus.Ended)
+
+        assertEquals(
+            listOf(
+                "cancelNotification",
+                "cancelNotification",
+                "diagnostic:voice_call_start_failed:Voice call ended before startup completed",
+                "close",
+                "startForeground",
+                "stopForeground",
+                "stopSelf",
+                "reportFailure",
+            ),
+            events,
+        )
+        assertTrue(host.foregroundStates.single().call is VoiceCallStatus.Degraded)
+        assertSame(closeFailure, host.reportedFailures.single())
     }
 
     @Test
@@ -110,71 +183,6 @@ class VoiceAgentCallServicePolicyTest {
         )
     }
 }
-
-private class PolicyTelecomRouteFixture {
-    val registry = VoiceAgentTelecomCallRegistry()
-    private val oldCall = PolicyTelecomCall()
-    val attempt = registry.beginAttempt()
-    val lease: VoiceAgentRouteLease
-
-    init {
-        check(registry.activate(attempt, oldCall))
-        registry.acknowledgeOutcome(attempt)
-        lease = TelecomVoiceAgentRouteLease(attempt, registry)
-    }
-
-    fun activateNewerAttempt(): PolicyAttempt {
-        val attempt = registry.beginAttempt()
-        val call = PolicyTelecomCall()
-        check(registry.activate(attempt, call))
-        registry.acknowledgeOutcome(attempt)
-        return PolicyAttempt(attempt, call)
-    }
-}
-
-private data class PolicyAttempt(
-    val attempt: VoiceAgentTelecomAttemptId,
-    val call: PolicyTelecomCall,
-)
-
-private class PolicyTelecomCall : VoiceAgentTelecomCall {
-    var disconnectCalls = 0
-    override fun disconnectFromApp() { disconnectCalls += 1 }
-}
-
-private class PolicyVoiceAgentCallFactory(
-    private val session: PolicyManagedSession,
-) : VoiceAgentCallFactory {
-    override fun create(
-        conversationId: Uuid,
-        config: VoiceAgentLaunchConfig,
-        routeLease: VoiceAgentRouteLease,
-        scope: CoroutineScope,
-    ): RouteOwnedManagedVoiceCallSession = RouteOwnedVoiceCallSession(session, routeLease)
-}
-
-private class PolicyManagedSession : ManagedVoiceCallSession {
-    var closeNowCalls = 0
-    override val state = MutableStateFlow(VoiceAgentUiState())
-    override fun start() = Unit
-    override fun interrupt() = Unit
-    override fun setMuted(value: Boolean) = Unit
-    override fun reconnect() = Unit
-    override fun recordDiagnostic(name: String, detail: String) = Unit
-    override fun end() = Unit
-    override suspend fun endAndDrain() = Unit
-    override fun closeNow() {
-        closeNowCalls += 1
-    }
-}
-
-private fun fakePolicyLaunchConfig() = VoiceAgentLaunchConfig(
-    hermesVoiceBaseUrl = "https://voice.test",
-    credentials = me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceCredentials(deviceApiKey = "profile-key"),
-    voiceModelId = "gemini-flash",
-    assistantName = "Hermes",
-    assistantPrompt = "system",
-)
 
 private fun runPolicyTest(block: suspend CoroutineScope.() -> Unit) = runBlocking {
     val scope = CoroutineScope(coroutineContext + SupervisorJob())
