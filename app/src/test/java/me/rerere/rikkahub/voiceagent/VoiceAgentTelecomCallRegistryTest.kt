@@ -2,6 +2,7 @@ package me.rerere.rikkahub.voiceagent
 
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 import kotlinx.coroutines.CoroutineStart
@@ -181,6 +182,41 @@ class VoiceAgentTelecomCallRegistryTest {
         assertTrue(accepted.get())
         assertEquals(VoiceAgentTelecomOutcome.Active, outcome.await())
         assertTrue(registry.hasActiveConnection())
+    }
+
+    @Test
+    fun `active outcome resumes unconfined waiter outside registry lock`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val callbackAcquiredRegistry = CountDownLatch(1)
+        var callbackThread: Thread? = null
+        val call = object : VoiceAgentTelecomCall {
+            var disconnectCalls = 0
+
+            override fun disconnectFromApp() {
+                disconnectCalls++
+                callbackThread = thread {
+                    registry.clear(this)
+                    callbackAcquiredRegistry.countDown()
+                }
+                check(callbackAcquiredRegistry.await(1, TimeUnit.SECONDS)) {
+                    "Telecom callback could not acquire the registry lock"
+                }
+            }
+        }
+        val outcome = async(Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+            registry.observeOutcome(attempt).also {
+                registry.retireOwnedAttempt(attempt)
+            }
+        }
+
+        assertFalse(outcome.isCompleted)
+        assertTrue(registry.activate(attempt, call))
+        callbackThread?.join()
+
+        assertEquals(VoiceAgentTelecomOutcome.Active, outcome.await())
+        assertEquals(1, call.disconnectCalls)
+        assertTrue(callbackAcquiredRegistry.await(0, TimeUnit.SECONDS))
     }
 
     @Test

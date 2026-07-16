@@ -53,8 +53,8 @@ class VoiceAgentTelecomCallRegistry {
                 AttemptPhase.Pending -> {
                     val outcome = VoiceAgentTelecomOutcome.Failed(checkNotNull(supersededFailure))
                     checkNotNull(previousRecord).phase = AttemptPhase.Failed(outcome.failure)
-                    supersededCompletion = previousRecord.completion
-                    supersededOutcome = outcome
+                    supersededCompletion = selectOutcomeLocked(previousRecord, outcome)
+                    if (supersededCompletion != null) supersededOutcome = outcome
                 }
                 is AttemptPhase.Activating -> {
                     checkNotNull(previousRecord).phase = AttemptPhase.Retiring(
@@ -98,14 +98,17 @@ class VoiceAgentTelecomCallRegistry {
                 diagnosticName = "telecom_supersession_cleanup_failed",
                 detail = supersessionError.message ?: supersessionError.javaClass.simpleName,
             )
-            val completion = synchronized(lock) {
+            var completion: CompletableDeferred<VoiceAgentTelecomOutcome>? = null
+            val outcome = VoiceAgentTelecomOutcome.Failed(failure)
+            synchronized(lock) {
                 attempts[id]?.takeIf { record ->
                     currentAttemptId == id && record.phase == AttemptPhase.Pending
                 }?.also { record ->
                     record.phase = AttemptPhase.Failed(failure)
-                }?.completion
+                    completion = selectOutcomeLocked(record, outcome)
+                }
             }
-            completion?.complete(VoiceAgentTelecomOutcome.Failed(failure))
+            completion?.complete(outcome)
             throw VoiceAgentTelecomAttemptStartException(id, failure, supersessionError)
         }
         return id
@@ -129,6 +132,7 @@ class VoiceAgentTelecomCallRegistry {
         }
 
         val activationError = runCatching(makeActive).exceptionOrNull()
+        var completion: CompletableDeferred<VoiceAgentTelecomOutcome>? = null
         var outcome: VoiceAgentTelecomOutcome? = null
         var shouldDisconnect = false
         val accepted = synchronized(lock) {
@@ -138,23 +142,27 @@ class VoiceAgentTelecomCallRegistry {
                         val failure = cancelledFailure(id)
                         record.phase = AttemptPhase.Retiring(connection, failure)
                         outcome = VoiceAgentTelecomOutcome.Failed(failure)
+                        completion = selectOutcomeLocked(record, checkNotNull(outcome))
                         shouldDisconnect = true
                         false
                     } else if (activationError != null) {
                         val failure = activationFailure(activationError)
                         record.phase = AttemptPhase.Retiring(connection, failure)
                         outcome = VoiceAgentTelecomOutcome.Failed(failure)
+                        completion = selectOutcomeLocked(record, checkNotNull(outcome))
                         shouldDisconnect = true
                         false
                     } else {
                         record.phase = AttemptPhase.Active(connection)
-                        record.completion.complete(VoiceAgentTelecomOutcome.Active)
+                        outcome = VoiceAgentTelecomOutcome.Active
+                        completion = checkNotNull(selectOutcomeLocked(record, checkNotNull(outcome)))
                         true
                     }
                 }
                 is AttemptPhase.Retiring -> {
                     if (phase.connection === connection) {
                         outcome = VoiceAgentTelecomOutcome.Failed(phase.failure)
+                        completion = selectOutcomeLocked(record, checkNotNull(outcome))
                     }
                     shouldDisconnect = true
                     false
@@ -170,7 +178,7 @@ class VoiceAgentTelecomCallRegistry {
         }
 
         if (!shouldDisconnect) {
-            outcome?.let(record.completion::complete)
+            outcome?.let { completion?.complete(it) }
             return accepted
         }
 
@@ -178,7 +186,7 @@ class VoiceAgentTelecomCallRegistry {
             connection.disconnectFromApp()
         } finally {
             finishRetiring(id, record, connection)
-            outcome?.let(record.completion::complete)
+            outcome?.let { completion?.complete(it) }
         }
         return accepted
     }
@@ -191,8 +199,8 @@ class VoiceAgentTelecomCallRegistry {
             when (val phase = record.phase) {
                 AttemptPhase.Pending -> {
                     record.phase = AttemptPhase.Failed(failure)
-                    completion = record.completion
                     outcome = VoiceAgentTelecomOutcome.Failed(failure)
+                    completion = selectOutcomeLocked(record, checkNotNull(outcome))
                 }
                 is AttemptPhase.Activating -> {
                     record.phase = AttemptPhase.Retiring(phase.connection, failure)
@@ -256,8 +264,8 @@ class VoiceAgentTelecomCallRegistry {
             when (val phase = candidate.phase) {
                 AttemptPhase.Pending -> {
                     candidate.phase = AttemptPhase.Failed(failure)
-                    completion = candidate.completion
                     outcome = VoiceAgentTelecomOutcome.Failed(failure)
+                    completion = selectOutcomeLocked(candidate, checkNotNull(outcome))
                     if (currentAttemptId == id) currentAttemptId = null
                 }
                 is AttemptPhase.Activating -> {
@@ -337,9 +345,9 @@ class VoiceAgentTelecomCallRegistry {
             val phase = record.phase
             if (phase is AttemptPhase.Retiring && phase.connection === connection) {
                 record.phase = AttemptPhase.Failed(phase.failure)
-                if (!record.completion.isCompleted) {
-                    completion = record.completion
+                if (record.selectedOutcome == null) {
                     outcome = VoiceAgentTelecomOutcome.Failed(phase.failure)
+                    completion = selectOutcomeLocked(record, checkNotNull(outcome))
                 }
                 if (currentAttemptId == id) currentAttemptId = null
                 if (record.activeOutcomeAcknowledged && attempts[id] === record) {
@@ -374,9 +382,19 @@ class VoiceAgentTelecomCallRegistry {
         detail = error.message ?: error.javaClass.simpleName,
     )
 
+    private fun selectOutcomeLocked(
+        record: AttemptRecord,
+        outcome: VoiceAgentTelecomOutcome,
+    ): CompletableDeferred<VoiceAgentTelecomOutcome>? {
+        if (record.selectedOutcome != null) return null
+        record.selectedOutcome = outcome
+        return record.completion
+    }
+
     private class AttemptRecord {
         val completion = CompletableDeferred<VoiceAgentTelecomOutcome>()
         var phase: AttemptPhase = AttemptPhase.Pending
+        var selectedOutcome: VoiceAgentTelecomOutcome? = null
         var activeOutcomeAcknowledged = false
     }
 
