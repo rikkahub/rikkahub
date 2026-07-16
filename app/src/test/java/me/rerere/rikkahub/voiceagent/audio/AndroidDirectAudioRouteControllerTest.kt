@@ -137,6 +137,49 @@ class AndroidDirectAudioRouteControllerTest {
     }
 
     @Test
+    fun `new acquisition waits for old physical teardown and remains active`() {
+        val restoreEntered = CountDownLatch(1)
+        val releaseRestore = CountDownLatch(1)
+        val newAcquisitionCompleted = CountDownLatch(1)
+        val platform = FakeDirectAudioRoutePlatform().apply {
+            beforeRestoreAudioMode = {
+                restoreEntered.countDown()
+                releaseRestore.await(5, TimeUnit.SECONDS)
+            }
+        }
+        val controller = controller(platform)
+        val oldLease = controller.acquireCapture()
+        val oldRetirement = thread(name = "old-direct-route-retirement") {
+            oldLease.retire()
+        }
+        assertTrue(restoreEntered.await(5, TimeUnit.SECONDS))
+        var newLease: VoiceAudioCaptureRouteLease? = null
+        val newAcquisition = thread(name = "new-direct-route-acquisition") {
+            newLease = controller.acquireCapture()
+            newAcquisitionCompleted.countDown()
+        }
+
+        try {
+            assertFalse(newAcquisitionCompleted.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            releaseRestore.countDown()
+            oldRetirement.join(5_000)
+            newAcquisition.join(5_000)
+        }
+
+        assertFalse(oldRetirement.isAlive)
+        assertFalse(newAcquisition.isAlive)
+        assertTrue(newAcquisitionCompleted.await(0, TimeUnit.MILLISECONDS))
+        assertEquals(2, platform.setCommunicationModeCalls)
+        assertEquals(1, platform.restoreAudioModeCalls)
+        assertEquals(2, platform.startScoCalls)
+        assertEquals(1, platform.stopScoCalls)
+
+        requireNotNull(newLease).retire()
+        controller.close()
+    }
+
+    @Test
     fun `stale lease configuration cannot mutate current capture route`() {
         val platform = FakeDirectAudioRoutePlatform().apply {
             communicationDeviceAccepted = true
@@ -344,6 +387,7 @@ private class FakeDirectAudioRoutePlatform : DirectAudioRoutePlatform {
     var throwWhenEnablingSco = false
     var throwWhenDisablingSco = false
     var throwWhenCheckingBluetoothPermission = false
+    var beforeRestoreAudioMode: () -> Unit = {}
     var deliverHeadsetDuringRequest = false
     var voiceRecognitionAccepted = false
     var dispatchImmediately = true
@@ -392,6 +436,7 @@ private class FakeDirectAudioRoutePlatform : DirectAudioRoutePlatform {
     }
 
     override fun restoreAudioMode(mode: Int) {
+        beforeRestoreAudioMode()
         communicationMode = false
         restoreAudioModeCalls += 1
         androidMutations += "restoreMode:$mode"

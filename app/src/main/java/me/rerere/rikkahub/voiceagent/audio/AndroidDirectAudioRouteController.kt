@@ -88,6 +88,7 @@ internal class AndroidDirectAudioRouteController(
     )
 
     private val lock = Any()
+    private val captureTransitionLock = Any()
     private var audioFocusHandle: DirectAudioFocusHandle? = null
     private var hasSelectedCommunicationDevice = false
     private var hasStartedBluetoothSco = false
@@ -135,7 +136,7 @@ internal class AndroidDirectAudioRouteController(
         }
     }
 
-    override fun acquireCapture(): VoiceAudioCaptureRouteLease {
+    override fun acquireCapture(): VoiceAudioCaptureRouteLease = synchronized(captureTransitionLock) {
         val generation = synchronized(lock) {
             check(!closed) { "Direct audio route controller is closed" }
             captureGeneration += 1
@@ -147,7 +148,7 @@ internal class AndroidDirectAudioRouteController(
             clearAfterCapture(generation)
             throw failure
         }
-        return DirectVoiceAudioCaptureRouteLease(
+        DirectVoiceAudioCaptureRouteLease(
             configureAudioRecord = { recorder -> configureCaptureRecorder(generation, recorder) },
             configureDirectRecorder = { recorder -> configureCaptureRecorder(generation, recorder) },
             clearAfterCapture = { clearAfterCapture(generation) },
@@ -168,30 +169,35 @@ internal class AndroidDirectAudioRouteController(
         configureCaptureRecorder(generation, platform.recorder(recorder))
     }
 
-    private fun configureCaptureRecorder(generation: Long, recorder: DirectAudioRecorder) {
-        synchronized(lock) {
-            check(!closed) { "Direct audio route controller is closed" }
-            check(captureGeneration == generation) { "Direct audio capture route lease is stale" }
-        }
-        if (!platform.available) return
-        val device = selectPreferredBluetoothCaptureDeviceOrNull() ?: return
-        val preferredAccepted = runCatching {
+    private fun configureCaptureRecorder(
+        generation: Long,
+        recorder: DirectAudioRecorder,
+    ) {
+        synchronized(captureTransitionLock) {
             synchronized(lock) {
                 check(!closed) { "Direct audio route controller is closed" }
                 check(captureGeneration == generation) { "Direct audio capture route lease is stale" }
-                recorder.setPreferredDevice(device)
             }
+            if (!platform.available) return
+            val device = selectPreferredBluetoothCaptureDeviceOrNull() ?: return
+            val preferredAccepted = runCatching {
+                synchronized(lock) {
+                    check(!closed) { "Direct audio route controller is closed" }
+                    check(captureGeneration == generation) { "Direct audio capture route lease is stale" }
+                    recorder.setPreferredDevice(device)
+                }
+            }
+                .onFailure { logWarning("Direct preferred Bluetooth device failed", it) }
+                .getOrDefault(false)
+            val communicationAccepted = setCommunicationDeviceBestEffort(generation, device)
+            logDebug(
+                "Direct capture route=${device.safeLabel} " +
+                    "preferredAccepted=$preferredAccepted communicationAccepted=$communicationAccepted",
+            )
         }
-            .onFailure { logWarning("Direct preferred Bluetooth device failed", it) }
-            .getOrDefault(false)
-        val communicationAccepted = setCommunicationDeviceBestEffort(generation, device)
-        logDebug(
-            "Direct capture route=${device.safeLabel} " +
-                "preferredAccepted=$preferredAccepted communicationAccepted=$communicationAccepted",
-        )
     }
 
-    private fun clearAfterCapture(generation: Long) {
+    private fun clearAfterCapture(generation: Long) = synchronized(captureTransitionLock) {
         val ownsRoute = synchronized(lock) {
             if (closed || captureGeneration != generation) {
                 false
