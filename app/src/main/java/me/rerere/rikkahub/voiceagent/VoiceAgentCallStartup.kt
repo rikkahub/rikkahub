@@ -1,31 +1,29 @@
 package me.rerere.rikkahub.voiceagent
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
 import kotlin.uuid.Uuid
 
 sealed interface VoiceAgentCallStartupResult {
+    val route: VoiceAgentRouteMetadata
+
     data class Started(
-        val resolution: VoiceAgentAudioRouteResolution,
+        override val route: VoiceAgentRouteMetadata,
         val startedNewSession: Boolean,
     ) : VoiceAgentCallStartupResult
 
     data class Stale(
-        val resolution: VoiceAgentAudioRouteResolution,
+        override val route: VoiceAgentRouteMetadata,
     ) : VoiceAgentCallStartupResult
 }
 
 class VoiceAgentCallStartup internal constructor(
     private val manager: VoiceAgentCallManager,
-    private val telecomRegistry: VoiceAgentTelecomCallRegistry,
-    private val resolveRoute: suspend () -> VoiceAgentAudioRouteResolution,
+    private val resolveRoute: suspend () -> VoiceAgentRouteLease,
 ) {
     constructor(
         manager: VoiceAgentCallManager,
         routeResolver: VoiceAgentAudioRouteResolver,
-        telecomRegistry: VoiceAgentTelecomCallRegistry,
-    ) : this(manager, telecomRegistry, routeResolver::resolve)
+    ) : this(manager, routeResolver::resolve)
 
     suspend fun start(
         conversationId: Uuid,
@@ -33,41 +31,28 @@ class VoiceAgentCallStartup internal constructor(
         scope: CoroutineScope,
         isCurrent: () -> Boolean,
     ): VoiceAgentCallStartupResult {
-        val resolution = manager.routeOwnerForActiveSession(conversationId, config)
-            ?.let(::VoiceAgentAudioRouteResolution)
-            ?: resolveRoute()
-        if (!isCurrent()) {
-            resolution.telecomAttemptId?.let { attemptId ->
-                withContext(NonCancellable) {
-                    val retirementError = runCatching {
-                        telecomRegistry.retireAttempt(
-                            attemptId,
-                            VoiceAgentTelecomFailure(
-                                diagnosticName = "telecom_startup_stale",
-                                detail = "Telecom startup attempt ${attemptId.value} became stale",
-                            ),
-                        )
-                    }.exceptionOrNull()
-                    val acknowledgementError = runCatching {
-                        telecomRegistry.awaitOutcomeIfPresent(attemptId)
-                    }.exceptionOrNull()
-                    retirementError?.let { error ->
-                        acknowledgementError?.let(error::addSuppressed)
-                        throw error
-                    }
-                    acknowledgementError?.let { throw it }
-                }
-            }
-            return VoiceAgentCallStartupResult.Stale(resolution)
+        manager.matchingRouteMetadata(conversationId, config)?.let { existing ->
+            return VoiceAgentCallStartupResult.Started(existing, startedNewSession = false)
         }
-        return VoiceAgentCallStartupResult.Started(
-            resolution = resolution,
-            startedNewSession = manager.start(
-                conversationId = conversationId,
-                config = config,
-                routeOwner = resolution.owner,
-                scope = scope,
-            ),
+
+        val routeLease = resolveRoute()
+        val route = routeLease.metadata
+        if (!isCurrent()) {
+            routeLease.retire()
+            return VoiceAgentCallStartupResult.Stale(route)
+        }
+
+        val startedNewSession = manager.start(
+            conversationId = conversationId,
+            config = config,
+            routeLease = routeLease,
+            scope = scope,
         )
+        val installedRoute = if (startedNewSession) {
+            route
+        } else {
+            manager.matchingRouteMetadata(conversationId, config) ?: route
+        }
+        return VoiceAgentCallStartupResult.Started(installedRoute, startedNewSession)
     }
 }

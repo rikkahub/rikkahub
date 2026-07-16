@@ -31,6 +31,7 @@ import me.rerere.rikkahub.voiceagent.hermes.VoiceToolRecordStatus
 import me.rerere.rikkahub.voiceagent.hermes.hermesQueueRecords
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
+import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
@@ -3596,10 +3597,17 @@ class VoiceAgentRuntimeTest {
                     FakeVoiceAgentContextProvider(VoiceContext(systemInstruction = "system", turns = emptyList()))
                 },
             )
+            val registry = VoiceAgentTelecomCallRegistry()
+            val attempt = registry.beginAttempt()
+            val telecomCall = object : VoiceAgentTelecomCall {
+                override fun disconnectFromApp() = Unit
+            }
+            assertTrue(registry.activate(attempt, telecomCall))
+            registry.acknowledgeOutcome(attempt)
             val session = factory.create(
                 conversationId = conversationId,
                 config = fakeLaunchConfig(voiceModelId = "factory-gemini"),
-                routeOwner = VoiceAudioRouteOwner.Telecom,
+                routeLease = TelecomVoiceAgentRouteLease(attempt, registry),
                 scope = sessionScope,
             )
             assertTrue(sessionMobileApi != null)
@@ -3634,9 +3642,55 @@ class VoiceAgentRuntimeTest {
                 started.boolean("sentryTracingEnabled"),
             )
             assertTrue(started.boolean("sentryPropagationCreated"))
+            session.closeNow()
         } finally {
             blockedConnect?.release?.complete(Unit)
             sessionScope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `default call factory keeps creation failure primary and suppresses lease retirement failure`() = runTest {
+        val root = Files.createTempDirectory("voice-factory-failure").toFile()
+        val creationFailure = IllegalStateException("session API creation failed")
+        val retirementFailure = IllegalArgumentException("Telecom retirement failed")
+        val context = object : ContextWrapper(null) {
+            override fun getNoBackupFilesDir(): File = root
+            override fun getPackageName(): String = "me.rerere.rikkahub.factorytest"
+        }
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val telecomCall = object : VoiceAgentTelecomCall {
+            override fun disconnectFromApp() {
+                throw retirementFailure
+            }
+        }
+        assertTrue(registry.activate(attempt, telecomCall))
+        registry.acknowledgeOutcome(attempt)
+        val factory = DefaultVoiceAgentCallFactory(
+            context = context,
+            chatService = null,
+            settingsStore = null,
+            okHttpClient = okhttp3.OkHttpClient(),
+            observability = NoOpVoiceObservability,
+            metadataEpochNowMs = { 1_700_000_010_000 },
+            sessionApiFactory = { throw creationFailure },
+        )
+
+        try {
+            val thrown = runCatching {
+                factory.create(
+                    conversationId = Uuid.random(),
+                    config = fakeLaunchConfig(),
+                    routeLease = TelecomVoiceAgentRouteLease(attempt, registry),
+                    scope = this,
+                )
+            }.exceptionOrNull()
+
+            assertSame(creationFailure, thrown)
+            assertEquals(listOf(retirementFailure), thrown?.suppressed?.toList())
+        } finally {
             root.deleteRecursively()
         }
     }

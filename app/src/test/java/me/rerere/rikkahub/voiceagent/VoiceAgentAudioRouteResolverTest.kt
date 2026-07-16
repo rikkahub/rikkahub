@@ -23,45 +23,68 @@ class VoiceAgentAudioRouteResolverTest {
     @Test
     fun `active attempt selects Telecom`() = runBlocking {
         val registry = VoiceAgentTelecomCallRegistry()
+        val telecomCall = ResolverFakeCall()
         val gateway = FakeTelecomGateway(onStart = { id ->
-            registry.activate(id, ResolverFakeCall())
+            registry.activate(id, telecomCall)
         })
 
-        val result = VoiceAgentAudioRouteResolver(gateway, registry, 100).resolve()
+        val lease = VoiceAgentAudioRouteResolver(gateway, registry, 100).resolve()
 
-        assertEquals(VoiceAudioRouteOwner.Telecom, result.owner)
-        assertEquals(null, result.failure)
-        assertEquals(VoiceAgentTelecomAttemptId(1), result.telecomAttemptId)
+        assertEquals(VoiceAudioRouteOwner.Telecom, lease.metadata.owner)
+        assertEquals(null, lease.metadata.failure)
         assertTrue(registry.hasActiveConnection())
+        lease.retire()
+        assertEquals(1, telecomCall.disconnectCalls)
     }
 
     @Test
     fun `registration failure selects direct fallback`() = runBlocking {
         val registry = VoiceAgentTelecomCallRegistry()
 
-        val result = VoiceAgentAudioRouteResolver(
+        val lease = VoiceAgentAudioRouteResolver(
             FakeTelecomGateway(registerResult = Result.failure(IllegalStateException("denied"))),
             registry,
             100,
         ).resolve()
 
-        assertEquals(VoiceAudioRouteOwner.DirectFallback, result.owner)
-        assertEquals("telecom_register_failed", result.failure?.diagnosticName)
-        assertEquals(null, result.telecomAttemptId)
+        assertEquals(VoiceAudioRouteOwner.DirectFallback, lease.metadata.owner)
+        assertEquals("telecom_register_failed", lease.metadata.failure?.diagnosticName)
+        lease.retire()
+    }
+
+    @Test
+    fun `fallback retirement cannot affect a newer Telecom attempt`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val lease = VoiceAgentAudioRouteResolver(
+            FakeTelecomGateway(registerResult = Result.failure(IllegalStateException("denied"))),
+            registry,
+            100,
+        ).resolve()
+        val newerAttempt = registry.beginAttempt()
+        val newerCall = ResolverFakeCall()
+        assertTrue(registry.activate(newerAttempt, newerCall))
+
+        lease.retire()
+
+        assertEquals(VoiceAudioRouteOwner.DirectFallback, lease.metadata.owner)
+        assertEquals(0, newerCall.disconnectCalls)
+        assertTrue(registry.isOwnedAttemptActive(newerAttempt))
+        registry.acknowledgeOutcome(newerAttempt)
+        registry.retireOwnedAttempt(newerAttempt)
     }
 
     @Test
     fun `placement failure selects direct fallback`() = runBlocking {
         val registry = VoiceAgentTelecomCallRegistry()
 
-        val result = VoiceAgentAudioRouteResolver(
+        val lease = VoiceAgentAudioRouteResolver(
             FakeTelecomGateway(startResult = Result.failure(IllegalStateException("rejected"))),
             registry,
             100,
         ).resolve()
 
-        assertEquals(VoiceAudioRouteOwner.DirectFallback, result.owner)
-        assertEquals("telecom_start_failed", result.failure?.diagnosticName)
+        assertEquals(VoiceAudioRouteOwner.DirectFallback, lease.metadata.owner)
+        assertEquals("telecom_start_failed", lease.metadata.failure?.diagnosticName)
     }
 
     @Test
@@ -73,17 +96,16 @@ class VoiceAgentAudioRouteResolverTest {
         registry.awaitOutcome(previous)
         val gateway = FakeTelecomGateway()
 
-        val result = VoiceAgentAudioRouteResolver(gateway, registry, 100).resolve()
+        val lease = VoiceAgentAudioRouteResolver(gateway, registry, 100).resolve()
 
-        assertEquals(VoiceAudioRouteOwner.DirectFallback, result.owner)
+        assertEquals(VoiceAudioRouteOwner.DirectFallback, lease.metadata.owner)
         assertEquals(
             VoiceAgentTelecomFailure(
                 diagnosticName = "telecom_supersession_cleanup_failed",
                 detail = "framework retirement failed",
             ),
-            result.failure,
+            lease.metadata.failure,
         )
-        assertEquals(null, result.telecomAttemptId)
         assertEquals(0, gateway.registerCalls)
         assertEquals(0, gateway.startCalls)
         assertEquals(1, previousCall.disconnectCalls)
@@ -97,11 +119,11 @@ class VoiceAgentAudioRouteResolverTest {
             registry.fail(id, VoiceAgentTelecomFailure("telecom_outgoing_failed", "framework rejected"))
         })
 
-        val result = VoiceAgentAudioRouteResolver(gateway, registry, 100).resolve()
+        val lease = VoiceAgentAudioRouteResolver(gateway, registry, 100).resolve()
 
-        assertEquals(VoiceAudioRouteOwner.DirectFallback, result.owner)
-        assertEquals("telecom_outgoing_failed", result.failure?.diagnosticName)
-        assertEquals("framework rejected", result.failure?.detail)
+        assertEquals(VoiceAudioRouteOwner.DirectFallback, lease.metadata.owner)
+        assertEquals("telecom_outgoing_failed", lease.metadata.failure?.diagnosticName)
+        assertEquals("framework rejected", lease.metadata.failure?.detail)
     }
 
     @Test
@@ -110,12 +132,12 @@ class VoiceAgentAudioRouteResolverTest {
         var attempt: VoiceAgentTelecomAttemptId? = null
         val gateway = FakeTelecomGateway(onStart = { attempt = it })
 
-        val result = VoiceAgentAudioRouteResolver(gateway, registry, 1).resolve()
+        val lease = VoiceAgentAudioRouteResolver(gateway, registry, 1).resolve()
         val late = ResolverFakeCall()
         val accepted = registry.activate(requireNotNull(attempt), late)
 
-        assertEquals(VoiceAudioRouteOwner.DirectFallback, result.owner)
-        assertEquals("telecom_connection_timeout", result.failure?.diagnosticName)
+        assertEquals(VoiceAudioRouteOwner.DirectFallback, lease.metadata.owner)
+        assertEquals("telecom_connection_timeout", lease.metadata.failure?.diagnosticName)
         assertEquals(false, accepted)
         assertEquals(1, late.disconnectCalls)
     }
@@ -123,16 +145,18 @@ class VoiceAgentAudioRouteResolverTest {
     @Test
     fun `active attempt at timeout boundary retains Telecom ownership`() = runBlocking {
         val registry = VoiceAgentTelecomCallRegistry()
+        val telecomCall = ResolverFakeCall()
         val gateway = FakeTelecomGateway(onStart = { attempt ->
-            registry.activate(attempt, ResolverFakeCall())
+            registry.activate(attempt, telecomCall)
         })
 
-        val result = VoiceAgentAudioRouteResolver(gateway, registry, 0).resolve()
+        val lease = VoiceAgentAudioRouteResolver(gateway, registry, 0).resolve()
 
-        assertEquals(VoiceAudioRouteOwner.Telecom, result.owner)
-        assertEquals(null, result.failure)
-        assertEquals(VoiceAgentTelecomAttemptId(1), result.telecomAttemptId)
+        assertEquals(VoiceAudioRouteOwner.Telecom, lease.metadata.owner)
+        assertEquals(null, lease.metadata.failure)
         assertTrue(registry.hasActiveConnection())
+        lease.retire()
+        assertEquals(1, telecomCall.disconnectCalls)
     }
 
     @Test
@@ -157,13 +181,14 @@ class VoiceAgentAudioRouteResolverTest {
 
         timeout.returnTimeout.complete(Unit)
         runCurrent()
-        val result = resolution.await()
+        val lease = resolution.await()
 
-        assertEquals(VoiceAudioRouteOwner.Telecom, result.owner)
-        assertEquals(null, result.failure)
-        assertEquals(requireNotNull(attempt), result.telecomAttemptId)
+        assertEquals(VoiceAudioRouteOwner.Telecom, lease.metadata.owner)
+        assertEquals(null, lease.metadata.failure)
         assertTrue(registry.hasActiveConnection())
         assertEquals(0, call.disconnectCalls)
+        lease.retire()
+        assertEquals(1, call.disconnectCalls)
     }
 
     @Test
@@ -297,10 +322,10 @@ class VoiceAgentAudioRouteResolverTest {
             releaseCallback.countDown()
             activation?.join()
         }
-        val result = resolution.await()
+        val lease = resolution.await()
 
-        assertEquals(VoiceAudioRouteOwner.DirectFallback, result.owner)
-        assertEquals("telecom_connection_timeout", result.failure?.diagnosticName)
+        assertEquals(VoiceAudioRouteOwner.DirectFallback, lease.metadata.owner)
+        assertEquals("telecom_connection_timeout", lease.metadata.failure?.diagnosticName)
         assertFalse(accepted.get())
         assertEquals(1, call.disconnectCalls)
         assertEquals(listOf("setActive", "fallback"), events)

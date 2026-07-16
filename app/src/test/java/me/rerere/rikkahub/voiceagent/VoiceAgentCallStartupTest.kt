@@ -1,10 +1,7 @@
 package me.rerere.rikkahub.voiceagent
 
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
@@ -22,382 +19,176 @@ import kotlin.uuid.Uuid
 
 class VoiceAgentCallStartupTest {
     @Test
-    fun `failed Telecom startup preserves matching session and live call for retry`() = runTest {
-        val registry = VoiceAgentTelecomCallRegistry()
-        val attempt = registry.beginAttempt()
-        val telecomCall = FakeTelecomCall()
-        assertTrue(registry.activate(attempt, telecomCall))
-        registry.acknowledgeOutcome(attempt)
-        val session = StartupFakeManagedSession()
-        val factory = StartupFakeCallFactory(session)
-        val manager = VoiceAgentCallManager(factory)
+    fun `matching active session returns metadata before resolving`() = runTest {
+        val manager = VoiceAgentCallManager(StartupFakeCallFactory(StartupFakeManagedSession()))
         val conversationId = Uuid.random()
-        val config = fakeLaunchConfig()
-        manager.start(conversationId, config, VoiceAudioRouteOwner.Telecom, this)
-        val cleanup = voiceAgentFailedStartCleanupPlan(
-            preserveSessionRequested = true,
-            routeOwner = manager.activeRouteOwner.value,
-            hasActiveTelecomCall = registry.hasActiveConnection(),
-        )
-        if (cleanup.retireTelecomCall) registry.disconnectActive()
-        if (!cleanup.preserveSession) manager.closeNow()
+        val config = fakeStartupLaunchConfig()
+        val installedLiveLease = CountingTelecomLease()
+        manager.start(conversationId, config, installedLiveLease.lease, this)
         var resolveCalls = 0
-        val startup = VoiceAgentCallStartup(manager, registry) {
+        val startup = VoiceAgentCallStartup(manager) {
             resolveCalls += 1
-            VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.DirectFallback)
-        }
-
-        val retry = startup.start(conversationId, config, this) { true }
-
-        assertEquals(false, cleanup.retireTelecomCall)
-        assertEquals(true, cleanup.preserveSession)
-        assertEquals(0, telecomCall.disconnectCalls)
-        assertTrue(registry.hasActiveConnection())
-        assertEquals(0, resolveCalls)
-        assertEquals(false, (retry as VoiceAgentCallStartupResult.Started).startedNewSession)
-        assertEquals(VoiceAudioRouteOwner.Telecom, retry.resolution.owner)
-    }
-
-    @Test
-    fun `failed Telecom startup without a live call closes session so retry resolves`() = runTest {
-        val firstSession = StartupFakeManagedSession()
-        val secondSession = StartupFakeManagedSession()
-        val factory = StartupFakeCallFactory(firstSession, secondSession)
-        val manager = VoiceAgentCallManager(factory)
-        val conversationId = Uuid.random()
-        val config = fakeLaunchConfig()
-        manager.start(conversationId, config, VoiceAudioRouteOwner.Telecom, this)
-        val cleanup = voiceAgentFailedStartCleanupPlan(
-            preserveSessionRequested = true,
-            routeOwner = manager.activeRouteOwner.value,
-            hasActiveTelecomCall = false,
-        )
-        if (!cleanup.preserveSession) manager.closeNow()
-        var resolveCalls = 0
-        val startup = VoiceAgentCallStartup(manager, VoiceAgentTelecomCallRegistry()) {
-            resolveCalls += 1
-            VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.DirectFallback)
-        }
-
-        val retry = startup.start(conversationId, config, this) { true }
-
-        assertEquals(false, cleanup.preserveSession)
-        assertEquals(1, firstSession.closeNowCalls)
-        assertEquals(1, resolveCalls)
-        assertEquals(true, (retry as VoiceAgentCallStartupResult.Started).startedNewSession)
-        assertEquals(VoiceAudioRouteOwner.DirectFallback, retry.resolution.owner)
-    }
-
-    @Test
-    fun `matching active session retains immutable owner without resolving again`() = runTest {
-        val session = StartupFakeManagedSession()
-        val factory = StartupFakeCallFactory(session)
-        val manager = VoiceAgentCallManager(factory)
-        val registry = VoiceAgentTelecomCallRegistry()
-        val conversationId = Uuid.random()
-        val config = fakeLaunchConfig()
-        manager.start(conversationId, config, VoiceAudioRouteOwner.Telecom, this)
-        var resolveCalls = 0
-        val startup = VoiceAgentCallStartup(manager, registry) {
-            resolveCalls += 1
-            VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.DirectFallback)
+            DirectFallbackVoiceAgentRouteLease(VoiceAgentTelecomFailure("unused", "unused"))
         }
 
         val result = startup.start(conversationId, config, this) { true }
 
-        assertEquals(
-            VoiceAgentCallStartupResult.Started(
-                resolution = VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.Telecom),
-                startedNewSession = false,
-            ),
-            result,
-        )
+        assertEquals(VoiceAgentCallStartupResult.Started(installedLiveLease.lease.metadata, false), result)
         assertEquals(0, resolveCalls)
-        assertEquals(1, factory.created.size)
-        assertEquals(1, session.startCalls)
+        assertEquals(0, installedLiveLease.retireCalls)
     }
 
     @Test
-    fun `suspended resolution starts no manager session`() = runTest {
-        val resolution = CompletableDeferred<VoiceAgentAudioRouteResolution>()
+    fun `stale resolved lease is retired exactly once and metadata is returned`() = runTest {
+        val staleLease = CountingTelecomLease()
         val factory = StartupFakeCallFactory(StartupFakeManagedSession())
-        val manager = VoiceAgentCallManager(factory)
-        val startup = VoiceAgentCallStartup(manager, VoiceAgentTelecomCallRegistry()) {
-            resolution.await()
-        }
+        val startup = VoiceAgentCallStartup(VoiceAgentCallManager(factory)) { staleLease.lease }
 
-        val pending = async {
-            startup.start(Uuid.random(), fakeLaunchConfig(), this@runTest) { true }
-        }
-        yield()
+        val result = startup.start(Uuid.random(), fakeStartupLaunchConfig(), this) { false }
 
-        assertFalse(pending.isCompleted)
-        assertEquals(emptyList<StartupCreatedCall>(), factory.created)
-        assertEquals(null, manager.activeConversationId.value)
-
-        resolution.complete(VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.Telecom))
-        pending.await()
+        assertEquals(VoiceAgentCallStartupResult.Stale(staleLease.lease.metadata), result)
+        assertEquals(1, staleLease.retireCalls)
+        assertEquals(0, factory.created.size)
     }
 
     @Test
-    fun `active Telecom resolution starts exactly one Telecom session after resolution`() = runTest {
+    fun `current resolved lease transfers through factory and remains owned by live session`() = runTest {
+        val installedLiveLease = CountingTelecomLease()
         val events = mutableListOf<String>()
-        val session = StartupFakeManagedSession(events)
-        val factory = StartupFakeCallFactory(session, events = events)
-        val manager = VoiceAgentCallManager(factory)
-        val startup = VoiceAgentCallStartup(manager, VoiceAgentTelecomCallRegistry()) {
-            events += "resolved:Telecom"
-            VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.Telecom)
+        val factory = StartupFakeCallFactory(StartupFakeManagedSession(events), events = events)
+        val startup = VoiceAgentCallStartup(VoiceAgentCallManager(factory)) {
+            events += "resolved"
+            installedLiveLease.lease
         }
 
-        val result = startup.start(Uuid.random(), fakeLaunchConfig(), this) {
-            events += "generation-current"
+        val result = startup.start(Uuid.random(), fakeStartupLaunchConfig(), this) {
+            events += "current"
             true
         }
 
-        assertEquals(
-            listOf("resolved:Telecom", "generation-current", "created:Telecom", "started"),
-            events,
-        )
-        assertEquals(1, factory.created.size)
-        assertEquals(VoiceAudioRouteOwner.Telecom, factory.created.single().routeOwner)
-        assertEquals(
-            VoiceAgentCallStartupResult.Started(
-                resolution = VoiceAgentAudioRouteResolution(VoiceAudioRouteOwner.Telecom),
-                startedNewSession = true,
-            ),
-            result,
-        )
+        assertEquals(listOf("resolved", "current", "created:Telecom", "started"), events)
+        assertEquals(VoiceAgentCallStartupResult.Started(installedLiveLease.lease.metadata, true), result)
+        assertEquals(0, installedLiveLease.retireCalls)
     }
 
     @Test
-    fun `failed Telecom resolution starts exactly one fallback session and preserves failure`() = runTest {
-        val failure = VoiceAgentTelecomFailure(
-            diagnosticName = "telecom_connection_timeout",
-            detail = "Android Telecom did not become active",
-        )
-        val resolution = VoiceAgentAudioRouteResolution(
-            owner = VoiceAudioRouteOwner.DirectFallback,
-            failure = failure,
-        )
-        val factory = StartupFakeCallFactory(StartupFakeManagedSession())
-        val manager = VoiceAgentCallManager(factory)
-        val startup = VoiceAgentCallStartup(manager, VoiceAgentTelecomCallRegistry()) { resolution }
-
-        val result = startup.start(Uuid.random(), fakeLaunchConfig(), this) { true }
-
-        assertEquals(1, factory.created.size)
-        assertEquals(VoiceAudioRouteOwner.DirectFallback, factory.created.single().routeOwner)
-        assertEquals(
-            VoiceAgentCallStartupResult.Started(resolution, startedNewSession = true),
-            result,
-        )
-        assertSame(failure, (result as VoiceAgentCallStartupResult.Started).resolution.failure)
-    }
-
-    @Test
-    fun `generation-stale Telecom result starts no session and disconnects unclaimed live call`() = runTest {
-        val registry = VoiceAgentTelecomCallRegistry()
-        val attempt = registry.beginAttempt()
-        val telecomCall = FakeTelecomCall()
-        assertTrue(registry.activate(attempt, telecomCall))
-        registry.acknowledgeOutcome(attempt)
-        val factory = StartupFakeCallFactory(StartupFakeManagedSession())
-        val manager = VoiceAgentCallManager(factory)
-        val resolution = VoiceAgentAudioRouteResolution(
-            owner = VoiceAudioRouteOwner.Telecom,
-            telecomAttemptId = attempt,
-        )
-        val startup = VoiceAgentCallStartup(manager, registry) { resolution }
-
-        val result = startup.start(Uuid.random(), fakeLaunchConfig(), this) { false }
-
-        assertEquals(VoiceAgentCallStartupResult.Stale(resolution), result)
-        assertEquals(emptyList<StartupCreatedCall>(), factory.created)
-        assertEquals(null, manager.activeConversationId.value)
-        assertEquals(1, telecomCall.disconnectCalls)
-        assertFalse(registry.hasActiveConnection())
-        assertFalse(registry.isOwnedAttemptActive(attempt))
-    }
-
-    @Test
-    fun `older stale Telecom result retires only its attempt after newer attempt becomes active`() = runTest {
-        val registry = VoiceAgentTelecomCallRegistry()
-        val oldAttempt = registry.beginAttempt()
-        val oldCall = FakeTelecomCall()
-        assertTrue(registry.activate(oldAttempt, oldCall))
-        registry.acknowledgeOutcome(oldAttempt)
-        val oldResolution = VoiceAgentAudioRouteResolution(
-            owner = VoiceAudioRouteOwner.Telecom,
-            telecomAttemptId = oldAttempt,
-        )
-
-        val newerAttempt = registry.beginAttempt()
-        val newerCall = FakeTelecomCall()
-        assertTrue(registry.activate(newerAttempt, newerCall))
-        val factory = StartupFakeCallFactory(StartupFakeManagedSession())
-        val manager = VoiceAgentCallManager(factory)
-        val startup = VoiceAgentCallStartup(manager, registry) { oldResolution }
-
-        val result = startup.start(Uuid.random(), fakeLaunchConfig(), this) { false }
-
-        assertEquals(VoiceAgentCallStartupResult.Stale(oldResolution), result)
-        assertEquals(emptyList<StartupCreatedCall>(), factory.created)
-        assertEquals(null, manager.activeConversationId.value)
-        assertEquals(1, oldCall.disconnectCalls)
-        assertEquals(0, newerCall.disconnectCalls)
-        assertTrue(registry.hasActiveConnection())
-        assertFalse(registry.isOwnedAttemptActive(oldAttempt))
-        assertTrue(registry.isOwnedAttemptActive(newerAttempt))
-        assertEquals(VoiceAgentTelecomOutcome.Active, registry.observeOutcome(newerAttempt))
-        registry.acknowledgeOutcome(newerAttempt)
-    }
-
-    @Test
-    fun `IllegalArgumentException from stale disconnect is not swallowed`() = runTest {
-        val registry = VoiceAgentTelecomCallRegistry()
-        val oldAttempt = registry.beginAttempt()
-        val disconnectError = IllegalArgumentException("old Telecom disconnect failed")
-        val oldCall = BlockingThrowingFakeTelecomCall(disconnectError)
-        assertTrue(registry.activate(oldAttempt, oldCall))
-        registry.acknowledgeOutcome(oldAttempt)
-        val oldResolution = VoiceAgentAudioRouteResolution(
-            owner = VoiceAudioRouteOwner.Telecom,
-            telecomAttemptId = oldAttempt,
-        )
-        val factory = StartupFakeCallFactory(StartupFakeManagedSession())
-        val manager = VoiceAgentCallManager(factory)
-        val startup = VoiceAgentCallStartup(manager, registry) { oldResolution }
-        val staleStartup = async(Dispatchers.Default) {
-            startup.start(Uuid.random(), fakeLaunchConfig(), this@runTest) { false }
-        }
-
-        assertTrue(oldCall.disconnectEntered.await(1, TimeUnit.SECONDS))
-        try {
-            val newerAttempt = registry.beginAttempt()
-            val newerCall = FakeTelecomCall()
-            assertTrue(registry.activate(newerAttempt, newerCall))
-
-            oldCall.releaseDisconnect.countDown()
-            val thrown = runCatching { staleStartup.await() }.exceptionOrNull()
-
-            assertTrue(thrown is IllegalArgumentException)
-            assertEquals(disconnectError.message, thrown?.message)
-            assertEquals(emptyList<StartupCreatedCall>(), factory.created)
-            assertEquals(null, manager.activeConversationId.value)
-            assertEquals(1, oldCall.disconnectCalls)
-            assertFalse(registry.isOwnedAttemptActive(oldAttempt))
-            assertEquals(0, newerCall.disconnectCalls)
-            assertTrue(registry.hasActiveConnection())
-            assertTrue(registry.isOwnedAttemptActive(newerAttempt))
-            assertEquals(VoiceAgentTelecomOutcome.Active, registry.observeOutcome(newerAttempt))
-            registry.acknowledgeOutcome(newerAttempt)
-        } finally {
-            oldCall.releaseDisconnect.countDown()
-        }
-    }
-
-    @Test
-    fun `stale retained Telecom resolution has no attempt and leaves claimed call connected`() = runTest {
-        val registry = VoiceAgentTelecomCallRegistry()
-        val attempt = registry.beginAttempt()
-        val telecomCall = FakeTelecomCall()
-        assertTrue(registry.activate(attempt, telecomCall))
+    fun `duplicate installation race retires resolved lease`() = runTest {
         val session = StartupFakeManagedSession()
         val factory = StartupFakeCallFactory(session)
         val manager = VoiceAgentCallManager(factory)
         val conversationId = Uuid.random()
-        val config = fakeLaunchConfig()
-        manager.start(conversationId, config, VoiceAudioRouteOwner.Telecom, this)
-        val startup = VoiceAgentCallStartup(manager, registry) {
-            error("retained session must not resolve a new route")
+        val config = fakeStartupLaunchConfig()
+        val installedLiveLease = CountingTelecomLease()
+        val raceRejectedLease = CountingTelecomLease()
+        val startup = VoiceAgentCallStartup(manager) {
+            manager.start(conversationId, config, installedLiveLease.lease, this)
+            raceRejectedLease.lease
         }
 
-        val result = startup.start(conversationId, config, this) { false }
+        val result = startup.start(conversationId, config, this) { true }
 
-        val stale = result as VoiceAgentCallStartupResult.Stale
-        assertEquals(VoiceAudioRouteOwner.Telecom, stale.resolution.owner)
-        assertEquals(null, stale.resolution.telecomAttemptId)
+        assertEquals(VoiceAgentCallStartupResult.Started(installedLiveLease.lease.metadata, false), result)
+        assertEquals(1, raceRejectedLease.retireCalls)
+        assertEquals(0, installedLiveLease.retireCalls)
         assertEquals(1, factory.created.size)
-        assertEquals(0, telecomCall.disconnectCalls)
-        assertTrue(registry.hasActiveConnection())
-        assertTrue(registry.isOwnedAttemptActive(attempt))
-        registry.acknowledgeOutcome(attempt)
     }
+
+    @Test
+    fun `factory failure is primary and lease is consumed once`() = runTest {
+        val creationFailure = IllegalStateException("factory failed")
+        val factoryFailureLease = CountingTelecomLease()
+        val manager = VoiceAgentCallManager(StartupConsumingFailingFactory(creationFailure))
+        val startup = VoiceAgentCallStartup(manager) { factoryFailureLease.lease }
+
+        val thrown = runCatching {
+            startup.start(Uuid.random(), fakeStartupLaunchConfig(), this) { true }
+        }.exceptionOrNull()
+
+        assertSame(creationFailure, thrown)
+        assertEquals(1, factoryFailureLease.retireCalls)
+    }
+
+    @Test
+    fun `suspended resolution starts no manager session`() = runTest {
+        val resolved = CompletableDeferred<VoiceAgentRouteLease>()
+        val factory = StartupFakeCallFactory(StartupFakeManagedSession())
+        val manager = VoiceAgentCallManager(factory)
+        val startup = VoiceAgentCallStartup(manager) { resolved.await() }
+
+        val pending = async { startup.start(Uuid.random(), fakeStartupLaunchConfig(), this@runTest) { true } }
+        yield()
+
+        assertFalse(pending.isCompleted)
+        assertEquals(0, factory.created.size)
+        resolved.complete(DirectFallbackVoiceAgentRouteLease(VoiceAgentTelecomFailure("fallback", "fallback")))
+        assertTrue((pending.await() as VoiceAgentCallStartupResult.Started).startedNewSession)
+    }
+}
+
+internal class CountingTelecomLease {
+    private val registry = VoiceAgentTelecomCallRegistry()
+    private val call = CountingTelecomCall()
+    private val attempt = registry.beginAttempt()
+    val lease: VoiceAgentRouteLease
+    val retireCalls: Int get() = call.disconnectCalls
+
+    init {
+        check(registry.activate(attempt, call))
+        registry.acknowledgeOutcome(attempt)
+        lease = TelecomVoiceAgentRouteLease(attempt, registry)
+    }
+}
+
+private class CountingTelecomCall : VoiceAgentTelecomCall {
+    var disconnectCalls = 0
+    override fun disconnectFromApp() { disconnectCalls += 1 }
 }
 
 private class StartupFakeManagedSession(
     private val events: MutableList<String>? = null,
 ) : ManagedVoiceCallSession {
     override val state = MutableStateFlow(VoiceAgentUiState())
-    var startCalls = 0
-    var closeNowCalls = 0
-
-    override fun start() {
-        startCalls += 1
-        events?.add("started")
-    }
-
+    override fun start() { events?.add("started") }
     override fun interrupt() = Unit
     override fun setMuted(value: Boolean) = Unit
     override fun reconnect() = Unit
     override fun recordDiagnostic(name: String, detail: String) = Unit
     override fun end() = Unit
     override suspend fun endAndDrain() = Unit
-    override fun closeNow() {
-        closeNowCalls += 1
-    }
+    override fun closeNow() = Unit
 }
 
 private class StartupFakeCallFactory(
     private vararg val sessions: ManagedVoiceCallSession,
     private val events: MutableList<String>? = null,
 ) : VoiceAgentCallFactory {
-    val created = mutableListOf<StartupCreatedCall>()
+    val created = mutableListOf<VoiceAudioRouteOwner>()
     private var nextSession = 0
-
     override fun create(
         conversationId: Uuid,
         config: VoiceAgentLaunchConfig,
-        routeOwner: VoiceAudioRouteOwner,
+        routeLease: VoiceAgentRouteLease,
         scope: CoroutineScope,
-    ): ManagedVoiceCallSession {
-        created += StartupCreatedCall(conversationId, config, routeOwner)
-        events?.add("created:${routeOwner.name}")
-        return sessions[nextSession++]
+    ): RouteOwnedManagedVoiceCallSession {
+        created += routeLease.metadata.owner
+        events?.add("created:${routeLease.metadata.owner.name}")
+        return RouteOwnedVoiceCallSession(sessions[nextSession++], routeLease)
     }
 }
 
-private data class StartupCreatedCall(
-    val conversationId: Uuid,
-    val config: VoiceAgentLaunchConfig,
-    val routeOwner: VoiceAudioRouteOwner,
-)
-
-private class FakeTelecomCall : VoiceAgentTelecomCall {
-    var disconnectCalls = 0
-
-    override fun disconnectFromApp() {
-        disconnectCalls += 1
+private class StartupConsumingFailingFactory(private val failure: Throwable) : VoiceAgentCallFactory {
+    override fun create(
+        conversationId: Uuid,
+        config: VoiceAgentLaunchConfig,
+        routeLease: VoiceAgentRouteLease,
+        scope: CoroutineScope,
+    ): RouteOwnedManagedVoiceCallSession {
+        routeLease.retire()
+        throw failure
     }
 }
 
-private class BlockingThrowingFakeTelecomCall(
-    private val disconnectError: Throwable,
-) : VoiceAgentTelecomCall {
-    val disconnectEntered = CountDownLatch(1)
-    val releaseDisconnect = CountDownLatch(1)
-    var disconnectCalls = 0
-
-    override fun disconnectFromApp() {
-        disconnectCalls += 1
-        disconnectEntered.countDown()
-        check(releaseDisconnect.await(1, TimeUnit.SECONDS)) { "timed out waiting to throw disconnect error" }
-        throw disconnectError
-    }
-}
-
-private fun fakeLaunchConfig() = VoiceAgentLaunchConfig(
+private fun fakeStartupLaunchConfig() = VoiceAgentLaunchConfig(
     hermesVoiceBaseUrl = "https://voice.test",
     credentials = HermesVoiceCredentials(deviceApiKey = "profile-key"),
     voiceModelId = "gemini-flash",
@@ -407,9 +198,5 @@ private fun fakeLaunchConfig() = VoiceAgentLaunchConfig(
 
 private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking {
     val testScope = CoroutineScope(coroutineContext + SupervisorJob())
-    try {
-        testScope.block()
-    } finally {
-        testScope.cancel()
-    }
+    try { testScope.block() } finally { testScope.cancel() }
 }

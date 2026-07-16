@@ -166,7 +166,7 @@ val appModule = module {
     }
 
     single {
-        VoiceAgentCallStartup(manager = get(), routeResolver = get(), telecomRegistry = get())
+        VoiceAgentCallStartup(manager = get(), routeResolver = get())
     }
 
     single {

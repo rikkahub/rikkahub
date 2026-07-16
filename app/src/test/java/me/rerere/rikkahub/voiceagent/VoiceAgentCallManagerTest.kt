@@ -10,6 +10,7 @@ import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceCredentials
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
 
@@ -23,320 +24,171 @@ class VoiceAgentCallManagerTest {
     }
 
     @Test
-    fun `start creates one active session and exposes its state`() = runTest {
-        val session = FakeManagedVoiceCallSession()
-        val factory = FakeVoiceAgentCallFactory(session)
-        val manager = VoiceAgentCallManager(factory = factory)
-        val conversationId = Uuid.parse("33333333-3333-4333-8333-333333333333")
-        val config = fakeLaunchConfig()
-
-        val started = manager.start(
-            conversationId = conversationId,
-            config = config,
-            routeOwner = VoiceAudioRouteOwner.DirectFallback,
-            scope = this,
-        )
-
-        val observedState = manager.state
-        session.state.value = VoiceAgentUiState(session = VoiceSessionStatus.Connected)
-        yield()
-
-        assertEquals(true, started)
-        assertSame(observedState, manager.state)
-        assertEquals(VoiceSessionStatus.Connected, manager.state.value.session)
-        assertEquals(
-            listOf(CreatedCall(conversationId, config, VoiceAudioRouteOwner.DirectFallback)),
-            factory.created,
-        )
-        assertEquals(1, session.startCalls)
-    }
-
-    @Test
-    fun `starting another conversation ends previous session before replacing it`() = runTest {
-        val first = FakeManagedVoiceCallSession()
-        val second = FakeManagedVoiceCallSession()
-        val manager = VoiceAgentCallManager(factory = FakeVoiceAgentCallFactory(first, second))
-        val firstConversationId = Uuid.parse("44444444-4444-4444-8444-444444444444")
-        val secondConversationId = Uuid.parse("55555555-5555-4555-8555-555555555555")
-
-        val startedFirst = manager.start(
-            firstConversationId,
-            fakeLaunchConfig(),
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-        val startedSecond = manager.start(
-            secondConversationId,
-            fakeLaunchConfig(),
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-
-        assertEquals(true, startedFirst)
-        assertEquals(true, startedSecond)
-        assertEquals(1, first.endCalls)
-        assertEquals(0, first.closeNowCalls)
-        assertEquals(1, second.startCalls)
-        assertEquals(secondConversationId, manager.activeConversationId.value)
-    }
-
-    @Test
-    fun `starting same conversation does not duplicate active session`() = runTest {
-        val session = FakeManagedVoiceCallSession()
-        val manager = VoiceAgentCallManager(factory = FakeVoiceAgentCallFactory(session))
-        val conversationId = Uuid.parse("66666666-6666-4666-8666-666666666666")
-
-        val startedFirst = manager.start(
-            conversationId,
-            fakeLaunchConfig(),
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-        val startedDuplicate = manager.start(
-            conversationId,
-            fakeLaunchConfig(),
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-
-        assertEquals(true, startedFirst)
-        assertEquals(false, startedDuplicate)
-        assertEquals(1, session.startCalls)
-        assertEquals(0, session.endCalls)
-    }
-
-    @Test
-    fun `starting same conversation preserves existing degraded call status`() = runTest {
-        val session = FakeManagedVoiceCallSession()
-        val manager = VoiceAgentCallManager(factory = FakeVoiceAgentCallFactory(session))
-        val conversationId = Uuid.parse("77777777-7777-4777-8777-777777777777")
-        val degraded = VoiceCallStatus.Degraded("Telecom unavailable")
-
-        manager.start(
-            conversationId,
-            fakeLaunchConfig(),
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-        manager.updateCallStatus(degraded)
-        val startedDuplicate = manager.start(
-            conversationId,
-            fakeLaunchConfig(),
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-
-        assertEquals(false, startedDuplicate)
-        assertEquals(degraded, manager.state.value.call)
-    }
-
-    @Test
-    fun `starting same conversation with different launch config replaces existing session`() = runTest {
-        val first = FakeManagedVoiceCallSession()
-        val second = FakeManagedVoiceCallSession()
-        val factory = FakeVoiceAgentCallFactory(first, second)
-        val manager = VoiceAgentCallManager(factory = factory)
-        val conversationId = Uuid.parse("77777777-7777-4777-8777-777777777778")
-
-        val startedFirst = manager.start(
-            conversationId = conversationId,
-            config = fakeLaunchConfig(voiceModelId = "gemini-flash"),
-            routeOwner = VoiceAudioRouteOwner.DirectFallback,
-            scope = this,
-        )
-        val startedSecond = manager.start(
-            conversationId = conversationId,
-            config = fakeLaunchConfig(voiceModelId = "gemini-pro"),
-            routeOwner = VoiceAudioRouteOwner.DirectFallback,
-            scope = this,
-        )
-
-        assertEquals(true, startedFirst)
-        assertEquals(true, startedSecond)
-        assertEquals(1, first.endCalls)
-        assertEquals(1, second.startCalls)
-        assertEquals("gemini-pro", factory.created.last().config.voiceModelId)
-        assertEquals(conversationId, manager.activeConversationId.value)
-    }
-
-    @Test
-    fun `starting same conversation with same launch config does not replace existing session`() = runTest {
-        val session = FakeManagedVoiceCallSession()
-        val manager = VoiceAgentCallManager(factory = FakeVoiceAgentCallFactory(session))
-        val conversationId = Uuid.parse("77777777-7777-4777-8777-777777777779")
-        val config = fakeLaunchConfig()
-
-        val startedFirst = manager.start(
-            conversationId,
-            config,
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-        val startedDuplicate = manager.start(
-            conversationId,
-            config,
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-
-        assertEquals(true, startedFirst)
-        assertEquals(false, startedDuplicate)
-        assertEquals(1, session.startCalls)
-        assertEquals(0, session.endCalls)
-    }
-
-    @Test
-    fun `reconnect forwards to active same conversation session`() = runTest {
-        val session = FakeManagedVoiceCallSession()
-        val manager = VoiceAgentCallManager(factory = FakeVoiceAgentCallFactory(session))
-        val conversationId = Uuid.parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
-
-        manager.start(
-            conversationId,
-            fakeLaunchConfig(),
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-        manager.reconnect()
-
-        assertEquals(1, session.reconnectCalls)
-        assertEquals(1, session.startCalls)
-        assertEquals(0, session.endCalls)
-        assertEquals(conversationId, manager.activeConversationId.value)
-    }
-
-    @Test
-    fun `record diagnostic forwards to active session`() = runTest {
-        val session = FakeManagedVoiceCallSession()
-        val manager = VoiceAgentCallManager(factory = FakeVoiceAgentCallFactory(session))
-
-        manager.start(
-            Uuid.random(),
-            fakeLaunchConfig(),
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-        manager.recordDiagnostic(name = "telecom_register_failed", detail = "registration error")
-
-        assertEquals(listOf("telecom_register_failed" to "registration error"), session.diagnostics)
-    }
-
-    @Test
-    fun `end forwards to active session and clears active call`() = runTest {
-        val session = FakeManagedVoiceCallSession()
-        val manager = VoiceAgentCallManager(factory = FakeVoiceAgentCallFactory(session))
-
-        manager.start(
-            Uuid.random(),
-            fakeLaunchConfig(),
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-        manager.end()
-
-        assertEquals(1, session.endCalls)
-        assertEquals(null, manager.activeConversationId.value)
-    }
-
-    @Test
-    fun `detached end drain does not drain replacement session`() = runTest {
-        val first = FakeManagedVoiceCallSession()
-        val second = FakeManagedVoiceCallSession()
-        val manager = VoiceAgentCallManager(factory = FakeVoiceAgentCallFactory(first, second))
-        val firstConversationId = Uuid.parse("88888888-8888-4888-8888-888888888888")
-        val secondConversationId = Uuid.parse("99999999-9999-4999-8999-999999999999")
-
-        manager.start(
-            firstConversationId,
-            fakeLaunchConfig(),
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-        val detached = manager.detachForEndAndDrain()
-        manager.start(
-            secondConversationId,
-            fakeLaunchConfig(),
-            VoiceAudioRouteOwner.DirectFallback,
-            this,
-        )
-        detached?.endAndDrain()
-
-        assertEquals(1, first.endAndDrainCalls)
-        assertEquals(0, second.endAndDrainCalls)
-        assertEquals(secondConversationId, manager.activeConversationId.value)
-    }
-
-    @Test
-    fun `start passes and retains immutable route owner`() = runTest {
+    fun `start transfers lease to one active session and exposes exact metadata`() = runTest {
         val session = FakeManagedVoiceCallSession()
         val factory = FakeVoiceAgentCallFactory(session)
         val manager = VoiceAgentCallManager(factory)
         val conversationId = Uuid.random()
         val config = fakeLaunchConfig()
+        val failure = VoiceAgentTelecomFailure("fallback", "exact failure")
+        val installedLiveLease = DirectFallbackVoiceAgentRouteLease(failure)
 
-        manager.start(conversationId, config, VoiceAudioRouteOwner.Telecom, this)
+        val started = manager.start(conversationId, config, installedLiveLease, this)
+        val observedState = manager.state
+        session.state.value = VoiceAgentUiState(session = VoiceSessionStatus.Connected)
+        yield()
 
-        assertEquals(VoiceAudioRouteOwner.Telecom, factory.created.single().routeOwner)
-        assertEquals(VoiceAudioRouteOwner.Telecom, manager.activeRouteOwner.value)
-        assertEquals(
-            VoiceAudioRouteOwner.Telecom,
-            manager.routeOwnerForActiveSession(conversationId, config),
-        )
+        assertTrue(started)
+        assertSame(observedState, manager.state)
+        assertEquals(VoiceSessionStatus.Connected, manager.state.value.session)
+        assertEquals(listOf(CreatedCall(conversationId, config, VoiceAudioRouteOwner.DirectFallback)), factory.created)
+        assertEquals(VoiceAgentRouteMetadata(VoiceAudioRouteOwner.DirectFallback, failure), manager.matchingRouteMetadata(conversationId, config))
+        assertEquals(1, session.startCalls)
     }
 
     @Test
-    fun `different owner replaces otherwise matching session`() = runTest {
-        val first = FakeManagedVoiceCallSession()
-        val second = FakeManagedVoiceCallSession()
-        val manager = VoiceAgentCallManager(FakeVoiceAgentCallFactory(first, second))
+    fun `duplicate race retires unused incoming lease exactly once`() = runTest {
+        val session = FakeManagedVoiceCallSession()
+        val factory = FakeVoiceAgentCallFactory(session)
+        val manager = VoiceAgentCallManager(factory)
         val conversationId = Uuid.random()
         val config = fakeLaunchConfig()
+        val installedLiveLease = CountingTelecomLease()
+        val raceRejectedLease = CountingTelecomLease()
+        manager.start(conversationId, config, installedLiveLease.lease, this)
 
-        manager.start(conversationId, config, VoiceAudioRouteOwner.DirectFallback, this)
-        val replaced = manager.start(conversationId, config, VoiceAudioRouteOwner.Telecom, this)
+        val started = manager.start(conversationId, config, raceRejectedLease.lease, this)
 
-        assertEquals(true, replaced)
+        assertEquals(false, started)
+        assertEquals(1, raceRejectedLease.retireCalls)
+        assertEquals(0, installedLiveLease.retireCalls)
+        assertEquals(1, factory.created.size)
+        assertEquals(0, session.endCalls)
+    }
+
+    @Test
+    fun `replacement ends previous route-owned session before factory consumes incoming lease`() = runTest {
+        val first = FakeManagedVoiceCallSession()
+        val second = FakeManagedVoiceCallSession()
+        val factory = FakeVoiceAgentCallFactory(first, second)
+        val manager = VoiceAgentCallManager(factory)
+        val previousSessionLease = CountingTelecomLease()
+        val installedLiveLease = CountingTelecomLease()
+        manager.start(Uuid.random(), fakeLaunchConfig(), previousSessionLease.lease, this)
+
+        val nextConversation = Uuid.random()
+        manager.start(nextConversation, fakeLaunchConfig(), installedLiveLease.lease, this)
+
+        assertEquals(1, previousSessionLease.retireCalls)
         assertEquals(1, first.endCalls)
-        assertEquals(VoiceAudioRouteOwner.Telecom, manager.activeRouteOwner.value)
+        assertEquals(0, installedLiveLease.retireCalls)
+        assertEquals(1, second.startCalls)
+        assertEquals(nextConversation, manager.activeConversationId.value)
+    }
+
+    @Test
+    fun `previous session end failure retires incoming lease before factory and rethrows`() = runTest {
+        val endFailure = IllegalStateException("previous end failed")
+        val first = FakeManagedVoiceCallSession(endFailure = endFailure)
+        val factory = FakeVoiceAgentCallFactory(first, FakeManagedVoiceCallSession())
+        val manager = VoiceAgentCallManager(factory)
+        val previousSessionLease = CountingTelecomLease()
+        val incomingLease = CountingTelecomLease()
+        manager.start(Uuid.random(), fakeLaunchConfig(), previousSessionLease.lease, this)
+
+        val thrown = runCatching {
+            manager.start(Uuid.random(), fakeLaunchConfig(), incomingLease.lease, this)
+        }.exceptionOrNull()
+
+        assertSame(endFailure, thrown)
+        assertEquals(1, previousSessionLease.retireCalls)
+        assertEquals(1, incomingLease.retireCalls)
+        assertEquals(1, factory.created.size)
+        assertEquals(null, manager.activeConversationId.value)
+    }
+
+    @Test
+    fun `factory failure consumes lease and manager does not retire it twice`() = runTest {
+        val creationFailure = IllegalStateException("factory failed")
+        val factoryFailureLease = CountingTelecomLease()
+        val manager = VoiceAgentCallManager(ConsumingFailingVoiceAgentCallFactory(creationFailure))
+
+        val thrown = runCatching {
+            manager.start(Uuid.random(), fakeLaunchConfig(), factoryFailureLease.lease, this)
+        }.exceptionOrNull()
+
+        assertSame(creationFailure, thrown)
+        assertEquals(1, factoryFailureLease.retireCalls)
+        assertEquals(null, manager.activeConversationId.value)
+    }
+
+    @Test
+    fun `exact route usability controls active session preservation`() = runTest {
+        val lease = CountingTelecomLease()
+        val manager = VoiceAgentCallManager(FakeVoiceAgentCallFactory(FakeManagedVoiceCallSession()))
+        val conversationId = Uuid.random()
+        manager.start(conversationId, fakeLaunchConfig(), lease.lease, this)
+
+        assertTrue(manager.canPreserveActiveSession(conversationId))
+        lease.lease.retire()
+        assertEquals(false, manager.canPreserveActiveSession(conversationId))
+        assertEquals(false, manager.canPreserveActiveSession(Uuid.random()))
+    }
+
+    @Test
+    fun `end clears aggregate and retires installed lease once`() = runTest {
+        val session = FakeManagedVoiceCallSession()
+        val lease = CountingTelecomLease()
+        val manager = VoiceAgentCallManager(FakeVoiceAgentCallFactory(session))
+        manager.start(Uuid.random(), fakeLaunchConfig(), lease.lease, this)
+
+        manager.end()
+
+        assertEquals(1, lease.retireCalls)
+        assertEquals(1, session.endCalls)
+        assertEquals(null, manager.activeConversationId.value)
+    }
+
+    @Test
+    fun `detached end drain retires only detached lease and leaves replacement live`() = runTest {
+        val first = FakeManagedVoiceCallSession()
+        val second = FakeManagedVoiceCallSession()
+        val firstLease = CountingTelecomLease()
+        val secondLease = CountingTelecomLease()
+        val manager = VoiceAgentCallManager(FakeVoiceAgentCallFactory(first, second))
+        manager.start(Uuid.random(), fakeLaunchConfig(), firstLease.lease, this)
+        val detached = manager.detachForEndAndDrain()
+        val secondConversation = Uuid.random()
+        manager.start(secondConversation, fakeLaunchConfig(), secondLease.lease, this)
+
+        detached?.endAndDrain()
+
+        assertEquals(1, firstLease.retireCalls)
+        assertEquals(0, secondLease.retireCalls)
+        assertEquals(1, first.endAndDrainCalls)
+        assertEquals(0, second.endAndDrainCalls)
+        assertEquals(secondConversation, manager.activeConversationId.value)
     }
 }
 
-private class FakeManagedVoiceCallSession : ManagedVoiceCallSession {
+private class FakeManagedVoiceCallSession(
+    private val endFailure: Throwable? = null,
+) : ManagedVoiceCallSession {
     override val state = MutableStateFlow(VoiceAgentUiState())
     var startCalls = 0
     var reconnectCalls = 0
     var endCalls = 0
     var endAndDrainCalls = 0
-    var closeNowCalls = 0
     val diagnostics = mutableListOf<Pair<String, String>>()
 
-    override fun start() {
-        startCalls += 1
-    }
-
+    override fun start() { startCalls += 1 }
     override fun interrupt() = Unit
-
     override fun setMuted(value: Boolean) = Unit
-
-    override fun reconnect() {
-        reconnectCalls += 1
-    }
-
-    override fun recordDiagnostic(name: String, detail: String) {
-        diagnostics += name to detail
-    }
-
-    override fun end() {
-        endCalls += 1
-    }
-
-    override suspend fun endAndDrain() {
-        endAndDrainCalls += 1
-    }
-
-    override fun closeNow() {
-        closeNowCalls += 1
-    }
+    override fun reconnect() { reconnectCalls += 1 }
+    override fun recordDiagnostic(name: String, detail: String) { diagnostics += name to detail }
+    override fun end() { endCalls += 1; endFailure?.let { throw it } }
+    override suspend fun endAndDrain() { endAndDrainCalls += 1 }
+    override fun closeNow() = Unit
 }
 
 private class FakeVoiceAgentCallFactory(
@@ -348,11 +200,25 @@ private class FakeVoiceAgentCallFactory(
     override fun create(
         conversationId: Uuid,
         config: VoiceAgentLaunchConfig,
-        routeOwner: VoiceAudioRouteOwner,
+        routeLease: VoiceAgentRouteLease,
         scope: CoroutineScope,
-    ): ManagedVoiceCallSession {
-        created += CreatedCall(conversationId, config, routeOwner)
-        return sessions[nextSession++]
+    ): RouteOwnedManagedVoiceCallSession {
+        created += CreatedCall(conversationId, config, routeLease.metadata.owner)
+        return RouteOwnedVoiceCallSession(sessions[nextSession++], routeLease)
+    }
+}
+
+private class ConsumingFailingVoiceAgentCallFactory(
+    private val failure: Throwable,
+) : VoiceAgentCallFactory {
+    override fun create(
+        conversationId: Uuid,
+        config: VoiceAgentLaunchConfig,
+        routeLease: VoiceAgentRouteLease,
+        scope: CoroutineScope,
+    ): RouteOwnedManagedVoiceCallSession {
+        routeLease.retire()
+        throw failure
     }
 }
 
@@ -372,9 +238,5 @@ private fun fakeLaunchConfig(voiceModelId: String = "gemini-flash") = VoiceAgent
 
 private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking {
     val testScope = CoroutineScope(coroutineContext + SupervisorJob())
-    try {
-        testScope.block()
-    } finally {
-        testScope.cancel()
-    }
+    try { testScope.block() } finally { testScope.cancel() }
 }

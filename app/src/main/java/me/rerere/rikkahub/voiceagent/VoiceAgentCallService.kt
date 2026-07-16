@@ -102,10 +102,10 @@ class VoiceAgentCallService : Service() {
                             is VoiceAgentCallStartupResult.Stale -> return@launch
                             is VoiceAgentCallStartupResult.Started -> startupResult
                         }
-                        val routeResolution = started.resolution
+                        val route = started.route
                         val startedNewSession = started.startedNewSession
                         VoiceAgentLog.d(TAG, "manager start returned startedNewSession=$startedNewSession")
-                        routeResolution.failure?.let { failure ->
+                        route.failure?.let { failure ->
                             manager.recordDiagnostic(failure.diagnosticName, failure.detail)
                             manager.updateCallStatus(
                                 VoiceCallStatus.Degraded("Telecom unavailable: ${failure.detail}"),
@@ -113,7 +113,7 @@ class VoiceAgentCallService : Service() {
                         }
                         if (
                             shouldPublishVoiceCallBackgroundCapable(
-                                owner = routeResolution.owner,
+                                owner = route.owner,
                                 current = manager.state.value.call,
                             )
                         ) {
@@ -235,10 +235,12 @@ class VoiceAgentCallService : Service() {
 
     private fun tearDownFailedStart(conversationId: String, error: Throwable, preserveSession: Boolean = false) {
         val detail = error.message ?: error.javaClass.simpleName
+        val activeSessionIsUsable = runCatching {
+            manager.canPreserveActiveSession(Uuid.parse(conversationId))
+        }.getOrDefault(false)
         val cleanupPlan = voiceAgentFailedStartCleanupPlan(
             preserveSessionRequested = preserveSession,
-            routeOwner = manager.activeRouteOwner.value,
-            hasActiveTelecomCall = telecomCallRegistry.hasActiveConnection(),
+            canPreserveActiveSession = activeSessionIsUsable,
         )
         VoiceAgentLog.w(
             TAG,
@@ -335,25 +337,15 @@ internal data class VoiceAgentFailedStartCleanupPlan(
 
 internal fun voiceAgentFailedStartCleanupPlan(
     preserveSessionRequested: Boolean,
-    routeOwner: VoiceAudioRouteOwner?,
-    hasActiveTelecomCall: Boolean,
+    canPreserveActiveSession: Boolean,
 ): VoiceAgentFailedStartCleanupPlan = when {
-    !preserveSessionRequested -> VoiceAgentFailedStartCleanupPlan(
-        preserveSession = false,
-        retireTelecomCall = true,
-    )
-    routeOwner == VoiceAudioRouteOwner.Telecom && hasActiveTelecomCall ->
-        VoiceAgentFailedStartCleanupPlan(
-            preserveSession = true,
-            retireTelecomCall = false,
-        )
-    routeOwner == VoiceAudioRouteOwner.Telecom -> VoiceAgentFailedStartCleanupPlan(
-        preserveSession = false,
-        retireTelecomCall = true,
+    preserveSessionRequested && canPreserveActiveSession -> VoiceAgentFailedStartCleanupPlan(
+        preserveSession = true,
+        retireTelecomCall = false,
     )
     else -> VoiceAgentFailedStartCleanupPlan(
-        preserveSession = true,
-        retireTelecomCall = true,
+        preserveSession = false,
+        retireTelecomCall = false,
     )
 }
 
