@@ -134,7 +134,6 @@ image-viewer = { group = "com.jvziyaoyao.scale", name = "image-viewer", version.
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashlytics" }
-firebase-config = { group = "com.google.firebase", name = "firebase-config" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 quickie-bundled = { group = "io.github.g00fy2.quickie", name = "quickie-bundled", version.ref = "quickie-bundled" }
