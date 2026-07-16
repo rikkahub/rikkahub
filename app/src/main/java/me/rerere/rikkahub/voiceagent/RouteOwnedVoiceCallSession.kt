@@ -2,6 +2,8 @@ package me.rerere.rikkahub.voiceagent
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Collections
+import java.util.IdentityHashMap
 
 sealed interface VoiceAgentEndDrainOutcome {
     class Completed internal constructor(val failure: Throwable?) : VoiceAgentEndDrainOutcome
@@ -93,9 +95,13 @@ private fun Throwable?.withEndDrainFailure(error: Throwable): Throwable = when {
 
 private fun CancellationException.canonicalCancellation(): CancellationException {
     var canonical = this
+    val visited = Collections.newSetFromMap(
+        IdentityHashMap<CancellationException, Boolean>(),
+    )
+    visited += canonical
     while (true) {
         val original = canonical.cause as? CancellationException ?: return canonical
-        if (original === canonical || original.message != canonical.message) return canonical
+        if (original.message != canonical.message || !visited.add(original)) return canonical
         canonical = original
     }
 }

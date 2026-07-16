@@ -15,6 +15,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class VoiceAgentRouteLeaseTest {
@@ -305,6 +307,43 @@ class VoiceAgentRouteLeaseTest {
             outcome.cancel()
             replacementAttempt?.let(registry::retireOwnedAttempt)
         }
+    }
+
+    @Test
+    fun `caller cancellation cause cycle terminates and aggregates cleanup once`() {
+        val routeFailure = IllegalStateException("route retirement failed")
+        val closeFailure = IllegalArgumentException("session close failed")
+        val cycleEntry = CancellationException("caller cancelled")
+        val cycleDeepest = CancellationException("caller cancelled")
+        cycleEntry.initCause(cycleDeepest)
+        cycleDeepest.initCause(cycleEntry)
+        val delegate = RecordingManagedSession(
+            closeFailure = closeFailure,
+            drainFailure = cycleEntry,
+        )
+        val owned = RouteOwnedVoiceCallSession(
+            delegate = delegate,
+            routeLease = activeTelecomLease(mutableListOf(), routeFailure),
+        )
+        val executor = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "voice-cancellation-cycle-test").apply { isDaemon = true }
+        }
+
+        val thrown = try {
+            executor.submit<Throwable?> {
+                runBlocking {
+                    runCatching { owned.endAndDrainWithin(timeoutMillis = 1_000) }.exceptionOrNull()
+                }
+            }.get(1, TimeUnit.SECONDS)
+        } finally {
+            executor.shutdownNow()
+        }
+
+        assertSame(cycleDeepest, thrown)
+        assertTrue(cycleEntry.suppressed.isEmpty())
+        assertEquals(listOf(routeFailure), cycleDeepest.suppressed.toList())
+        assertEquals(listOf(closeFailure), routeFailure.suppressed.toList())
+        assertEquals(1, delegate.closeNowCalls)
     }
 
     @Test
