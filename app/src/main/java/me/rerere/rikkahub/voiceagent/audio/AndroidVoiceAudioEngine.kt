@@ -17,7 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import me.rerere.rikkahub.voiceagent.SingleFlightRetirement
+import me.rerere.rikkahub.voiceagent.RetirementBarrier
 
 private fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (this) {
     is VoicePlaybackDiagnostic.MalformedChunk -> "Malformed playback chunk: $message"
@@ -45,10 +45,10 @@ internal class VoiceAudioCaptureLifecycle {
 internal class VoiceAudioCaptureRouteLease(
     private val afterCapture: () -> Unit,
 ) {
-    private val singleFlight = SingleFlightRetirement()
+    private val retirement = RetirementBarrier()
 
     fun retire() {
-        singleFlight.retire {
+        retirement.retire {
             afterCapture()
         }
     }

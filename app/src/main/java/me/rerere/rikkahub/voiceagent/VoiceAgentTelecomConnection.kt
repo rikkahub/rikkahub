@@ -170,10 +170,10 @@ internal class VoiceAgentTelecomRetirement<Cause>(
     private val destroy: () -> Unit,
     private val onRetired: () -> Unit,
 ) {
-    private val singleFlight = SingleFlightRetirement()
+    private val retirement = RetirementBarrier()
 
     fun retire(cause: Cause) {
-        singleFlight.retire {
+        retirement.retire {
             try {
                 try {
                     onRetiring()
