@@ -27,6 +27,65 @@ class RetirementBarrierTest {
     }
 
     @Test
+    fun `cleanup preserves primary failure and restores interruption`() {
+        val calls = mutableListOf<String>()
+        val primary = AssertionError("primary")
+        val ownerJoinFailure = IllegalStateException("owner join failed")
+        val waiterJoinInterruption = InterruptedException("waiter join interrupted")
+
+        val thrown = runCatching {
+            runWithNonMaskingCleanup(
+                cleanupActions = listOf(
+                    { calls += "release" },
+                    {
+                        calls += "owner"
+                        throw ownerJoinFailure
+                    },
+                    {
+                        calls += "waiter"
+                        throw waiterJoinInterruption
+                    },
+                ),
+            ) {
+                throw primary
+            }
+        }.exceptionOrNull()
+        val interrupted = Thread.interrupted()
+
+        assertSame(primary, thrown)
+        assertEquals(listOf(ownerJoinFailure, waiterJoinInterruption), primary.suppressed.toList())
+        assertEquals(listOf("release", "owner", "waiter"), calls)
+        assertTrue(interrupted)
+    }
+
+    @Test
+    fun `cleanup preserves first cleanup failure`() {
+        val calls = mutableListOf<String>()
+        val releaseFailure = IllegalStateException("release failed")
+        val ownerJoinFailure = IllegalArgumentException("owner join failed")
+
+        val thrown = runCatching {
+            runWithNonMaskingCleanup(
+                cleanupActions = listOf(
+                    {
+                        calls += "release"
+                        throw releaseFailure
+                    },
+                    {
+                        calls += "owner"
+                        throw ownerJoinFailure
+                    },
+                    { calls += "waiter" },
+                ),
+            ) {}
+        }.exceptionOrNull()
+
+        assertSame(releaseFailure, thrown)
+        assertEquals(listOf(ownerJoinFailure), releaseFailure.suppressed.toList())
+        assertEquals(listOf("release", "owner", "waiter"), calls)
+    }
+
+    @Test
     fun `interrupted waiter blocks until completion and restores interruption`() {
         val barrier = RetirementBarrier()
         val ownerEntered = CountDownLatch(1)
@@ -34,6 +93,7 @@ class RetirementBarrierTest {
         val waiterReturned = CountDownLatch(1)
         val waiterInterrupted = AtomicBoolean()
         val cleanupCalls = AtomicInteger()
+        var waiter: Thread? = null
         val owner = thread(name = "retirement-owner") {
             barrier.retire {
                 cleanupCalls.incrementAndGet()
@@ -41,24 +101,26 @@ class RetirementBarrierTest {
                 releaseOwner.await()
             }
         }
-        assertTrue(ownerEntered.await(5, TimeUnit.SECONDS))
-        val waiter = thread(name = "retirement-waiter") {
-            Thread.currentThread().interrupt()
-            barrier.retire { cleanupCalls.incrementAndGet() }
-            waiterInterrupted.set(Thread.currentThread().isInterrupted)
-            waiterReturned.countDown()
-        }
-
-        try {
+        runWithNonMaskingCleanup(
+            cleanupActions = listOf(
+                { releaseOwner.countDown() },
+                { owner.join(5_000) },
+                { waiter?.join(5_000) },
+            ),
+        ) {
+            assertTrue(ownerEntered.await(5, TimeUnit.SECONDS))
+            waiter = thread(name = "retirement-waiter") {
+                Thread.currentThread().interrupt()
+                barrier.retire { cleanupCalls.incrementAndGet() }
+                waiterInterrupted.set(Thread.currentThread().isInterrupted)
+                waiterReturned.countDown()
+            }
             assertFalse(waiterReturned.await(100, TimeUnit.MILLISECONDS))
-        } finally {
-            releaseOwner.countDown()
-            owner.join(5_000)
-            waiter.join(5_000)
         }
 
+        val completedWaiter = requireNotNull(waiter)
         assertFalse(owner.isAlive)
-        assertFalse(waiter.isAlive)
+        assertFalse(completedWaiter.isAlive)
         assertEquals(1, cleanupCalls.get())
         assertEquals(0L, waiterReturned.count)
         assertTrue(waiterInterrupted.get())
@@ -75,6 +137,7 @@ class RetirementBarrierTest {
         val waiterCleanupCalls = AtomicInteger()
         val ownerFailure = AtomicReference<Throwable?>()
         val waiterFailure = AtomicReference<Throwable?>()
+        var waiter: Thread? = null
         val owner = thread(name = "failing-retirement-owner") {
             ownerFailure.set(
                 runCatching {
@@ -86,8 +149,13 @@ class RetirementBarrierTest {
                 }.exceptionOrNull(),
             )
         }
-        var waiter: Thread? = null
-        try {
+        runWithNonMaskingCleanup(
+            cleanupActions = listOf(
+                { releaseOwner.countDown() },
+                { owner.join(5_000) },
+                { waiter?.join(5_000) },
+            ),
+        ) {
             assertTrue(ownerEntered.await(5, TimeUnit.SECONDS))
             val startedWaiter = thread(name = "failing-retirement-waiter") {
                 waiterAttemptingRetirement.countDown()
@@ -111,13 +179,6 @@ class RetirementBarrierTest {
             }
             assertEquals(Thread.State.WAITING, startedWaiter.state)
             assertFalse(waiterReturned.await(100, TimeUnit.MILLISECONDS))
-        } finally {
-            releaseOwner.countDown()
-            try {
-                owner.join(5_000)
-            } finally {
-                waiter?.join(5_000)
-            }
         }
 
         val completedWaiter = requireNotNull(waiter)
@@ -139,4 +200,29 @@ class RetirementBarrierTest {
         assertSame(failure, first)
         assertSame(failure, second)
     }
+}
+
+private fun runWithNonMaskingCleanup(
+    cleanupActions: List<() -> Unit>,
+    block: () -> Unit,
+) {
+    val primaryFailure = runCatching(block).exceptionOrNull()
+    val cleanupFailures = buildList {
+        cleanupActions.forEach { action ->
+            try {
+                action()
+            } catch (failure: Throwable) {
+                add(failure)
+            }
+        }
+    }
+    if (primaryFailure is InterruptedException || cleanupFailures.any { it is InterruptedException }) {
+        Thread.currentThread().interrupt()
+    }
+    val terminalFailure = primaryFailure ?: cleanupFailures.firstOrNull() ?: return
+    val suppressedFailures = if (primaryFailure == null) cleanupFailures.drop(1) else cleanupFailures
+    suppressedFailures
+        .filter { it !== terminalFailure }
+        .forEach(terminalFailure::addSuppressed)
+    throw terminalFailure
 }
