@@ -190,6 +190,9 @@
   <string name="file_transfer_uploading">正在上传...</string>
   <string name="file_transfer_downloading">正在下载...</string>
   <string name="file_transfer_progress_detail">%1$s (%2$d/%3$d)</string>
+  <string name="cloud_pull_syncing_conversations">正在同步会话记录</string>
+  <string name="cloud_pull_loading_file">正在加载文件内容</string>
+  <string name="cloud_pull_from_server">正在从服务器接收数据</string>
   <string name="chat_page_compress_progress_detail">%1$d / %2$d tokens</string>
   <string name="backup_page_loading_failed">加载备份文件失败: %s</string>
   <string name="backup_page_local_backup_export">导出为文件</string>

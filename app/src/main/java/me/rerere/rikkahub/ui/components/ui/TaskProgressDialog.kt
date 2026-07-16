@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -25,6 +26,7 @@ fun TaskProgressDialog(
     title: String,
     message: String? = null,
     progress: Float? = null,
+    wavy: Boolean = false,
     detail: String? = null,
     cancellable: Boolean = false,
     onCancel: (() -> Unit)? = null,
@@ -50,7 +52,14 @@ fun TaskProgressDialog(
                     Text(message)
                 }
                 val fraction = progress?.coerceIn(0f, 1f)
-                if (fraction != null) {
+                if (wavy && fraction != null) {
+                    LinearWavyProgressIndicator(
+                        progress = { fraction },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else if (wavy) {
+                    LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else if (fraction != null) {
                     LinearProgressIndicator(
                         progress = { fraction },
                         modifier = Modifier.fillMaxWidth(),

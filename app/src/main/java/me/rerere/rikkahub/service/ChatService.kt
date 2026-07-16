@@ -851,25 +851,21 @@ class ChatService(
 
     // ---- 压缩对话历史 ----
 
-    /**
-     * Progress for compress UI: bar length = targetTokens + fixed headroom percent.
-     * progress = cumulative output tokens / that length.
-     */
+    /** Progress for compress UI: cumulative returned tokens against a fixed 1500-token scale. */
     data class CompressProgress(
         val outputTokens: Int,
         val targetTokens: Int,
         val completedChunks: Int,
         val totalChunks: Int,
     ) {
-        /** Fixed overhead on top of target tokens (15%). */
         val progressMaxTokens: Int
-            get() = (targetTokens + (targetTokens * FIXED_PROGRESS_PERCENT / 100f)).toInt().coerceAtLeast(1)
+            get() = PROGRESS_COMPLETION_TOKENS
 
         val fraction: Float
-            get() = (outputTokens.toFloat() / progressMaxTokens.toFloat()).coerceIn(0f, 0.99f)
+            get() = (outputTokens.toFloat() / PROGRESS_COMPLETION_TOKENS.toFloat()).coerceIn(0f, 1f)
 
         companion object {
-            const val FIXED_PROGRESS_PERCENT = 15
+            const val PROGRESS_COMPLETION_TOKENS = 1500
         }
     }
 

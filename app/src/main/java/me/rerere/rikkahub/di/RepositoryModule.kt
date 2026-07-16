@@ -11,6 +11,7 @@ import me.rerere.rikkahub.data.repository.GenMediaRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.data.sync.cloud.CloudSyncRepository
+import me.rerere.rikkahub.data.sync.cloud.CloudPullProgressTracker
 import me.rerere.rikkahub.data.sync.cloud.ConversationDomainSync
 import me.rerere.rikkahub.data.sync.cloud.FavoriteDomainSync
 import me.rerere.rikkahub.data.sync.cloud.FileDomainSync
@@ -22,6 +23,8 @@ import me.rerere.rikkahub.data.sync.cloud.UploadProgressTracker
 import org.koin.dsl.module
 
 val repositoryModule = module {
+    single { CloudPullProgressTracker() }
+
     single {
         ConversationRepository(get(), get(), get(), get(), get(), get())
     }
@@ -78,6 +81,7 @@ val repositoryModule = module {
             settingsStore = get(),
             okHttpClient = get(),
             appEventBus = get(),
+            pullProgressTracker = get(),
         )
     }
 

@@ -7,13 +7,21 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.FilesRepository
+import okio.buffer
+import okio.sink
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
+import java.io.IOException
+import java.security.DigestOutputStream
 import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 
 /**
  * Uploads/downloads file bytes only through Perry proxy.
@@ -39,11 +47,15 @@ class FileTransferWorker(
                 val moreDownloads = processDownloadBatch()
                 if (!moreUploads && !moreDownloads) break
             }
-            uploadProgressTracker.clear()
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e(TAG, "file transfer failed", e)
             Result.retry()
+        } finally {
+            // Never leave the global banner pinned to the last attempted file.
+            uploadProgressTracker.clear()
         }
     }
 
@@ -99,9 +111,17 @@ class FileTransferWorker(
         val remainingHint = filesRepository.listByStatuses(statuses, limit = 500).size
         uploadProgressTracker.setQueue(remaining = remainingHint, isDownload = true)
 
+        var failures = 0
         for (entity in pending) {
-            downloadOne(entity)
+            try {
+                downloadOne(entity)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                failures++
+            }
         }
+        if (failures > 0) Log.w(TAG, "download batch completed with $failures failure(s)")
         return filesRepository.listByStatuses(statuses, limit = 1).isNotEmpty()
     }
 
@@ -122,7 +142,8 @@ class FileTransferWorker(
             )
             return
         }
-        val client = cloudSyncRepository.createAuthenticatedClient() ?: return
+        val client = cloudSyncRepository.createAuthenticatedClient()
+            ?: error("Perry client is not configured")
         val sha = entity.sha256.ifBlank { sha256Hex(file) }
         val size = file.length()
         uploadProgressTracker.beginFile(
@@ -213,31 +234,79 @@ class FileTransferWorker(
     }
 
     private suspend fun downloadOne(entity: ManagedFileEntity) {
-        val client = cloudSyncRepository.createAuthenticatedClient() ?: return
+        val client = cloudSyncRepository.createAuthenticatedClient()
+            ?: error("Perry client is not configured")
         uploadProgressTracker.beginFile(
             displayName = entity.displayName.ifBlank { entity.id },
             bytesTotal = entity.sizeBytes.coerceAtLeast(0L),
             isDownload = true,
         )
+        val target = filesManager.getFile(entity)
+        target.parentFile?.mkdirs()
+        val tmp = File(target.parentFile, "${target.name}.part")
         try {
-            val target = filesManager.getFile(entity)
-            target.parentFile?.mkdirs()
-            val tmp = File(target.parentFile, "${target.name}.part")
-            val bytes = client.getFileContent(entity.id)
-            uploadProgressTracker.updateBytes(bytes.size.toLong(), bytes.size.toLong())
-            tmp.writeBytes(bytes)
-            if (entity.sha256.isNotBlank()) {
-                val actual = sha256Hex(tmp)
-                if (!actual.equals(entity.sha256, ignoreCase = true)) {
-                    tmp.delete()
-                    error("sha256 mismatch for ${entity.id}")
+            var copied = 0L
+            var completed = false
+            var lastFailure: Exception? = null
+            for (attempt in 1..MAX_DOWNLOAD_ATTEMPTS) {
+                try {
+                    if (tmp.exists() && !tmp.delete()) {
+                        error("cannot replace partial file for ${entity.id}")
+                    }
+                    Log.i(
+                        TAG,
+                        "download opened ${entity.id}; target=${target.name}; " +
+                            "attempt=$attempt/$MAX_DOWNLOAD_ATTEMPTS",
+                    )
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    copied = withTimeout(FILE_DOWNLOAD_ATTEMPT_TIMEOUT_MS) {
+                        DigestOutputStream(tmp.outputStream(), digest).sink().buffer().use { sink ->
+                            client.downloadFileContent(
+                                fileId = entity.id,
+                                sink = sink,
+                                onProgress = { read, total ->
+                                    uploadProgressTracker.updateBytes(
+                                        bytesSent = read,
+                                        bytesTotal = total.takeIf { it >= 0L } ?: entity.sizeBytes,
+                                    )
+                                },
+                            )
+                        }
+                    }
+                    Log.i(TAG, "download copied ${entity.id}; bytes=$copied; attempt=$attempt")
+                    if (entity.sha256.isNotBlank()) {
+                        val actual = digest.digest().joinToString("") { "%02x".format(it) }
+                        if (!actual.equals(entity.sha256, ignoreCase = true)) {
+                            error("sha256 mismatch for ${entity.id}")
+                        }
+                        Log.i(TAG, "download hash verified ${entity.id}")
+                    }
+                    completed = true
+                    break
+                } catch (e: TimeoutCancellationException) {
+                    lastFailure = IOException("download attempt timed out for ${entity.id}", e)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    lastFailure = e
+                    if (!isRetryableDownload(e)) throw e
+                }
+                tmp.delete()
+                if (attempt < MAX_DOWNLOAD_ATTEMPTS) {
+                    Log.w(
+                        TAG,
+                        "download retry ${entity.id} after attempt $attempt: ${lastFailure?.message.orEmpty()}",
+                    )
+                    delay(DOWNLOAD_RETRY_DELAY_MS)
                 }
             }
+            if (!completed) throw lastFailure ?: IOException("download failed for ${entity.id}")
             if (target.exists()) target.delete()
             if (!tmp.renameTo(target)) {
                 tmp.copyTo(target, overwrite = true)
                 tmp.delete()
             }
+            Log.i(TAG, "download committed ${entity.id}; bytes=${target.length()}")
             filesRepository.upsertQuiet(
                 entity.copy(
                     sizeBytes = target.length(),
@@ -247,7 +316,17 @@ class FileTransferWorker(
             )
             uploadProgressTracker.completeFile()
             Log.i(TAG, "downloaded file ${entity.id} via perry proxy")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            tmp.delete()
+            filesRepository.upsertQuiet(
+                entity.copy(
+                    uploadStatus = ManagedFileEntity.UPLOAD_PENDING_DOWNLOAD,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            )
+            throw e
         } catch (e: Exception) {
+            tmp.delete()
             Log.w(TAG, "download failed ${entity.id}: ${e.message}")
             filesRepository.upsertQuiet(
                 entity.copy(
@@ -258,6 +337,9 @@ class FileTransferWorker(
             throw e
         }
     }
+
+    private fun isRetryableDownload(error: Exception): Boolean =
+        error !is PerryApiException || error.httpStatus >= 500
 
     private fun sha256Hex(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
@@ -277,6 +359,9 @@ class FileTransferWorker(
         private const val UNIQUE = "perry_file_transfer"
         private const val BATCH_LIMIT = 8
         private const val MAX_BATCHES = 64
+        private const val MAX_DOWNLOAD_ATTEMPTS = 2
+        private const val DOWNLOAD_RETRY_DELAY_MS = 500L
+        private val FILE_DOWNLOAD_ATTEMPT_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(50)
 
         fun enqueue(context: Context) {
             val req = OneTimeWorkRequestBuilder<FileTransferWorker>().build()

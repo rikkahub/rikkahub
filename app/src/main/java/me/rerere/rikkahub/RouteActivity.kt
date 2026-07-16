@@ -69,6 +69,7 @@ import me.rerere.rikkahub.ui.activity.SafeModeActivity
 import me.rerere.rikkahub.data.sync.cloud.UploadProgressTracker
 import me.rerere.rikkahub.ui.components.ui.TTSController
 import me.rerere.rikkahub.ui.components.ui.TaskProgressDialog
+import me.rerere.rikkahub.ui.components.ui.CloudPullProgressHost
 import me.rerere.rikkahub.ui.context.LocalASRState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
@@ -540,6 +541,7 @@ class RouteActivity : ComponentActivity() {
                             color = MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
                         )
                     }
+                    CloudPullProgressHost()
                     AnimatedVisibility(
                         visible = migrationState is MigrationState.Migrating,
                         enter = fadeIn(),
@@ -751,7 +753,7 @@ private fun GlobalFileTransferProgressHost() {
         else -> null
     }
     TaskProgressDialog(
-        visible = state.active,
+        visible = state.active && !state.isDownload,
         title = title,
         message = null,
         progress = state.fraction,

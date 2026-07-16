@@ -12,7 +12,6 @@ import me.rerere.rikkahub.data.repository.FilesRepository
 import me.rerere.rikkahub.data.sync.cloud.CloudSyncRepository
 import java.io.File
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Local-first media resolution for chat/settings UI.
@@ -26,8 +25,6 @@ class CloudMediaResolver(
     private val filesRepository: FilesRepository,
     private val cloudSyncRepository: CloudSyncRepository,
 ) {
-    private val requested = ConcurrentHashMap.newKeySet<String>()
-
     /**
      * Resolve a model for Coil/AsyncImage. May return File, Uri string, or original URL.
      * Triggers on-demand download when local bytes are missing.
@@ -149,25 +146,20 @@ class CloudMediaResolver(
     private suspend fun requestDownload(entity: ManagedFileEntity) {
         if (entity.uploadStatus == ManagedFileEntity.UPLOAD_DELETED) return
         if (entity.deletedAt != null) return
-        // Only remote-ready metadata should be downloaded.
-        if (entity.uploadStatus == ManagedFileEntity.UPLOAD_PENDING ||
-            entity.uploadStatus == ManagedFileEntity.UPLOAD_UPLOADING ||
-            entity.uploadStatus == ManagedFileEntity.UPLOAD_LOCAL_ONLY
-        ) {
-            return
-        }
-        if (!requested.add(entity.id)) {
-            // Already requested this process; still nudge worker.
-            cloudSyncRepository.requestFileTransfer()
-            return
-        }
-        Log.d(TAG, "on-demand download ${entity.id}")
-        filesRepository.upsertQuiet(
-            entity.copy(
-                uploadStatus = ManagedFileEntity.UPLOAD_PENDING_DOWNLOAD,
-                updatedAt = System.currentTimeMillis(),
+        // Older clients could leave remote-backed rows in failed/local states.
+        // The server revision/object key is the source of truth that bytes exist remotely.
+        val hasRemoteMetadata = entity.remoteRevision > 0L || entity.objectKey.isNotBlank()
+        if (!hasRemoteMetadata) return
+        if (entity.uploadStatus != ManagedFileEntity.UPLOAD_PENDING_DOWNLOAD) {
+            Log.d(TAG, "queue on-demand download ${entity.id} status=${entity.uploadStatus}")
+            filesRepository.upsertQuiet(
+                entity.copy(
+                    uploadStatus = ManagedFileEntity.UPLOAD_PENDING_DOWNLOAD,
+                    updatedAt = System.currentTimeMillis(),
+                )
             )
-        )
+        }
+        // Unique KEEP work makes repeated polling cheap and idempotent.
         cloudSyncRepository.requestFileTransfer()
     }
 

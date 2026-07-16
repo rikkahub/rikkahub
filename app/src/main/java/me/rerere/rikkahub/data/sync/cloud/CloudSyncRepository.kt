@@ -62,6 +62,7 @@ class CloudSyncRepository(
     private val settingsStore: SettingsStore,
     private val okHttpClient: OkHttpClient,
     private val appEventBus: AppEventBus,
+    private val pullProgressTracker: CloudPullProgressTracker,
 ) {
     // Set after Koin creates domain sync helpers to avoid ctor cycles.
     var settingsDomainSync: SettingsDomainSync? = null
@@ -659,8 +660,12 @@ class CloudSyncRepository(
                     deviceToken = token,
                 )
                 if (state.changeCursor <= 0L) {
-                    val bootstrap = client.bootstrap()
-                    applyBootstrap(bootstrap)
+                    pullProgressTracker.beginConversationPull()
+                    val bootstrap = try {
+                        client.bootstrap().also { applyBootstrap(it) }
+                    } finally {
+                        pullProgressTracker.endConversationPull()
+                    }
                     // Seed any local keys that have no revision yet (e.g. newly
                     // added "providers" after older settings already exist on server).
                     // Previously this only ran when bootstrap was completely empty,
@@ -715,7 +720,12 @@ class CloudSyncRepository(
                 // Bootstrap/changes do not embed message_node bodies for all history;
                 // fill empty local conversations from /conversations/{id}/nodes.
                 runCatching {
-                    messageNodeDomainSync?.hydrateMissingNodes(client)
+                    pullProgressTracker.beginConversationPull()
+                    try {
+                        messageNodeDomainSync?.hydrateMissingNodes(client)
+                    } finally {
+                        pullProgressTracker.endConversationPull()
+                    }
                 }.onFailure {
                     Log.w(TAG, "message node hydrate failed: ${it.message}")
                 }
@@ -889,28 +899,41 @@ class CloudSyncRepository(
     private suspend fun pullChanges(client: PerryApiClient) {
         var cursor = ensureState().changeCursor
         var guard = 0
+        var showingProgress = false
         // Large ZIP imports produce thousands of change_log rows; 20*200 was too small.
-        while (guard < 200) {
-            guard++
-            val page = client.changes(cursor = cursor, limit = 200)
-            if (page.changes.isNotEmpty()) {
-                applyChangeBatch(page.changes)
-            }
-            if (page.nextCursor > cursor) {
-                cursor = page.nextCursor
-                val state = ensureState()
-                stateDao.upsert(
-                    state.copy(
-                        changeCursor = cursor,
-                        lastSuccessAt = System.currentTimeMillis(),
-                        updatedAt = System.currentTimeMillis(),
-                        lastError = null,
+        try {
+            while (guard < 200) {
+                guard++
+                val page = client.changes(cursor = cursor, limit = 200)
+                if (!showingProgress && page.changes.any { it.isConversationContent() }) {
+                    pullProgressTracker.beginConversationPull()
+                    showingProgress = true
+                }
+                if (page.changes.isNotEmpty()) {
+                    applyChangeBatch(page.changes)
+                }
+                if (page.nextCursor > cursor) {
+                    cursor = page.nextCursor
+                    val state = ensureState()
+                    stateDao.upsert(
+                        state.copy(
+                            changeCursor = cursor,
+                            lastSuccessAt = System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis(),
+                            lastError = null,
+                        )
                     )
-                )
+                }
+                if (!page.hasMore || page.changes.isEmpty()) break
             }
-            if (!page.hasMore || page.changes.isEmpty()) break
+        } finally {
+            if (showingProgress) pullProgressTracker.endConversationPull()
         }
     }
+
+    private fun SyncChangeItem.isConversationContent(): Boolean =
+        entityType == ConversationDomainSync.ENTITY_CONVERSATION ||
+            entityType == MessageNodeDomainSync.ENTITY_MESSAGE_NODE
 
     /**
      * Apply settings + assistants from bootstrap for devices that already have a
@@ -934,7 +957,9 @@ class CloudSyncRepository(
                 val shouldApply = revision > known ||
                     (revision >= known && key == SyncableSettings.PROVIDERS && settings.providers.isEmpty()) ||
                     (revision >= known && key == SyncableSettings.DISPLAY_SETTING &&
-                        settings.displaySetting.userNickname.isBlank())
+                        settings.displaySetting.userNickname.isBlank()) ||
+                    (revision >= known && key in SyncableSettings.THEME_KEYS &&
+                        SyncableSettings.extract(settings)[key] != value)
                 if (!shouldApply && revision == known) {
                     // Still refresh revision stamp; skip body when already current.
                     return@forEach
@@ -997,8 +1022,10 @@ class CloudSyncRepository(
         client: PerryApiClient,
     ) {
         val changedIds = mutableSetOf<String>()
-        withRemoteApply {
-            bootstrap.conversations.forEach { element ->
+        var showingProgress = false
+        try {
+            withRemoteApply {
+                bootstrap.conversations.forEach { element ->
                 val obj = element as? JsonObject ?: return@forEach
                 val id = (obj["id"] as? JsonPrimitive)?.contentOrNull ?: return@forEach
                 val remoteRevision = (obj["revision"] as? JsonPrimitive)
@@ -1023,6 +1050,10 @@ class CloudSyncRepository(
                     return@forEach
                 }
 
+                if (!showingProgress) {
+                    pullProgressTracker.beginConversationPull()
+                    showingProgress = true
+                }
                 conversationDomainSync?.applyRemotePayload(
                     entityId = id,
                     operation = "upsert",
@@ -1040,7 +1071,10 @@ class CloudSyncRepository(
                     "reconciled conversation $id rev=$remoteRevision (was $localRevision) " +
                         "nodeSetMismatch=$nodeSetMismatch",
                 )
+                }
             }
+        } finally {
+            if (showingProgress) pullProgressTracker.endConversationPull()
         }
         if (changedIds.isNotEmpty()) {
             appEventBus.emit(AppEvent.ConversationsSynced(changedIds))

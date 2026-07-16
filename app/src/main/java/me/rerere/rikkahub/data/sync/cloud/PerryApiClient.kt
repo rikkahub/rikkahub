@@ -3,7 +3,11 @@ package me.rerere.rikkahub.data.sync.cloud
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import me.rerere.common.http.await
 import me.rerere.rikkahub.utils.JsonInstant
@@ -14,6 +18,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.Buffer
 import okio.BufferedSink
 import android.util.Base64
 import java.util.concurrent.TimeUnit
@@ -38,6 +43,11 @@ class PerryApiClient(
         .writeTimeout(10, TimeUnit.SECONDS)
         // Avoid callTimeout: shared interceptors + LAN jitter can exceed a hard 5s budget.
         .callTimeout(0, TimeUnit.SECONDS)
+        .build()
+
+    private val fileTransferClient: OkHttpClient = httpClient.newBuilder()
+        .readTimeout(15, TimeUnit.SECONDS)
+        .callTimeout(45, TimeUnit.SECONDS)
         .build()
 
     suspend fun healthLive(): HealthLiveResponse {
@@ -132,23 +142,55 @@ class PerryApiClient(
         onProgress?.invoke(bytes.size.toLong(), bytes.size.toLong())
     }
 
-    suspend fun getFileContent(fileId: String): ByteArray {
+    suspend fun downloadFileContent(
+        fileId: String,
+        sink: BufferedSink,
+        onProgress: (bytesRead: Long, bytesTotal: Long) -> Unit,
+    ): Long {
         val request = Request.Builder()
             .url(join(baseUrl, "/v1/files/$fileId/content"))
             .get()
             .applyAuth(true)
             .build()
-        val response = httpClient.newCall(request).await()
-        if (!response.isSuccessful) {
-            val raw = response.readBodyString()
-            val err = runCatching { json.decodeFromString<ErrorEnvelope>(raw) }.getOrNull()
-            throw PerryApiException(
-                code = err?.error?.code ?: "http_${response.code}",
-                message = err?.error?.message ?: raw.ifBlank { "HTTP ${response.code}" },
-                httpStatus = response.code,
-            )
+        val call = fileTransferClient.newCall(request)
+        val cancellationHandle = currentCoroutineContext().job.invokeOnCompletion { cause ->
+            if (cause is CancellationException) call.cancel()
         }
-        return response.readBodyBytes()
+        try {
+            val response = call.await()
+            if (!response.isSuccessful) {
+                val raw = response.readBodyString()
+                val err = runCatching { json.decodeFromString<ErrorEnvelope>(raw) }.getOrNull()
+                throw PerryApiException(
+                    code = err?.error?.code ?: "http_${response.code}",
+                    message = err?.error?.message ?: raw.ifBlank { "HTTP ${response.code}" },
+                    httpStatus = response.code,
+                )
+            }
+            return withContext(Dispatchers.IO) {
+                response.use {
+                    val body = response.body
+                        ?: throw PerryApiException("empty_body", "empty response body", response.code)
+                    val total = body.contentLength()
+                    onProgress(0L, total)
+                    val source = body.source()
+                    val buffer = Buffer()
+                    var copied = 0L
+                    while (true) {
+                        currentCoroutineContext().ensureActive()
+                        val read = source.read(buffer, DOWNLOAD_CHUNK_BYTES)
+                        if (read == -1L) break
+                        sink.write(buffer, read)
+                        copied += read
+                        onProgress(copied, total)
+                    }
+                    sink.flush()
+                    copied
+                }
+            }
+        } finally {
+            cancellationHandle.dispose()
+        }
     }
 
     suspend fun listWorkspaces(): WorkspaceListResponse =
@@ -378,6 +420,8 @@ class PerryApiClient(
         withContext(Dispatchers.IO) { body?.bytes() ?: ByteArray(0) }
 
     companion object {
+        private const val DOWNLOAD_CHUNK_BYTES = 64L * 1024L
+
         fun resolve(baseUrl: String, path: String): String =
             if (path.startsWith("http://") || path.startsWith("https://")) {
                 path

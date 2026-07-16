@@ -6,6 +6,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -15,7 +16,11 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 class WorkspaceVM(
     private val repository: WorkspaceRepository,
 ) : ViewModel() {
+    private val _loading = MutableStateFlow(true)
+    val loading = _loading.asStateFlow()
+
     val workspaces = repository.listFlow()
+        .onEach { _loading.value = false }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     fun create(name: String) {

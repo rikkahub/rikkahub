@@ -64,6 +64,7 @@ fun CompressContextDialog(
             title = stringResource(R.string.chat_page_compress_context_title),
             message = stringResource(R.string.chat_page_compressing),
             progress = progressFraction,
+            wavy = true,
             detail = progressDetail.ifBlank { null },
             cancellable = true,
             onCancel = {

@@ -24,6 +24,7 @@ import kotlin.uuid.Uuid
 object SyncableSettings {
     const val THEME_ID = "theme_id"
     const val DYNAMIC_COLOR = "dynamic_color"
+    const val CUSTOM_THEMES = "custom_themes"
     const val DISPLAY_SETTING = "display_setting"
     const val FAVORITE_MODELS = "favorite_models"
     const val CHAT_MODEL = "chat_model"
@@ -56,6 +57,7 @@ object SyncableSettings {
     val ALL_KEYS: Set<String> = setOf(
         THEME_ID,
         DYNAMIC_COLOR,
+        CUSTOM_THEMES,
         DISPLAY_SETTING,
         FAVORITE_MODELS,
         CHAT_MODEL,
@@ -86,10 +88,13 @@ object SyncableSettings {
         MCP_SERVERS,
     )
 
+    val THEME_KEYS: Set<String> = setOf(THEME_ID, DYNAMIC_COLOR, CUSTOM_THEMES)
+
     fun extract(settings: Settings): Map<String, JsonElement> {
         return mapOf(
             THEME_ID to JsonPrimitive(settings.themeId),
             DYNAMIC_COLOR to JsonPrimitive(settings.dynamicColor),
+            CUSTOM_THEMES to toJson(settings.customThemes),
             DISPLAY_SETTING to toJson(settings.displaySetting),
             FAVORITE_MODELS to toJson(settings.favoriteModels),
             CHAT_MODEL to JsonPrimitive(settings.chatModelId.toString()),
@@ -129,6 +134,7 @@ object SyncableSettings {
             DYNAMIC_COLOR -> settings.copy(
                 dynamicColor = value.asBooleanOrNull() ?: settings.dynamicColor
             )
+            CUSTOM_THEMES -> settings.copy(customThemes = fromJson(value))
             DISPLAY_SETTING -> settings.copy(displaySetting = fromJson(value))
             FAVORITE_MODELS -> settings.copy(favoriteModels = fromJson(value))
             CHAT_MODEL -> settings.copy(chatModelId = value.asUuidOrNull() ?: settings.chatModelId)

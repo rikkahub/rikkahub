@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
@@ -59,6 +60,7 @@ import org.koin.androidx.compose.koinViewModel
 fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
     val navController = LocalNavController.current
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
+    val loading by vm.loading.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<WorkspaceEntity?>(null) }
@@ -86,7 +88,18 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
             contentPadding = innerPadding + PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (workspaces.isEmpty()) {
+            if (loading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 28.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularWavyProgressIndicator(modifier = Modifier.size(28.dp))
+                    }
+                }
+            } else if (workspaces.isEmpty()) {
                 item {
                     EmptyWorkspaceState()
                 }
