@@ -4,6 +4,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceTimeBy
@@ -171,6 +172,48 @@ class VoiceAgentCallServiceLifecycleTest {
     }
 
     @Test
+    fun `deadline after route failure closes delegate once and preserves replacement ownership and failure order`() =
+        runTest {
+            val neverCompletes = CompletableDeferred<Unit>()
+            val routeFailure = IllegalStateException("route retirement failed")
+            val closeFailure = IllegalArgumentException("delegate close failed")
+            val session = LifecycleManagedSession(
+                closeNowFailure = closeFailure,
+                onEndAndDrain = { neverCompletes.await() },
+            )
+            val route = LifecycleTelecomRoute(retireFailure = routeFailure)
+            val scope = CoroutineScope(coroutineContext + SupervisorJob())
+            val manager = VoiceAgentCallManager(LifecycleCallFactory(session))
+            val host = RecordingLifecycleHost()
+            val lifecycle = VoiceAgentCallServiceLifecycle(manager, scope, host, endDrainTimeoutMillis = 100)
+            var replacement: LifecycleTelecomReplacement? = null
+            try {
+                manager.start(Uuid.random(), lifecycleLaunchConfig(), route.lease, scope)
+                assertTrue(lifecycle.endCall())
+                replacement = route.activateReplacement()
+                lifecycle.beginStart()
+
+                advanceTimeBy(100)
+                runCurrent()
+
+                assertEquals(1, route.retireCalls)
+                assertEquals(1, session.closeNowCalls)
+                assertEquals(0, replacement.call.disconnectCalls)
+                val reported = host.reportedFailures.single()
+                assertEquals(routeFailure::class, reported::class)
+                assertEquals(routeFailure.message, reported.message)
+                assertEquals(2, reported.suppressed.size)
+                assertTrue(reported.suppressed[0] is TimeoutCancellationException)
+                assertEquals(closeFailure::class, reported.suppressed[1]::class)
+                assertEquals(closeFailure.message, reported.suppressed[1].message)
+            } finally {
+                neverCompletes.complete(Unit)
+                replacement?.retire()
+                scope.cancel()
+            }
+        }
+
+    @Test
     fun `throwing drain after destruction is reported without escaping or skipping destroy`() = runTest {
         val releaseDrain = CompletableDeferred<Unit>()
         val drainFailure = IllegalStateException("drain failed")
@@ -336,9 +379,11 @@ internal class LifecycleCallFactory(
     ): RouteOwnedManagedVoiceCallSession = RouteOwnedVoiceCallSession(sessions[next++], routeLease)
 }
 
-internal class LifecycleTelecomRoute {
+internal class LifecycleTelecomRoute(
+    retireFailure: Throwable? = null,
+) {
     private val registry = VoiceAgentTelecomCallRegistry()
-    private val call = LifecycleTelecomCall()
+    private val call = LifecycleTelecomCall(retireFailure)
     val attempt = registry.beginAttempt()
     val lease: VoiceAgentRouteLease
     val retireCalls: Int get() = call.disconnectCalls
@@ -349,19 +394,32 @@ internal class LifecycleTelecomRoute {
         lease = TelecomVoiceAgentRouteLease(attempt, registry)
     }
 
-    fun activateReplacement(): LifecycleTelecomCall {
+    fun activateReplacement(): LifecycleTelecomReplacement {
         val replacement = LifecycleTelecomCall()
         val replacementAttempt = registry.beginAttempt()
         check(registry.activate(replacementAttempt, replacement))
         registry.acknowledgeOutcome(replacementAttempt)
-        return replacement
+        return LifecycleTelecomReplacement(registry, replacementAttempt, replacement)
     }
 }
 
-internal class LifecycleTelecomCall : VoiceAgentTelecomCall {
+internal class LifecycleTelecomReplacement(
+    private val registry: VoiceAgentTelecomCallRegistry,
+    private val attempt: VoiceAgentTelecomAttemptId,
+    val call: LifecycleTelecomCall,
+) {
+    val disconnectCalls: Int get() = call.disconnectCalls
+
+    fun retire() = registry.retireOwnedAttempt(attempt)
+}
+
+internal class LifecycleTelecomCall(
+    private val disconnectFailure: Throwable? = null,
+) : VoiceAgentTelecomCall {
     var disconnectCalls = 0
     override fun disconnectFromApp() {
         disconnectCalls += 1
+        disconnectFailure?.let { throw it }
     }
 }
 
