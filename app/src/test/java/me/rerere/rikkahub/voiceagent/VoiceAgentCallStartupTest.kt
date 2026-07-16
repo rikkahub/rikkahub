@@ -254,10 +254,10 @@ class VoiceAgentCallStartupTest {
     }
 
     @Test
-    fun `throwing stale disconnect still consumes old attempt without touching newer active attempt`() = runTest {
+    fun `IllegalArgumentException from stale disconnect is not swallowed`() = runTest {
         val registry = VoiceAgentTelecomCallRegistry()
         val oldAttempt = registry.beginAttempt()
-        val disconnectError = IllegalStateException("old Telecom disconnect failed")
+        val disconnectError = IllegalArgumentException("old Telecom disconnect failed")
         val oldCall = BlockingThrowingFakeTelecomCall(disconnectError)
         assertTrue(registry.activate(oldAttempt, oldCall))
         registry.acknowledgeOutcome(oldAttempt)
@@ -281,7 +281,7 @@ class VoiceAgentCallStartupTest {
             oldCall.releaseDisconnect.countDown()
             val thrown = runCatching { staleStartup.await() }.exceptionOrNull()
 
-            assertTrue(thrown is IllegalStateException)
+            assertTrue(thrown is IllegalArgumentException)
             assertEquals(disconnectError.message, thrown?.message)
             assertEquals(emptyList<StartupCreatedCall>(), factory.created)
             assertEquals(null, manager.activeConversationId.value)

@@ -49,8 +49,8 @@ class VoiceAgentCallStartup internal constructor(
                         )
                     }.exceptionOrNull()
                     val acknowledgementError = runCatching {
-                        telecomRegistry.awaitOutcome(attemptId)
-                    }.exceptionOrNull()?.takeUnless { it is IllegalArgumentException }
+                        telecomRegistry.awaitOutcomeIfPresent(attemptId)
+                    }.exceptionOrNull()
                     retirementError?.let { error ->
                         acknowledgementError?.let(error::addSuppressed)
                         throw error
