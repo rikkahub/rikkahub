@@ -52,8 +52,9 @@ class RouteOwnedVoiceCallSession(
             } ?: false
         } catch (cancellation: CancellationException) {
             failure = closeDelegateNow(failure)
-            failure?.takeIf { it !== cancellation }?.let(cancellation::addSuppressed)
-            throw cancellation
+            val callerCancellation = cancellation.canonicalCancellation()
+            failure?.takeIf { it !== callerCancellation }?.let(callerCancellation::addSuppressed)
+            throw callerCancellation
         } catch (error: Throwable) {
             drainFailure = error
             false
@@ -88,4 +89,13 @@ private fun Throwable?.withEndDrainFailure(error: Throwable): Throwable = when {
     this == null -> error
     this !== error -> apply { addSuppressed(error) }
     else -> this
+}
+
+private fun CancellationException.canonicalCancellation(): CancellationException {
+    var canonical = this
+    while (true) {
+        val original = canonical.cause as? CancellationException ?: return canonical
+        if (original === canonical || original.message != canonical.message) return canonical
+        canonical = original
+    }
 }

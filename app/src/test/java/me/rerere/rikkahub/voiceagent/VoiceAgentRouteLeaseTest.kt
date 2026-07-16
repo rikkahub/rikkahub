@@ -252,9 +252,19 @@ class VoiceAgentRouteLeaseTest {
 
     @Test
     fun `caller cancellation closes detached delegate once and remains cancellation`() = runTest {
+        val events = mutableListOf<String>()
+        val routeFailure = IllegalStateException("route retirement failed")
+        val closeFailure = IllegalArgumentException("session close failed")
+        val callerCancellation = CancellationException("caller cancelled")
         val drainStarted = CompletableDeferred<Unit>()
         val neverCompletes = CompletableDeferred<Unit>()
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val call = RecordingTelecomCall(events, routeFailure)
+        assertTrue(registry.activate(attempt, call))
         val delegate = RecordingManagedSession(
+            events = events,
+            closeFailure = closeFailure,
             onDrain = {
                 drainStarted.complete(Unit)
                 neverCompletes.await()
@@ -262,27 +272,38 @@ class VoiceAgentRouteLeaseTest {
         )
         val owned = RouteOwnedVoiceCallSession(
             delegate = delegate,
-            routeLease = DirectFallbackVoiceAgentRouteLease(
-                VoiceAgentTelecomFailure("fallback", "fallback"),
-            ),
+            routeLease = TelecomVoiceAgentRouteLease(attempt, registry),
         )
         val outcome = async { owned.endAndDrainWithin(timeoutMillis = 1_000) }
+        var replacementAttempt: VoiceAgentTelecomAttemptId? = null
         try {
             drainStarted.await()
-            outcome.cancel(CancellationException("caller cancelled"))
+            val replacementCall = RecordingTelecomCall()
+            replacementAttempt = registry.beginAttempt()
+            assertTrue(registry.activate(replacementAttempt, replacementCall))
+            outcome.cancel(callerCancellation)
 
             val thrown = runCatching { outcome.await() }.exceptionOrNull()
 
             assertTrue(thrown is CancellationException)
+            assertEquals(callerCancellation.message, thrown?.message)
+            assertSame(callerCancellation, thrown?.cause)
             assertTrue(outcome.isCancelled)
+            val cleanupAggregate = callerCancellation.suppressed.single()
+            assertSame(routeFailure, cleanupAggregate)
+            assertEquals(listOf(closeFailure), cleanupAggregate.suppressed.toList())
+            assertEquals(1, call.disconnectCalls)
             assertEquals(1, delegate.closeNowCalls)
+            assertEquals(0, replacementCall.disconnectCalls)
+            assertTrue(registry.isOwnedAttemptActive(replacementAttempt))
             assertEquals(
-                listOf("session-end-and-drain", "session-close-now"),
-                delegate.events,
+                listOf("route-retire", "session-end-and-drain", "session-close-now"),
+                events,
             )
         } finally {
             neverCompletes.complete(Unit)
             outcome.cancel()
+            replacementAttempt?.let(registry::retireOwnedAttempt)
         }
     }
 
