@@ -7,13 +7,16 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.ServiceCompat
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
@@ -28,7 +31,7 @@ class VoiceAgentCallService : Service() {
     private val callStartup: VoiceAgentCallStartup by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var notificationJob: Job? = null
-    private var endJob: Job? = null
+    private val endJobTracker = VoiceAgentEndJobTracker()
     private var callGeneration = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -43,11 +46,12 @@ class VoiceAgentCallService : Service() {
     }
 
     override fun onDestroy() {
+        callGeneration += 1
         runVoiceAgentCleanupStages(
             {
                 notificationJob?.cancel()
                 notificationJob = null
-                endJob = null
+                endJobTracker.clearTracking()
             },
             manager::closeNow,
             serviceScope::cancel,
@@ -66,7 +70,7 @@ class VoiceAgentCallService : Service() {
         VoiceAgentLog.d(TAG, "start requested conversationId=$id")
         callGeneration += 1
         val startGeneration = callGeneration
-        endJob = null
+        endJobTracker.clearTracking()
         notificationJob?.cancel()
         val preserveDegradedStatus = manager.activeConversationId.value == id &&
             manager.state.value.call is VoiceCallStatus.Degraded
@@ -185,7 +189,7 @@ class VoiceAgentCallService : Service() {
     }
 
     private fun endCall() {
-        if (endJob?.isActive == true) {
+        if (endJobTracker.job?.isActive == true) {
             return
         }
         notificationJob?.cancel()
@@ -200,16 +204,16 @@ class VoiceAgentCallService : Service() {
         callGeneration += 1
         val endGeneration = callGeneration
         val session = manager.detachForEndAndDrain()
-        endJob = serviceScope.launch {
+        endJobTracker.launch(serviceScope) { clearEndJob ->
             completeVoiceAgentEndForGeneration(
                 isCurrent = { endGeneration == callGeneration },
                 endAndDrain = { session?.endAndDrain() },
                 onCompleted = {
                     VoiceAgentLog.d(TAG, "end completed conversationId=${endingConversationId ?: "none"}")
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                    endJob = null
                 },
+                stopForeground = { stopForeground(STOP_FOREGROUND_REMOVE) },
+                stopSelf = { stopSelf() },
+                clearEndJob = clearEndJob,
             )
         }
     }
@@ -274,14 +278,61 @@ class VoiceAgentCallService : Service() {
     }
 }
 
+internal class VoiceAgentEndJobTracker {
+    var job: Job? = null
+        private set
+
+    private var operationToken: Any? = null
+
+    fun clearTracking() {
+        operationToken = null
+        job = null
+    }
+
+    fun launch(
+        scope: CoroutineScope,
+        block: suspend (clearEndJob: () -> Unit) -> Unit,
+    ) {
+        val token = Any()
+        operationToken = token
+        job = null
+        val launchedJob = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            withContext(NonCancellable) {
+                try {
+                    block { clearIfCurrent(token) }
+                } finally {
+                    clearIfCurrent(token)
+                }
+            }
+        }
+        if (operationToken === token) {
+            job = launchedJob
+        }
+    }
+
+    private fun clearIfCurrent(token: Any) {
+        if (operationToken === token) {
+            operationToken = null
+            job = null
+        }
+    }
+}
+
 internal suspend fun completeVoiceAgentEndForGeneration(
     isCurrent: () -> Boolean,
     endAndDrain: suspend () -> Unit,
     onCompleted: suspend () -> Unit,
+    stopForeground: suspend () -> Unit,
+    stopSelf: suspend () -> Unit,
+    clearEndJob: suspend () -> Unit,
 ) {
-    if (!isCurrent()) return
-    endAndDrain()
-    if (isCurrent()) onCompleted()
+    runVoiceAgentSuspendCleanupStages(
+        endAndDrain,
+        { if (isCurrent()) onCompleted() },
+        { if (isCurrent()) stopForeground() },
+        { if (isCurrent()) stopSelf() },
+        clearEndJob,
+    )
 }
 
 internal fun shouldStartForegroundForVoiceAgentEnd(activeConversationId: Uuid?): Boolean =
