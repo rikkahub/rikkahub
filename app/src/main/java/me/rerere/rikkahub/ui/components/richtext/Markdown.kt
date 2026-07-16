@@ -1052,7 +1052,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                         style = style,
                         enableLatexRendering = enableLatexRendering,
                         latexColorArgb = latexColorArgb,
-                        onClickCitation = onClickCitation
+                        onClickCitation = onClickCitation,
+                        maxWidthPx = maxWidthPx,
+                        fontSizePx = fontSizePx,
                     )
                 }
             }
@@ -1070,7 +1072,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                         style = style,
                         enableLatexRendering = enableLatexRendering,
                         latexColorArgb = latexColorArgb,
-                        onClickCitation = onClickCitation
+                        onClickCitation = onClickCitation,
+                        maxWidthPx = maxWidthPx,
+                        fontSizePx = fontSizePx,
                     )
                 }
             }
@@ -1088,7 +1092,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                         style = style,
                         enableLatexRendering = enableLatexRendering,
                         latexColorArgb = latexColorArgb,
-                        onClickCitation = onClickCitation
+                        onClickCitation = onClickCitation,
+                        maxWidthPx = maxWidthPx,
+                        fontSizePx = fontSizePx,
                     )
                 }
             }
@@ -1234,7 +1240,9 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                     style = style,
                     enableLatexRendering = enableLatexRendering,
                     latexColorArgb = latexColorArgb,
-                    onClickCitation = onClickCitation
+                    onClickCitation = onClickCitation,
+                    maxWidthPx = maxWidthPx,
+                    fontSizePx = fontSizePx,
                 )
             }
         }

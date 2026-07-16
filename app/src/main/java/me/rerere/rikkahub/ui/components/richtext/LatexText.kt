@@ -14,6 +14,12 @@ import io.ratex.compose.RaTeX
 import io.ratex.measure
 
 /**
+ * Compose 单边最大允许像素数 (0xFFFFFF)。
+ * 超过此值的尺寸会导致 IllegalStateException: "Size out of range".
+ */
+private const val MAX_COMPOSE_SIZE_PX = 16_777_215f
+
+/**
  * 尺寸信息，替代原先 JLatexMath 的 Rect。
  * [depth] 用于 InlineTextContent 基线对齐。
  */
@@ -25,7 +31,9 @@ data class LatexMetrics(
 
 /**
  * 同步计算公式尺寸，用于 [InlineTextContent] 的 Placeholder 预占位。
- * 内部调用 [RaTeXEngine.parseBlocking] 阻塞解析。
+ *
+ * 如果 RaTeX 返回的尺寸无效（NaN、Infinity 或超出 Compose 限制），
+ * 返回 null。调用者应使用 0 作为安全降级 Placeholder 尺寸。
  */
 fun assumeLatexSize(
     latex: String,
@@ -35,7 +43,13 @@ fun assumeLatexSize(
     return runCatching {
         val dl = RaTeXEngine.parseBlocking(latex, displayMode = displayMode)
         val m = dl.measure(fontSizePx)
-        LatexMetrics(m.widthPx, m.heightPx, m.depthPx)
+        if (m.widthPx.isFinite() && m.heightPx.isFinite() && m.depthPx.isFinite()
+            && m.widthPx <= MAX_COMPOSE_SIZE_PX
+            && m.heightPx <= MAX_COMPOSE_SIZE_PX
+            && m.depthPx <= MAX_COMPOSE_SIZE_PX
+        ) {
+            LatexMetrics(m.widthPx, m.heightPx, m.depthPx)
+        } else null
     }.getOrNull()
 }
 
