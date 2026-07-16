@@ -6,66 +6,72 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
 
 class VoiceAgentCallServicePolicyTest {
     @Test
-    fun `failed start preserves requested usable exact route without global retirement`() = runPolicyTest {
+    fun `failed start preserves requested active exact Telecom session`() = runPolicyTest {
         val fixture = PolicyTelecomRouteFixture()
-        val manager = VoiceAgentCallManager(PolicyVoiceAgentCallFactory())
+        val session = PolicyManagedSession()
+        val manager = VoiceAgentCallManager(PolicyVoiceAgentCallFactory(session))
         val conversationId = Uuid.random()
         manager.start(conversationId, fakePolicyLaunchConfig(), fixture.lease, this)
 
-        val plan = voiceAgentFailedStartCleanupPlan(
-            preserveSessionRequested = true,
-            canPreserveActiveSession = manager.canPreserveActiveSession(conversationId),
-        )
+        val preserveSessionRequested = true
+        val preserveSession = preserveSessionRequested && manager.canPreserveActiveSession(conversationId)
+        if (!preserveSession) manager.closeNow()
 
-        assertEquals(VoiceAgentFailedStartCleanupPlan(preserveSession = true, retireTelecomCall = false), plan)
-        assertEquals(0, fixture.oldDisconnectCalls)
+        assertTrue(preserveSession)
+        assertTrue(fixture.registry.isOwnedAttemptActive(fixture.attempt))
+        assertEquals(0, session.closeNowCalls)
         manager.closeNow()
     }
 
     @Test
-    fun `failed start closes non-preserved exact route without global retirement`() = runPolicyTest {
+    fun `failed start closes a retired Telecom session without touching newer attempt`() = runPolicyTest {
         val fixture = PolicyTelecomRouteFixture()
-        val manager = VoiceAgentCallManager(PolicyVoiceAgentCallFactory())
-        val conversationId = Uuid.random()
-        manager.start(conversationId, fakePolicyLaunchConfig(), fixture.lease, this)
-
-        val plan = voiceAgentFailedStartCleanupPlan(
-            preserveSessionRequested = false,
-            canPreserveActiveSession = manager.canPreserveActiveSession(conversationId),
-        )
-        if (!plan.preserveSession) manager.closeNow()
-
-        assertEquals(VoiceAgentFailedStartCleanupPlan(preserveSession = false, retireTelecomCall = false), plan)
-        assertEquals(1, fixture.oldDisconnectCalls)
-    }
-
-    @Test
-    fun `failed start closes unusable exact route without touching newer attempt`() = runPolicyTest {
-        val fixture = PolicyTelecomRouteFixture()
-        val manager = VoiceAgentCallManager(PolicyVoiceAgentCallFactory())
+        val session = PolicyManagedSession()
+        val manager = VoiceAgentCallManager(PolicyVoiceAgentCallFactory(session))
         val conversationId = Uuid.random()
         manager.start(conversationId, fakePolicyLaunchConfig(), fixture.lease, this)
         val newer = fixture.activateNewerAttempt()
 
-        val plan = voiceAgentFailedStartCleanupPlan(
-            preserveSessionRequested = true,
-            canPreserveActiveSession = manager.canPreserveActiveSession(conversationId),
-        )
-        if (!plan.preserveSession) manager.closeNow()
+        val preserveSessionRequested = true
+        val preserveSession = preserveSessionRequested && manager.canPreserveActiveSession(conversationId)
+        if (!preserveSession) manager.closeNow()
 
-        assertEquals(VoiceAgentFailedStartCleanupPlan(preserveSession = false, retireTelecomCall = false), plan)
-        assertEquals(1, fixture.oldDisconnectCalls)
+        assertFalse(preserveSession)
+        assertEquals(1, session.closeNowCalls)
         assertEquals(0, newer.call.disconnectCalls)
         assertTrue(fixture.registry.isOwnedAttemptActive(newer.attempt))
         fixture.registry.retireOwnedAttempt(newer.attempt)
+    }
+
+    @Test
+    fun `failed start preserves requested direct fallback session`() = runPolicyTest {
+        val session = PolicyManagedSession()
+        val manager = VoiceAgentCallManager(PolicyVoiceAgentCallFactory(session))
+        val conversationId = Uuid.random()
+        manager.start(
+            conversationId,
+            fakePolicyLaunchConfig(),
+            DirectFallbackVoiceAgentRouteLease(
+                VoiceAgentTelecomFailure("telecom_unavailable", "Telecom unavailable"),
+            ),
+            this,
+        )
+
+        val preserveSessionRequested = true
+        val preserveSession = preserveSessionRequested && manager.canPreserveActiveSession(conversationId)
+        if (!preserveSession) manager.closeNow()
+
+        assertTrue(preserveSession)
+        assertEquals(0, session.closeNowCalls)
+        manager.closeNow()
     }
 
     @Test
@@ -108,14 +114,13 @@ class VoiceAgentCallServicePolicyTest {
 private class PolicyTelecomRouteFixture {
     val registry = VoiceAgentTelecomCallRegistry()
     private val oldCall = PolicyTelecomCall()
-    private val oldAttempt = registry.beginAttempt()
+    val attempt = registry.beginAttempt()
     val lease: VoiceAgentRouteLease
-    val oldDisconnectCalls: Int get() = oldCall.disconnectCalls
 
     init {
-        check(registry.activate(oldAttempt, oldCall))
-        registry.acknowledgeOutcome(oldAttempt)
-        lease = TelecomVoiceAgentRouteLease(oldAttempt, registry)
+        check(registry.activate(attempt, oldCall))
+        registry.acknowledgeOutcome(attempt)
+        lease = TelecomVoiceAgentRouteLease(attempt, registry)
     }
 
     fun activateNewerAttempt(): PolicyAttempt {
@@ -137,16 +142,19 @@ private class PolicyTelecomCall : VoiceAgentTelecomCall {
     override fun disconnectFromApp() { disconnectCalls += 1 }
 }
 
-private class PolicyVoiceAgentCallFactory : VoiceAgentCallFactory {
+private class PolicyVoiceAgentCallFactory(
+    private val session: PolicyManagedSession,
+) : VoiceAgentCallFactory {
     override fun create(
         conversationId: Uuid,
         config: VoiceAgentLaunchConfig,
         routeLease: VoiceAgentRouteLease,
         scope: CoroutineScope,
-    ): RouteOwnedManagedVoiceCallSession = RouteOwnedVoiceCallSession(PolicyManagedSession(), routeLease)
+    ): RouteOwnedManagedVoiceCallSession = RouteOwnedVoiceCallSession(session, routeLease)
 }
 
 private class PolicyManagedSession : ManagedVoiceCallSession {
+    var closeNowCalls = 0
     override val state = MutableStateFlow(VoiceAgentUiState())
     override fun start() = Unit
     override fun interrupt() = Unit
@@ -155,7 +163,9 @@ private class PolicyManagedSession : ManagedVoiceCallSession {
     override fun recordDiagnostic(name: String, detail: String) = Unit
     override fun end() = Unit
     override suspend fun endAndDrain() = Unit
-    override fun closeNow() = Unit
+    override fun closeNow() {
+        closeNowCalls += 1
+    }
 }
 
 private fun fakePolicyLaunchConfig() = VoiceAgentLaunchConfig(

@@ -119,6 +119,6 @@ class VoiceAgentTelecomRetirementTest {
             listOf("retiring", "setDisconnected", "setActive", "destroy", "callback", "outcome"),
             events,
         )
-        assertFalse(registry.hasActiveConnection())
+        assertFalse(registry.isOwnedAttemptActive(attempt))
     }
 }

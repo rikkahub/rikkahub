@@ -25,7 +25,6 @@ class VoiceAgentCallService : Service() {
     private val settingsStore: SettingsStore by inject()
     private val chatService: ChatService by inject()
     private val notificationFactory: VoiceAgentNotificationFactory by inject()
-    private val telecomCallRegistry: VoiceAgentTelecomCallRegistry by inject()
     private val callStartup: VoiceAgentCallStartup by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var notificationJob: Job? = null
@@ -50,7 +49,6 @@ class VoiceAgentCallService : Service() {
                 notificationJob = null
                 endJob = null
             },
-            ::retireTelecomCall,
             manager::closeNow,
             serviceScope::cancel,
             { super.onDestroy() },
@@ -132,16 +130,9 @@ class VoiceAgentCallService : Service() {
                         }
                         if (startedNewSession) {
                             VoiceAgentLog.d(TAG, "waiting for startup state")
-                            var observedReconnectAttempt = !serviceReconnect
                             val startupState = manager.state.first { state ->
-                                if (startGeneration != callGeneration) {
-                                    return@first true
-                                }
-                                if (!observedReconnectAttempt && state.session is VoiceSessionStatus.Error) {
-                                    return@first false
-                                }
-                                observedReconnectAttempt = true
-                                state.session == VoiceSessionStatus.Connected ||
+                                startGeneration != callGeneration ||
+                                    state.session == VoiceSessionStatus.Connected ||
                                     state.session is VoiceSessionStatus.Error ||
                                     state.session == VoiceSessionStatus.Ended
                             }
@@ -156,7 +147,7 @@ class VoiceAgentCallService : Service() {
                                     tearDownFailedStart(
                                         conversationId = id.toString(),
                                         error = IllegalStateException(session.message),
-                                        preserveSession = true,
+                                        preserveSessionRequested = true,
                                     )
                                     return@launch
                                 }
@@ -186,7 +177,7 @@ class VoiceAgentCallService : Service() {
                     tearDownFailedStart(
                         conversationId = id.toString(),
                         error = error,
-                        preserveSession = manager.activeConversationId.value == id,
+                        preserveSessionRequested = manager.activeConversationId.value == id,
                     )
                 }
             }
@@ -209,42 +200,32 @@ class VoiceAgentCallService : Service() {
         callGeneration += 1
         val endGeneration = callGeneration
         val session = manager.detachForEndAndDrain()
-        if (session == null && endingConversationId == null) {
-            runVoiceAgentCleanupStages(
-                ::retireTelecomCall,
-                { VoiceAgentLog.d(TAG, "end completed conversationId=none") },
-                { stopForeground(STOP_FOREGROUND_REMOVE) },
-                ::stopSelf,
-            )
-            return
-        }
         endJob = serviceScope.launch {
-            runVoiceAgentEndCleanupForGeneration(
+            completeVoiceAgentEndForGeneration(
                 isCurrent = { endGeneration == callGeneration },
-                retireTelecomCall = { retireTelecomCall() },
                 endAndDrain = { session?.endAndDrain() },
                 onCompleted = {
                     VoiceAgentLog.d(TAG, "end completed conversationId=${endingConversationId ?: "none"}")
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    endJob = null
                 },
-                stopForeground = { stopForeground(STOP_FOREGROUND_REMOVE) },
-                stopSelf = { stopSelf() },
-                clearEndJob = { endJob = null },
             )
         }
     }
 
-    private fun tearDownFailedStart(conversationId: String, error: Throwable, preserveSession: Boolean = false) {
+    private fun tearDownFailedStart(
+        conversationId: String,
+        error: Throwable,
+        preserveSessionRequested: Boolean = false,
+    ) {
         val detail = error.message ?: error.javaClass.simpleName
-        val activeSessionIsUsable = runCatching {
+        val preserveSession = preserveSessionRequested && runCatching {
             manager.canPreserveActiveSession(Uuid.parse(conversationId))
         }.getOrDefault(false)
-        val cleanupPlan = voiceAgentFailedStartCleanupPlan(
-            preserveSessionRequested = preserveSession,
-            canPreserveActiveSession = activeSessionIsUsable,
-        )
         VoiceAgentLog.w(
             TAG,
-            "tearing down failed start preserveSession=${cleanupPlan.preserveSession} " +
+            "tearing down failed start preserveSession=$preserveSession " +
                 "detail=${detail.redactForVoiceAgentLog()}",
         )
         runVoiceAgentCleanupStages(
@@ -254,32 +235,23 @@ class VoiceAgentCallService : Service() {
             },
             { manager.recordDiagnostic("voice_call_start_failed", detail) },
             {
-                if (cleanupPlan.retireTelecomCall) {
-                    retireTelecomCall()
-                }
-            },
-            {
-                if (!cleanupPlan.preserveSession) {
+                if (!preserveSession) {
                     manager.closeNow()
                 }
             },
             { manager.updateCallStatus(VoiceCallStatus.Degraded("Voice call startup failed: $detail")) },
             { startForegroundFor(conversationId, manager.state.value) },
             {
-                if (!cleanupPlan.preserveSession) {
+                if (!preserveSession) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                 }
             },
             {
-                if (!cleanupPlan.preserveSession) {
+                if (!preserveSession) {
                     stopSelf()
                 }
             },
         )
-    }
-
-    private fun retireTelecomCall() {
-        telecomCallRegistry.disconnectActive()
     }
 
     private fun startForegroundFor(conversationId: String, state: VoiceAgentUiState) {
@@ -302,24 +274,14 @@ class VoiceAgentCallService : Service() {
     }
 }
 
-internal suspend fun runVoiceAgentEndCleanupForGeneration(
+internal suspend fun completeVoiceAgentEndForGeneration(
     isCurrent: () -> Boolean,
-    retireTelecomCall: suspend () -> Unit,
     endAndDrain: suspend () -> Unit,
     onCompleted: suspend () -> Unit,
-    stopForeground: suspend () -> Unit,
-    stopSelf: suspend () -> Unit,
-    clearEndJob: suspend () -> Unit,
 ) {
     if (!isCurrent()) return
-    runVoiceAgentSuspendCleanupStages(
-        retireTelecomCall,
-        endAndDrain,
-        onCompleted,
-        { if (isCurrent()) stopForeground() },
-        { if (isCurrent()) stopSelf() },
-        { if (isCurrent()) clearEndJob() },
-    )
+    endAndDrain()
+    if (isCurrent()) onCompleted()
 }
 
 internal fun shouldStartForegroundForVoiceAgentEnd(activeConversationId: Uuid?): Boolean =
@@ -329,25 +291,6 @@ internal fun shouldPublishVoiceCallBackgroundCapable(
     owner: VoiceAudioRouteOwner,
     current: VoiceCallStatus,
 ): Boolean = owner == VoiceAudioRouteOwner.Telecom && current !is VoiceCallStatus.Degraded
-
-internal data class VoiceAgentFailedStartCleanupPlan(
-    val preserveSession: Boolean,
-    val retireTelecomCall: Boolean,
-)
-
-internal fun voiceAgentFailedStartCleanupPlan(
-    preserveSessionRequested: Boolean,
-    canPreserveActiveSession: Boolean,
-): VoiceAgentFailedStartCleanupPlan = when {
-    preserveSessionRequested && canPreserveActiveSession -> VoiceAgentFailedStartCleanupPlan(
-        preserveSession = true,
-        retireTelecomCall = false,
-    )
-    else -> VoiceAgentFailedStartCleanupPlan(
-        preserveSession = false,
-        retireTelecomCall = false,
-    )
-}
 
 internal fun Throwable.toVoiceAgentLogDetail(): String =
     "${javaClass.simpleName}: ${(message ?: "").redactForVoiceAgentLog()}"

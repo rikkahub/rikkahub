@@ -24,7 +24,9 @@ class VoiceAgentAudioRouteResolverTest {
     fun `active attempt selects Telecom`() = runBlocking {
         val registry = VoiceAgentTelecomCallRegistry()
         val telecomCall = ResolverFakeCall()
+        var attempt: VoiceAgentTelecomAttemptId? = null
         val gateway = FakeTelecomGateway(onStart = { id ->
+            attempt = id
             registry.activate(id, telecomCall)
         })
 
@@ -32,7 +34,7 @@ class VoiceAgentAudioRouteResolverTest {
 
         assertEquals(VoiceAudioRouteOwner.Telecom, lease.metadata.owner)
         assertEquals(null, lease.metadata.failure)
-        assertTrue(registry.hasActiveConnection())
+        assertTrue(registry.isOwnedAttemptActive(requireNotNull(attempt)))
         lease.retire()
         assertEquals(1, telecomCall.disconnectCalls)
     }
@@ -109,7 +111,8 @@ class VoiceAgentAudioRouteResolverTest {
         assertEquals(0, gateway.registerCalls)
         assertEquals(0, gateway.startCalls)
         assertEquals(1, previousCall.disconnectCalls)
-        assertFalse(registry.hasActiveConnection())
+        assertFalse(registry.isOwnedAttemptActive(previous))
+        assertFalse(registry.isOwnedAttemptActive(VoiceAgentTelecomAttemptId(previous.value + 1)))
     }
 
     @Test
@@ -146,15 +149,17 @@ class VoiceAgentAudioRouteResolverTest {
     fun `active attempt at timeout boundary retains Telecom ownership`() = runBlocking {
         val registry = VoiceAgentTelecomCallRegistry()
         val telecomCall = ResolverFakeCall()
-        val gateway = FakeTelecomGateway(onStart = { attempt ->
-            registry.activate(attempt, telecomCall)
+        var attempt: VoiceAgentTelecomAttemptId? = null
+        val gateway = FakeTelecomGateway(onStart = { id ->
+            attempt = id
+            registry.activate(id, telecomCall)
         })
 
         val lease = VoiceAgentAudioRouteResolver(gateway, registry, 0).resolve()
 
         assertEquals(VoiceAudioRouteOwner.Telecom, lease.metadata.owner)
         assertEquals(null, lease.metadata.failure)
-        assertTrue(registry.hasActiveConnection())
+        assertTrue(registry.isOwnedAttemptActive(requireNotNull(attempt)))
         lease.retire()
         assertEquals(1, telecomCall.disconnectCalls)
     }
@@ -185,7 +190,7 @@ class VoiceAgentAudioRouteResolverTest {
 
         assertEquals(VoiceAudioRouteOwner.Telecom, lease.metadata.owner)
         assertEquals(null, lease.metadata.failure)
-        assertTrue(registry.hasActiveConnection())
+        assertTrue(registry.isOwnedAttemptActive(requireNotNull(attempt)))
         assertEquals(0, call.disconnectCalls)
         lease.retire()
         assertEquals(1, call.disconnectCalls)
@@ -212,7 +217,7 @@ class VoiceAgentAudioRouteResolverTest {
         assertSame(cancellation, thrown)
         assertFalse(accepted)
         assertEquals(1, late.disconnectCalls)
-        assertFalse(registry.hasActiveConnection())
+        assertFalse(registry.isOwnedAttemptActive(requireNotNull(attempt)))
     }
 
     @Test
@@ -220,9 +225,11 @@ class VoiceAgentAudioRouteResolverTest {
         val registry = VoiceAgentTelecomCallRegistry()
         val call = ThrowingResolverCall()
         val cancellation = CancellationException("caller cancelled after activation")
+        var attempt: VoiceAgentTelecomAttemptId? = null
         val resolver = VoiceAgentAudioRouteResolver(
-            FakeTelecomGateway(onStart = { attempt ->
-                registry.activate(attempt, call)
+            FakeTelecomGateway(onStart = { id ->
+                attempt = id
+                registry.activate(id, call)
                 throw cancellation
             }),
             registry,
@@ -234,7 +241,7 @@ class VoiceAgentAudioRouteResolverTest {
         assertSame(cancellation, thrown)
         assertEquals(listOf("framework retirement failed"), cancellation.suppressed.map { it.message })
         assertEquals(1, call.disconnectCalls)
-        assertFalse(registry.hasActiveConnection())
+        assertFalse(registry.isOwnedAttemptActive(requireNotNull(attempt)))
     }
 
     @Test
@@ -245,11 +252,13 @@ class VoiceAgentAudioRouteResolverTest {
         val releaseCallback = CountDownLatch(1)
         val accepted = AtomicBoolean(true)
         var activation: Thread? = null
+        var attempt: VoiceAgentTelecomAttemptId? = null
         val resolver = VoiceAgentAudioRouteResolver(
-            FakeTelecomGateway(onStart = { attempt ->
+            FakeTelecomGateway(onStart = { id ->
+                attempt = id
                 activation = thread {
                     accepted.set(
-                        registry.activate(attempt, call) {
+                        registry.activate(id, call) {
                             callbackEntered.countDown()
                             releaseCallback.await()
                         },
@@ -279,7 +288,7 @@ class VoiceAgentAudioRouteResolverTest {
         assertEquals(cancellation.message, thrown?.message)
         assertFalse(accepted.get())
         assertEquals(1, call.disconnectCalls)
-        assertFalse(registry.hasActiveConnection())
+        assertFalse(registry.isOwnedAttemptActive(requireNotNull(attempt)))
     }
 
     @Test

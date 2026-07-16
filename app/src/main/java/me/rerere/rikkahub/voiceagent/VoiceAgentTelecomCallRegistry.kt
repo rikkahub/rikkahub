@@ -352,15 +352,6 @@ class VoiceAgentTelecomCallRegistry internal constructor(
         publication?.publish()
     }
 
-    fun hasActiveConnection(): Boolean = synchronized(lock) {
-        attempts.values.any { it.phase is AttemptPhase.Active }
-    }
-
-    fun disconnectActive() {
-        val id = synchronized(lock) { currentAttemptId } ?: return
-        retireOwnedAttempt(id)
-    }
-
     private fun finishRetiring(
         id: VoiceAgentTelecomAttemptId,
         record: AttemptRecord,
