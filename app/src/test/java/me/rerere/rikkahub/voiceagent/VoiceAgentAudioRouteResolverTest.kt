@@ -12,8 +12,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.yield
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -35,7 +33,6 @@ class VoiceAgentAudioRouteResolverTest {
         assertEquals(null, result.failure)
         assertEquals(VoiceAgentTelecomAttemptId(1), result.telecomAttemptId)
         assertTrue(registry.hasActiveConnection())
-        assertAllAttemptsConsumed(registry)
     }
 
     @Test
@@ -51,7 +48,6 @@ class VoiceAgentAudioRouteResolverTest {
         assertEquals(VoiceAudioRouteOwner.DirectFallback, result.owner)
         assertEquals("telecom_register_failed", result.failure?.diagnosticName)
         assertEquals(null, result.telecomAttemptId)
-        assertAllAttemptsConsumed(registry)
     }
 
     @Test
@@ -66,7 +62,6 @@ class VoiceAgentAudioRouteResolverTest {
 
         assertEquals(VoiceAudioRouteOwner.DirectFallback, result.owner)
         assertEquals("telecom_start_failed", result.failure?.diagnosticName)
-        assertAllAttemptsConsumed(registry)
     }
 
     @Test
@@ -93,7 +88,6 @@ class VoiceAgentAudioRouteResolverTest {
         assertEquals(0, gateway.startCalls)
         assertEquals(1, previousCall.disconnectCalls)
         assertFalse(registry.hasActiveConnection())
-        assertAllAttemptsConsumed(registry)
     }
 
     @Test
@@ -108,7 +102,6 @@ class VoiceAgentAudioRouteResolverTest {
         assertEquals(VoiceAudioRouteOwner.DirectFallback, result.owner)
         assertEquals("telecom_outgoing_failed", result.failure?.diagnosticName)
         assertEquals("framework rejected", result.failure?.detail)
-        assertAllAttemptsConsumed(registry)
     }
 
     @Test
@@ -125,7 +118,6 @@ class VoiceAgentAudioRouteResolverTest {
         assertEquals("telecom_connection_timeout", result.failure?.diagnosticName)
         assertEquals(false, accepted)
         assertEquals(1, late.disconnectCalls)
-        assertAllAttemptsConsumed(registry)
     }
 
     @Test
@@ -141,7 +133,6 @@ class VoiceAgentAudioRouteResolverTest {
         assertEquals(null, result.failure)
         assertEquals(VoiceAgentTelecomAttemptId(1), result.telecomAttemptId)
         assertTrue(registry.hasActiveConnection())
-        assertAllAttemptsConsumed(registry)
     }
 
     @Test
@@ -173,7 +164,6 @@ class VoiceAgentAudioRouteResolverTest {
         assertEquals(requireNotNull(attempt), result.telecomAttemptId)
         assertTrue(registry.hasActiveConnection())
         assertEquals(0, call.disconnectCalls)
-        assertAllAttemptsConsumed(registry)
     }
 
     @Test
@@ -198,7 +188,6 @@ class VoiceAgentAudioRouteResolverTest {
         assertFalse(accepted)
         assertEquals(1, late.disconnectCalls)
         assertFalse(registry.hasActiveConnection())
-        assertAllAttemptsConsumed(registry)
     }
 
     @Test
@@ -221,7 +210,6 @@ class VoiceAgentAudioRouteResolverTest {
         assertEquals(listOf("framework retirement failed"), cancellation.suppressed.map { it.message })
         assertEquals(1, call.disconnectCalls)
         assertFalse(registry.hasActiveConnection())
-        assertAllAttemptsConsumed(registry)
     }
 
     @Test
@@ -267,7 +255,6 @@ class VoiceAgentAudioRouteResolverTest {
         assertFalse(accepted.get())
         assertEquals(1, call.disconnectCalls)
         assertFalse(registry.hasActiveConnection())
-        assertAllAttemptsConsumed(registry)
     }
 
     @Test
@@ -279,9 +266,7 @@ class VoiceAgentAudioRouteResolverTest {
         val accepted = AtomicBoolean(true)
         val events = Collections.synchronizedList(mutableListOf<String>())
         var activation: Thread? = null
-        var startedAttempt: VoiceAgentTelecomAttemptId? = null
         val gateway = FakeTelecomGateway(onStart = { attempt ->
-            startedAttempt = attempt
             activation = thread {
                 accepted.set(
                     registry.activate(attempt, call) {
@@ -295,17 +280,17 @@ class VoiceAgentAudioRouteResolverTest {
         })
 
         val resolution = async(start = CoroutineStart.UNDISPATCHED) {
-            VoiceAgentAudioRouteResolver(gateway, registry, 1).resolve().also {
+            VoiceAgentAudioRouteResolver(
+                gateway = gateway,
+                registry = registry,
+                timeoutMs = 1_000,
+                outcomeTimeout = ImmediateOutcomeTimeout,
+            ).resolve().also {
                 events += "fallback"
             }
         }
 
         try {
-            withTimeout(1_000) {
-                while (attemptPhaseName(registry, requireNotNull(startedAttempt)) != "Cancelling") {
-                    yield()
-                }
-            }
             assertFalse(resolution.isCompleted)
             assertEquals(0, call.disconnectCalls)
         } finally {
@@ -319,30 +304,7 @@ class VoiceAgentAudioRouteResolverTest {
         assertFalse(accepted.get())
         assertEquals(1, call.disconnectCalls)
         assertEquals(listOf("setActive", "fallback"), events)
-        assertAllAttemptsConsumed(registry)
     }
-
-    private fun assertAllAttemptsConsumed(registry: VoiceAgentTelecomCallRegistry) {
-        val attemptsField = registry.javaClass.getDeclaredField("attempts").apply { isAccessible = true }
-        val attempts = attemptsField.get(registry) as Map<*, *>
-        assertTrue("resolver left an acknowledged attempt record", attempts.isEmpty())
-    }
-
-    private fun attemptPhaseName(
-        registry: VoiceAgentTelecomCallRegistry,
-        attemptId: VoiceAgentTelecomAttemptId,
-    ): String? = registryLock(registry).let { lock ->
-        synchronized(lock) {
-            val attemptsField = registry.javaClass.getDeclaredField("attempts").apply { isAccessible = true }
-            val attempts = attemptsField.get(registry) as Map<*, *>
-            val record = attempts[attemptId] ?: return@synchronized null
-            val phaseField = record.javaClass.getDeclaredField("phase").apply { isAccessible = true }
-            phaseField.get(record).javaClass.simpleName
-        }
-    }
-
-    private fun registryLock(registry: VoiceAgentTelecomCallRegistry): Any =
-        requireNotNull(registry.javaClass.getDeclaredField("lock").apply { isAccessible = true }.get(registry))
 }
 
 private class FakeTelecomGateway(
@@ -396,4 +358,11 @@ private class BoundaryOutcomeTimeout : VoiceAgentTelecomOutcomeTimeout {
         returnTimeout.await()
         return null
     }
+}
+
+private object ImmediateOutcomeTimeout : VoiceAgentTelecomOutcomeTimeout {
+    override suspend fun awaitOutcome(
+        timeoutMs: Long,
+        observe: suspend () -> VoiceAgentTelecomOutcome,
+    ): VoiceAgentTelecomOutcome? = null
 }

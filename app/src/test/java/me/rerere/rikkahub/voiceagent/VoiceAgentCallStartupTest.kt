@@ -217,7 +217,7 @@ class VoiceAgentCallStartupTest {
         assertEquals(null, manager.activeConversationId.value)
         assertEquals(1, telecomCall.disconnectCalls)
         assertFalse(registry.hasActiveConnection())
-        assertFalse(registry.hasAttemptRecord(attempt))
+        assertFalse(registry.isOwnedAttemptActive(attempt))
     }
 
     @Test
@@ -247,8 +247,8 @@ class VoiceAgentCallStartupTest {
         assertEquals(1, oldCall.disconnectCalls)
         assertEquals(0, newerCall.disconnectCalls)
         assertTrue(registry.hasActiveConnection())
-        assertFalse(registry.hasAttemptRecord(oldAttempt))
-        assertTrue(registry.hasAttemptRecord(newerAttempt))
+        assertFalse(registry.isOwnedAttemptActive(oldAttempt))
+        assertTrue(registry.isOwnedAttemptActive(newerAttempt))
         assertEquals(VoiceAgentTelecomOutcome.Active, registry.observeOutcome(newerAttempt))
         registry.acknowledgeOutcome(newerAttempt)
     }
@@ -286,10 +286,10 @@ class VoiceAgentCallStartupTest {
             assertEquals(emptyList<StartupCreatedCall>(), factory.created)
             assertEquals(null, manager.activeConversationId.value)
             assertEquals(1, oldCall.disconnectCalls)
-            assertFalse(registry.hasAttemptRecord(oldAttempt))
+            assertFalse(registry.isOwnedAttemptActive(oldAttempt))
             assertEquals(0, newerCall.disconnectCalls)
             assertTrue(registry.hasActiveConnection())
-            assertTrue(registry.hasAttemptRecord(newerAttempt))
+            assertTrue(registry.isOwnedAttemptActive(newerAttempt))
             assertEquals(VoiceAgentTelecomOutcome.Active, registry.observeOutcome(newerAttempt))
             registry.acknowledgeOutcome(newerAttempt)
         } finally {
@@ -321,15 +321,9 @@ class VoiceAgentCallStartupTest {
         assertEquals(1, factory.created.size)
         assertEquals(0, telecomCall.disconnectCalls)
         assertTrue(registry.hasActiveConnection())
-        assertTrue(registry.hasAttemptRecord(attempt))
+        assertTrue(registry.isOwnedAttemptActive(attempt))
         registry.acknowledgeOutcome(attempt)
     }
-}
-
-private fun VoiceAgentTelecomCallRegistry.hasAttemptRecord(attemptId: VoiceAgentTelecomAttemptId): Boolean {
-    val attemptsField = javaClass.getDeclaredField("attempts").apply { isAccessible = true }
-    val attempts = attemptsField.get(this) as Map<*, *>
-    return attemptId in attempts
 }
 
 private class StartupFakeManagedSession(
