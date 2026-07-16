@@ -137,6 +137,59 @@ class AndroidDirectAudioRouteControllerTest {
     }
 
     @Test
+    fun `stale lease configuration cannot mutate current capture route`() {
+        val platform = FakeDirectAudioRoutePlatform().apply {
+            communicationDeviceAccepted = true
+        }
+        val controller = controller(platform)
+        val staleLease = controller.acquireCapture() as DirectVoiceAudioCaptureRouteLease
+        controller.acquireCapture()
+        val recorder = FakeDirectAudioRecorder()
+        val mutationsBeforeConfigure = platform.androidMutations.toList()
+
+        assertThrows(IllegalStateException::class.java) {
+            staleLease.configureRecorder(recorder)
+        }
+
+        assertTrue(recorder.preferredDevices.isEmpty())
+        assertEquals(0, platform.setCommunicationDeviceCalls)
+        assertEquals(mutationsBeforeConfigure, platform.androidMutations)
+    }
+
+    @Test
+    fun `controller close makes late active lease retirement inert`() {
+        val platform = FakeDirectAudioRoutePlatform()
+        val controller = controller(platform)
+        val lease = controller.acquireCapture()
+        controller.close()
+        val mutationsAfterClose = platform.androidMutations.toList()
+
+        lease.retire()
+        lease.retire()
+
+        assertEquals(mutationsAfterClose, platform.androidMutations)
+    }
+
+    @Test
+    fun `acquisition failure after partial setup rolls route back`() {
+        val platform = FakeDirectAudioRoutePlatform().apply {
+            throwWhenCheckingBluetoothPermission = true
+        }
+        val controller = controller(platform)
+
+        assertThrows(IllegalStateException::class.java) {
+            controller.acquireCapture()
+        }
+
+        assertEquals(1, platform.focusRequests)
+        assertEquals(1, platform.setCommunicationModeCalls)
+        assertEquals(1, platform.restoreAudioModeCalls)
+        assertEquals(0, platform.startScoCalls)
+        controller.close()
+        assertEquals(listOf(platform.focusHandle), platform.abandonedFocus)
+    }
+
+    @Test
     fun `SCO stop is attempted when disabling SCO fails`() {
         val platform = FakeDirectAudioRoutePlatform().apply {
             throwWhenDisablingSco = true
@@ -290,6 +343,7 @@ private class FakeDirectAudioRoutePlatform : DirectAudioRoutePlatform {
     var communicationDeviceAccepted = false
     var throwWhenEnablingSco = false
     var throwWhenDisablingSco = false
+    var throwWhenCheckingBluetoothPermission = false
     var deliverHeadsetDuringRequest = false
     var voiceRecognitionAccepted = false
     var dispatchImmediately = true
@@ -343,7 +397,10 @@ private class FakeDirectAudioRoutePlatform : DirectAudioRoutePlatform {
         androidMutations += "restoreMode:$mode"
     }
 
-    override fun hasBluetoothConnectPermission(): Boolean = true
+    override fun hasBluetoothConnectPermission(): Boolean {
+        if (throwWhenCheckingBluetoothPermission) error("Bluetooth permission lookup failed")
+        return true
+    }
 
     override fun captureDevices(): List<DirectAudioCaptureDevice> = listOf(captureDevice)
 
