@@ -1,7 +1,13 @@
 package me.rerere.rikkahub.voiceagent
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -9,6 +15,7 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class VoiceAgentRouteLeaseTest {
     @Test
     fun `Telecom lease exposes metadata and retires its exact attempt once`() {
@@ -152,6 +159,54 @@ class VoiceAgentRouteLeaseTest {
     }
 
     @Test
+    fun `timed end returns canonical route timeout close failure and leaves replacement untouched`() = runTest {
+        val events = mutableListOf<String>()
+        val routeFailure = IllegalStateException("route retirement failed")
+        val closeFailure = IllegalArgumentException("session close failed")
+        val neverCompletes = CompletableDeferred<Unit>()
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val call = RecordingTelecomCall(events, routeFailure)
+        assertTrue(registry.activate(attempt, call))
+        val delegate = RecordingManagedSession(
+            events = events,
+            closeFailure = closeFailure,
+            onDrain = { neverCompletes.await() },
+        )
+        val owned = RouteOwnedVoiceCallSession(
+            delegate = delegate,
+            routeLease = TelecomVoiceAgentRouteLease(attempt, registry),
+        )
+        val outcome = async { owned.endAndDrainWithin(timeoutMillis = 100) }
+        var replacementAttempt: VoiceAgentTelecomAttemptId? = null
+        try {
+            runCurrent()
+            val replacementCall = RecordingTelecomCall()
+            replacementAttempt = registry.beginAttempt()
+            assertTrue(registry.activate(replacementAttempt, replacementCall))
+
+            advanceTimeBy(100)
+            runCurrent()
+
+            val timedOut = outcome.await() as VoiceAgentEndDrainOutcome.TimedOut
+            assertSame(routeFailure, timedOut.failure)
+            assertEquals(2, timedOut.failure.suppressed.size)
+            assertTrue(timedOut.failure.suppressed[0] is VoiceAgentEndDrainTimeoutException)
+            assertSame(closeFailure, timedOut.failure.suppressed[1])
+            assertEquals(1, call.disconnectCalls)
+            assertEquals(1, delegate.closeNowCalls)
+            assertEquals(0, replacementCall.disconnectCalls)
+            assertEquals(
+                listOf("route-retire", "session-end-and-drain", "session-close-now"),
+                events,
+            )
+        } finally {
+            neverCompletes.complete(Unit)
+            replacementAttempt?.let(registry::retireOwnedAttempt)
+        }
+    }
+
+    @Test
     fun `closeNow retires route before closing session`() {
         val events = mutableListOf<String>()
         val owned = RouteOwnedVoiceCallSession(
@@ -197,8 +252,11 @@ private class RecordingManagedSession(
     val events: MutableList<String> = mutableListOf(),
     private val endFailure: Throwable? = null,
     private val drainFailure: Throwable? = null,
+    private val closeFailure: Throwable? = null,
+    private val onDrain: suspend () -> Unit = {},
 ) : ManagedVoiceCallSession {
     override val state = MutableStateFlow(VoiceAgentUiState())
+    var closeNowCalls = 0
 
     override fun start() {
         events += "session-start"
@@ -227,10 +285,13 @@ private class RecordingManagedSession(
 
     override suspend fun endAndDrain() {
         events += "session-end-and-drain"
+        onDrain()
         drainFailure?.let { throw it }
     }
 
     override fun closeNow() {
+        closeNowCalls += 1
         events += "session-close-now"
+        closeFailure?.let { throw it }
     }
 }

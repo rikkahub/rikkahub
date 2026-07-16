@@ -4,8 +4,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -15,6 +15,7 @@ import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
@@ -136,6 +137,73 @@ class VoiceAgentCallServiceLifecycleTest {
     }
 
     @Test
+    fun `destroy closes active exact session and completes every cleanup stage in failure order`() = runTest {
+        val events = mutableListOf<String>()
+        val notificationFailure = IllegalStateException("notification cleanup failed")
+        val closeFailure = IllegalArgumentException("session close failed")
+        val destroyFailure = UnsupportedOperationException("base destroy failed")
+        val session = LifecycleManagedSession(
+            events = events,
+            closeNowFailure = closeFailure,
+        )
+        val route = LifecycleTelecomRoute()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val manager = VoiceAgentCallManager(LifecycleCallFactory(session))
+        val host = RecordingLifecycleHost(
+            events = events,
+            cancelNotificationFailure = notificationFailure,
+            destroyBaseFailure = destroyFailure,
+        )
+        val lifecycle = VoiceAgentCallServiceLifecycle(manager, scope, host)
+        val conversationId = Uuid.random()
+        manager.start(conversationId, lifecycleLaunchConfig(), route.lease, scope)
+        val generationBeforeDestroy = lifecycle.currentGeneration
+
+        val thrown = runCatching { lifecycle.destroy() }.exceptionOrNull()
+
+        assertSame(notificationFailure, thrown)
+        assertEquals(listOf(closeFailure, destroyFailure), thrown?.suppressed?.toList())
+        assertEquals(1, route.retireCalls)
+        assertEquals(1, session.closeNowCalls)
+        assertNull(manager.activeConversationId.value)
+        assertTrue(manager.state.value.call is VoiceCallStatus.Ended)
+        assertEquals(generationBeforeDestroy + 1, lifecycle.currentGeneration)
+        assertFalse(scope.isActive)
+        assertEquals(1, host.destroyBaseCalls)
+        assertEquals(listOf("cancelNotification", "close", "destroyBase"), events)
+    }
+
+    @Test
+    fun `empty manager end uses fallback identity completes synchronously and accepts repeat`() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val manager = VoiceAgentCallManager(LifecycleCallFactory())
+        val host = RecordingLifecycleHost()
+        val lifecycle = VoiceAgentCallServiceLifecycle(manager, scope, host)
+        try {
+            assertTrue(lifecycle.endCall())
+
+            assertEquals(listOf("voice-agent"), host.foregroundConversationIds)
+            assertEquals(listOf<Uuid?>(null), host.completedConversationIds)
+            assertTrue(host.foregroundStates.single().call is VoiceCallStatus.Ending)
+            assertEquals(1, host.stopForegroundCalls)
+            assertEquals(1, host.stopSelfCalls)
+            assertNull(manager.activeConversationId.value)
+            assertEquals(
+                listOf("cancelNotification", "startForeground", "endCompleted", "stopForeground", "stopSelf"),
+                host.events,
+            )
+
+            assertTrue(lifecycle.endCall())
+            assertEquals(listOf("voice-agent", "voice-agent"), host.foregroundConversationIds)
+            assertEquals(listOf<Uuid?>(null, null), host.completedConversationIds)
+            assertEquals(2, host.stopForegroundCalls)
+            assertEquals(2, host.stopSelfCalls)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun `timed out drain retires route closes immediately and cannot stop newer generation`() = runTest {
         val neverCompletes = CompletableDeferred<Unit>()
         val closeFailure = IllegalStateException("immediate close failed")
@@ -203,7 +271,7 @@ class VoiceAgentCallServiceLifecycleTest {
                 assertEquals(routeFailure::class, reported::class)
                 assertEquals(routeFailure.message, reported.message)
                 assertEquals(2, reported.suppressed.size)
-                assertTrue(reported.suppressed[0] is TimeoutCancellationException)
+                assertTrue(reported.suppressed[0] is VoiceAgentEndDrainTimeoutException)
                 assertEquals(closeFailure::class, reported.suppressed[1]::class)
                 assertEquals(closeFailure.message, reported.suppressed[1].message)
             } finally {
@@ -289,12 +357,16 @@ class VoiceAgentCallServiceLifecycleTest {
 
 internal class RecordingLifecycleHost(
     val events: MutableList<String> = mutableListOf(),
+    private val cancelNotificationFailure: Throwable? = null,
     private val endCompletedFailure: Throwable? = null,
     private val stopForegroundFailure: Throwable? = null,
     private val stopSelfFailure: Throwable? = null,
+    private val destroyBaseFailure: Throwable? = null,
 ) : VoiceAgentCallServiceLifecycleHost {
     val reportedFailures = mutableListOf<Throwable>()
     val foregroundStates = mutableListOf<VoiceAgentUiState>()
+    val foregroundConversationIds = mutableListOf<String>()
+    val completedConversationIds = mutableListOf<Uuid?>()
     var stopForegroundCalls = 0
     var stopSelfCalls = 0
     var endCompletedCalls = 0
@@ -302,16 +374,19 @@ internal class RecordingLifecycleHost(
 
     override fun cancelNotification() {
         events += "cancelNotification"
+        cancelNotificationFailure?.let { throw it }
     }
 
     override fun startForeground(conversationId: String, state: VoiceAgentUiState) {
         events += "startForeground"
+        foregroundConversationIds += conversationId
         foregroundStates += state
     }
 
     override fun endCompleted(conversationId: Uuid?) {
         events += "endCompleted"
         endCompletedCalls += 1
+        completedConversationIds += conversationId
         endCompletedFailure?.let { throw it }
     }
 
@@ -335,6 +410,7 @@ internal class RecordingLifecycleHost(
     override fun destroyBaseService() {
         events += "destroyBase"
         destroyBaseCalls += 1
+        destroyBaseFailure?.let { throw it }
     }
 }
 

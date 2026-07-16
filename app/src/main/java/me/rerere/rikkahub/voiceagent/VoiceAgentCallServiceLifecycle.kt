@@ -4,13 +4,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlin.uuid.Uuid
 
 internal const val VOICE_AGENT_END_DRAIN_TIMEOUT_MS = 15_000L
@@ -109,7 +105,7 @@ internal class VoiceAgentCallServiceLifecycle(
         endJobTracker.launch(serviceScope) {
             val cleanupFailure = runCatching {
                 runVoiceAgentSuspendCleanupStages(
-                    { session?.let { drainWithTimeout(it) } },
+                    { session?.let { drainOwnedSession(it) } },
                     { if (isCurrent(endGeneration)) host.endCompleted(endingConversationId) },
                     { if (isCurrent(endGeneration)) host.stopForeground() },
                     { if (isCurrent(endGeneration)) host.stopSelf() },
@@ -123,49 +119,20 @@ internal class VoiceAgentCallServiceLifecycle(
     fun destroy() {
         currentGeneration += 1
         runVoiceAgentCleanupStages(
-            {
-                host.cancelNotification()
-                endJobTracker.clearTracking()
-            },
+            host::cancelNotification,
+            endJobTracker::clearTracking,
             manager::closeNow,
             serviceScope::cancel,
             host::destroyBaseService,
         )
     }
 
-    private suspend fun drainWithTimeout(session: ManagedVoiceCallSession) {
-        var deadlineReached = false
-        try {
-            withTimeout(endDrainTimeoutMillis) {
-                try {
-                    session.endAndDrain()
-                } finally {
-                    deadlineReached = !currentCoroutineContext().isActive
-                }
-            }
-        } catch (drainFailure: Throwable) {
-            if (!deadlineReached) throw drainFailure
-            val timeoutCancellation = drainFailure.findTimeoutCancellation()
-            val timeoutFailure = timeoutCancellation
-                ?: VoiceAgentEndDrainTimeoutException(endDrainTimeoutMillis)
-            val failure = if (drainFailure === timeoutCancellation) {
-                VoiceAgentEndDrainTimeoutException(endDrainTimeoutMillis, timeoutCancellation)
-            } else {
-                drainFailure
-            }
-            if (drainFailure !== timeoutCancellation) failure.addSuppressedIfDistinct(timeoutFailure)
-            val replayedFailure = failure.recoveredOriginal()
-            val replayedSuppressedCount = replayedFailure?.suppressed?.size ?: 0
-            val closeFailure = runCatching(session::closeNow).exceptionOrNull()
-            when {
-                closeFailure == null || closeFailure === failure -> Unit
-                closeFailure === replayedFailure -> closeFailure.suppressed
-                    .drop(replayedSuppressedCount)
-                    .forEach(failure::addSuppressedIfDistinct)
-                else -> failure.addSuppressedIfDistinct(closeFailure)
-            }
-            throw failure
+    private suspend fun drainOwnedSession(session: RouteOwnedManagedVoiceCallSession) {
+        val failure = when (val outcome = session.endAndDrainWithin(endDrainTimeoutMillis)) {
+            is VoiceAgentEndDrainOutcome.Completed -> outcome.failure
+            is VoiceAgentEndDrainOutcome.TimedOut -> outcome.failure
         }
+        failure?.let { throw it }
     }
 
     private fun reportCleanupFailureSafely(error: Throwable) {
@@ -175,30 +142,6 @@ internal class VoiceAgentCallServiceLifecycle(
     private companion object {
         const val FALLBACK_END_NOTIFICATION_CONVERSATION_ID = "voice-agent"
     }
-}
-
-internal class VoiceAgentEndDrainTimeoutException(
-    timeoutMillis: Long,
-    cause: Throwable? = null,
-) : RuntimeException("Voice Agent end drain timed out after ${timeoutMillis}ms", cause)
-
-private fun Throwable.findTimeoutCancellation(): TimeoutCancellationException? {
-    val visited = mutableSetOf<Throwable>()
-    fun find(error: Throwable): TimeoutCancellationException? {
-        if (!visited.add(error)) return null
-        if (error is TimeoutCancellationException) return error
-        error.suppressed.forEach { find(it)?.let { timeout -> return timeout } }
-        return error.cause?.let(::find)
-    }
-    return find(this)
-}
-
-private fun Throwable.recoveredOriginal(): Throwable? = cause?.takeIf { original ->
-    original::class == this::class && original.message == message
-}
-
-private fun Throwable.addSuppressedIfDistinct(error: Throwable) {
-    if (error !== this && suppressed.none { it === error }) addSuppressed(error)
 }
 
 internal class VoiceAgentEndJobTracker {

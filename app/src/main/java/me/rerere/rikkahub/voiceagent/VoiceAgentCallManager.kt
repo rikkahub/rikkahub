@@ -126,7 +126,7 @@ class VoiceAgentCallManager(
         session?.end()
     }
 
-    fun detachForEndAndDrain(): ManagedVoiceCallSession? = synchronized(lock) {
+    fun detachForEndAndDrain(): RouteOwnedManagedVoiceCallSession? = synchronized(lock) {
         callStatus = VoiceCallStatus.Ending
         _state.value = _state.value.copy(call = VoiceCallStatus.Ending)
         clearActiveSessionLocked()
