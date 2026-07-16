@@ -18,6 +18,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.voiceagent.RetirementBarrier
+import me.rerere.rikkahub.voiceagent.runVoiceAgentCleanupStages
 
 private fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (this) {
     is VoicePlaybackDiagnostic.MalformedChunk -> "Malformed playback chunk: $message"
@@ -228,18 +229,20 @@ internal class VoiceAudioCaptureOwnership<Recorder : Any, CaptureTask : Any>(
     }
 
     private fun retireOwnedCapture(owned: OwnedCapture<Recorder, CaptureTask>) {
-        try {
-            owned.retirement.retire {
+        owned.retirement.retire {
+            try {
                 synchronized(recorderLock) {
-                    owned.task?.let(cancelTask)
-                    owned.recorder?.let(stopRecorder)
-                    owned.recorder?.let(releaseRecorder)
-                    owned.routeLease?.retire()
+                    runVoiceAgentCleanupStages(
+                        { owned.task?.let(cancelTask) },
+                        { owned.recorder?.let(stopRecorder) },
+                        { owned.recorder?.let(releaseRecorder) },
+                        { owned.routeLease?.retire() },
+                    )
                 }
-            }
-        } finally {
-            synchronized(lock) {
-                if (inFlightRetirement === owned) inFlightRetirement = null
+            } finally {
+                synchronized(lock) {
+                    if (inFlightRetirement === owned) inFlightRetirement = null
+                }
             }
         }
     }

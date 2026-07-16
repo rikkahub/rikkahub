@@ -3,10 +3,12 @@ package me.rerere.rikkahub.voiceagent.audio
 import android.media.AudioRecord
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import me.rerere.rikkahub.voiceagent.RetirementBarrier
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -210,20 +212,101 @@ class VoiceAudioCaptureOwnershipTest {
     }
 
     @Test
-    fun `task cancellation reentry does not repeat or deadlock retirement`() {
+    fun `task cancellation reentry keeps stop and release behind outer route teardown`() {
         lateinit var ownership: VoiceAudioCaptureOwnership<FakeCaptureRecorder, FakeCaptureTask>
         lateinit var token: VoiceAudioCaptureToken
-        val lease = FakeCaptureRouteLease()
+        val routeRetirementEntered = CountDownLatch(1)
+        val allowRouteRetirement = CountDownLatch(1)
+        val competingStopReturned = CountDownLatch(1)
+        val releaseReturned = CountDownLatch(1)
+        val lease = FakeCaptureRouteLease {
+            routeRetirementEntered.countDown()
+            allowRouteRetirement.await(5, TimeUnit.SECONDS)
+        }
         val recorder = FakeCaptureRecorder()
         val task = FakeCaptureTask(onCancel = { ownership.terminate(token, recorder) })
         ownership = fakeOwnership()
         token = ownership.begin(lease)
         ownership.publishAndStart(token, recorder, task)
+        val owner = thread(name = "reentrant-capture-retirement-owner") { ownership.stop() }
+        assertTrue(routeRetirementEntered.await(5, TimeUnit.SECONDS))
+        val competingStop = thread(name = "reentrant-capture-stop-waiter") {
+            ownership.stop()
+            competingStopReturned.countDown()
+        }
+        val release = thread(name = "reentrant-capture-release-waiter") {
+            ownership.release()
+            releaseReturned.countDown()
+        }
 
-        val stop = thread(name = "reentrant-capture-stop") { ownership.stop() }
-        stop.join(5_000)
+        try {
+            assertFalse(competingStopReturned.await(100, TimeUnit.MILLISECONDS))
+            assertFalse(releaseReturned.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            allowRouteRetirement.countDown()
+            owner.join(5_000)
+            competingStop.join(5_000)
+            release.join(5_000)
+        }
 
-        assertFalse(stop.isAlive)
+        assertFalse(owner.isAlive)
+        assertFalse(competingStop.isAlive)
+        assertFalse(release.isAlive)
+        assertTrue(competingStopReturned.await(0, TimeUnit.MILLISECONDS))
+        assertTrue(releaseReturned.await(0, TimeUnit.MILLISECONDS))
+        assertRetiredExactlyOnce(lease, recorder, task)
+    }
+
+    @Test
+    fun `retirement runs every cleanup stage and replays ordered failure result`() {
+        val cancelFailure = IllegalStateException("cancel failed")
+        val stopFailure = IllegalArgumentException("stop failed")
+        val releaseFailure = UnsupportedOperationException("release failed")
+        val routeFailure = AssertionError("route failed")
+        val cancelEntered = CountDownLatch(1)
+        val allowCancelFailure = CountDownLatch(1)
+        val waiterReturned = CountDownLatch(1)
+        val ownerResult = AtomicReference<Throwable?>()
+        val waiterResult = AtomicReference<Throwable?>()
+        val ownership = fakeOwnership()
+        val lease = FakeCaptureRouteLease { throw routeFailure }
+        val recorder = FakeCaptureRecorder(
+            stopFailure = stopFailure,
+            releaseFailure = releaseFailure,
+        )
+        val task = FakeCaptureTask(
+            onCancel = {
+                cancelEntered.countDown()
+                allowCancelFailure.await(5, TimeUnit.SECONDS)
+                throw cancelFailure
+            },
+        )
+        val token = ownership.begin(lease)
+        ownership.publishAndStart(token, recorder, task)
+        val owner = thread(name = "failing-capture-retirement-owner") {
+            ownerResult.set(runCatching { ownership.terminate(token, recorder) }.exceptionOrNull())
+        }
+        assertTrue(cancelEntered.await(5, TimeUnit.SECONDS))
+        val waiter = thread(name = "failing-capture-retirement-waiter") {
+            waiterResult.set(runCatching { ownership.stop() }.exceptionOrNull())
+            waiterReturned.countDown()
+        }
+
+        try {
+            assertFalse(waiterReturned.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            allowCancelFailure.countDown()
+            owner.join(5_000)
+            waiter.join(5_000)
+        }
+        val laterResult = runCatching { ownership.terminate(token, recorder) }.exceptionOrNull()
+
+        assertFalse(owner.isAlive)
+        assertFalse(waiter.isAlive)
+        assertSame(cancelFailure, ownerResult.get())
+        assertSame(cancelFailure, waiterResult.get())
+        assertSame(cancelFailure, laterResult)
+        assertEquals(listOf(stopFailure, releaseFailure, routeFailure), cancelFailure.suppressed.toList())
         assertRetiredExactlyOnce(lease, recorder, task)
     }
 
@@ -269,6 +352,8 @@ class VoiceAudioCaptureOwnershipTest {
         private val startFailure: RuntimeException? = null,
         private val recordingAfterStart: Boolean = true,
         private val onStart: () -> Unit = {},
+        private val stopFailure: Throwable? = null,
+        private val releaseFailure: Throwable? = null,
     ) {
         var stopCalls = 0
             private set
@@ -284,10 +369,12 @@ class VoiceAudioCaptureOwnershipTest {
 
         fun stop() {
             stopCalls += 1
+            stopFailure?.let { throw it }
         }
 
         fun release() {
             releaseCalls += 1
+            releaseFailure?.let { throw it }
         }
     }
 
