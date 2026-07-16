@@ -7,7 +7,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Test
 
@@ -52,14 +54,18 @@ class VoiceAgentCallServiceCleanupTest {
                 clearEndJob = { endJobClears += 1 },
             )
         }
-        drainStarted.await()
+        try {
+            withTimeout(CLEANUP_TIMEOUT_MS) { drainStarted.await() }
+            currentGeneration = 2L
+            releaseDrain.complete(Unit)
+            withTimeout(CLEANUP_TIMEOUT_MS) { cleanup.await() }
 
-        currentGeneration = 2L
-        releaseDrain.complete(Unit)
-        cleanup.await()
-
-        assertEquals(0, completions)
-        assertEquals(1, endJobClears)
+            assertEquals(0, completions)
+            assertEquals(1, endJobClears)
+        } finally {
+            releaseDrain.complete(Unit)
+            cleanup.cancel()
+        }
     }
 
     @Test
@@ -124,33 +130,110 @@ class VoiceAgentCallServiceCleanupTest {
         val events = mutableListOf<String>()
         var current = true
 
-        tracker.launch(scope) { clearEndJob ->
-            completeVoiceAgentEndForGeneration(
-                isCurrent = { current },
-                endAndDrain = {
-                    events += "drain-started"
-                    drainStarted.complete(Unit)
-                    releaseDrain.await()
-                    events += "drain-finished"
-                },
-                onCompleted = { events += "completed" },
-                stopForeground = { events += "stopForeground" },
-                stopSelf = { events += "stopSelf" },
-                clearEndJob = {
-                    events += "clearEndJob"
-                    clearEndJob()
-                },
-            )
+        try {
+            tracker.launch(scope) { clearEndJob ->
+                completeVoiceAgentEndForGeneration(
+                    isCurrent = { current },
+                    endAndDrain = {
+                        events += "drain-started"
+                        drainStarted.complete(Unit)
+                        releaseDrain.await()
+                        events += "drain-finished"
+                    },
+                    onCompleted = { events += "completed" },
+                    stopForeground = { events += "stopForeground" },
+                    stopSelf = { events += "stopSelf" },
+                    clearEndJob = {
+                        events += "clearEndJob"
+                        clearEndJob()
+                    },
+                )
+            }
+
+            assertEquals(true, drainStarted.isCompleted)
+            val launchedJob = checkNotNull(tracker.job)
+            current = false
+            scope.cancel()
+            releaseDrain.complete(Unit)
+            withTimeout(CLEANUP_TIMEOUT_MS) { launchedJob.join() }
+
+            assertEquals(listOf("drain-started", "drain-finished", "clearEndJob"), events)
+            assertEquals(null, tracker.job)
+        } finally {
+            releaseDrain.complete(Unit)
+            scope.cancel()
         }
+    }
 
-        assertEquals(true, drainStarted.isCompleted)
-        val launchedJob = checkNotNull(tracker.job)
-        current = false
-        scope.cancel()
-        releaseDrain.complete(Unit)
-        launchedJob.join()
+    @Test
+    fun `old ordered clear and finally cannot clear newer tracked job`() = runBlocking {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val tracker = VoiceAgentEndJobTracker()
+        val oldDrainStarted = CompletableDeferred<Unit>()
+        val releaseOldDrain = CompletableDeferred<Unit>()
+        val oldOrderedClearFinished = CompletableDeferred<Unit>()
+        val releaseOldFinally = CompletableDeferred<Unit>()
+        val newerDrainStarted = CompletableDeferred<Unit>()
+        val releaseNewerDrain = CompletableDeferred<Unit>()
+        try {
+            tracker.launch(scope) { clearOldEndJob ->
+                completeVoiceAgentEndForGeneration(
+                    isCurrent = { true },
+                    endAndDrain = {
+                        oldDrainStarted.complete(Unit)
+                        releaseOldDrain.await()
+                    },
+                    onCompleted = {},
+                    stopForeground = {},
+                    stopSelf = {},
+                    clearEndJob = clearOldEndJob,
+                )
+                oldOrderedClearFinished.complete(Unit)
+                releaseOldFinally.await()
+            }
+            withTimeout(CLEANUP_TIMEOUT_MS) { oldDrainStarted.await() }
+            val oldJob = checkNotNull(tracker.job)
+            assertSame(oldJob, tracker.job)
 
-        assertEquals(listOf("drain-started", "drain-finished", "clearEndJob"), events)
-        assertEquals(null, tracker.job)
+            tracker.clearTracking()
+            tracker.launch(scope) { clearNewerEndJob ->
+                completeVoiceAgentEndForGeneration(
+                    isCurrent = { true },
+                    endAndDrain = {
+                        newerDrainStarted.complete(Unit)
+                        releaseNewerDrain.await()
+                    },
+                    onCompleted = {},
+                    stopForeground = {},
+                    stopSelf = {},
+                    clearEndJob = clearNewerEndJob,
+                )
+            }
+            withTimeout(CLEANUP_TIMEOUT_MS) { newerDrainStarted.await() }
+            val newerJob = checkNotNull(tracker.job)
+            assertNotSame(oldJob, newerJob)
+            assertSame(newerJob, tracker.job)
+
+            releaseOldDrain.complete(Unit)
+            withTimeout(CLEANUP_TIMEOUT_MS) { oldOrderedClearFinished.await() }
+            assertSame(newerJob, tracker.job)
+
+            releaseOldFinally.complete(Unit)
+            withTimeout(CLEANUP_TIMEOUT_MS) { oldJob.join() }
+            assertSame(newerJob, tracker.job)
+
+            releaseNewerDrain.complete(Unit)
+            withTimeout(CLEANUP_TIMEOUT_MS) { newerJob.join() }
+            assertEquals(null, tracker.job)
+        } finally {
+            releaseOldDrain.complete(Unit)
+            releaseOldFinally.complete(Unit)
+            releaseNewerDrain.complete(Unit)
+            scope.cancel()
+        }
+    }
+
+    private companion object {
+        const val CLEANUP_TIMEOUT_MS = 2_000L
     }
 }
