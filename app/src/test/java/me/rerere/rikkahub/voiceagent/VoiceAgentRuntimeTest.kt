@@ -3599,8 +3599,11 @@ class VoiceAgentRuntimeTest {
             )
             val registry = VoiceAgentTelecomCallRegistry()
             val attempt = registry.beginAttempt()
+            var disconnectCalls = 0
             val telecomCall = object : VoiceAgentTelecomCall {
-                override fun disconnectFromApp() = Unit
+                override fun disconnectFromApp() {
+                    disconnectCalls += 1
+                }
             }
             assertTrue(registry.activate(attempt, telecomCall))
             registry.acknowledgeOutcome(attempt)
@@ -3616,6 +3619,8 @@ class VoiceAgentRuntimeTest {
 
             session.start()
             gemini.awaitConnectCount(1)
+            assertEquals(0, disconnectCalls)
+            assertTrue(registry.isOwnedAttemptActive(attempt))
             val traceId = requireNotNull(observability.propagatedTrace).traceId
             val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "$traceId/session.json")
             withTimeout(1000) {
@@ -3643,6 +3648,8 @@ class VoiceAgentRuntimeTest {
             )
             assertTrue(started.boolean("sentryPropagationCreated"))
             session.closeNow()
+            assertEquals(1, disconnectCalls)
+            assertFalse(registry.isOwnedAttemptActive(attempt))
         } finally {
             blockedConnect?.release?.complete(Unit)
             sessionScope.cancel()

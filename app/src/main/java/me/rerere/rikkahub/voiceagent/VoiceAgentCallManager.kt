@@ -70,7 +70,18 @@ class VoiceAgentCallManager(
                 _state.value = sessionState.copy(call = status)
             }
         }
-        session.start()
+        try {
+            session.start()
+        } catch (startError: Throwable) {
+            if (activeCall === call) {
+                clearActiveSessionLocked()
+                _state.value = VoiceAgentUiState()
+                runCatching(session::closeNow)
+                    .exceptionOrNull()
+                    ?.let(startError::addSuppressed)
+            }
+            throw startError
+        }
         true
     }
 

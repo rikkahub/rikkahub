@@ -1,5 +1,10 @@
 package me.rerere.rikkahub.voiceagent
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.thread
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -9,6 +14,7 @@ import kotlinx.coroutines.yield
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceCredentials
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -87,13 +93,14 @@ class VoiceAgentCallManagerTest {
     }
 
     @Test
-    fun `previous session end failure retires incoming lease before factory and rethrows`() = runTest {
+    fun `previous end and incoming retirement failure preserve primary error and clear aggregate`() = runTest {
         val endFailure = IllegalStateException("previous end failed")
+        val retirementFailure = IllegalArgumentException("incoming retirement failed")
         val first = FakeManagedVoiceCallSession(endFailure = endFailure)
         val factory = FakeVoiceAgentCallFactory(first, FakeManagedVoiceCallSession())
         val manager = VoiceAgentCallManager(factory)
         val previousSessionLease = CountingTelecomLease()
-        val incomingLease = CountingTelecomLease()
+        val incomingLease = CountingTelecomLease(disconnectFailure = retirementFailure)
         manager.start(Uuid.random(), fakeLaunchConfig(), previousSessionLease.lease, this)
 
         val thrown = runCatching {
@@ -101,10 +108,87 @@ class VoiceAgentCallManagerTest {
         }.exceptionOrNull()
 
         assertSame(endFailure, thrown)
+        assertEquals(listOf(retirementFailure), thrown?.suppressed?.toList())
         assertEquals(1, previousSessionLease.retireCalls)
         assertEquals(1, incomingLease.retireCalls)
         assertEquals(1, factory.created.size)
         assertEquals(null, manager.activeConversationId.value)
+    }
+
+    @Test
+    fun `concurrent matching starts install one session and retire rejected exact lease`() = runTest {
+        val releaseFactory = CountDownLatch(1)
+        val factory = BlockingFirstVoiceAgentCallFactory(releaseFactory)
+        val manager = VoiceAgentCallManager(factory)
+        val conversationId = Uuid.random()
+        val config = fakeLaunchConfig()
+        val installedLiveLease = CountingTelecomLease()
+        val raceRejectedLease = CountingTelecomLease()
+        val firstResult = AtomicReference<Boolean?>()
+        val secondResult = AtomicReference<Boolean?>()
+        val workerFailure = AtomicReference<Throwable?>()
+        val secondStarted = CountDownLatch(1)
+        val scope = this
+        val firstWorker = thread(isDaemon = true, name = "voice-manager-first-start") {
+            runCatching {
+                manager.start(conversationId, config, installedLiveLease.lease, scope)
+            }.onSuccess(firstResult::set).onFailure { workerFailure.compareAndSet(null, it) }
+        }
+        var secondWorker: Thread? = null
+        try {
+            assertTrue(factory.factoryEntered.await(1, TimeUnit.SECONDS))
+            secondWorker = thread(isDaemon = true, name = "voice-manager-duplicate-start") {
+                secondStarted.countDown()
+                runCatching {
+                    manager.start(conversationId, config, raceRejectedLease.lease, scope)
+                }.onSuccess(secondResult::set).onFailure { workerFailure.compareAndSet(null, it) }
+            }
+            assertTrue(secondStarted.await(1, TimeUnit.SECONDS))
+        } finally {
+            releaseFactory.countDown()
+            firstWorker.join(1_000)
+            secondWorker?.join(1_000)
+        }
+
+        assertFalse("first start worker hung", firstWorker.isAlive)
+        assertFalse("duplicate start worker hung", checkNotNull(secondWorker).isAlive)
+        workerFailure.get()?.let { throw AssertionError("manager start worker failed", it) }
+        assertEquals(true, firstResult.get())
+        assertEquals(false, secondResult.get())
+        assertEquals(1, factory.createdCalls.get())
+        assertEquals(1, factory.session.startCalls)
+        assertEquals(0, installedLiveLease.retireCalls)
+        assertEquals(1, raceRejectedLease.retireCalls)
+    }
+
+    @Test
+    fun `synchronous session start failure clears aggregate and closes exact route once`() = runTest {
+        val startFailure = IllegalStateException("session start failed")
+        val cleanupFailure = IllegalArgumentException("route cleanup failed")
+        val session = FakeManagedVoiceCallSession(
+            initialState = VoiceAgentUiState(session = VoiceSessionStatus.Connected),
+            startFailure = startFailure,
+        )
+        val factory = FakeVoiceAgentCallFactory(session)
+        val manager = VoiceAgentCallManager(factory)
+        val conversationId = Uuid.random()
+        val config = fakeLaunchConfig()
+        val lease = CountingTelecomLease(disconnectFailure = cleanupFailure)
+
+        val thrown = runCatching {
+            manager.start(conversationId, config, lease.lease, this)
+        }.exceptionOrNull()
+        session.state.value = VoiceAgentUiState(session = VoiceSessionStatus.Error("late stale state"))
+        yield()
+
+        assertSame(startFailure, thrown)
+        assertEquals(listOf(cleanupFailure), thrown?.suppressed?.toList())
+        assertEquals(1, lease.retireCalls)
+        assertEquals(1, session.closeNowCalls)
+        assertEquals(null, manager.activeConversationId.value)
+        assertEquals(null, manager.matchingRouteMetadata(conversationId, config))
+        assertEquals(VoiceAgentUiState(), manager.state.value)
+        assertEquals(1, factory.created.size)
     }
 
     @Test
@@ -172,23 +256,46 @@ class VoiceAgentCallManagerTest {
 }
 
 private class FakeManagedVoiceCallSession(
+    initialState: VoiceAgentUiState = VoiceAgentUiState(),
+    private val startFailure: Throwable? = null,
     private val endFailure: Throwable? = null,
 ) : ManagedVoiceCallSession {
-    override val state = MutableStateFlow(VoiceAgentUiState())
+    override val state = MutableStateFlow(initialState)
     var startCalls = 0
     var reconnectCalls = 0
     var endCalls = 0
     var endAndDrainCalls = 0
+    var closeNowCalls = 0
     val diagnostics = mutableListOf<Pair<String, String>>()
 
-    override fun start() { startCalls += 1 }
+    override fun start() { startCalls += 1; startFailure?.let { throw it } }
     override fun interrupt() = Unit
     override fun setMuted(value: Boolean) = Unit
     override fun reconnect() { reconnectCalls += 1 }
     override fun recordDiagnostic(name: String, detail: String) { diagnostics += name to detail }
     override fun end() { endCalls += 1; endFailure?.let { throw it } }
     override suspend fun endAndDrain() { endAndDrainCalls += 1 }
-    override fun closeNow() = Unit
+    override fun closeNow() { closeNowCalls += 1 }
+}
+
+private class BlockingFirstVoiceAgentCallFactory(
+    private val releaseFactory: CountDownLatch,
+) : VoiceAgentCallFactory {
+    val factoryEntered = CountDownLatch(1)
+    val createdCalls = AtomicInteger()
+    val session = FakeManagedVoiceCallSession()
+
+    override fun create(
+        conversationId: Uuid,
+        config: VoiceAgentLaunchConfig,
+        routeLease: VoiceAgentRouteLease,
+        scope: CoroutineScope,
+    ): RouteOwnedManagedVoiceCallSession {
+        createdCalls.incrementAndGet()
+        factoryEntered.countDown()
+        check(releaseFactory.await(1, TimeUnit.SECONDS)) { "timed out waiting to release call factory" }
+        return RouteOwnedVoiceCallSession(session, routeLease)
+    }
 }
 
 private class FakeVoiceAgentCallFactory(

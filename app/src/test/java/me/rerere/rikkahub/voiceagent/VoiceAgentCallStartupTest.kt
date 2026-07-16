@@ -39,6 +39,35 @@ class VoiceAgentCallStartupTest {
     }
 
     @Test
+    fun `same conversation with different config replaces exact route lease`() = runTest {
+        val firstSession = StartupFakeManagedSession()
+        val secondSession = StartupFakeManagedSession()
+        val factory = StartupFakeCallFactory(firstSession, secondSession)
+        val manager = VoiceAgentCallManager(factory)
+        val conversationId = Uuid.random()
+        val firstConfig = fakeStartupLaunchConfig(voiceModelId = "gemini-flash")
+        val secondConfig = fakeStartupLaunchConfig(voiceModelId = "gemini-pro")
+        val previousLease = CountingTelecomLease()
+        val installedLiveLease = CountingTelecomLease()
+        manager.start(conversationId, firstConfig, previousLease.lease, this)
+        var resolveCalls = 0
+        val startup = VoiceAgentCallStartup(manager) {
+            resolveCalls += 1
+            installedLiveLease.lease
+        }
+
+        val result = startup.start(conversationId, secondConfig, this) { true }
+
+        assertEquals(VoiceAgentCallStartupResult.Started(installedLiveLease.lease.metadata, true), result)
+        assertEquals(1, resolveCalls)
+        assertEquals(2, factory.created.size)
+        assertEquals(1, previousLease.retireCalls)
+        assertEquals(0, installedLiveLease.retireCalls)
+        assertEquals(null, manager.matchingRouteMetadata(conversationId, firstConfig))
+        assertEquals(installedLiveLease.lease.metadata, manager.matchingRouteMetadata(conversationId, secondConfig))
+    }
+
+    @Test
     fun `stale resolved lease is retired exactly once and metadata is returned`() = runTest {
         val staleLease = CountingTelecomLease()
         val factory = StartupFakeCallFactory(StartupFakeManagedSession())
@@ -125,9 +154,11 @@ class VoiceAgentCallStartupTest {
     }
 }
 
-internal class CountingTelecomLease {
+internal class CountingTelecomLease(
+    disconnectFailure: Throwable? = null,
+) {
     private val registry = VoiceAgentTelecomCallRegistry()
-    private val call = CountingTelecomCall()
+    private val call = CountingTelecomCall(disconnectFailure)
     private val attempt = registry.beginAttempt()
     val lease: VoiceAgentRouteLease
     val retireCalls: Int get() = call.disconnectCalls
@@ -139,9 +170,14 @@ internal class CountingTelecomLease {
     }
 }
 
-private class CountingTelecomCall : VoiceAgentTelecomCall {
+private class CountingTelecomCall(
+    private val disconnectFailure: Throwable?,
+) : VoiceAgentTelecomCall {
     var disconnectCalls = 0
-    override fun disconnectFromApp() { disconnectCalls += 1 }
+    override fun disconnectFromApp() {
+        disconnectCalls += 1
+        disconnectFailure?.let { throw it }
+    }
 }
 
 private class StartupFakeManagedSession(
@@ -188,10 +224,10 @@ private class StartupConsumingFailingFactory(private val failure: Throwable) : V
     }
 }
 
-private fun fakeStartupLaunchConfig() = VoiceAgentLaunchConfig(
+private fun fakeStartupLaunchConfig(voiceModelId: String = "gemini-flash") = VoiceAgentLaunchConfig(
     hermesVoiceBaseUrl = "https://voice.test",
     credentials = HermesVoiceCredentials(deviceApiKey = "profile-key"),
-    voiceModelId = "gemini-flash",
+    voiceModelId = voiceModelId,
     assistantName = "Hermes",
     assistantPrompt = "system",
 )
