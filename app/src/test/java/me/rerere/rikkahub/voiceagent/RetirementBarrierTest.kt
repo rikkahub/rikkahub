@@ -4,6 +4,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -61,6 +62,60 @@ class RetirementBarrierTest {
         assertEquals(1, cleanupCalls.get())
         assertEquals(0L, waiterReturned.count)
         assertTrue(waiterInterrupted.get())
+    }
+
+    @Test
+    fun `waiting caller replays owner failure`() {
+        val barrier = RetirementBarrier()
+        val failure = IllegalStateException("retirement failed")
+        val ownerEntered = CountDownLatch(1)
+        val releaseOwner = CountDownLatch(1)
+        val waiterAttemptingRetirement = CountDownLatch(1)
+        val waiterReturned = CountDownLatch(1)
+        val waiterCleanupCalls = AtomicInteger()
+        val ownerFailure = AtomicReference<Throwable?>()
+        val waiterFailure = AtomicReference<Throwable?>()
+        val owner = thread(name = "failing-retirement-owner") {
+            ownerFailure.set(
+                runCatching {
+                    barrier.retire {
+                        ownerEntered.countDown()
+                        releaseOwner.await()
+                        throw failure
+                    }
+                }.exceptionOrNull(),
+            )
+        }
+        assertTrue(ownerEntered.await(5, TimeUnit.SECONDS))
+        val waiter = thread(name = "failing-retirement-waiter") {
+            waiterAttemptingRetirement.countDown()
+            waiterFailure.set(
+                runCatching {
+                    barrier.retire { waiterCleanupCalls.incrementAndGet() }
+                }.exceptionOrNull(),
+            )
+            waiterReturned.countDown()
+        }
+
+        assertTrue(waiterAttemptingRetirement.await(5, TimeUnit.SECONDS))
+        try {
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (waiter.state != Thread.State.WAITING && waiter.isAlive && System.nanoTime() < deadline) {
+                Thread.yield()
+            }
+            assertEquals(Thread.State.WAITING, waiter.state)
+            assertFalse(waiterReturned.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            releaseOwner.countDown()
+            owner.join(5_000)
+            waiter.join(5_000)
+        }
+
+        assertFalse(owner.isAlive)
+        assertFalse(waiter.isAlive)
+        assertSame(failure, ownerFailure.get())
+        assertSame(failure, waiterFailure.get())
+        assertEquals(0, waiterCleanupCalls.get())
     }
 
     @Test
