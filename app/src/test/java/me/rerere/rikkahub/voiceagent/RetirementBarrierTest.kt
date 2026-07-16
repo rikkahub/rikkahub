@@ -59,6 +59,30 @@ class RetirementBarrierTest {
     }
 
     @Test
+    fun `cleanup rethrows primary interruption and restores then clears interrupt flag`() {
+        val calls = mutableListOf<String>()
+        val primary = InterruptedException("primary interruption")
+
+        val thrown = runCatching {
+            runWithNonMaskingCleanup(
+                cleanupActions = listOf(
+                    { calls += "release" },
+                    { calls += "owner" },
+                    { calls += "waiter" },
+                ),
+            ) {
+                throw primary
+            }
+        }.exceptionOrNull()
+        val interrupted = Thread.interrupted()
+
+        assertSame(primary, thrown)
+        assertEquals(listOf("release", "owner", "waiter"), calls)
+        assertTrue(interrupted)
+        assertFalse(Thread.currentThread().isInterrupted)
+    }
+
+    @Test
     fun `cleanup preserves first cleanup failure`() {
         val calls = mutableListOf<String>()
         val releaseFailure = IllegalStateException("release failed")
@@ -90,6 +114,7 @@ class RetirementBarrierTest {
         val barrier = RetirementBarrier()
         val ownerEntered = CountDownLatch(1)
         val releaseOwner = CountDownLatch(1)
+        val waiterAttemptingRetirement = CountDownLatch(1)
         val waiterReturned = CountDownLatch(1)
         val waiterInterrupted = AtomicBoolean()
         val cleanupCalls = AtomicInteger()
@@ -109,12 +134,25 @@ class RetirementBarrierTest {
             ),
         ) {
             assertTrue(ownerEntered.await(5, TimeUnit.SECONDS))
-            waiter = thread(name = "retirement-waiter") {
-                Thread.currentThread().interrupt()
+            val startedWaiter = thread(name = "retirement-waiter") {
+                waiterAttemptingRetirement.countDown()
                 barrier.retire { cleanupCalls.incrementAndGet() }
                 waiterInterrupted.set(Thread.currentThread().isInterrupted)
                 waiterReturned.countDown()
             }
+            waiter = startedWaiter
+
+            assertTrue(waiterAttemptingRetirement.await(5, TimeUnit.SECONDS))
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (
+                startedWaiter.state != Thread.State.WAITING &&
+                startedWaiter.isAlive &&
+                System.nanoTime() < deadline
+            ) {
+                Thread.yield()
+            }
+            assertEquals(Thread.State.WAITING, startedWaiter.state)
+            startedWaiter.interrupt()
             assertFalse(waiterReturned.await(100, TimeUnit.MILLISECONDS))
         }
 
