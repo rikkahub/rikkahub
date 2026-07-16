@@ -66,8 +66,11 @@ class VoiceAgentCallManager(
         _state.value = session.state.value.copy(call = callStatus)
         stateCollectionJob = scope.launch {
             session.state.collect { sessionState ->
-                val status = synchronized(lock) { callStatus }
-                _state.value = sessionState.copy(call = status)
+                synchronized(lock) {
+                    if (activeCall === call) {
+                        _state.value = sessionState.copy(call = callStatus)
+                    }
+                }
             }
         }
         try {

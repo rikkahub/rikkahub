@@ -5,10 +5,15 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalForInheritanceCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
@@ -165,21 +170,25 @@ class VoiceAgentCallManagerTest {
     fun `synchronous session start failure clears aggregate and closes exact route once`() = runTest {
         val startFailure = IllegalStateException("session start failed")
         val cleanupFailure = IllegalArgumentException("route cleanup failed")
-        val session = FakeManagedVoiceCallSession(
-            initialState = VoiceAgentUiState(session = VoiceSessionStatus.Connected),
-            startFailure = startFailure,
+        val blockedState = ManagerLockBlockingStateFlow(
+            VoiceAgentUiState(session = VoiceSessionStatus.Error("stale in-flight state")),
         )
+        val session = BlockingCollectorFailingStartSession(blockedState, startFailure)
         val factory = FakeVoiceAgentCallFactory(session)
         val manager = VoiceAgentCallManager(factory)
         val conversationId = Uuid.random()
         val config = fakeLaunchConfig()
         val lease = CountingTelecomLease(disconnectFailure = cleanupFailure)
+        val collectorScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-        val thrown = runCatching {
-            manager.start(conversationId, config, lease.lease, this)
-        }.exceptionOrNull()
-        session.state.value = VoiceAgentUiState(session = VoiceSessionStatus.Error("late stale state"))
-        yield()
+        val thrown = try {
+            runCatching {
+                manager.start(conversationId, config, lease.lease, collectorScope)
+            }.exceptionOrNull()
+        } finally {
+            collectorScope.cancel()
+        }
+        assertTrue(blockedState.awaitCollectorReturned())
 
         assertSame(startFailure, thrown)
         assertEquals(listOf(cleanupFailure), thrown?.suppressed?.toList())
@@ -276,6 +285,61 @@ private class FakeManagedVoiceCallSession(
     override fun end() { endCalls += 1; endFailure?.let { throw it } }
     override suspend fun endAndDrain() { endAndDrainCalls += 1 }
     override fun closeNow() { closeNowCalls += 1 }
+}
+
+private class BlockingCollectorFailingStartSession(
+    override val state: StateFlow<VoiceAgentUiState>,
+    private val startFailure: Throwable,
+) : ManagedVoiceCallSession {
+    var closeNowCalls = 0
+
+    override fun start() {
+        check((state as ManagerLockBlockingStateFlow).awaitCollectorBlockedOnManagerLock())
+        throw startFailure
+    }
+
+    override fun interrupt() = Unit
+    override fun setMuted(value: Boolean) = Unit
+    override fun reconnect() = Unit
+    override fun recordDiagnostic(name: String, detail: String) = Unit
+    override fun end() = Unit
+    override suspend fun endAndDrain() = Unit
+    override fun closeNow() { closeNowCalls += 1 }
+}
+
+@OptIn(ExperimentalForInheritanceCoroutinesApi::class)
+private class ManagerLockBlockingStateFlow(
+    private val staleState: VoiceAgentUiState,
+) : StateFlow<VoiceAgentUiState> {
+    private val emissionStarted = CountDownLatch(1)
+    private val collectorReturned = CountDownLatch(1)
+    private val collectorThread = AtomicReference<Thread?>()
+
+    override val value: VoiceAgentUiState = staleState
+    override val replayCache: List<VoiceAgentUiState> = listOf(staleState)
+
+    override suspend fun collect(collector: FlowCollector<VoiceAgentUiState>): Nothing {
+        collectorThread.set(Thread.currentThread())
+        emissionStarted.countDown()
+        try {
+            collector.emit(staleState)
+            awaitCancellation()
+        } finally {
+            collectorReturned.countDown()
+        }
+    }
+
+    fun awaitCollectorBlockedOnManagerLock(): Boolean {
+        check(emissionStarted.await(1, TimeUnit.SECONDS)) { "collector did not start emission" }
+        val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+        while (System.nanoTime() < deadlineNanos) {
+            if (collectorThread.get()?.state == Thread.State.BLOCKED) return true
+            Thread.yield()
+        }
+        return collectorThread.get()?.state == Thread.State.BLOCKED
+    }
+
+    fun awaitCollectorReturned(): Boolean = collectorReturned.await(1, TimeUnit.SECONDS)
 }
 
 private class BlockingFirstVoiceAgentCallFactory(
