@@ -504,6 +504,9 @@ class VoiceAgentTelecomCallRegistryTest {
         val oldOutcome = async(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
             registry.awaitOutcome(oldAttempt)
         }
+        var primaryFailure: Throwable? = null
+        var replacementAttempt: VoiceAgentTelecomAttemptId? = null
+        val replacementCall = FakeTelecomCall()
         val oldActivation = thread {
             oldAccepted.set(
                 registry.activate(oldAttempt, oldCall) {
@@ -513,26 +516,45 @@ class VoiceAgentTelecomCallRegistryTest {
             )
         }
 
-        assertTrue(activationEntered.await(1, TimeUnit.SECONDS))
-        val replacementAttempt = registry.beginAttempt()
-        val replacementCall = FakeTelecomCall()
         try {
-            assertTrue(registry.activate(replacementAttempt, replacementCall))
+            assertTrue(activationEntered.await(1, TimeUnit.SECONDS))
+            replacementAttempt = registry.beginAttempt()
+            assertTrue(registry.activate(requireNotNull(replacementAttempt), replacementCall))
             assertFalse(oldOutcome.isCompleted)
+        } catch (failure: Throwable) {
+            primaryFailure = failure
+            throw failure
         } finally {
             releaseActivation.countDown()
-            oldActivation.join(1_000)
+            var cleanupFailure: Throwable? = runCatching {
+                oldActivation.join(1_000)
+            }.exceptionOrNull()
+            if (oldActivation.isAlive) {
+                val timeoutFailure = AssertionError("old activation did not finish")
+                cleanupFailure?.addSuppressed(timeoutFailure) ?: run {
+                    cleanupFailure = timeoutFailure
+                }
+            }
+            if (primaryFailure != null) {
+                cleanupFailure?.let(primaryFailure::addSuppressed)
+                oldOutcome.cancel()
+            } else {
+                cleanupFailure?.let { failure ->
+                    oldOutcome.cancel()
+                    throw failure
+                }
+            }
         }
 
-        assertFalse("old activation did not finish", oldActivation.isAlive)
         assertFalse(oldAccepted.get())
         assertEquals(1, oldCall.disconnectCalls)
         assertEquals(0, replacementCall.disconnectCalls)
         val failed = withTimeoutOrNull(1_000) { oldOutcome.await() }
             as VoiceAgentTelecomOutcome.Failed
         assertEquals("telecom_attempt_superseded", failed.failure.diagnosticName)
-        assertTrue(registry.isOwnedAttemptActive(replacementAttempt))
-        assertEquals(VoiceAgentTelecomOutcome.Active, registry.awaitOutcome(replacementAttempt))
+        val activeReplacementAttempt = requireNotNull(replacementAttempt)
+        assertTrue(registry.isOwnedAttemptActive(activeReplacementAttempt))
+        assertEquals(VoiceAgentTelecomOutcome.Active, registry.awaitOutcome(activeReplacementAttempt))
     }
 
     @Test
