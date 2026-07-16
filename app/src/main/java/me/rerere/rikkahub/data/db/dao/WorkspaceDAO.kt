@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 
@@ -18,6 +19,9 @@ interface WorkspaceDAO {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(workspace: WorkspaceEntity)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(workspaces: List<WorkspaceEntity>)
+
     @Query("SELECT * FROM workspaces")
     suspend fun getAll(): List<WorkspaceEntity>
 
@@ -26,4 +30,13 @@ interface WorkspaceDAO {
 
     @Query("DELETE FROM workspaces WHERE id = :id")
     suspend fun deleteById(id: String): Int
+
+    @Query("DELETE FROM workspaces")
+    suspend fun deleteAll()
+
+    @Transaction
+    suspend fun replaceAll(workspaces: List<WorkspaceEntity>) {
+        deleteAll()
+        upsertAll(workspaces)
+    }
 }

@@ -23,6 +23,7 @@ from perry_server.errors import (
 from perry_server.logging_config import setup_logging
 from perry_server.services.monel import create_monel_client
 from perry_server.services.storage import create_object_storage
+from perry_server.services.workspace_runtime import PodmanWorkspaceRuntime
 
 
 def _ensure_sqlite_parent(settings: Settings) -> None:
@@ -48,6 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.session_factory = session_factory
     app.state.object_storage = create_object_storage(settings)
     app.state.monel_client = create_monel_client(settings)
+    app.state.workspace_runtime = PodmanWorkspaceRuntime(settings)
 
     # Phase 1 convenience: create tables if missing. Prefer Alembic in real deploys.
     async with engine.begin() as conn:

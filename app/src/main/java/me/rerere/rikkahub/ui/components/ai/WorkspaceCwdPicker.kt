@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,9 +58,12 @@ fun WorkspaceCwdPickerSheet(
     var browsePath by remember { mutableStateOf(fromAbsolutePath(currentCwd)) }
     var entries by remember { mutableStateOf<List<WorkspaceFileEntry>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var reloadKey by remember { mutableStateOf(0) }
 
-    LaunchedEffect(browsePath) {
+    LaunchedEffect(browsePath, reloadKey) {
         loading = true
+        error = null
         try {
             val result = withContext(Dispatchers.IO) {
                 workspaceRepository.listFiles(workspaceId, WorkspaceStorageArea.FILES, browsePath)
@@ -68,8 +72,9 @@ fun WorkspaceCwdPickerSheet(
             loading = false
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             entries = emptyList()
+            error = e.message
             loading = false
         }
     }
@@ -123,6 +128,16 @@ fun WorkspaceCwdPickerSheet(
                     .heightIn(max = 350.dp),
             ) {
                 val dirs = entries.filter { it.isDirectory }
+                if (loading) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                }
                 items(dirs, key = { it.path }) { entry ->
                     ListItem(
                         headlineContent = {
@@ -147,7 +162,23 @@ fun WorkspaceCwdPickerSheet(
                     )
                 }
 
-                if (!loading && dirs.isEmpty()) {
+                if (!loading && error != null) {
+                    item {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.workspace_cwd_load_failed),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            TextButton(onClick = { reloadKey++ }) {
+                                Text(stringResource(R.string.workspace_cwd_retry))
+                            }
+                        }
+                    }
+                } else if (!loading && dirs.isEmpty()) {
                     item {
                         Text(
                             text = stringResource(R.string.workspace_cwd_no_subdirectories),

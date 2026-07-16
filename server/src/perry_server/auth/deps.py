@@ -1,15 +1,19 @@
+import logging
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, Header, Request
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from perry_server.config import Settings
 from perry_server.errors import AppError
 from perry_server.models.device import Device
 from perry_server.services import devices as device_service
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -63,6 +67,12 @@ async def require_device(
     )
     if device is None:
         raise AppError("unauthorized", "invalid or revoked device token", status_code=401)
-    await device_service.touch_device(session, device)
-    request.state.device_id = str(device.id)
-    return AuthContext(device=device, user_id=device.user_id, device_id=device.id)
+    device_id = device.id
+    user_id = device.user_id
+    try:
+        await device_service.touch_device(session, device)
+    except OperationalError:
+        await session.rollback()
+        logger.warning("could not update device last_seen_at", exc_info=True)
+    request.state.device_id = str(device_id)
+    return AuthContext(device=device, user_id=user_id, device_id=device_id)

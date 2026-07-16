@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field
@@ -31,9 +32,23 @@ class Settings(BaseSettings):
     monel_base_url: str | None = None
     monel_auth_key: str | None = None
 
+    perry_workspace_enabled: bool = False
+    perry_workspace_podman_binary: str = "podman"
+    perry_workspace_data_root: str = "./data/workspaces"
+    perry_workspace_default_image: str = "docker.io/library/python:3.12-slim-bookworm"
+    perry_workspace_memory: str = "2g"
+    perry_workspace_cpus: float = Field(default=2.0, gt=0)
+    perry_workspace_pids_limit: int = Field(default=512, ge=32)
+    perry_workspace_max_file_bytes: int = Field(default=8 * 1024 * 1024, ge=1024)
+    perry_workspace_max_output_bytes: int = Field(default=128 * 1024, ge=4096)
+
     @property
     def is_sqlite(self) -> bool:
         return self.perry_database_url.startswith("sqlite")
+
+    @property
+    def workspace_data_root(self) -> Path:
+        return Path(self.perry_workspace_data_root).expanduser().resolve()
 
 
 @lru_cache

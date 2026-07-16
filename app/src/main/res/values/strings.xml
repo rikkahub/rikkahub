@@ -1219,6 +1219,8 @@
   <string name="workspace_cwd_select_directory">Select Working Directory</string>
   <string name="workspace_cwd_select_desc">Set the working directory for the current session</string>
   <string name="workspace_cwd_no_subdirectories">No subdirectories</string>
+  <string name="workspace_cwd_load_failed">Could not load cloud workspace folders</string>
+  <string name="workspace_cwd_retry">Retry</string>
   <string name="workspace_cwd_reset">Reset</string>
   <string name="workspace_cwd_set">Set as CWD</string>
   <string name="common_confirm">OK</string>

@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
@@ -44,7 +44,14 @@ async def get_active_device_by_token(
 
 
 async def touch_device(session: AsyncSession, device: Device) -> None:
-    device.last_seen_at = datetime.now(UTC)
+    now = datetime.now(UTC)
+    last_seen_at = device.last_seen_at
+    if last_seen_at is not None:
+        if last_seen_at.tzinfo is None:
+            last_seen_at = last_seen_at.replace(tzinfo=UTC)
+        if now - last_seen_at < timedelta(minutes=1):
+            return
+    device.last_seen_at = now
     await session.commit()
 
 

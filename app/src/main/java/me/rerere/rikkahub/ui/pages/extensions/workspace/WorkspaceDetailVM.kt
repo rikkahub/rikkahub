@@ -1,8 +1,10 @@
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.getAndUpdate
@@ -13,8 +15,6 @@ import java.io.InputStream
 import java.io.OutputStream
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
-import me.rerere.workspace.RootfsInstallProgress
-import me.rerere.workspace.RootfsInstallStage
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceStorageArea
@@ -28,12 +28,9 @@ class WorkspaceDetailVM(
 
     private val _terminalState = MutableStateFlow(WorkspaceTerminalState())
     val terminalState = _terminalState.asStateFlow()
-
-    private val _installProgress = MutableStateFlow<RootfsInstallProgress?>(null)
-    val installProgress = _installProgress.asStateFlow()
-
-    private val _installError = MutableStateFlow<String?>(null)
-    val installError = _installError.asStateFlow()
+    private var refreshJob: Job? = null
+    private var refreshRequest: RefreshRequest? = null
+    private var refreshGeneration = 0L
 
     init {
         loadWorkspace()
@@ -72,26 +69,44 @@ class WorkspaceDetailVM(
     }
 
     fun refresh() {
-        viewModelScope.launch {
+        val area = state.value.area
+        val path = state.value.path
+        val currentRequest = refreshRequest
+        if (refreshJob?.isActive == true && currentRequest?.area == area && currentRequest.path == path) {
+            return
+        }
+
+        val request = RefreshRequest(++refreshGeneration, area, path)
+        refreshRequest = request
+        val job = viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
-            runCatching {
-                repository.listFiles(
+            try {
+                val entries = repository.listFiles(
                     id = id,
-                    area = state.value.area,
-                    path = state.value.path,
+                    area = area,
+                    path = path,
                 )
-            }.onSuccess { entries ->
-                _state.update { it.copy(entries = entries, loading = false) }
-            }.onFailure { error ->
-                _state.update {
-                    it.copy(
-                        entries = emptyList(),
-                        loading = false,
-                        error = error.message ?: "加载工作区文件失败",
-                    )
+                if (refreshRequest == request) {
+                    _state.update { it.copy(entries = entries, loading = false) }
                 }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.e(TAG, "listFiles failed area=$area path=$path", error)
+                if (refreshRequest == request) {
+                    _state.update {
+                        it.copy(
+                            entries = emptyList(),
+                            loading = false,
+                            error = error.message ?: "加载工作区文件失败",
+                        )
+                    }
+                }
+            } finally {
+                if (refreshRequest == request) refreshRequest = null
             }
         }
+        refreshJob = job
     }
 
     fun delete(entry: WorkspaceFileEntry) {
@@ -172,31 +187,6 @@ class WorkspaceDetailVM(
         }
     }
 
-    fun installRootfs(url: String) {
-        viewModelScope.launch {
-            _installError.value = null
-            val workspace = state.value.workspace ?: return@launch
-            _installProgress.value = RootfsInstallProgress(stage = RootfsInstallStage.DOWNLOADING)
-            try {
-                repository.installRootfs(workspace.id, url) { progress ->
-                    _installProgress.value = progress
-                }
-                loadWorkspace()
-                refresh()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (error: Throwable) {
-                _installError.value = error.message ?: "Rootfs 安装失败"
-            } finally {
-                _installProgress.value = null
-            }
-        }
-    }
-
-    fun dismissInstallError() {
-        _installError.value = null
-    }
-
     fun executeTerminalCommand(command: String) {
         val trimmed = command.trim()
         if (trimmed.isBlank()) return
@@ -247,6 +237,16 @@ class WorkspaceDetailVM(
             val workspace = repository.getById(id)
             _state.update { it.copy(workspace = workspace) }
         }
+    }
+
+    private data class RefreshRequest(
+        val generation: Long,
+        val area: WorkspaceStorageArea,
+        val path: String,
+    )
+
+    private companion object {
+        const val TAG = "WorkspaceDetailVM"
     }
 }
 

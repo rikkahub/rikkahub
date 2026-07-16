@@ -3,15 +3,19 @@ package me.rerere.rikkahub.data.sync.cloud
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import me.rerere.common.http.await
 import me.rerere.rikkahub.utils.JsonInstant
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okio.BufferedSink
+import android.util.Base64
 import java.util.concurrent.TimeUnit
 
 class PerryApiException(
@@ -116,7 +120,7 @@ class PerryApiClient(
             .applyAuth(true)
             .build()
         val response = httpClient.newCall(request).await()
-        val raw = response.body?.string().orEmpty()
+        val raw = response.readBodyString()
         if (!response.isSuccessful) {
             val err = runCatching { json.decodeFromString<ErrorEnvelope>(raw) }.getOrNull()
             throw PerryApiException(
@@ -135,9 +139,8 @@ class PerryApiClient(
             .applyAuth(true)
             .build()
         val response = httpClient.newCall(request).await()
-        val body = response.body
         if (!response.isSuccessful) {
-            val raw = body?.string().orEmpty()
+            val raw = response.readBodyString()
             val err = runCatching { json.decodeFromString<ErrorEnvelope>(raw) }.getOrNull()
             throw PerryApiException(
                 code = err?.error?.code ?: "http_${response.code}",
@@ -145,8 +148,126 @@ class PerryApiClient(
                 httpStatus = response.code,
             )
         }
-        return body?.bytes() ?: ByteArray(0)
+        return response.readBodyBytes()
     }
+
+    suspend fun listWorkspaces(): WorkspaceListResponse =
+        get("/v1/workspaces", auth = true)
+
+    suspend fun getWorkspace(workspaceId: String): CloudWorkspaceDto =
+        get("/v1/workspaces/$workspaceId", auth = true)
+
+    suspend fun createWorkspace(request: WorkspaceCreateRequest): CloudWorkspaceDto =
+        post(
+            "/v1/workspaces",
+            body = json.encodeToString(request),
+            auth = true,
+        )
+
+    suspend fun updateWorkspace(
+        workspaceId: String,
+        request: WorkspaceUpdateRequest,
+    ): CloudWorkspaceDto {
+        val body = json.encodeToString(request).toRequestBody(mediaType)
+        val httpRequest = Request.Builder()
+            .url(join(baseUrl, "/v1/workspaces/$workspaceId"))
+            .patch(body)
+            .applyAuth(true)
+            .build()
+        return execute(httpClient, httpRequest)
+    }
+
+    suspend fun deleteWorkspace(workspaceId: String) {
+        val request = Request.Builder()
+            .url(join(baseUrl, "/v1/workspaces/$workspaceId"))
+            .delete()
+            .applyAuth(true)
+            .build()
+        executeNoContent(httpClient, request)
+    }
+
+    suspend fun executeWorkspaceCommand(
+        workspaceId: String,
+        request: WorkspaceExecuteRequest,
+    ): WorkspaceCommandResultDto = post(
+        "/v1/workspaces/$workspaceId/execute",
+        body = json.encodeToString(request),
+        auth = true,
+    )
+
+    suspend fun listWorkspaceFiles(workspaceId: String, path: String): WorkspaceFileListResponse =
+        get(workspaceUrl(workspaceId, "/files", path), auth = true)
+
+    suspend fun statWorkspaceFile(workspaceId: String, path: String): WorkspaceFileEntryDto =
+        get(workspaceUrl(workspaceId, "/files/stat", path), auth = true)
+
+    suspend fun getWorkspaceFileContent(workspaceId: String, path: String): ByteArray {
+        val request = Request.Builder()
+            .url(workspaceUrl(workspaceId, "/files/content", path))
+            .get()
+            .applyAuth(true)
+            .build()
+        val response = httpClient.newCall(request).await()
+        if (!response.isSuccessful) {
+            val raw = response.readBodyString()
+            throw decodeError(response.code, raw)
+        }
+        return response.readBodyBytes()
+    }
+
+    suspend fun putWorkspaceFileContent(
+        workspaceId: String,
+        path: String,
+        bytes: ByteArray,
+        overwrite: Boolean,
+    ): WorkspaceFileEntryDto {
+        val url = workspaceUrl(workspaceId, "/files/content", path)
+            .toHttpUrl()
+            .newBuilder()
+            .addQueryParameter("overwrite", overwrite.toString())
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .put(bytes.toRequestBody("application/octet-stream".toMediaType()))
+            .applyAuth(true)
+            .build()
+        return execute(httpClient, request)
+    }
+
+    suspend fun moveWorkspaceFile(
+        workspaceId: String,
+        request: WorkspaceMoveRequest,
+    ): WorkspaceFileEntryDto = post(
+        "/v1/workspaces/$workspaceId/files/move",
+        body = json.encodeToString(request),
+        auth = true,
+    )
+
+    suspend fun deleteWorkspaceFile(
+        workspaceId: String,
+        path: String,
+        recursive: Boolean,
+    ): WorkspaceStatusResponse {
+        val url = workspaceUrl(workspaceId, "/files", path)
+            .toHttpUrl()
+            .newBuilder()
+            .addQueryParameter("recursive", recursive.toString())
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .delete()
+            .applyAuth(true)
+            .build()
+        return execute(httpClient, request)
+    }
+
+    private fun workspaceUrl(workspaceId: String, suffix: String, path: String): String =
+        join(baseUrl, "/v1/workspaces/$workspaceId$suffix")
+            .toHttpUrl()
+            .newBuilder()
+            .addQueryParameter("path", path)
+            .build()
+            .toString()
 
     /** Phase 8: Monel catalog via Perry (no Monel auth key on device). */
     suspend fun catalogProviders(): List<CatalogProviderDto> {
@@ -180,7 +301,7 @@ class PerryApiClient(
         extraHeaders: Map<String, String> = emptyMap(),
     ): T {
         val request = Request.Builder()
-            .url(join(baseUrl, path))
+            .url(resolve(baseUrl, path))
             .get()
             .applyAuth(auth)
             .apply {
@@ -198,7 +319,7 @@ class PerryApiClient(
         extraHeaders: Map<String, String> = emptyMap(),
     ): T {
         val request = Request.Builder()
-            .url(join(baseUrl, path))
+            .url(resolve(baseUrl, path))
             .post(body.toRequestBody(mediaType))
             .applyAuth(auth)
             .apply {
@@ -220,7 +341,7 @@ class PerryApiClient(
 
     private suspend inline fun <reified T> execute(client: OkHttpClient, request: Request): T {
         val response = client.newCall(request).await()
-        val raw = response.body?.string().orEmpty()
+        val raw = response.readBodyString()
         if (!response.isSuccessful) {
             val err = runCatching { json.decodeFromString<ErrorEnvelope>(raw) }.getOrNull()
             throw PerryApiException(
@@ -235,7 +356,35 @@ class PerryApiClient(
         return json.decodeFromString(raw)
     }
 
+    private suspend fun executeNoContent(client: OkHttpClient, request: Request) {
+        val response = client.newCall(request).await()
+        val raw = response.readBodyString()
+        if (!response.isSuccessful) throw decodeError(response.code, raw)
+    }
+
+    private fun decodeError(status: Int, raw: String): PerryApiException {
+        val err = runCatching { json.decodeFromString<ErrorEnvelope>(raw) }.getOrNull()
+        return PerryApiException(
+            code = err?.error?.code ?: "http_$status",
+            message = err?.error?.message ?: raw.ifBlank { "HTTP $status" },
+            httpStatus = status,
+        )
+    }
+
+    private suspend fun okhttp3.Response.readBodyString(): String =
+        withContext(Dispatchers.IO) { body?.string().orEmpty() }
+
+    private suspend fun okhttp3.Response.readBodyBytes(): ByteArray =
+        withContext(Dispatchers.IO) { body?.bytes() ?: ByteArray(0) }
+
     companion object {
+        fun resolve(baseUrl: String, path: String): String =
+            if (path.startsWith("http://") || path.startsWith("https://")) {
+                path
+            } else {
+                join(baseUrl, path)
+            }
+
         fun join(baseUrl: String, path: String): String {
             val base = baseUrl.trimEnd('/')
             val p = if (path.startsWith("/")) path else "/$path"
@@ -283,6 +432,84 @@ data class ServerInfoResponse(
     val features: Map<String, Boolean> = emptyMap(),
     val components: Map<String, ComponentStatusDto> = emptyMap(),
 )
+
+@Serializable
+data class CloudWorkspaceDto(
+    val id: String,
+    val name: String,
+    val image: String,
+    @SerialName("shell_status") val shellStatus: String,
+    @SerialName("tool_approvals") val toolApprovals: Map<String, Boolean> = emptyMap(),
+    @SerialName("created_at_ms") val createdAtMs: Long,
+    @SerialName("updated_at_ms") val updatedAtMs: Long,
+    @SerialName("last_access_at_ms") val lastAccessAtMs: Long? = null,
+)
+
+@Serializable
+data class WorkspaceListResponse(val items: List<CloudWorkspaceDto> = emptyList())
+
+@Serializable
+data class WorkspaceCreateRequest(
+    val id: String,
+    val name: String,
+    val image: String? = null,
+    @SerialName("tool_approvals") val toolApprovals: Map<String, Boolean> = emptyMap(),
+)
+
+@Serializable
+data class WorkspaceUpdateRequest(
+    val name: String? = null,
+    @SerialName("tool_approvals") val toolApprovals: Map<String, Boolean>? = null,
+)
+
+@Serializable
+data class WorkspaceExecuteRequest(
+    val command: String,
+    val cwd: String = "",
+    @SerialName("timeout_ms") val timeoutMs: Long,
+    @SerialName("stdin_base64") val stdinBase64: String? = null,
+) {
+    companion object {
+        fun create(command: String, cwd: String, timeoutMs: Long, stdin: ByteArray?) =
+            WorkspaceExecuteRequest(
+                command = command,
+                cwd = cwd,
+                timeoutMs = timeoutMs,
+                stdinBase64 = stdin?.let { Base64.encodeToString(it, Base64.NO_WRAP) },
+            )
+    }
+}
+
+@Serializable
+data class WorkspaceCommandResultDto(
+    @SerialName("exit_code") val exitCode: Int,
+    val stdout: String,
+    val stderr: String,
+    @SerialName("timed_out") val timedOut: Boolean = false,
+    val truncated: Boolean = false,
+)
+
+@Serializable
+data class WorkspaceFileEntryDto(
+    val path: String,
+    val name: String,
+    @SerialName("is_directory") val isDirectory: Boolean,
+    @SerialName("size_bytes") val sizeBytes: Long,
+    @SerialName("updated_at_ms") val updatedAtMs: Long,
+)
+
+@Serializable
+data class WorkspaceFileListResponse(val items: List<WorkspaceFileEntryDto> = emptyList())
+
+@Serializable
+data class WorkspaceMoveRequest(
+    val source: String,
+    val target: String,
+    val overwrite: Boolean = false,
+)
+
+@Serializable
+data class WorkspaceStatusResponse(val status: String)
 
 @Serializable
 data class SyncBootstrapResponse(

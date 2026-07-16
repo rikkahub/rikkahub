@@ -1,5 +1,10 @@
+import sqlite3
+
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.exc import OperationalError
+
+from perry_server.auth import deps
 
 
 @pytest.mark.asyncio
@@ -60,6 +65,33 @@ async def test_invalid_bearer_rejected(client: AsyncClient) -> None:
         headers={"Authorization": "Bearer totally-wrong"},
     )
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_server_info_survives_last_seen_database_lock(
+    client: AsyncClient,
+    bootstrap_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registered = await client.post(
+        "/v1/devices/register",
+        json={"name": "locked-device"},
+        headers=bootstrap_headers,
+    )
+
+    async def fail_touch(*_args: object, **_kwargs: object) -> None:
+        raise OperationalError(
+            "UPDATE devices",
+            {},
+            sqlite3.OperationalError("database is locked"),
+        )
+
+    monkeypatch.setattr(deps.device_service, "touch_device", fail_touch)
+    response = await client.get(
+        "/v1/server-info",
+        headers={"Authorization": f"Bearer {registered.json()['device_token']}"},
+    )
+    assert response.status_code == 200
 
 
 @pytest.mark.asyncio

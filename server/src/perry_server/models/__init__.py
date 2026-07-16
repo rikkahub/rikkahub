@@ -10,6 +10,7 @@ from perry_server.models.message_node import MessageNode
 from perry_server.models.mutation_receipt import MutationReceipt
 from perry_server.models.setting import Setting
 from perry_server.models.user import User
+from perry_server.models.workspace import Workspace
 
 __all__ = [
     "Assistant",
@@ -24,4 +25,5 @@ __all__ = [
     "MutationReceipt",
     "Setting",
     "User",
+    "Workspace",
 ]

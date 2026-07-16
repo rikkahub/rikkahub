@@ -71,6 +71,7 @@ class CloudSyncRepository(
     var memoryDomainSync: MemoryDomainSync? = null
     var favoriteDomainSync: FavoriteDomainSync? = null
     var fileDomainSync: FileDomainSync? = null
+    var workspaceRefresh: (suspend () -> Unit)? = null
     private val syncMutex = Mutex()
     private var pendingSyncJob: Job? = null
     private var foregroundPollingJob: Job? = null
@@ -350,6 +351,7 @@ class CloudSyncRepository(
                 Log.w(TAG, "server-info failed for $baseUrl", e)
                 val status = when (e.httpStatus) {
                     401, 403 -> ConnectionStatus.AUTH_REQUIRED
+                    in 500..599 -> ConnectionStatus.DEGRADED
                     else -> ConnectionStatus.UNREACHABLE
                 }
                 return@withContext publishProbe(
@@ -599,6 +601,8 @@ class CloudSyncRepository(
                 )
                 pushOutbox(client, state.deviceId)
                 pullChanges(client)
+                runCatching { workspaceRefresh?.invoke() }
+                    .onFailure { Log.w(TAG, "workspace list refresh failed: ${it.message}") }
                 val now = System.currentTimeMillis()
                 stateDao.updateCursor(
                     cursor = ensureState().changeCursor,
@@ -706,6 +710,8 @@ class CloudSyncRepository(
                 // Second push for anything enqueued during seed after first push.
                 pushOutbox(client, state.deviceId!!)
                 pullChanges(client)
+                runCatching { workspaceRefresh?.invoke() }
+                    .onFailure { Log.w(TAG, "workspace list refresh failed: ${it.message}") }
                 // Bootstrap/changes do not embed message_node bodies for all history;
                 // fill empty local conversations from /conversations/{id}/nodes.
                 runCatching {

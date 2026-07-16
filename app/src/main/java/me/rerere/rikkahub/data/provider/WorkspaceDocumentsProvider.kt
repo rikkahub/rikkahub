@@ -3,47 +3,43 @@ package me.rerere.rikkahub.data.provider
 import android.database.Cursor
 import android.database.MatrixCursor
 import android.os.CancellationSignal
+import android.os.Handler
+import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
 import android.webkit.MimeTypeMap
+import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
-import me.rerere.workspace.WorkspaceManager
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.workspace.WorkspaceFileEntry
+import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.core.context.GlobalContext
-import java.io.File
 
-/**
- * 通过 Storage Access Framework 将 workspace 的 files 目录暴露给系统文件管理器。
- *
- * 目录结构：
- * ```
- * <root>
- * └── {workspace name}        <- 每个 workspace（虚拟目录，对应 files/ 目录）
- *     └── ...                 <- files/ 目录下的实际文件
- * ```
- *
- * documentId 设计：
- * - 顶层根：[ROOT_DOC_ID]
- * - workspace 根目录：`ws/{root}`（root 为 workspace 在磁盘上的目录名，即 UUID）
- * - workspace 内文件：`ws/{root}/{相对 files/ 的路径}`
- */
+/** Exposes cloud workspace files through Android's Storage Access Framework. */
 class WorkspaceDocumentsProvider : DocumentsProvider() {
+    private lateinit var closeHandlerThread: HandlerThread
+    private lateinit var closeHandler: Handler
 
-    private fun manager(): WorkspaceManager = GlobalContext.get().get()
+    private fun repository(): WorkspaceRepository = GlobalContext.get().get()
 
-    private fun dao(): WorkspaceDAO = GlobalContext.get().get()
+    private fun allWorkspaces(): List<WorkspaceEntity> = runBlocking {
+        runCatching { repository().refreshRemote() }.getOrElse { emptyList() }
+    }
 
-    private fun allWorkspaces(): List<WorkspaceEntity> = runBlocking { dao().getAll() }
+    private fun workspaceName(id: String): String =
+        allWorkspaces().firstOrNull { it.id == id }?.name ?: id
 
-    private fun workspaceName(root: String): String =
-        allWorkspaces().firstOrNull { it.root == root }?.name ?: root
-
-    override fun onCreate(): Boolean = true
+    override fun onCreate(): Boolean {
+        closeHandlerThread = HandlerThread("workspace-document-close").apply { start() }
+        closeHandler = Handler(closeHandlerThread.looper)
+        return true
+    }
 
     override fun queryRoots(projection: Array<String>?): Cursor {
         val cursor = MatrixCursor(projection ?: DEFAULT_ROOT_PROJECTION)
@@ -52,7 +48,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
             add(Root.COLUMN_ROOT_ID, ROOT_ID)
             add(Root.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
             add(Root.COLUMN_TITLE, ctx.getString(R.string.app_name))
-            add(Root.COLUMN_FLAGS, Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD)
+            add(Root.COLUMN_FLAGS, Root.FLAG_SUPPORTS_IS_CHILD)
             add(Root.COLUMN_ICON, R.mipmap.ic_launcher)
             add(Root.COLUMN_MIME_TYPES, "*/*")
         }
@@ -62,17 +58,18 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
     override fun queryDocument(documentId: String, projection: Array<String>?): Cursor {
         val cursor = MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION)
         val target = parseDocId(documentId)
-        if (target.isRoot) {
-            cursor.newRow().apply {
-                add(Document.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
-                add(Document.COLUMN_DISPLAY_NAME, context?.getString(R.string.app_name))
-                add(Document.COLUMN_MIME_TYPE, Document.MIME_TYPE_DIR)
-                add(Document.COLUMN_FLAGS, 0)
-                add(Document.COLUMN_SIZE, null)
-                add(Document.COLUMN_LAST_MODIFIED, null)
+        when {
+            target.isRoot -> addRootRow(cursor)
+            target.relPath.isEmpty() -> addWorkspaceRow(cursor, target.workspaceId)
+            else -> runBlocking {
+                repository().listFiles(
+                    target.workspaceId,
+                    WorkspaceStorageArea.FILES,
+                    target.relPath.substringBeforeLast('/', ""),
+                ).firstOrNull { it.path == target.relPath }?.let {
+                    addEntryRow(cursor, target.workspaceId, it)
+                }
             }
-        } else {
-            addFileRow(cursor, target.root, resolveFile(target.root, target.relPath))
         }
         return cursor
     }
@@ -85,19 +82,16 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
         val cursor = MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION)
         val parent = parseDocId(parentDocumentId)
         if (parent.isRoot) {
-            // 顶层：列出所有 workspace
-            for (ws in allWorkspaces()) {
-                val dir = manager().filesDir(ws.root).also { it.mkdirs() }
-                addFileRow(cursor, ws.root, dir)
-            }
+            allWorkspaces().forEach { addWorkspaceRow(cursor, it.id, it.name) }
         } else {
-            val dir = resolveFile(parent.root, parent.relPath)
-            if (dir.isDirectory) {
-                dir.listFiles()
-                    .orEmpty()
-                    .filter { !it.name.startsWith(".l2s.") }
-                    .sortedWith(compareBy<File> { !it.isDirectory }.thenBy { it.name.lowercase() })
-                    .forEach { addFileRow(cursor, parent.root, it) }
+            runBlocking {
+                repository().listFiles(
+                    parent.workspaceId,
+                    WorkspaceStorageArea.FILES,
+                    parent.relPath,
+                ).filterNot { it.name.startsWith(".l2s.") }
+                    .sortedWith(compareBy<WorkspaceFileEntry> { !it.isDirectory }.thenBy { it.name.lowercase() })
+                    .forEach { addEntryRow(cursor, parent.workspaceId, it) }
             }
         }
         return cursor
@@ -109,55 +103,98 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
         signal: CancellationSignal?,
     ): ParcelFileDescriptor {
         val target = parseDocId(documentId)
-        require(!target.isRoot) { "Cannot open root as a document" }
-        val file = resolveFile(target.root, target.relPath)
-        return ParcelFileDescriptor.open(file, ParcelFileDescriptor.parseMode(mode))
+        require(!target.isRoot && target.relPath.isNotEmpty()) { "Cannot open a directory" }
+        val cacheDir = File(requireNotNull(context).cacheDir, "workspace-documents").apply { mkdirs() }
+        val cacheFile = File(cacheDir, UUID.randomUUID().toString())
+        val writes = mode.contains('w') || mode.contains('+')
+        val truncates = mode.contains('t')
+        if (!truncates) {
+            val bytes = runBlocking {
+                repository().readBytes(target.workspaceId, WorkspaceStorageArea.FILES, target.relPath)
+            }
+            cacheFile.writeBytes(bytes)
+        } else {
+            cacheFile.createNewFile()
+        }
+        return ParcelFileDescriptor.open(
+            cacheFile,
+            ParcelFileDescriptor.parseMode(mode),
+            closeHandler,
+        ) {
+            try {
+                if (writes) {
+                    runBlocking {
+                        repository().writeBytes(
+                            target.workspaceId,
+                            WorkspaceStorageArea.FILES,
+                            target.relPath,
+                            cacheFile.readBytes(),
+                            overwrite = true,
+                        )
+                    }
+                    notifyChange(buildDocId(target.workspaceId, target.relPath.substringBeforeLast('/', "")))
+                }
+            } finally {
+                cacheFile.delete()
+            }
+        }
     }
 
-    override fun createDocument(
-        parentDocumentId: String,
-        mimeType: String,
-        displayName: String,
-    ): String {
+    override fun createDocument(parentDocumentId: String, mimeType: String, displayName: String): String {
         val parent = parseDocId(parentDocumentId)
         require(!parent.isRoot) { "Cannot create document at root" }
-        manager().ensureWorkspace(parent.root)
-        val parentDir = resolveFile(parent.root, parent.relPath)
-        require(parentDir.isDirectory) { "Parent is not a directory" }
-        val target = uniqueChild(parentDir, displayName)
-        if (mimeType == Document.MIME_TYPE_DIR) {
-            require(target.mkdir()) { "Failed to create directory: $displayName" }
-        } else {
-            require(target.createNewFile()) { "Failed to create file: $displayName" }
+        val name = runBlocking { uniqueName(parent.workspaceId, parent.relPath, displayName) }
+        val path = joinPath(parent.relPath, name)
+        runBlocking {
+            if (mimeType == Document.MIME_TYPE_DIR) {
+                repository().createDirectory(parent.workspaceId, WorkspaceStorageArea.FILES, path)
+            } else {
+                repository().writeBytes(
+                    parent.workspaceId,
+                    WorkspaceStorageArea.FILES,
+                    path,
+                    ByteArray(0),
+                    overwrite = false,
+                )
+            }
         }
         notifyChange(parentDocumentId)
-        return buildDocId(parent.root, relPathOf(parent.root, target))
+        return buildDocId(parent.workspaceId, path)
     }
 
     override fun deleteDocument(documentId: String) {
         val target = parseDocId(documentId)
         require(!target.isRoot && target.relPath.isNotEmpty()) { "Cannot delete this document" }
-        val file = resolveFile(target.root, target.relPath)
-        val ok = if (file.isDirectory) file.deleteRecursively() else file.delete()
-        require(ok) { "Failed to delete: $documentId" }
-        notifyChange(buildDocId(target.root, target.relPath.substringBeforeLast('/', "")))
+        val entry = runBlocking { findEntry(target.workspaceId, target.relPath) }
+        runBlocking {
+            repository().deleteFile(
+                target.workspaceId,
+                WorkspaceStorageArea.FILES,
+                target.relPath,
+                recursive = entry?.isDirectory == true,
+            )
+        }
+        notifyChange(buildDocId(target.workspaceId, target.relPath.substringBeforeLast('/', "")))
     }
 
     override fun renameDocument(documentId: String, displayName: String): String {
         val target = parseDocId(documentId)
         require(!target.isRoot && target.relPath.isNotEmpty()) { "Cannot rename this document" }
-        val file = resolveFile(target.root, target.relPath)
-        val dest = File(file.parentFile, displayName.replace('/', '_'))
-        require(!dest.exists()) { "Target already exists: $displayName" }
-        require(file.renameTo(dest)) { "Failed to rename: $documentId" }
-        notifyChange(buildDocId(target.root, target.relPath.substringBeforeLast('/', "")))
-        return buildDocId(target.root, relPathOf(target.root, dest))
+        val parent = target.relPath.substringBeforeLast('/', "")
+        val safeName = displayName.replace('/', '_').ifBlank { "untitled" }
+        val destination = joinPath(parent, safeName)
+        runBlocking {
+            repository().moveFile(target.workspaceId, target.relPath, destination, overwrite = false)
+        }
+        notifyChange(buildDocId(target.workspaceId, parent))
+        return buildDocId(target.workspaceId, destination)
     }
 
     override fun getDocumentType(documentId: String): String {
         val target = parseDocId(documentId)
-        if (target.isRoot) return Document.MIME_TYPE_DIR
-        return mimeOf(resolveFile(target.root, target.relPath))
+        if (target.isRoot || target.relPath.isEmpty()) return Document.MIME_TYPE_DIR
+        val entry = runBlocking { findEntry(target.workspaceId, target.relPath) }
+        return mimeOf(entry?.name ?: target.relPath.substringAfterLast('/'), entry?.isDirectory == true)
     }
 
     override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean {
@@ -165,105 +202,103 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
         val child = parseDocId(documentId)
         if (child.isRoot) return false
         if (parent.isRoot) return true
-        if (parent.root != child.root) return false
+        if (parent.workspaceId != child.workspaceId) return false
         if (parent.relPath.isEmpty()) return true
         return child.relPath == parent.relPath || child.relPath.startsWith(parent.relPath + "/")
     }
 
-    // --- helpers ---
-
-    private fun addFileRow(cursor: MatrixCursor, root: String, file: File) {
-        val relPath = relPathOf(root, file)
-        val isDir = file.isDirectory
-        val flags = when {
-            // workspace 根目录：仅允许在其内部创建文件，不能删除/重命名 workspace 本身
-            relPath.isEmpty() -> Document.FLAG_DIR_SUPPORTS_CREATE
-            isDir -> Document.FLAG_DIR_SUPPORTS_CREATE or
-                Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME
-            else -> Document.FLAG_SUPPORTS_WRITE or
-                Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME
-        }
+    private fun addRootRow(cursor: MatrixCursor) {
         cursor.newRow().apply {
-            add(Document.COLUMN_DOCUMENT_ID, buildDocId(root, relPath))
-            add(Document.COLUMN_DISPLAY_NAME, if (relPath.isEmpty()) workspaceName(root) else file.name)
-            add(Document.COLUMN_MIME_TYPE, if (isDir) Document.MIME_TYPE_DIR else mimeOf(file))
-            add(Document.COLUMN_FLAGS, flags)
-            add(Document.COLUMN_SIZE, if (isDir) null else file.length())
-            add(Document.COLUMN_LAST_MODIFIED, file.lastModified())
+            add(Document.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
+            add(Document.COLUMN_DISPLAY_NAME, context?.getString(R.string.app_name))
+            add(Document.COLUMN_MIME_TYPE, Document.MIME_TYPE_DIR)
+            add(Document.COLUMN_FLAGS, 0)
         }
     }
 
-    private fun mimeOf(file: File): String {
-        if (file.isDirectory) return Document.MIME_TYPE_DIR
-        val ext = file.extension.lowercase()
-        return ext.takeIf { it.isNotEmpty() }
+    private fun addWorkspaceRow(cursor: MatrixCursor, workspaceId: String, name: String = workspaceName(workspaceId)) {
+        cursor.newRow().apply {
+            add(Document.COLUMN_DOCUMENT_ID, buildDocId(workspaceId, ""))
+            add(Document.COLUMN_DISPLAY_NAME, name)
+            add(Document.COLUMN_MIME_TYPE, Document.MIME_TYPE_DIR)
+            add(Document.COLUMN_FLAGS, Document.FLAG_DIR_SUPPORTS_CREATE)
+        }
+    }
+
+    private fun addEntryRow(cursor: MatrixCursor, workspaceId: String, entry: WorkspaceFileEntry) {
+        val flags = if (entry.isDirectory) {
+            Document.FLAG_DIR_SUPPORTS_CREATE or Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME
+        } else {
+            Document.FLAG_SUPPORTS_WRITE or Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME
+        }
+        cursor.newRow().apply {
+            add(Document.COLUMN_DOCUMENT_ID, buildDocId(workspaceId, entry.path))
+            add(Document.COLUMN_DISPLAY_NAME, entry.name)
+            add(Document.COLUMN_MIME_TYPE, mimeOf(entry.name, entry.isDirectory))
+            add(Document.COLUMN_FLAGS, flags)
+            add(Document.COLUMN_SIZE, if (entry.isDirectory) null else entry.sizeBytes)
+            add(Document.COLUMN_LAST_MODIFIED, entry.updatedAt)
+        }
+    }
+
+    private suspend fun findEntry(workspaceId: String, path: String): WorkspaceFileEntry? =
+        repository().listFiles(
+            workspaceId,
+            WorkspaceStorageArea.FILES,
+            path.substringBeforeLast('/', ""),
+        ).firstOrNull { it.path == path }
+
+    private suspend fun uniqueName(workspaceId: String, parent: String, displayName: String): String {
+        val safe = displayName.replace('/', '_').ifBlank { "untitled" }
+        val existing = repository().listFiles(workspaceId, WorkspaceStorageArea.FILES, parent)
+            .mapTo(hashSetOf()) { it.name }
+        if (safe !in existing) return safe
+        val dot = safe.lastIndexOf('.').takeIf { it > 0 } ?: safe.length
+        val stem = safe.substring(0, dot)
+        val extension = safe.substring(dot)
+        var index = 1
+        while ("$stem ($index)$extension" in existing) index++
+        return "$stem ($index)$extension"
+    }
+
+    private fun mimeOf(name: String, isDirectory: Boolean): String {
+        if (isDirectory) return Document.MIME_TYPE_DIR
+        return name.substringAfterLast('.', "").lowercase().takeIf { it.isNotEmpty() }
             ?.let { MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) }
             ?: "application/octet-stream"
     }
 
-    private fun uniqueChild(parent: File, name: String): File {
-        val safe = name.replace('/', '_').ifBlank { "untitled" }
-        var candidate = File(parent, safe)
-        if (!candidate.exists()) return candidate
-        val stem = candidate.nameWithoutExtension
-        val ext = candidate.extension.let { if (it.isNotEmpty()) ".$it" else "" }
-        var n = 1
-        do {
-            candidate = File(parent, "$stem ($n)$ext")
-            n++
-        } while (candidate.exists())
-        return candidate
-    }
-
-    /** 将 workspace files 目录下的文件解析为相对路径（root 自身返回空串） */
-    private fun relPathOf(root: String, file: File): String {
-        val base = manager().filesDir(root).canonicalFile
-        return file.canonicalFile.relativeTo(base).path.replace(File.separatorChar, '/')
-    }
-
-    /** 解析 documentId 指向的实际文件，并校验路径不逃逸 workspace files 目录 */
-    private fun resolveFile(root: String, relPath: String): File {
-        val base = manager().filesDir(root).canonicalFile
-        base.mkdirs()
-        val normalized = relPath.trim().trimStart('/')
-        require(!normalized.contains(' ')) { "Path contains invalid character" }
-        if (normalized.isEmpty()) return base
-        val target = File(base, normalized).canonicalFile
-        require(target.path == base.path || target.path.startsWith(base.path + File.separator)) {
-            "Path escapes workspace root: $relPath"
-        }
-        return target
-    }
-
     private fun parseDocId(documentId: String): DocId {
-        if (documentId == ROOT_DOC_ID) return DocId(isRoot = true, root = "", relPath = "")
+        if (documentId == ROOT_DOC_ID) return DocId(true, "", "")
         require(documentId.startsWith(DOC_PREFIX)) { "Invalid documentId: $documentId" }
         val rest = documentId.removePrefix(DOC_PREFIX)
-        val idx = rest.indexOf('/')
-        return if (idx < 0) {
-            DocId(isRoot = false, root = rest, relPath = "")
+        val separator = rest.indexOf('/')
+        return if (separator < 0) {
+            DocId(false, rest, "")
         } else {
-            DocId(isRoot = false, root = rest.substring(0, idx), relPath = rest.substring(idx + 1))
+            DocId(false, rest.substring(0, separator), normalizeRelativePath(rest.substring(separator + 1)))
         }
     }
 
-    private fun buildDocId(root: String, relPath: String): String =
-        if (relPath.isEmpty()) "$DOC_PREFIX$root" else "$DOC_PREFIX$root/$relPath"
+    private fun normalizeRelativePath(path: String): String {
+        val parts = path.replace('\\', '/').split('/').filter { it.isNotBlank() }
+        require(parts.none { it == "." || it == ".." || '\u0000' in it }) { "Invalid path" }
+        return parts.joinToString("/")
+    }
+
+    private fun joinPath(parent: String, child: String): String =
+        listOf(parent.trim('/'), normalizeRelativePath(child)).filter { it.isNotEmpty() }.joinToString("/")
+
+    private fun buildDocId(workspaceId: String, path: String): String =
+        if (path.isEmpty()) "$DOC_PREFIX$workspaceId" else "$DOC_PREFIX$workspaceId/$path"
 
     private fun notifyChange(parentDocumentId: String) {
         val ctx = context ?: return
-        val uri = DocumentsContract.buildChildDocumentsUri(
-            ctx.packageName + ".documents",
-            parentDocumentId,
-        )
+        val uri = DocumentsContract.buildChildDocumentsUri(ctx.packageName + ".documents", parentDocumentId)
         ctx.contentResolver.notifyChange(uri, null)
     }
 
-    private data class DocId(
-        val isRoot: Boolean,
-        val root: String,
-        val relPath: String,
-    )
+    private data class DocId(val isRoot: Boolean, val workspaceId: String, val relPath: String)
 
     companion object {
         private const val ROOT_ID = "rikkahub_workspaces"

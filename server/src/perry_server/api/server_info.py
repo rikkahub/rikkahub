@@ -37,6 +37,7 @@ async def server_info(
             "sync": True,
             "files": files_enabled,
             "monel_facade": monel_enabled,
+            "workspaces": settings.perry_workspace_enabled,
         },
         components=components,
     )

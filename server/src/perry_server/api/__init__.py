@@ -1,6 +1,16 @@
 from fastapi import APIRouter
 
-from perry_server.api import ai_proxy, catalog, conversations, devices, files, health, server_info, sync
+from perry_server.api import (
+    ai_proxy,
+    catalog,
+    conversations,
+    devices,
+    files,
+    health,
+    server_info,
+    sync,
+    workspaces,
+)
 
 
 def build_api_router() -> APIRouter:
@@ -13,4 +23,5 @@ def build_api_router() -> APIRouter:
     router.include_router(files.router)
     router.include_router(catalog.router)
     router.include_router(ai_proxy.router)
+    router.include_router(workspaces.router)
     return router
