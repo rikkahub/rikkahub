@@ -86,33 +86,43 @@ class RetirementBarrierTest {
                 }.exceptionOrNull(),
             )
         }
-        assertTrue(ownerEntered.await(5, TimeUnit.SECONDS))
-        val waiter = thread(name = "failing-retirement-waiter") {
-            waiterAttemptingRetirement.countDown()
-            waiterFailure.set(
-                runCatching {
-                    barrier.retire { waiterCleanupCalls.incrementAndGet() }
-                }.exceptionOrNull(),
-            )
-            waiterReturned.countDown()
-        }
-
-        assertTrue(waiterAttemptingRetirement.await(5, TimeUnit.SECONDS))
+        var waiter: Thread? = null
         try {
+            assertTrue(ownerEntered.await(5, TimeUnit.SECONDS))
+            val startedWaiter = thread(name = "failing-retirement-waiter") {
+                waiterAttemptingRetirement.countDown()
+                waiterFailure.set(
+                    runCatching {
+                        barrier.retire { waiterCleanupCalls.incrementAndGet() }
+                    }.exceptionOrNull(),
+                )
+                waiterReturned.countDown()
+            }
+            waiter = startedWaiter
+
+            assertTrue(waiterAttemptingRetirement.await(5, TimeUnit.SECONDS))
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-            while (waiter.state != Thread.State.WAITING && waiter.isAlive && System.nanoTime() < deadline) {
+            while (
+                startedWaiter.state != Thread.State.WAITING &&
+                startedWaiter.isAlive &&
+                System.nanoTime() < deadline
+            ) {
                 Thread.yield()
             }
-            assertEquals(Thread.State.WAITING, waiter.state)
+            assertEquals(Thread.State.WAITING, startedWaiter.state)
             assertFalse(waiterReturned.await(100, TimeUnit.MILLISECONDS))
         } finally {
             releaseOwner.countDown()
-            owner.join(5_000)
-            waiter.join(5_000)
+            try {
+                owner.join(5_000)
+            } finally {
+                waiter?.join(5_000)
+            }
         }
 
+        val completedWaiter = requireNotNull(waiter)
         assertFalse(owner.isAlive)
-        assertFalse(waiter.isAlive)
+        assertFalse(completedWaiter.isAlive)
         assertSame(failure, ownerFailure.get())
         assertSame(failure, waiterFailure.get())
         assertEquals(0, waiterCleanupCalls.get())
