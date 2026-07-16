@@ -1,9 +1,11 @@
 package me.rerere.rikkahub.voiceagent
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 
 sealed interface VoiceAgentEndDrainOutcome {
     class Completed internal constructor(val failure: Throwable?) : VoiceAgentEndDrainOutcome
+    class Failed internal constructor(val failure: Throwable) : VoiceAgentEndDrainOutcome
     class TimedOut internal constructor(val failure: Throwable) : VoiceAgentEndDrainOutcome
 }
 
@@ -42,23 +44,38 @@ class RouteOwnedVoiceCallSession(
     override suspend fun endAndDrainWithin(timeoutMillis: Long): VoiceAgentEndDrainOutcome {
         require(timeoutMillis > 0) { "timeoutMillis must be positive" }
         var failure = runCatching(routeLease::retire).exceptionOrNull()
-        val completed = try {
+        var drainFailure: Throwable? = null
+        val completedNormally = try {
             withTimeoutOrNull(timeoutMillis) {
                 delegate.endAndDrain()
                 true
             } ?: false
-        } catch (drainFailure: Throwable) {
-            failure = failure.withEndDrainFailure(drainFailure)
-            true
+        } catch (cancellation: CancellationException) {
+            failure = closeDelegateNow(failure)
+            failure?.takeIf { it !== cancellation }?.let(cancellation::addSuppressed)
+            throw cancellation
+        } catch (error: Throwable) {
+            drainFailure = error
+            false
         }
-        if (completed) return VoiceAgentEndDrainOutcome.Completed(failure)
+        if (completedNormally) return VoiceAgentEndDrainOutcome.Completed(failure)
+
+        drainFailure?.let { failure = failure.withEndDrainFailure(it) }
+        if (drainFailure != null) {
+            failure = closeDelegateNow(failure)
+            return VoiceAgentEndDrainOutcome.Failed(checkNotNull(failure))
+        }
 
         failure = failure.withEndDrainFailure(VoiceAgentEndDrainTimeoutException(timeoutMillis))
-        runCatching(delegate::closeNow)
-            .exceptionOrNull()
-            ?.let { closeFailure -> failure = failure.withEndDrainFailure(closeFailure) }
+        failure = closeDelegateNow(failure)
         return VoiceAgentEndDrainOutcome.TimedOut(checkNotNull(failure))
     }
+
+    private fun closeDelegateNow(failure: Throwable?): Throwable? =
+        runCatching(delegate::closeNow)
+            .exceptionOrNull()
+            ?.let { closeFailure -> failure.withEndDrainFailure(closeFailure) }
+            ?: failure
 
     override fun closeNow() = runVoiceAgentCleanupStages(routeLease::retire, delegate::closeNow)
 }
