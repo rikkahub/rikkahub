@@ -38,6 +38,7 @@ class VoiceAgentTelecomCallRegistryTest {
 
         assertEquals(1, call.disconnectCalls)
         assertFalse(registry.hasActiveConnection())
+        assertAttemptWasConsumed(registry, attempt)
     }
 
     @Test
@@ -214,12 +215,17 @@ class VoiceAgentTelecomCallRegistryTest {
         val call = FakeTelecomCall()
         registry.activate(activeAttempt, call)
 
-        registry.beginAttempt()
+        val newerAttempt = registry.beginAttempt()
+        val newerCall = FakeTelecomCall()
+        assertTrue(registry.activate(newerAttempt, newerCall))
 
         assertEquals(1, call.disconnectCalls)
         assertFalse(registry.isOwnedAttemptActive(activeAttempt))
         assertEquals(VoiceAgentTelecomOutcome.Active, registry.awaitOutcome(activeAttempt))
         assertAttemptWasConsumed(registry, activeAttempt)
+        assertEquals(0, newerCall.disconnectCalls)
+        assertTrue(registry.isOwnedAttemptActive(newerAttempt))
+        assertEquals(VoiceAgentTelecomOutcome.Active, registry.awaitOutcome(newerAttempt))
     }
 
     @Test
