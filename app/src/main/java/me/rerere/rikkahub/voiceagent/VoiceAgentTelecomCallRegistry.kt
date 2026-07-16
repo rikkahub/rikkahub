@@ -148,7 +148,7 @@ class VoiceAgentTelecomCallRegistry {
                         false
                     } else {
                         record.phase = AttemptPhase.Active(connection)
-                        outcome = VoiceAgentTelecomOutcome.Active
+                        record.completion.complete(VoiceAgentTelecomOutcome.Active)
                         true
                     }
                 }

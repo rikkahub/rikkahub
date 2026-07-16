@@ -184,6 +184,66 @@ class VoiceAgentTelecomCallRegistryTest {
     }
 
     @Test
+    fun `activation and retirement linearize to exactly one outcome`() = runBlocking {
+        val retirementFirstRegistry = VoiceAgentTelecomCallRegistry()
+        val retirementFirstAttempt = retirementFirstRegistry.beginAttempt()
+        val retirementFirstCall = FakeTelecomCall()
+        val activationEntered = CountDownLatch(1)
+        val releaseActivation = CountDownLatch(1)
+        val retirementFirstAccepted = AtomicBoolean(true)
+        val retirementFirstOutcome = async(start = CoroutineStart.UNDISPATCHED) {
+            retirementFirstRegistry.awaitOutcome(retirementFirstAttempt)
+        }
+        val retirementFirstActivation = thread {
+            retirementFirstAccepted.set(
+                retirementFirstRegistry.activate(retirementFirstAttempt, retirementFirstCall) {
+                    activationEntered.countDown()
+                    releaseActivation.await()
+                },
+            )
+        }
+
+        activationEntered.await()
+        retirementFirstRegistry.retireOwnedAttempt(retirementFirstAttempt)
+        assertFalse(retirementFirstOutcome.isCompleted)
+        releaseActivation.countDown()
+        retirementFirstActivation.join()
+
+        assertFalse(retirementFirstAccepted.get())
+        assertEquals(1, retirementFirstCall.disconnectCalls)
+        assertEquals(
+            "telecom_attempt_cancelled",
+            (retirementFirstOutcome.await() as VoiceAgentTelecomOutcome.Failed).failure.diagnosticName,
+        )
+
+        val publicationFirstRegistry = VoiceAgentTelecomCallRegistry()
+        val publicationFirstAttempt = publicationFirstRegistry.beginAttempt()
+        val publicationFirstCall = FakeTelecomCall()
+        val publicationFirstAccepted = AtomicBoolean()
+        val publicationFirstActivation = thread {
+            publicationFirstAccepted.set(
+                publicationFirstRegistry.activate(publicationFirstAttempt, publicationFirstCall),
+            )
+        }
+
+        publicationFirstActivation.join()
+        assertTrue(publicationFirstAccepted.get())
+        assertEquals(
+            VoiceAgentTelecomOutcome.Active,
+            publicationFirstRegistry.observeOutcome(publicationFirstAttempt),
+        )
+
+        publicationFirstRegistry.retireOwnedAttempt(publicationFirstAttempt)
+
+        assertEquals(1, publicationFirstCall.disconnectCalls)
+        assertEquals(
+            VoiceAgentTelecomOutcome.Active,
+            publicationFirstRegistry.awaitOutcome(publicationFirstAttempt),
+        )
+        assertAttemptWasConsumed(publicationFirstRegistry, publicationFirstAttempt)
+    }
+
+    @Test
     fun `matching failure completes pending attempt`() = runBlocking {
         val registry = VoiceAgentTelecomCallRegistry()
         val attempt = registry.beginAttempt()
