@@ -149,6 +149,10 @@ class VoiceAgentCallManagerTest {
                 }.onSuccess(secondResult::set).onFailure { workerFailure.compareAndSet(null, it) }
             }
             assertTrue(secondStarted.await(1, TimeUnit.SECONDS))
+            assertTrue(
+                "duplicate start did not block on the manager monitor",
+                awaitThreadState(checkNotNull(secondWorker), Thread.State.BLOCKED),
+            )
         } finally {
             releaseFactory.countDown()
             firstWorker.join(1_000)
@@ -331,12 +335,7 @@ private class ManagerLockBlockingStateFlow(
 
     fun awaitCollectorBlockedOnManagerLock(): Boolean {
         check(emissionStarted.await(1, TimeUnit.SECONDS)) { "collector did not start emission" }
-        val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
-        while (System.nanoTime() < deadlineNanos) {
-            if (collectorThread.get()?.state == Thread.State.BLOCKED) return true
-            Thread.yield()
-        }
-        return collectorThread.get()?.state == Thread.State.BLOCKED
+        return collectorThread.get()?.let { awaitThreadState(it, Thread.State.BLOCKED) } == true
     }
 
     fun awaitCollectorReturned(): Boolean = collectorReturned.await(1, TimeUnit.SECONDS)
@@ -406,6 +405,18 @@ private fun fakeLaunchConfig(voiceModelId: String = "gemini-flash") = VoiceAgent
     assistantName = "Hermes",
     assistantPrompt = "system",
 )
+
+private fun awaitThreadState(
+    thread: Thread,
+    expectedState: Thread.State,
+): Boolean {
+    val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+    while (System.nanoTime() < deadlineNanos) {
+        if (thread.state == expectedState) return true
+        Thread.yield()
+    }
+    return thread.state == expectedState
+}
 
 private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking {
     val testScope = CoroutineScope(coroutineContext + SupervisorJob())
