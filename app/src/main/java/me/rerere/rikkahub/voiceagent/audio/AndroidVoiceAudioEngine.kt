@@ -17,7 +17,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import me.rerere.rikkahub.voiceagent.RetirementBarrier
 
 private fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (this) {
     is VoicePlaybackDiagnostic.MalformedChunk -> "Malformed playback chunk: $message"
@@ -40,18 +39,6 @@ internal class VoiceAudioCaptureLifecycle {
     fun <T> transition(block: () -> T): T = synchronized(lock) { block() }
 
     fun <T> callback(block: () -> T): T = synchronized(lock) { block() }
-}
-
-internal class VoiceAudioCaptureRouteLease(
-    private val afterCapture: () -> Unit,
-) {
-    private val retirement = RetirementBarrier()
-
-    fun retire() {
-        retirement.retire {
-            afterCapture()
-        }
-    }
 }
 
 internal fun runVoiceAudioCaptureLoop(
@@ -102,6 +89,43 @@ internal fun ensureVoiceAudioCaptureRecorderInitialized(
     val failure = IllegalStateException("AudioRecord initialization failed")
     listOf(
         releaseRecorder,
+        clearRouteLease,
+        routeLease::retire,
+    ).forEach { cleanup ->
+        runCatching(cleanup).exceptionOrNull()?.let(failure::addSuppressed)
+    }
+    throw failure
+}
+
+internal fun configureVoiceAudioCaptureRecorder(
+    configureRecorder: () -> Unit,
+    releaseRecorder: () -> Unit,
+    clearRouteLease: () -> Unit,
+    routeLease: VoiceAudioCaptureRouteLease,
+) {
+    try {
+        configureRecorder()
+    } catch (failure: Throwable) {
+        listOf(
+            releaseRecorder,
+            clearRouteLease,
+            routeLease::retire,
+        ).forEach { cleanup ->
+            runCatching(cleanup).exceptionOrNull()?.let(failure::addSuppressed)
+        }
+        throw failure
+    }
+}
+
+internal fun <Recorder> createVoiceAudioCaptureRecorder(
+    createRecorder: () -> Recorder,
+    clearRouteLease: () -> Unit,
+    routeLease: VoiceAudioCaptureRouteLease,
+): Recorder = try {
+    createRecorder()
+} catch (cause: Throwable) {
+    val failure = IllegalStateException("AudioRecord creation failed", cause)
+    listOf(
         clearRouteLease,
         routeLease::retire,
     ).forEach { cleanup ->
@@ -170,8 +194,7 @@ class AndroidVoiceAudioEngine(
         }
 
         stopCaptureLocked()
-        routeController.beforeCapture()
-        val routeLease = VoiceAudioCaptureRouteLease(routeController::afterCapture)
+        val routeLease = routeController.acquireCapture()
         val generation = try {
             synchronized(lock) {
                 check(!released) { "Voice audio engine is released" }
@@ -190,14 +213,17 @@ class AndroidVoiceAudioEngine(
             routeLease.retire()
             throw error
         }
-        val recorder = runCatching {
-            createCaptureRecord(bufferSize = bufferSize)
-        }.getOrElse {
-            clearCaptureRouteLease(generation, routeLease)
-            routeLease.retire()
-            throw IllegalStateException("AudioRecord creation failed", it)
-        }
-        routeController.configureRecorder(recorder)
+        val recorder = createVoiceAudioCaptureRecorder(
+            createRecorder = { createCaptureRecord(bufferSize = bufferSize) },
+            clearRouteLease = { clearCaptureRouteLease(generation, routeLease) },
+            routeLease = routeLease,
+        )
+        configureVoiceAudioCaptureRecorder(
+            configureRecorder = { routeLease.configureRecorder(recorder) },
+            releaseRecorder = { recorder.releaseSafely() },
+            clearRouteLease = { clearCaptureRouteLease(generation, routeLease) },
+            routeLease = routeLease,
+        )
 
         ensureVoiceAudioCaptureRecorderInitialized(
             initialized = recorder.state == AudioRecord.STATE_INITIALIZED,

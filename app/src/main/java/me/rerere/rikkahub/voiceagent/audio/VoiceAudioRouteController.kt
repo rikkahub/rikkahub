@@ -2,21 +2,26 @@ package me.rerere.rikkahub.voiceagent.audio
 
 import android.media.AudioRecord
 
-internal interface VoiceAudioRouteController {
-    fun beforeCapture()
+internal interface VoiceAudioCaptureRouteLease {
     fun configureRecorder(recorder: AudioRecord)
-    fun afterCapture()
+    fun retire()
+}
+
+internal interface VoiceAudioRouteController {
+    fun acquireCapture(): VoiceAudioCaptureRouteLease
     fun close()
 }
 
 private object TelecomVoiceAudioRouteController : VoiceAudioRouteController {
-    override fun beforeCapture() = Unit
-
-    override fun configureRecorder(recorder: AudioRecord) = Unit
-
-    override fun afterCapture() = Unit
+    override fun acquireCapture(): VoiceAudioCaptureRouteLease = TelecomVoiceAudioCaptureRouteLease
 
     override fun close() = Unit
+}
+
+private object TelecomVoiceAudioCaptureRouteLease : VoiceAudioCaptureRouteLease {
+    override fun configureRecorder(recorder: AudioRecord) = Unit
+
+    override fun retire() = Unit
 }
 
 internal fun selectVoiceAudioRouteController(

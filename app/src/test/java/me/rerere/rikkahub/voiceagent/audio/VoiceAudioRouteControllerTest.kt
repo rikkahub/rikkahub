@@ -12,14 +12,57 @@ import org.junit.Test
 
 class VoiceAudioRouteControllerTest {
     @Test
+    fun `recorder creation failure clears and retires exact acquired lease`() {
+        val cause = IllegalArgumentException("factory failed")
+        val events = mutableListOf<String>()
+        val lease = FakeCaptureRouteLease { events += "routeRetired" }
+
+        val thrown = runCatching {
+            createVoiceAudioCaptureRecorder(
+                createRecorder = { throw cause },
+                clearRouteLease = { events += "routeCleared" },
+                routeLease = lease,
+            )
+        }.exceptionOrNull()
+
+        assertTrue(thrown is IllegalStateException)
+        assertEquals("AudioRecord creation failed", thrown?.message)
+        assertTrue(thrown?.cause === cause)
+        assertEquals(listOf("routeCleared", "routeRetired"), events)
+        lease.retire()
+        assertEquals(listOf("routeCleared", "routeRetired"), events)
+    }
+
+    @Test
+    fun `recorder configuration failure releases recorder and exact route lease before escaping`() {
+        val failure = IllegalStateException("configuration failed")
+        val events = mutableListOf<String>()
+        val lease = FakeCaptureRouteLease { events += "routeRetired" }
+
+        val thrown = runCatching {
+            configureVoiceAudioCaptureRecorder(
+                configureRecorder = { throw failure },
+                releaseRecorder = { events += "recorderReleased" },
+                clearRouteLease = { events += "routeCleared" },
+                routeLease = lease,
+            )
+        }.exceptionOrNull()
+
+        assertTrue(thrown === failure)
+        assertEquals(listOf("recorderReleased", "routeCleared", "routeRetired"), events)
+        lease.retire()
+        assertEquals(listOf("recorderReleased", "routeCleared", "routeRetired"), events)
+    }
+
+    @Test
     fun `uninitialized recorder retires installed route lease before setup error escapes`() {
         var directResourcesAcquired = false
-        var afterCaptureCalls = 0
+        var retireCalls = 0
         var recorderReleaseCalls = 0
         var installedLease: VoiceAudioCaptureRouteLease? = null
         directResourcesAcquired = true
-        val lease = VoiceAudioCaptureRouteLease {
-            afterCaptureCalls += 1
+        val lease = FakeCaptureRouteLease {
+            retireCalls += 1
             directResourcesAcquired = false
         }.also { installedLease = it }
 
@@ -39,19 +82,19 @@ class VoiceAudioRouteControllerTest {
         assertEquals(1, recorderReleaseCalls)
         assertEquals(null, installedLease)
         assertFalse(directResourcesAcquired)
-        assertEquals(1, afterCaptureCalls)
+        assertEquals(1, retireCalls)
 
         lease.retire() // later stop
         lease.retire() // later release
 
-        assertEquals(1, afterCaptureCalls)
+        assertEquals(1, retireCalls)
         assertFalse(directResourcesAcquired)
     }
 
     @Test
     fun `read exception autonomously retires exact capture route once`() {
         val events = mutableListOf<String>()
-        val lease = VoiceAudioCaptureRouteLease { events += "afterCapture" }
+        val lease = FakeCaptureRouteLease { events += "routeRetired" }
         var reads = 0
 
         runVoiceAudioCaptureLoop(
@@ -71,7 +114,7 @@ class VoiceAudioRouteControllerTest {
 
         assertEquals(1, reads)
         assertEquals(
-            listOf("readException:read failed", "recorderRetired", "afterCapture"),
+            listOf("readException:read failed", "recorderRetired", "routeRetired"),
             events,
         )
     }
@@ -79,7 +122,7 @@ class VoiceAudioRouteControllerTest {
     @Test
     fun `negative read autonomously retires exact capture route once`() {
         val events = mutableListOf<String>()
-        val lease = VoiceAudioCaptureRouteLease { events += "afterCapture" }
+        val lease = FakeCaptureRouteLease { events += "routeRetired" }
         var reads = 0
 
         runVoiceAudioCaptureLoop(
@@ -98,13 +141,13 @@ class VoiceAudioRouteControllerTest {
         lease.retire()
 
         assertEquals(1, reads)
-        assertEquals(listOf("negative:-3", "recorderRetired", "afterCapture"), events)
+        assertEquals(listOf("negative:-3", "recorderRetired", "routeRetired"), events)
     }
 
     @Test
     fun `PCM callback exception autonomously retires exact capture route once with no later read`() {
         val events = mutableListOf<String>()
-        val lease = VoiceAudioCaptureRouteLease { events += "afterCapture" }
+        val lease = FakeCaptureRouteLease { events += "routeRetired" }
         var reads = 0
 
         runVoiceAudioCaptureLoop(
@@ -124,15 +167,15 @@ class VoiceAudioRouteControllerTest {
 
         assertEquals(1, reads)
         assertEquals(
-            listOf("callbackException:callback failed", "recorderRetired", "afterCapture"),
+            listOf("callbackException:callback failed", "recorderRetired", "routeRetired"),
             events,
         )
     }
 
     @Test
     fun `capture route lease is exact once across autonomous stop and release race`() {
-        val afterCaptureCalls = AtomicInteger()
-        val lease = VoiceAudioCaptureRouteLease { afterCaptureCalls.incrementAndGet() }
+        val retireCalls = AtomicInteger()
+        val lease = FakeCaptureRouteLease { retireCalls.incrementAndGet() }
         val racers = List(3) {
             thread(name = "capture-retirement-$it") { lease.retire() }
         }
@@ -140,20 +183,20 @@ class VoiceAudioRouteControllerTest {
         racers.forEach { it.join(5_000) }
 
         assertTrue(racers.none(Thread::isAlive))
-        assertEquals(1, afterCaptureCalls.get())
+        assertEquals(1, retireCalls.get())
     }
 
     @Test
     fun `stop or release waits for autonomous route retirement before later mutation`() {
-        val afterCaptureEntered = CountDownLatch(1)
-        val releaseAfterCapture = CountDownLatch(1)
+        val retirementEntered = CountDownLatch(1)
+        val releaseRetirement = CountDownLatch(1)
         val competingRetirementCompleted = CountDownLatch(1)
-        val lease = VoiceAudioCaptureRouteLease {
-            afterCaptureEntered.countDown()
-            releaseAfterCapture.await(5, TimeUnit.SECONDS)
+        val lease = FakeCaptureRouteLease {
+            retirementEntered.countDown()
+            releaseRetirement.await(5, TimeUnit.SECONDS)
         }
         val autonomous = thread(name = "autonomous-capture-retirement") { lease.retire() }
-        assertTrue(afterCaptureEntered.await(5, TimeUnit.SECONDS))
+        assertTrue(retirementEntered.await(5, TimeUnit.SECONDS))
         val stopOrRelease = thread(name = "explicit-capture-retirement") {
             lease.retire()
             competingRetirementCompleted.countDown()
@@ -162,7 +205,7 @@ class VoiceAudioRouteControllerTest {
         try {
             assertFalse(competingRetirementCompleted.await(100, TimeUnit.MILLISECONDS))
         } finally {
-            releaseAfterCapture.countDown()
+            releaseRetirement.countDown()
             autonomous.join(5_000)
             stopOrRelease.join(5_000)
         }
@@ -180,8 +223,9 @@ class VoiceAudioRouteControllerTest {
             RecordingRouteController()
         }
 
-        selected.beforeCapture()
-        selected.afterCapture()
+        val lease = selected.acquireCapture()
+        lease.retire()
+        lease.retire()
         selected.close()
 
         assertEquals(0, directCreated)
@@ -192,11 +236,12 @@ class VoiceAudioRouteControllerTest {
         val direct = RecordingRouteController()
         val selected = selectVoiceAudioRouteController(VoiceAudioRouteOwner.DirectFallback) { direct }
 
-        selected.beforeCapture()
-        selected.afterCapture()
+        val lease = selected.acquireCapture()
+        lease.retire()
+        lease.retire()
         selected.close()
 
-        assertEquals(listOf("before", "after", "close"), direct.calls)
+        assertEquals(listOf("acquire", "retire", "close"), direct.calls)
     }
 
     @Test
@@ -272,18 +317,30 @@ class VoiceAudioRouteControllerTest {
     private class RecordingRouteController : VoiceAudioRouteController {
         val calls = mutableListOf<String>()
 
-        override fun beforeCapture() {
-            calls += "before"
-        }
-
-        override fun configureRecorder(recorder: AudioRecord) = Unit
-
-        override fun afterCapture() {
-            calls += "after"
+        override fun acquireCapture(): VoiceAudioCaptureRouteLease {
+            calls += "acquire"
+            return FakeCaptureRouteLease { calls += "retire" }
         }
 
         override fun close() {
             calls += "close"
+        }
+    }
+
+    private class FakeCaptureRouteLease(
+        private val onRetire: () -> Unit,
+    ) : VoiceAudioCaptureRouteLease {
+        private val retirement = me.rerere.rikkahub.voiceagent.RetirementBarrier()
+
+        var configureCalls = 0
+            private set
+
+        override fun configureRecorder(recorder: AudioRecord) {
+            configureCalls += 1
+        }
+
+        override fun retire() {
+            retirement.retire(onRetire)
         }
     }
 }

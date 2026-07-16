@@ -21,6 +21,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.voiceagent.RetirementBarrier
 
 internal interface DirectAudioFocusHandle
 
@@ -97,6 +98,7 @@ internal class AndroidDirectAudioRouteController(
     private var previousAudioMode: Int? = null
     private var hasAudioFocus = false
     private var closed = false
+    private var captureGeneration = 0L
     private val bluetoothHeadsetListener = object : DirectBluetoothHeadsetListener {
         override fun onConnected(headset: DirectBluetoothHeadset) {
             val state = synchronized(lock) {
@@ -133,7 +135,26 @@ internal class AndroidDirectAudioRouteController(
         }
     }
 
-    override fun beforeCapture() {
+    override fun acquireCapture(): VoiceAudioCaptureRouteLease {
+        val generation = synchronized(lock) {
+            check(!closed) { "Direct audio route controller is closed" }
+            captureGeneration += 1
+            captureGeneration
+        }
+        try {
+            prepareForCapture()
+        } catch (failure: Throwable) {
+            clearAfterCapture(generation)
+            throw failure
+        }
+        return DirectVoiceAudioCaptureRouteLease(
+            configureAudioRecord = { recorder -> configureCaptureRecorder(generation, recorder) },
+            configureDirectRecorder = { recorder -> configureCaptureRecorder(generation, recorder) },
+            clearAfterCapture = { clearAfterCapture(generation) },
+        )
+    }
+
+    private fun prepareForCapture() {
         synchronized(lock) {
             check(!closed) { "Direct audio route controller is closed" }
         }
@@ -143,39 +164,50 @@ internal class AndroidDirectAudioRouteController(
         prepareVoiceCommunicationRoutingBestEffort()
     }
 
-    override fun configureRecorder(recorder: AudioRecord) {
-        configureRecorder(platform.recorder(recorder))
+    private fun configureCaptureRecorder(generation: Long, recorder: AudioRecord) {
+        configureCaptureRecorder(generation, platform.recorder(recorder))
     }
 
-    internal fun configureRecorder(recorder: DirectAudioRecorder) {
+    private fun configureCaptureRecorder(generation: Long, recorder: DirectAudioRecorder) {
         synchronized(lock) {
             check(!closed) { "Direct audio route controller is closed" }
+            check(captureGeneration == generation) { "Direct audio capture route lease is stale" }
         }
         if (!platform.available) return
         val device = selectPreferredBluetoothCaptureDeviceOrNull() ?: return
         val preferredAccepted = runCatching {
             synchronized(lock) {
                 check(!closed) { "Direct audio route controller is closed" }
+                check(captureGeneration == generation) { "Direct audio capture route lease is stale" }
                 recorder.setPreferredDevice(device)
             }
         }
             .onFailure { logWarning("Direct preferred Bluetooth device failed", it) }
             .getOrDefault(false)
-        val communicationAccepted = setCommunicationDeviceBestEffort(device)
+        val communicationAccepted = setCommunicationDeviceBestEffort(generation, device)
         logDebug(
             "Direct capture route=${device.safeLabel} " +
                 "preferredAccepted=$preferredAccepted communicationAccepted=$communicationAccepted",
         )
     }
 
-    override fun afterCapture() {
-        if (!isClosed()) clearVoiceCommunicationRoutingBestEffort()
+    private fun clearAfterCapture(generation: Long) {
+        val ownsRoute = synchronized(lock) {
+            if (closed || captureGeneration != generation) {
+                false
+            } else {
+                captureGeneration += 1
+                true
+            }
+        }
+        if (ownsRoute) clearVoiceCommunicationRoutingBestEffort()
     }
 
     override fun close() {
         synchronized(lock) {
             if (closed) return
             closed = true
+            captureGeneration += 1
         }
         clearVoiceCommunicationRoutingBestEffort()
         closeBluetoothHeadsetProxy()
@@ -200,9 +232,13 @@ internal class AndroidDirectAudioRouteController(
         return selected?.let { route -> devices.firstOrNull { it.routeDevice.id == route.id } }
     }
 
-    private fun setCommunicationDeviceBestEffort(device: DirectAudioCaptureDevice): Boolean = runCatching {
+    private fun setCommunicationDeviceBestEffort(
+        generation: Long,
+        device: DirectAudioCaptureDevice,
+    ): Boolean = runCatching {
         synchronized(lock) {
             check(!closed) { "Direct audio route controller is closed" }
+            check(captureGeneration == generation) { "Direct audio capture route lease is stale" }
             val accepted = platform.setCommunicationDevice(device)
             if (accepted) hasSelectedCommunicationDevice = true
             accepted
@@ -438,6 +474,26 @@ internal class AndroidDirectAudioRouteController(
         val shouldClose: Boolean,
         val shouldRequestVoiceRecognition: Boolean,
     )
+}
+
+internal class DirectVoiceAudioCaptureRouteLease(
+    private val configureAudioRecord: (AudioRecord) -> Unit,
+    private val configureDirectRecorder: (DirectAudioRecorder) -> Unit,
+    private val clearAfterCapture: () -> Unit,
+) : VoiceAudioCaptureRouteLease {
+    private val retirement = RetirementBarrier()
+
+    override fun configureRecorder(recorder: AudioRecord) {
+        configureAudioRecord(recorder)
+    }
+
+    internal fun configureRecorder(recorder: DirectAudioRecorder) {
+        configureDirectRecorder(recorder)
+    }
+
+    override fun retire() {
+        retirement.retire(clearAfterCapture)
+    }
 }
 
 private class SystemDirectAudioRoutePlatform(

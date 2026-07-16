@@ -17,7 +17,9 @@ class AndroidDirectAudioRouteControllerTest {
         val granted = FakeDirectAudioRoutePlatform()
         val grantedController = controller(granted)
 
-        grantedController.beforeCapture()
+        val grantedLease = grantedController.acquireCapture()
+        grantedLease.retire()
+        grantedLease.retire()
         grantedController.close()
         grantedController.close()
 
@@ -29,7 +31,8 @@ class AndroidDirectAudioRouteControllerTest {
         }
         val failedController = controller(failed)
 
-        failedController.beforeCapture()
+        val failedLease = failedController.acquireCapture()
+        failedLease.retire()
         failedController.close()
 
         assertEquals(1, failed.focusRequests)
@@ -46,20 +49,20 @@ class AndroidDirectAudioRouteControllerTest {
             releaseFocus.await(5, TimeUnit.SECONDS)
         }
         val controller = controller(platform)
-        val beforeFailure = AtomicReference<Throwable?>()
-        val before = thread(name = "direct-focus-request") {
-            runCatching { controller.beforeCapture() }
-                .onFailure(beforeFailure::set)
+        val acquisitionFailure = AtomicReference<Throwable?>()
+        val acquisition = thread(name = "direct-focus-request") {
+            runCatching { controller.acquireCapture() }
+                .onFailure(acquisitionFailure::set)
         }
         assertTrue(focusRequested.await(5, TimeUnit.SECONDS))
 
         controller.close()
         val mutationsAtClose = platform.androidMutations.toList()
         releaseFocus.countDown()
-        before.join(5_000)
+        acquisition.join(5_000)
 
-        assertFalse(before.isAlive)
-        assertEquals(null, beforeFailure.get())
+        assertFalse(acquisition.isAlive)
+        assertEquals(null, acquisitionFailure.get())
         assertEquals(listOf(platform.focusHandle), platform.abandonedFocus)
         assertEquals(mutationsAtClose + "abandonFocus", platform.androidMutations)
         assertEquals(0, platform.setCommunicationModeCalls)
@@ -73,10 +76,11 @@ class AndroidDirectAudioRouteControllerTest {
         }
         val acceptedRecorder = FakeDirectAudioRecorder()
         val acceptedController = controller(accepted)
-        acceptedController.configureRecorder(acceptedRecorder)
+        val acceptedLease = acceptedController.acquireCapture() as DirectVoiceAudioCaptureRouteLease
+        acceptedLease.configureRecorder(acceptedRecorder)
 
-        acceptedController.afterCapture()
-        acceptedController.afterCapture()
+        acceptedLease.retire()
+        acceptedLease.retire()
         acceptedController.close()
 
         assertEquals(listOf(accepted.captureDevice), acceptedRecorder.preferredDevices)
@@ -87,9 +91,10 @@ class AndroidDirectAudioRouteControllerTest {
             communicationDeviceAccepted = false
         }
         val rejectedController = controller(rejected)
-        rejectedController.configureRecorder(FakeDirectAudioRecorder())
+        val rejectedLease = rejectedController.acquireCapture() as DirectVoiceAudioCaptureRouteLease
+        rejectedLease.configureRecorder(FakeDirectAudioRecorder())
 
-        rejectedController.afterCapture()
+        rejectedLease.retire()
         rejectedController.close()
 
         assertEquals(1, rejected.setCommunicationDeviceCalls)
@@ -103,14 +108,31 @@ class AndroidDirectAudioRouteControllerTest {
         }
         val controller = controller(platform)
 
-        controller.beforeCapture()
-        controller.beforeCapture()
-        controller.afterCapture()
-        controller.afterCapture()
+        val lease = controller.acquireCapture()
+        lease.retire()
+        lease.retire()
         controller.close()
 
         assertEquals(1, platform.startScoCalls)
         assertEquals(listOf(true, false), platform.scoEnabledValues)
+        assertEquals(1, platform.stopScoCalls)
+    }
+
+    @Test
+    fun `stale lease retirement does not clear a newer capture route`() {
+        val platform = FakeDirectAudioRoutePlatform()
+        val controller = controller(platform)
+        val staleLease = controller.acquireCapture()
+        val currentLease = controller.acquireCapture()
+
+        staleLease.retire()
+
+        assertEquals(0, platform.restoreAudioModeCalls)
+        assertEquals(0, platform.stopScoCalls)
+
+        currentLease.retire()
+
+        assertEquals(1, platform.restoreAudioModeCalls)
         assertEquals(1, platform.stopScoCalls)
     }
 
@@ -121,8 +143,8 @@ class AndroidDirectAudioRouteControllerTest {
         }
         val controller = controller(platform)
 
-        controller.beforeCapture()
-        controller.afterCapture()
+        val lease = controller.acquireCapture()
+        lease.retire()
         controller.close()
 
         assertEquals(listOf(true, false), platform.scoEnabledValues)
@@ -137,9 +159,9 @@ class AndroidDirectAudioRouteControllerTest {
         }
         val controller = controller(platform)
 
-        controller.beforeCapture()
-        controller.afterCapture()
-        controller.afterCapture()
+        val lease = controller.acquireCapture()
+        lease.retire()
+        lease.retire()
         controller.close()
 
         assertEquals(listOf(platform.headset to platform.bluetoothDevice), platform.voiceRecognitionStarts)
@@ -150,7 +172,7 @@ class AndroidDirectAudioRouteControllerTest {
     fun `headset delivered after close is closed and later disconnect does not mutate`() {
         val platform = FakeDirectAudioRoutePlatform()
         val controller = controller(platform)
-        controller.beforeCapture()
+        controller.acquireCapture()
         controller.close()
         val beforeDelivery = platform.androidMutations.toList()
 
@@ -172,7 +194,7 @@ class AndroidDirectAudioRouteControllerTest {
             dispatchImmediately = false
         }
         val controller = controller(platform)
-        controller.beforeCapture()
+        controller.acquireCapture()
 
         platform.deliverHeadset()
         assertEquals(1, platform.pendingDispatchCount)
@@ -193,11 +215,11 @@ class AndroidDirectAudioRouteControllerTest {
             voiceRecognitionAccepted = true
         }
         val controller = controller(platform)
-        controller.beforeCapture()
-        controller.configureRecorder(FakeDirectAudioRecorder())
+        val lease = controller.acquireCapture() as DirectVoiceAudioCaptureRouteLease
+        lease.configureRecorder(FakeDirectAudioRecorder())
 
-        controller.afterCapture()
-        controller.afterCapture()
+        lease.retire()
+        lease.retire()
         controller.close()
         val mutationsAfterClose = platform.androidMutations.toList()
         controller.close()
@@ -226,12 +248,8 @@ class AndroidDirectAudioRouteControllerTest {
         val mutationsAfterClose = platform.androidMutations.toList()
 
         assertThrows(IllegalStateException::class.java) {
-            controller.beforeCapture()
+            controller.acquireCapture()
         }
-        assertThrows(IllegalStateException::class.java) {
-            controller.configureRecorder(FakeDirectAudioRecorder())
-        }
-        controller.afterCapture()
         controller.close()
 
         assertEquals(mutationsAfterClose, platform.androidMutations)
