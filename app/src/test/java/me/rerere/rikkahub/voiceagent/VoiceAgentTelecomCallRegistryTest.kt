@@ -84,6 +84,31 @@ class VoiceAgentTelecomCallRegistryTest {
     }
 
     @Test
+    fun `retiring callback releases old ownership before clear and preserves replacement`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val oldAttempt = registry.beginAttempt()
+        val oldCall = FakeTelecomCall()
+        assertTrue(registry.activate(oldAttempt, oldCall))
+
+        registry.retiring(oldCall)
+
+        assertFalse(registry.isOwnedAttemptActive(oldAttempt))
+        assertFalse(registry.hasActiveConnection())
+
+        val replacementAttempt = registry.beginAttempt()
+        val replacementCall = FakeTelecomCall()
+        assertTrue(registry.activate(replacementAttempt, replacementCall))
+
+        registry.clear(oldCall)
+
+        assertEquals(VoiceAgentTelecomOutcome.Active, registry.awaitOutcome(oldAttempt))
+        assertAttemptWasConsumed(registry, oldAttempt)
+        assertEquals(0, replacementCall.disconnectCalls)
+        assertTrue(registry.isOwnedAttemptActive(replacementAttempt))
+        assertEquals(VoiceAgentTelecomOutcome.Active, registry.awaitOutcome(replacementAttempt))
+    }
+
+    @Test
     fun `acknowledging active outcome retains connection ownership`() = runBlocking {
         val registry = VoiceAgentTelecomCallRegistry()
         val attempt = registry.beginAttempt()
@@ -466,6 +491,48 @@ class VoiceAgentTelecomCallRegistryTest {
             ),
             withTimeoutOrNull(100) { registry.awaitOutcome(superseded) },
         )
+    }
+
+    @Test
+    fun `replacement supersedes activating attempt and remains usable`() = runBlocking {
+        val registry = VoiceAgentTelecomCallRegistry()
+        val oldAttempt = registry.beginAttempt()
+        val oldCall = FakeTelecomCall()
+        val activationEntered = CountDownLatch(1)
+        val releaseActivation = CountDownLatch(1)
+        val oldAccepted = AtomicBoolean(true)
+        val oldOutcome = async(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
+            registry.awaitOutcome(oldAttempt)
+        }
+        val oldActivation = thread {
+            oldAccepted.set(
+                registry.activate(oldAttempt, oldCall) {
+                    activationEntered.countDown()
+                    releaseActivation.await()
+                },
+            )
+        }
+
+        assertTrue(activationEntered.await(1, TimeUnit.SECONDS))
+        val replacementAttempt = registry.beginAttempt()
+        val replacementCall = FakeTelecomCall()
+        try {
+            assertTrue(registry.activate(replacementAttempt, replacementCall))
+            assertFalse(oldOutcome.isCompleted)
+        } finally {
+            releaseActivation.countDown()
+            oldActivation.join(1_000)
+        }
+
+        assertFalse("old activation did not finish", oldActivation.isAlive)
+        assertFalse(oldAccepted.get())
+        assertEquals(1, oldCall.disconnectCalls)
+        assertEquals(0, replacementCall.disconnectCalls)
+        val failed = withTimeoutOrNull(1_000) { oldOutcome.await() }
+            as VoiceAgentTelecomOutcome.Failed
+        assertEquals("telecom_attempt_superseded", failed.failure.diagnosticName)
+        assertTrue(registry.isOwnedAttemptActive(replacementAttempt))
+        assertEquals(VoiceAgentTelecomOutcome.Active, registry.awaitOutcome(replacementAttempt))
     }
 
     @Test
