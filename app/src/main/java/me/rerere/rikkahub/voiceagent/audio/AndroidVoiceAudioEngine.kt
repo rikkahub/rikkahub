@@ -17,6 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.voiceagent.RetirementBarrier
 
 private fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (this) {
     is VoicePlaybackDiagnostic.MalformedChunk -> "Malformed playback chunk: $message"
@@ -49,6 +50,7 @@ internal enum class VoiceAudioCaptureStartOutcome {
 internal class VoiceAudioCaptureToken internal constructor(
     internal val generation: Long,
     internal val routeLease: VoiceAudioCaptureRouteLease,
+    internal val retirement: RetirementBarrier,
 )
 
 internal class VoiceAudioCaptureOwnership<Recorder : Any, CaptureTask : Any>(
@@ -65,13 +67,17 @@ internal class VoiceAudioCaptureOwnership<Recorder : Any, CaptureTask : Any>(
     private var task: CaptureTask? = null
     private var recorder: Recorder? = null
     private var routeLease: VoiceAudioCaptureRouteLease? = null
+    private var currentRetirement: RetirementBarrier? = null
+    private var inFlightRetirement: OwnedCapture<Recorder, CaptureTask>? = null
     private var released = false
 
     fun begin(routeLease: VoiceAudioCaptureRouteLease): VoiceAudioCaptureToken = synchronized(lock) {
         check(!released) { "Voice audio engine is released" }
         generation += 1
+        val retirement = RetirementBarrier()
         this.routeLease = routeLease
-        VoiceAudioCaptureToken(generation, routeLease)
+        currentRetirement = retirement
+        VoiceAudioCaptureToken(generation, routeLease, retirement)
     }
 
     fun publishAndStart(
@@ -88,18 +94,20 @@ internal class VoiceAudioCaptureOwnership<Recorder : Any, CaptureTask : Any>(
                 false
             }
         }
-        if (!published || !isCurrent(token, recorder)) {
+        if (!published) {
             cancelTask(task)
             releaseRecorder(recorder)
-            clearLease(token, token.routeLease)
             token.routeLease.retire()
+            return VoiceAudioCaptureStartOutcome.Rejected
+        }
+        if (!isCurrent(token, recorder)) {
+            retire(token, recorder)
             return VoiceAudioCaptureStartOutcome.Rejected
         }
 
         return synchronized(recorderLock) {
             if (!isCurrent(token, recorder)) {
-                cancelTask(task)
-                releaseRecorder(recorder)
+                retire(token, recorder)
                 return@synchronized VoiceAudioCaptureStartOutcome.Rejected
             }
 
@@ -107,22 +115,14 @@ internal class VoiceAudioCaptureOwnership<Recorder : Any, CaptureTask : Any>(
                 startRecorder(recorder)
             } catch (failure: RuntimeException) {
                 val stillCurrent = isCurrent(token, recorder)
-                if (stillCurrent) clearCurrent(token, recorder)
-                cancelTask(task)
-                releaseRecorder(recorder)
-                clearLease(token, token.routeLease)
-                token.routeLease.retire()
+                retire(token, recorder)
                 if (stillCurrent) throw IllegalStateException("AudioRecord start failed", failure)
                 return@synchronized VoiceAudioCaptureStartOutcome.Rejected
             }
 
             if (!isRecorderRecording(recorder)) {
                 val stillCurrent = isCurrent(token, recorder)
-                if (stillCurrent) clearCurrent(token, recorder)
-                cancelTask(task)
-                releaseRecorder(recorder)
-                clearLease(token, token.routeLease)
-                token.routeLease.retire()
+                retire(token, recorder)
                 if (stillCurrent) throw IllegalStateException("AudioRecord start failed")
                 return@synchronized VoiceAudioCaptureStartOutcome.Rejected
             }
@@ -131,49 +131,65 @@ internal class VoiceAudioCaptureOwnership<Recorder : Any, CaptureTask : Any>(
                 startTask(task)
                 VoiceAudioCaptureStartOutcome.Started
             } else {
-                cancelTask(task)
-                stopRecorder(recorder)
-                releaseRecorder(recorder)
-                clearLease(token, token.routeLease)
-                token.routeLease.retire()
+                retire(token, recorder)
                 VoiceAudioCaptureStartOutcome.Rejected
             }
         }
     }
 
     fun stop() {
-        val owned = detach() ?: return
+        val owned = synchronized(lock) {
+            claimCurrentForRetirementLocked() ?: inFlightRetirement
+        } ?: return
         retireOwnedCapture(owned)
     }
 
     fun release(): Boolean {
-        val owned = synchronized(lock) {
-            if (released) return false
-            released = true
-            generation += 1
-            detachLocked()
+        val (firstRelease, owned) = synchronized(lock) {
+            val first = !released
+            if (first) {
+                released = true
+                generation += 1
+            }
+            first to (claimCurrentForRetirementLocked() ?: inFlightRetirement)
         }
         owned?.let(::retireOwnedCapture)
-        return true
+        return firstRelease
     }
 
-    fun terminate(token: VoiceAudioCaptureToken, recorder: Recorder): Boolean =
-        synchronized(recorderLock) {
-            stopRecorder(recorder)
-            releaseRecorder(recorder)
-            val cleared = clearCurrent(token, recorder)
-            token.routeLease.retire()
-            cleared
+    fun terminate(token: VoiceAudioCaptureToken, recorder: Recorder): Boolean = retire(token, recorder)
+
+    private fun retire(token: VoiceAudioCaptureToken, recorder: Recorder): Boolean {
+        val (claimed, owned) = synchronized(lock) {
+            val claimedCapture = claimCurrentForRetirementLocked(token, recorder)
+            val capture = claimedCapture
+                ?: inFlightRetirement?.takeIf { it.retirement === token.retirement }
+                ?: OwnedCapture<Recorder, CaptureTask>(
+                    task = null,
+                    recorder = recorder,
+                    routeLease = token.routeLease,
+                    retirement = token.retirement,
+                )
+            (claimedCapture != null) to capture
         }
+        retireOwnedCapture(owned)
+        return claimed
+    }
 
     fun clearLease(token: VoiceAudioCaptureToken, lease: VoiceAudioCaptureRouteLease) {
         synchronized(lock) {
-            if (isCurrentLeaseLocked(token, lease)) routeLease = null
+            if (isCurrentLeaseLocked(token, lease)) {
+                routeLease = null
+                currentRetirement = null
+            }
         }
     }
 
     fun isCurrent(token: VoiceAudioCaptureToken, recorder: Recorder): Boolean = synchronized(lock) {
-        !released && generation == token.generation && this.recorder === recorder
+        !released &&
+            generation == token.generation &&
+            currentRetirement === token.retirement &&
+            this.recorder === recorder
     }
 
     fun isCurrentLease(token: VoiceAudioCaptureToken, lease: VoiceAudioCaptureRouteLease): Boolean =
@@ -181,61 +197,66 @@ internal class VoiceAudioCaptureOwnership<Recorder : Any, CaptureTask : Any>(
 
     fun invalidate(token: VoiceAudioCaptureToken, recorder: Recorder) {
         synchronized(lock) {
-            if (generation == token.generation && this.recorder === recorder) generation += 1
+            if (currentRetirement === token.retirement && this.recorder === recorder) generation += 1
         }
     }
 
     fun isReleased(): Boolean = synchronized(lock) { released }
 
-    private fun clearCurrent(token: VoiceAudioCaptureToken, recorder: Recorder): Boolean =
-        synchronized(lock) {
-            if (generation == token.generation && this.recorder === recorder) {
-                task = null
-                this.recorder = null
-                routeLease = null
-                true
-            } else {
-                false
-            }
-        }
-
-    private fun detach(): OwnedCapture<Recorder, CaptureTask>? = synchronized(lock) {
-        generation += 1
-        detachLocked()
-    }
-
-    private fun detachLocked(): OwnedCapture<Recorder, CaptureTask>? {
+    private fun claimCurrentForRetirementLocked(
+        token: VoiceAudioCaptureToken? = null,
+        expectedRecorder: Recorder? = null,
+    ): OwnedCapture<Recorder, CaptureTask>? {
+        if (token != null && currentRetirement !== token.retirement) return null
+        if (expectedRecorder != null && recorder !== expectedRecorder) return null
         val ownedTask = task
         val ownedRecorder = recorder
         val ownedLease = routeLease
+        val retirement = currentRetirement
+        if (ownedTask == null && ownedRecorder == null && ownedLease == null && retirement == null) return null
+        generation += 1
         task = null
         recorder = null
         routeLease = null
-        if (ownedTask == null && ownedRecorder == null && ownedLease == null) {
-            return null
-        } else {
-            return OwnedCapture(ownedTask, ownedRecorder, ownedLease)
-        }
+        currentRetirement = null
+        return OwnedCapture(
+            task = ownedTask,
+            recorder = ownedRecorder,
+            routeLease = ownedLease,
+            retirement = requireNotNull(retirement),
+        ).also { inFlightRetirement = it }
     }
 
     private fun retireOwnedCapture(owned: OwnedCapture<Recorder, CaptureTask>) {
-        synchronized(recorderLock) {
-            owned.task?.let(cancelTask)
-            owned.recorder?.let(stopRecorder)
-            owned.recorder?.let(releaseRecorder)
-            owned.routeLease?.retire()
+        try {
+            owned.retirement.retire {
+                synchronized(recorderLock) {
+                    owned.task?.let(cancelTask)
+                    owned.recorder?.let(stopRecorder)
+                    owned.recorder?.let(releaseRecorder)
+                    owned.routeLease?.retire()
+                }
+            }
+        } finally {
+            synchronized(lock) {
+                if (inFlightRetirement === owned) inFlightRetirement = null
+            }
         }
     }
 
     private fun isCurrentLeaseLocked(
         token: VoiceAudioCaptureToken,
         lease: VoiceAudioCaptureRouteLease,
-    ): Boolean = !released && generation == token.generation && routeLease === lease
+    ): Boolean = !released &&
+        generation == token.generation &&
+        currentRetirement === token.retirement &&
+        routeLease === lease
 
     private data class OwnedCapture<Recorder, CaptureTask>(
         val task: CaptureTask?,
         val recorder: Recorder?,
         val routeLease: VoiceAudioCaptureRouteLease?,
+        val retirement: RetirementBarrier,
     )
 }
 
@@ -332,6 +353,22 @@ internal fun <Recorder> createVoiceAudioCaptureRecorder(
     throw failure
 }
 
+internal fun acquireVoiceAudioCaptureBufferSize(
+    lookupBufferSize: () -> Int,
+    clearRouteLease: () -> Unit,
+    routeLease: VoiceAudioCaptureRouteLease,
+): Int = try {
+    lookupBufferSize()
+} catch (failure: Throwable) {
+    listOf(
+        clearRouteLease,
+        routeLease::retire,
+    ).forEach { cleanup ->
+        runCatching(cleanup).exceptionOrNull()?.let(failure::addSuppressed)
+    }
+    throw failure
+}
+
 class AndroidVoiceAudioEngine(
     context: Context,
     routeOwner: VoiceAudioRouteOwner,
@@ -401,13 +438,11 @@ class AndroidVoiceAudioEngine(
             routeLease.retire()
             throw error
         }
-        val bufferSize = try {
-            captureBufferSize()
-        } catch (error: Throwable) {
-            captureOwnership.clearLease(token, routeLease)
-            routeLease.retire()
-            throw error
-        }
+        val bufferSize = acquireVoiceAudioCaptureBufferSize(
+            lookupBufferSize = ::captureBufferSize,
+            clearRouteLease = { captureOwnership.clearLease(token, routeLease) },
+            routeLease = routeLease,
+        )
         val recorder = createVoiceAudioCaptureRecorder(
             createRecorder = { createCaptureRecord(bufferSize = bufferSize) },
             clearRouteLease = { captureOwnership.clearLease(token, routeLease) },
