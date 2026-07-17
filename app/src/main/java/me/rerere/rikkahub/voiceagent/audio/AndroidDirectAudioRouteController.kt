@@ -20,14 +20,22 @@ internal class AndroidDirectAudioRouteController(
     override fun acquireCapture(): VoiceAudioCaptureRouteLease = synchronized(lock) {
         check(!closed) { "Direct audio route controller is closed" }
         val acquired = mutableListOf<DirectAudioResourceLease>()
+        val focusCallbackGate = DirectAudioFocusCallbackGate()
         try {
-            capabilities.focus.acquire { focusChange ->
-                if (VoiceAudioFocusPolicy.isFocusChangeFatal(focusChange)) {
-                    onAudioError("Audio focus lost: $focusChange")
-                } else if (focusChange < 0) {
-                    logWarning("Recoverable direct audio focus change: $focusChange")
+            val acquiredFocus = capabilities.focus.acquire { focusChange ->
+                focusCallbackGate.deliver {
+                    if (VoiceAudioFocusPolicy.isFocusChangeFatal(focusChange)) {
+                        onAudioError("Audio focus lost: $focusChange")
+                    } else if (focusChange < 0) {
+                        logWarning("Recoverable direct audio focus change: $focusChange")
+                    }
                 }
-            }?.let(acquired::add)
+            }
+            if (acquiredFocus == null) {
+                focusCallbackGate.close()
+            } else {
+                acquired += acquiredFocus
+            }
             acquireBestEffort(
                 message = "Direct communication mode setup failed",
                 action = capabilities.communicationMode::acquire,
@@ -38,10 +46,12 @@ internal class AndroidDirectAudioRouteController(
             )?.let(acquired::add)
             DirectVoiceAudioCaptureRouteLease(
                 captureDevice = capabilities.captureDevice,
+                focusCallbackGate = focusCallbackGate,
                 initialLeases = acquired,
                 logWarning = ::logWarning,
             )
         } catch (fatal: Throwable) {
+            focusCallbackGate.close()
             acquired.asReversed().forEach { lease ->
                 retireBestEffort("Direct audio rollback failed", lease)
             }
@@ -81,8 +91,22 @@ internal class AndroidDirectAudioRouteController(
     }
 }
 
-internal class DirectVoiceAudioCaptureRouteLease(
+private class DirectAudioFocusCallbackGate {
+    private val lock = Any()
+    private var closed = false
+
+    fun deliver(callback: () -> Unit) = synchronized(lock) {
+        if (!closed) callback()
+    }
+
+    fun close() = synchronized(lock) {
+        closed = true
+    }
+}
+
+private class DirectVoiceAudioCaptureRouteLease(
     private val captureDevice: DirectCaptureDeviceCapability,
+    private val focusCallbackGate: DirectAudioFocusCallbackGate,
     initialLeases: List<DirectAudioResourceLease>,
     private val logWarning: (String, Throwable?) -> Unit,
 ) : VoiceAudioCaptureRouteLease {
@@ -102,6 +126,7 @@ internal class DirectVoiceAudioCaptureRouteLease(
     }
 
     override fun retire() = retirement.retire {
+        focusCallbackGate.close()
         val owned = synchronized(lock) {
             retired = true
             leases.toList().asReversed().also { leases.clear() }

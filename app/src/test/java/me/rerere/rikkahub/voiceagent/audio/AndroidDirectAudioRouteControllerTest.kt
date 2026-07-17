@@ -150,10 +150,11 @@ class AndroidDirectAudioRouteControllerTest {
 
     @Test
     fun `focus acquisition failure remains fatal without later capability mutation`() {
+        val audioErrors = mutableListOf<String>()
         val fixture = DirectAudioCapabilitiesFixture().apply {
             focus.acquireFailure = IllegalStateException("delayed focus is fatal")
         }
-        val controller = fixture.controller()
+        val controller = fixture.controller(audioErrors::add)
 
         val failure = assertThrows(IllegalStateException::class.java) {
             controller.acquireCapture()
@@ -161,6 +162,8 @@ class AndroidDirectAudioRouteControllerTest {
 
         assertEquals("delayed focus is fatal", failure.message)
         assertEquals(listOf("focus-acquire"), fixture.events)
+        fixture.focus.dispatch(AudioManager.AUDIOFOCUS_LOSS)
+        assertTrue(audioErrors.isEmpty())
         controller.close()
         assertEquals(listOf("focus-acquire", "capabilities-close"), fixture.events)
     }
@@ -176,6 +179,79 @@ class AndroidDirectAudioRouteControllerTest {
         fixture.focus.dispatch(AudioManager.AUDIOFOCUS_LOSS)
 
         assertEquals(listOf("Audio focus lost: ${AudioManager.AUDIOFOCUS_LOSS}"), audioErrors)
+        controller.close()
+    }
+
+    @Test
+    fun `retired focus callback cannot affect newer capture while current callback still applies`() {
+        val audioErrors = mutableListOf<String>()
+        val fixture = DirectAudioCapabilitiesFixture()
+        val controller = fixture.controller(audioErrors::add)
+        val oldCapture = controller.acquireCapture()
+        oldCapture.retire()
+        val currentCapture = controller.acquireCapture()
+
+        fixture.focus.dispatch(AudioManager.AUDIOFOCUS_LOSS, acquisitionIndex = 0)
+        fixture.focus.dispatch(AudioManager.AUDIOFOCUS_LOSS, acquisitionIndex = 1)
+
+        assertEquals(listOf("Audio focus lost: ${AudioManager.AUDIOFOCUS_LOSS}"), audioErrors)
+        currentCapture.retire()
+        controller.close()
+    }
+
+    @Test
+    fun `focus retirement joins admitted callback and suppresses callback after retirement wins`() {
+        val callbackEntered = CountDownLatch(1)
+        val releaseCallback = CountDownLatch(1)
+        val retirementCompleted = CountDownLatch(1)
+        val audioErrors = Collections.synchronizedList(mutableListOf<String>())
+        val fixture = DirectAudioCapabilitiesFixture()
+        val controller = fixture.controller { error ->
+            callbackEntered.countDown()
+            releaseCallback.await(5, TimeUnit.SECONDS)
+            audioErrors += error
+        }
+        val capture = controller.acquireCapture()
+        val callback = thread(name = "direct-focus-callback") {
+            fixture.focus.dispatch(AudioManager.AUDIOFOCUS_LOSS)
+        }
+        assertTrue(callbackEntered.await(5, TimeUnit.SECONDS))
+        val retirement = thread(name = "direct-focus-retirement") {
+            capture.retire()
+            retirementCompleted.countDown()
+        }
+
+        try {
+            assertFalse(retirementCompleted.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            releaseCallback.countDown()
+            callback.join(5_000)
+            retirement.join(5_000)
+        }
+
+        assertFalse(callback.isAlive)
+        assertFalse(retirement.isAlive)
+        assertTrue(retirementCompleted.await(0, TimeUnit.MILLISECONDS))
+        assertEquals(listOf("Audio focus lost: ${AudioManager.AUDIOFOCUS_LOSS}"), audioErrors)
+
+        fixture.focus.dispatch(AudioManager.AUDIOFOCUS_LOSS)
+        assertEquals(1, audioErrors.size)
+        controller.close()
+    }
+
+    @Test
+    fun `missing focus lease leaves its retained callback disabled`() {
+        val audioErrors = mutableListOf<String>()
+        val fixture = DirectAudioCapabilitiesFixture().apply {
+            focus.acquisitionAvailable = false
+        }
+        val controller = fixture.controller(audioErrors::add)
+        val capture = controller.acquireCapture()
+
+        fixture.focus.dispatch(AudioManager.AUDIOFOCUS_LOSS)
+
+        assertTrue(audioErrors.isEmpty())
+        capture.retire()
         controller.close()
     }
 
@@ -418,14 +494,14 @@ private class FakeDirectAudioFocusCapability(
     var beforeAcquire: () -> Unit = {}
     var acquireCalls = 0
     var retireCalls = 0
-    private var onFocusChange: ((Int) -> Unit)? = null
+    private val focusCallbacks = mutableListOf<(Int) -> Unit>()
 
     override fun acquire(onFocusChange: (Int) -> Unit): DirectAudioResourceLease? {
         acquireCalls += 1
         events += "focus-acquire"
         beforeAcquire()
+        focusCallbacks += onFocusChange
         acquireFailure?.let { throw it }
-        this.onFocusChange = onFocusChange
         if (!acquisitionAvailable) return null
         return DirectAudioResourceLease {
             retireCalls += 1
@@ -434,8 +510,8 @@ private class FakeDirectAudioFocusCapability(
         }
     }
 
-    fun dispatch(change: Int) {
-        requireNotNull(onFocusChange).invoke(change)
+    fun dispatch(change: Int, acquisitionIndex: Int = focusCallbacks.lastIndex) {
+        focusCallbacks[acquisitionIndex].invoke(change)
     }
 }
 
