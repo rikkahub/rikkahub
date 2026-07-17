@@ -7,23 +7,27 @@ import android.telecom.PhoneAccountHandle
 import org.koin.android.ext.android.inject
 
 class VoiceAgentConnectionService : ConnectionService() {
-    private val callManager: VoiceAgentCallManager by inject()
     private val telecomCallRegistry: VoiceAgentTelecomCallRegistry by inject()
 
     override fun onCreateOutgoingConnection(
         connectionManagerPhoneAccount: PhoneAccountHandle?,
         request: ConnectionRequest?,
     ): Connection {
+        val attemptId = request?.address.voiceAgentTelecomAttemptIdOrNull()
         val connection = VoiceAgentTelecomConnection(
             context = applicationContext,
-            onDisconnected = telecomCallRegistry::clear,
+            onRetiring = telecomCallRegistry::retiring,
+            onRetired = telecomCallRegistry::clear,
         ).apply {
             setAudioModeIsVoip(true)
             setInitializing()
-            setActive()
         }
-        telecomCallRegistry.replace(connection)
-        callManager.updateCallStatus(VoiceCallStatus.BackgroundCapable)
+        activateVoiceAgentTelecomConnection(
+            registry = telecomCallRegistry,
+            attemptId = attemptId,
+            connection = connection,
+            makeActive = connection::setActive,
+        )
         return connection
     }
 
@@ -32,7 +36,34 @@ class VoiceAgentConnectionService : ConnectionService() {
         request: ConnectionRequest?,
     ) {
         val detail = "Android Telecom rejected Voice Agent call"
-        callManager.recordDiagnostic("telecom_outgoing_failed", detail)
-        callManager.updateCallStatus(VoiceCallStatus.Degraded(detail))
+        failVoiceAgentTelecomAttempt(
+            registry = telecomCallRegistry,
+            attemptId = request?.address.voiceAgentTelecomAttemptIdOrNull(),
+            failure = VoiceAgentTelecomFailure(
+                diagnosticName = "telecom_outgoing_failed",
+                detail = detail,
+            ),
+        )
     }
+}
+
+internal fun activateVoiceAgentTelecomConnection(
+    registry: VoiceAgentTelecomCallRegistry,
+    attemptId: VoiceAgentTelecomAttemptId?,
+    connection: VoiceAgentTelecomCall,
+    makeActive: () -> Unit,
+): Boolean {
+    if (attemptId == null) {
+        connection.disconnectFromApp()
+        return false
+    }
+    return registry.activate(attemptId, connection, makeActive)
+}
+
+internal fun failVoiceAgentTelecomAttempt(
+    registry: VoiceAgentTelecomCallRegistry,
+    attemptId: VoiceAgentTelecomAttemptId?,
+    failure: VoiceAgentTelecomFailure,
+) {
+    attemptId?.let { registry.fail(it, failure) }
 }

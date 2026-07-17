@@ -13,10 +13,17 @@ import androidx.annotation.RequiresApi
 
 class VoiceAgentTelecomConnection(
     private val context: Context,
-    private val onDisconnected: (VoiceAgentTelecomConnection) -> Unit,
+    onRetiring: (VoiceAgentTelecomConnection) -> Unit,
+    onRetired: (VoiceAgentTelecomConnection) -> Unit,
 ) : Connection(), VoiceAgentTelecomCall {
     private var requestedBluetoothEndpointId: ParcelUuid? = null
     private var requestedLegacyBluetoothRoute = false
+    private val retirement = VoiceAgentTelecomRetirement(
+        onRetiring = { onRetiring(this) },
+        setDisconnected = ::setDisconnected,
+        destroy = ::destroy,
+        onRetired = { onRetired(this) },
+    )
 
     override fun onDisconnect() {
         context.startService(voiceAgentCallEndIntent(context))
@@ -91,9 +98,7 @@ class VoiceAgentTelecomConnection(
     }
 
     private fun disconnect(cause: DisconnectCause) {
-        onDisconnected(this)
-        setDisconnected(cause)
-        destroy()
+        retirement.retire(cause)
     }
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -156,5 +161,25 @@ class VoiceAgentTelecomConnection(
 
     private companion object {
         const val TAG = "VoiceAgentTelecomConnection"
+    }
+}
+
+internal class VoiceAgentTelecomRetirement<Cause>(
+    private val onRetiring: () -> Unit,
+    private val setDisconnected: (Cause) -> Unit,
+    private val destroy: () -> Unit,
+    private val onRetired: () -> Unit,
+) {
+    private val retirement = RetirementBarrier()
+
+    fun retire(cause: Cause) {
+        retirement.retire {
+            runVoiceAgentCleanupStages(
+                onRetiring,
+                { setDisconnected(cause) },
+                destroy,
+                onRetired,
+            )
+        }
     }
 }

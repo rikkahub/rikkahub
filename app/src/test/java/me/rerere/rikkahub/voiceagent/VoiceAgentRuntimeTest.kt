@@ -20,6 +20,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveCodec
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
@@ -30,6 +31,7 @@ import me.rerere.rikkahub.voiceagent.hermes.VoiceToolRecordStatus
 import me.rerere.rikkahub.voiceagent.hermes.hermesQueueRecords
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.telemetry.HermesToolResponseHash
+import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.RecordingVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
@@ -3567,6 +3569,7 @@ class VoiceAgentRuntimeTest {
             blockedConnect = gemini.blockNextConnectCompletion()
             var sessionMobileApi: HermesVoiceApi? = null
             var toolMobileApi: HermesVoiceApi? = null
+            var audioRouteOwner: VoiceAudioRouteOwner? = null
             val factory = DefaultVoiceAgentCallFactory(
                 context = context,
                 chatService = null,
@@ -3583,7 +3586,10 @@ class VoiceAgentRuntimeTest {
                     FakeVoiceToolApi()
                 },
                 geminiFactory = { gemini },
-                audioFactory = { FakeVoiceAudioEngine() },
+                audioFactory = { owner ->
+                    audioRouteOwner = owner
+                    FakeVoiceAudioEngine()
+                },
                 conversationStoreFactory = {
                     InMemoryVoiceConversationStore(Conversation.ofId(id = conversationId))
                 },
@@ -3591,16 +3597,30 @@ class VoiceAgentRuntimeTest {
                     FakeVoiceAgentContextProvider(VoiceContext(systemInstruction = "system", turns = emptyList()))
                 },
             )
+            val registry = VoiceAgentTelecomCallRegistry()
+            val attempt = registry.beginAttempt()
+            var disconnectCalls = 0
+            val telecomCall = object : VoiceAgentTelecomCall {
+                override fun disconnectFromApp() {
+                    disconnectCalls += 1
+                }
+            }
+            assertTrue(registry.activate(attempt, telecomCall))
+            registry.acknowledgeOutcome(attempt)
             val session = factory.create(
                 conversationId = conversationId,
                 config = fakeLaunchConfig(voiceModelId = "factory-gemini"),
+                routeLease = TelecomVoiceAgentRouteLease(attempt, registry),
                 scope = sessionScope,
             )
             assertTrue(sessionMobileApi != null)
             assertSame(sessionMobileApi, toolMobileApi)
+            assertEquals(VoiceAudioRouteOwner.Telecom, audioRouteOwner)
 
             session.start()
             gemini.awaitConnectCount(1)
+            assertEquals(0, disconnectCalls)
+            assertTrue(registry.isOwnedAttemptActive(attempt))
             val traceId = requireNotNull(observability.propagatedTrace).traceId
             val sessionJson = File(VoiceE2EArtifactPaths.rootDirectory(root), "$traceId/session.json")
             withTimeout(1000) {
@@ -3618,6 +3638,7 @@ class VoiceAgentRuntimeTest {
             assertEquals(BuildConfig.VERSION_NAME, started.string("versionName"))
             assertEquals(BuildConfig.VERSION_CODE, started.string("versionCode"))
             assertEquals("factory-gemini", started.string("voiceModelId"))
+            assertEquals("telecom", started.string("audioRouteOwner"))
             assertEquals("1700000010000", started.getValue("startedAtEpochMs").jsonPrimitive.content)
             assertEquals(BuildConfig.DEBUG, started.boolean("debuggable"))
             assertEquals(BuildConfig.VOICE_AGENT_SENTRY_DSN.isNotBlank(), started.boolean("sentryDsnConfigured"))
@@ -3626,9 +3647,57 @@ class VoiceAgentRuntimeTest {
                 started.boolean("sentryTracingEnabled"),
             )
             assertTrue(started.boolean("sentryPropagationCreated"))
+            session.closeNow()
+            assertEquals(1, disconnectCalls)
+            assertFalse(registry.isOwnedAttemptActive(attempt))
         } finally {
             blockedConnect?.release?.complete(Unit)
             sessionScope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `default call factory keeps creation failure primary and suppresses lease retirement failure`() = runTest {
+        val root = Files.createTempDirectory("voice-factory-failure").toFile()
+        val creationFailure = IllegalStateException("session API creation failed")
+        val retirementFailure = IllegalArgumentException("Telecom retirement failed")
+        val context = object : ContextWrapper(null) {
+            override fun getNoBackupFilesDir(): File = root
+            override fun getPackageName(): String = "me.rerere.rikkahub.factorytest"
+        }
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt()
+        val telecomCall = object : VoiceAgentTelecomCall {
+            override fun disconnectFromApp() {
+                throw retirementFailure
+            }
+        }
+        assertTrue(registry.activate(attempt, telecomCall))
+        registry.acknowledgeOutcome(attempt)
+        val factory = DefaultVoiceAgentCallFactory(
+            context = context,
+            chatService = null,
+            settingsStore = null,
+            okHttpClient = okhttp3.OkHttpClient(),
+            observability = NoOpVoiceObservability,
+            metadataEpochNowMs = { 1_700_000_010_000 },
+            sessionApiFactory = { throw creationFailure },
+        )
+
+        try {
+            val thrown = runCatching {
+                factory.create(
+                    conversationId = Uuid.random(),
+                    config = fakeLaunchConfig(),
+                    routeLease = TelecomVoiceAgentRouteLease(attempt, registry),
+                    scope = this,
+                )
+            }.exceptionOrNull()
+
+            assertSame(creationFailure, thrown)
+            assertEquals(listOf(retirementFailure), thrown?.suppressed?.toList())
+        } finally {
             root.deleteRecursively()
         }
     }
@@ -5692,6 +5761,7 @@ private fun testSessionMetadata(
     versionCode = versionCode,
     debuggable = debuggable,
     voiceModelId = voiceModelId,
+    audioRouteOwner = "telecom",
     providerModel = providerModel,
     status = status,
     startedAtEpochMs = startedAtEpochMs,

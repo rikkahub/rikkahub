@@ -1,7 +1,9 @@
 import com.android.build.api.dsl.Packaging
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.io.File
 import java.io.FileInputStream
+import java.net.URI
 import java.util.Properties
 
 plugins {
@@ -30,6 +32,75 @@ fun localStringProperty(name: String, envName: String? = null): String {
     return "\"$value\""
 }
 
+private fun loadPlainEnvironmentFile(file: File): Map<String, String> {
+    if (!file.isFile) return emptyMap()
+    return file.readLines().mapNotNull { rawLine ->
+        val line = rawLine.trim()
+        if (line.isBlank() || line.startsWith("#")) return@mapNotNull null
+        val separator = line.indexOf('=')
+        if (separator <= 0) return@mapNotNull null
+        val key = line.substring(0, separator).trim()
+        val rawValue = line.substring(separator + 1).trim()
+        val value = if (
+            rawValue.length >= 2 &&
+            ((rawValue.first() == '"' && rawValue.last() == '"') ||
+                (rawValue.first() == '\'' && rawValue.last() == '\''))
+        ) rawValue.substring(1, rawValue.lastIndex) else rawValue
+        key to value
+    }.toMap()
+}
+
+private fun String.asBuildConfigString(): String =
+    "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
+val voiceAgentLocalEnvironment = loadPlainEnvironmentFile(
+    File(System.getProperty("user.home"), ".config/voice-lab/local.env"),
+)
+
+fun resolvedVoiceAgentSetting(propertyName: String, environmentName: String): String =
+    providers.gradleProperty(propertyName).orNull
+        ?: localProperties.getProperty(propertyName)
+        ?: System.getenv(environmentName)
+        ?: voiceAgentLocalEnvironment[environmentName]
+        ?: ""
+
+val voiceAgentSentryDsn = resolvedVoiceAgentSetting("voiceAgentSentryDsn", "VOICE_AGENT_SENTRY_DSN")
+val voiceAgentSentryEnvironment = resolvedVoiceAgentSetting(
+    "voiceAgentSentryEnvironment",
+    "VOICE_AGENT_SENTRY_ENVIRONMENT",
+)
+val voiceAgentSentryTracesSampleRate = resolvedVoiceAgentSetting(
+    "voiceAgentSentryTracesSampleRate",
+    "VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE",
+)
+
+val validateVoiceAgentSentryDebug by tasks.registering {
+    group = "verification"
+    description = "Validates Voice Agent Sentry settings before packaging a debug APK."
+    val dsnValue = voiceAgentSentryDsn
+    val environmentValue = voiceAgentSentryEnvironment
+    val tracesSampleRateValue = voiceAgentSentryTracesSampleRate
+    doLast {
+        require(dsnValue.isNotBlank()) {
+            "VOICE_AGENT_SENTRY_DSN is required for debug APK builds; use a Gradle/local property, process environment, or ~/.config/voice-lab/local.env"
+        }
+        val dsn = runCatching { URI(dsnValue) }.getOrNull()
+        require(
+            dsn != null && dsn.scheme in setOf("http", "https") &&
+                dsn.rawUserInfo?.substringBefore(':')?.isNotBlank() == true &&
+                !dsn.host.isNullOrBlank() && dsn.path?.trim('/')?.isNotBlank() == true
+        ) { "VOICE_AGENT_SENTRY_DSN is invalid for a debug APK build" }
+        require(environmentValue.isNotBlank()) {
+            "VOICE_AGENT_SENTRY_ENVIRONMENT is required for debug APK builds"
+        }
+        val rate = tracesSampleRateValue.toDoubleOrNull()
+        require(rate != null && rate.isFinite() && rate in 0.0..1.0) {
+            "VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE must be a finite number in 0.0..1.0 for debug APK builds"
+        }
+        logger.lifecycle("Voice Agent Sentry debug configuration verified")
+    }
+}
+
 android {
     namespace = "me.rerere.rikkahub"
     compileSdk = 37
@@ -44,9 +115,13 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "VOICE_AGENT_BASE_URL_OVERRIDE", localStringProperty("voiceAgentBaseUrlOverride", "VOICE_AGENT_BASE_URL_OVERRIDE"))
         buildConfigField("String", "VOICE_AGENT_HERMES_E2E_EXPECTED_HASH", "\"\"")
-        buildConfigField("String", "VOICE_AGENT_SENTRY_DSN", localStringProperty("voiceAgentSentryDsn", "VOICE_AGENT_SENTRY_DSN"))
-        buildConfigField("String", "VOICE_AGENT_SENTRY_ENVIRONMENT", localStringProperty("voiceAgentSentryEnvironment", "VOICE_AGENT_SENTRY_ENVIRONMENT"))
-        buildConfigField("String", "VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE", localStringProperty("voiceAgentSentryTracesSampleRate", "VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE"))
+        buildConfigField("String", "VOICE_AGENT_SENTRY_DSN", voiceAgentSentryDsn.asBuildConfigString())
+        buildConfigField("String", "VOICE_AGENT_SENTRY_ENVIRONMENT", voiceAgentSentryEnvironment.asBuildConfigString())
+        buildConfigField(
+            "String",
+            "VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE",
+            voiceAgentSentryTracesSampleRate.asBuildConfigString(),
+        )
 
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
@@ -134,6 +209,18 @@ android {
         compilerOptions.optIn.add("kotlin.time.ExperimentalTime")
         compilerOptions.optIn.add("kotlinx.coroutines.ExperimentalCoroutinesApi")
         compilerOptions.optIn.add("androidx.navigation3.runtime.ExperimentalNavigation3Api")
+    }
+}
+
+val voiceAgentSentryProtectedDebugTasks = setOf(
+    "assembleDebug",
+    "packageDebug",
+    "packageDebugUniversalApk",
+    "installDebug",
+)
+tasks.configureEach {
+    if (name in voiceAgentSentryProtectedDebugTasks) {
+        dependsOn(validateVoiceAgentSentryDebug)
     }
 }
 

@@ -18,12 +18,15 @@ import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.SoundEffectPlayer
 import me.rerere.rikkahub.utils.UpdateChecker
 import me.rerere.rikkahub.voiceagent.DefaultVoiceAgentCallFactory
+import me.rerere.rikkahub.voiceagent.VoiceAgentAudioRouteResolver
 import me.rerere.rikkahub.voiceagent.VoiceAgentCallFactory
 import me.rerere.rikkahub.voiceagent.VoiceAgentCallManager
+import me.rerere.rikkahub.voiceagent.VoiceAgentCallStartup
 import me.rerere.rikkahub.voiceagent.VoiceAgentNotificationFactory
 import me.rerere.rikkahub.voiceagent.VoiceSessionMetadataStore
 import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomAdapter
 import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomCallRegistry
+import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomGateway
 import me.rerere.rikkahub.voiceagent.telemetry.SentryVoiceObservabilityConfig
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.createSentryVoiceObservability
@@ -150,8 +153,20 @@ val appModule = module {
         VoiceAgentTelecomAdapter(context = get())
     }
 
+    single<VoiceAgentTelecomGateway> {
+        get<VoiceAgentTelecomAdapter>()
+    }
+
     single {
         VoiceAgentTelecomCallRegistry()
+    }
+
+    single {
+        VoiceAgentAudioRouteResolver(gateway = get(), registry = get())
+    }
+
+    single {
+        VoiceAgentCallStartup(manager = get(), routeResolver = get())
     }
 
     single {

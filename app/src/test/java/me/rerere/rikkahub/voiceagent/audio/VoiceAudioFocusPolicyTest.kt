@@ -7,7 +7,7 @@ import org.junit.Test
 
 class VoiceAudioFocusPolicyTest {
     @Test
-    fun `failed focus request is recoverable for Telecom managed voice call`() {
+    fun `failed focus request is recoverable for direct fallback voice call`() {
         assertFalse(
             VoiceAudioFocusPolicy.isRequestFailureFatal(AudioManager.AUDIOFOCUS_REQUEST_FAILED)
         )
@@ -21,7 +21,7 @@ class VoiceAudioFocusPolicyTest {
     }
 
     @Test
-    fun `transient focus loss is recoverable for Telecom managed voice call`() {
+    fun `transient focus loss is recoverable for direct fallback voice call`() {
         assertFalse(
             VoiceAudioFocusPolicy.isFocusChangeFatal(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT)
         )

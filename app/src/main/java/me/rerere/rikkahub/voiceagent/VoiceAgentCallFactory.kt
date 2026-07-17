@@ -8,6 +8,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.voiceagent.audio.AndroidVoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.gemini.OkHttpGeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
@@ -36,8 +37,9 @@ interface VoiceAgentCallFactory {
     fun create(
         conversationId: Uuid,
         config: VoiceAgentLaunchConfig,
+        routeLease: VoiceAgentRouteLease,
         scope: CoroutineScope,
-    ): ManagedVoiceCallSession
+    ): RouteOwnedManagedVoiceCallSession
 }
 
 class DefaultVoiceAgentCallFactory internal constructor(
@@ -52,8 +54,8 @@ class DefaultVoiceAgentCallFactory internal constructor(
     private val geminiFactory: () -> GeminiLiveVoiceClient = {
         OkHttpGeminiLiveVoiceClient(httpClient = okHttpClient)
     },
-    private val audioFactory: () -> VoiceAudioEngine = {
-        AndroidVoiceAudioEngine(context = context)
+    private val audioFactory: (VoiceAudioRouteOwner) -> VoiceAudioEngine = { owner ->
+        AndroidVoiceAudioEngine(context = context, routeOwner = owner)
     },
     private val conversationStoreFactory: (Uuid) -> VoiceConversationStore = { conversationId ->
         ChatServiceVoiceConversationStore(
@@ -88,60 +90,71 @@ class DefaultVoiceAgentCallFactory internal constructor(
     override fun create(
         conversationId: Uuid,
         config: VoiceAgentLaunchConfig,
+        routeLease: VoiceAgentRouteLease,
         scope: CoroutineScope,
-    ): ManagedVoiceCallSession {
-        val baseTraceContext = newVoiceTraceContext()
-        val propagatedTraceContext = runCatching {
-            observability.withSentryPropagation(baseTraceContext)
-        }.getOrDefault(baseTraceContext)
-        val (traceContext, traceHeaders) = runCatching {
-            propagatedTraceContext to HermesVoiceTraceHeaders.from(propagatedTraceContext)
-        }.getOrElse {
-            runCatching {
-                observability.recordEvent(
-                    name = "hermes_voice.mobile.session.ended",
-                    trace = propagatedTraceContext,
-                    attributes = mapOf("modelId" to config.voiceModelId),
-                )
+    ): RouteOwnedManagedVoiceCallSession {
+        try {
+            val route = routeLease.metadata
+            val baseTraceContext = newVoiceTraceContext()
+            val propagatedTraceContext = runCatching {
+                observability.withSentryPropagation(baseTraceContext)
+            }.getOrDefault(baseTraceContext)
+            val (traceContext, traceHeaders) = runCatching {
+                propagatedTraceContext to HermesVoiceTraceHeaders.from(propagatedTraceContext)
+            }.getOrElse {
+                runCatching {
+                    observability.recordEvent(
+                        name = "hermes_voice.mobile.session.ended",
+                        trace = propagatedTraceContext,
+                        attributes = mapOf("modelId" to config.voiceModelId),
+                    )
+                }
+                baseTraceContext to HermesVoiceTraceHeaders.from(baseTraceContext)
             }
-            baseTraceContext to HermesVoiceTraceHeaders.from(baseTraceContext)
-        }
-        return runCatching {
-            val mobileApi = HermesVoiceApi(
-                baseUrl = config.hermesVoiceBaseUrl,
-                credentials = config.credentials,
-                traceHeaders = traceHeaders,
-            )
-            VoiceAgentCallSession(
-                modelId = config.voiceModelId,
-                sessionApi = sessionApiFactory(mobileApi),
-                toolApi = toolApiFactory(mobileApi),
-                gemini = geminiFactory(),
-                audio = audioFactory(),
-                conversationStore = conversationStoreFactory(conversationId),
-                contextProvider = contextProviderFactory(config.voiceModelId),
-                observability = observability,
-                traceContext = traceContext,
-                voiceE2EArtifacts = artifactWriterFactory(context.noBackupFilesDir, traceContext, scope),
-                sessionMetadata = buildDefaultVoiceE2ESessionMetadata(
+            val coreSession = runCatching {
+                val mobileApi = HermesVoiceApi(
+                    baseUrl = config.hermesVoiceBaseUrl,
+                    credentials = config.credentials,
+                    traceHeaders = traceHeaders,
+                )
+                VoiceAgentCallSession(
+                    modelId = config.voiceModelId,
+                    sessionApi = sessionApiFactory(mobileApi),
+                    toolApi = toolApiFactory(mobileApi),
+                    gemini = geminiFactory(),
+                    audio = audioFactory(route.owner),
+                    conversationStore = conversationStoreFactory(conversationId),
+                    contextProvider = contextProviderFactory(config.voiceModelId),
+                    observability = observability,
                     traceContext = traceContext,
-                    conversationId = conversationId,
-                    packageName = context.packageName,
-                    voiceModelId = config.voiceModelId,
-                    startedAtEpochMs = metadataEpochNowMs(),
-                ),
-                metadataEpochNowMs = metadataEpochNowMs,
-                scope = scope,
-            )
-        }.getOrElse { throwable ->
-            runCatching {
-                observability.recordEvent(
-                    name = "hermes_voice.mobile.session.ended",
-                    trace = traceContext,
-                    attributes = mapOf("modelId" to config.voiceModelId),
+                    voiceE2EArtifacts = artifactWriterFactory(context.noBackupFilesDir, traceContext, scope),
+                    sessionMetadata = buildDefaultVoiceE2ESessionMetadata(
+                        traceContext = traceContext,
+                        conversationId = conversationId,
+                        packageName = context.packageName,
+                        voiceModelId = config.voiceModelId,
+                        routeOwner = route.owner,
+                        startedAtEpochMs = metadataEpochNowMs(),
+                    ),
+                    metadataEpochNowMs = metadataEpochNowMs,
+                    scope = scope,
                 )
+            }.getOrElse { throwable ->
+                runCatching {
+                    observability.recordEvent(
+                        name = "hermes_voice.mobile.session.ended",
+                        trace = traceContext,
+                        attributes = mapOf("modelId" to config.voiceModelId),
+                    )
+                }
+                throw throwable
             }
-            throw throwable
+            return RouteOwnedVoiceCallSession(coreSession, routeLease)
+        } catch (creationError: Throwable) {
+            runCatching(routeLease::retire)
+                .exceptionOrNull()
+                ?.let(creationError::addSuppressed)
+            throw creationError
         }
     }
 }
@@ -151,6 +164,7 @@ internal fun buildDefaultVoiceE2ESessionMetadata(
     conversationId: Uuid,
     packageName: String,
     voiceModelId: String,
+    routeOwner: VoiceAudioRouteOwner,
     startedAtEpochMs: Long,
 ): VoiceE2ESessionMetadata = VoiceE2ESessionMetadata(
     voiceTraceId = traceContext.traceId,
@@ -161,6 +175,7 @@ internal fun buildDefaultVoiceE2ESessionMetadata(
     versionCode = BuildConfig.VERSION_CODE,
     debuggable = BuildConfig.DEBUG,
     voiceModelId = voiceModelId,
+    audioRouteOwner = routeOwner.diagnosticLabel,
     providerModel = null,
     status = "created",
     startedAtEpochMs = startedAtEpochMs,
