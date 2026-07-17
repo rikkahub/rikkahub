@@ -19,6 +19,7 @@ class RetirementBarrierTest {
         val failure = IllegalStateException("retirement failed")
         val hookEntered = CountDownLatch(1)
         val allowHookCompletion = CountDownLatch(1)
+        val waiterAttemptingRetirement = CountDownLatch(1)
         val waiterReturned = CountDownLatch(1)
         val hookCalls = AtomicInteger()
         val nestedHookCalls = AtomicInteger()
@@ -50,6 +51,7 @@ class RetirementBarrierTest {
         }
         assertTrue(hookEntered.await(5, TimeUnit.SECONDS))
         val waiter = thread(name = "retirement-result-waiter") {
+            waiterAttemptingRetirement.countDown()
             waiterResult.set(
                 runCatching { barrier.retire { cleanupCalls.incrementAndGet() } }.exceptionOrNull(),
             )
@@ -57,6 +59,8 @@ class RetirementBarrierTest {
         }
 
         try {
+            assertTrue(waiterAttemptingRetirement.await(5, TimeUnit.SECONDS))
+            assertTrue(awaitThreadState(waiter, Thread.State.BLOCKED))
             assertFalse(waiterReturned.await(100, TimeUnit.MILLISECONDS))
         } finally {
             allowHookCompletion.countDown()
@@ -323,4 +327,16 @@ private fun runWithNonMaskingCleanup(
         .filter { it !== terminalFailure }
         .forEach(terminalFailure::addSuppressed)
     throw terminalFailure
+}
+
+private fun awaitThreadState(
+    thread: Thread,
+    expectedState: Thread.State,
+): Boolean {
+    val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+    while (System.nanoTime() < deadlineNanos) {
+        if (thread.state == expectedState) return true
+        Thread.yield()
+    }
+    return thread.state == expectedState
 }

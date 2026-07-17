@@ -223,6 +223,7 @@ class VoiceAudioRouteControllerTest {
     fun `stop or release waits for autonomous route retirement before later mutation`() {
         val retirementEntered = CountDownLatch(1)
         val releaseRetirement = CountDownLatch(1)
+        val competingRetirementAttempted = CountDownLatch(1)
         val competingRetirementCompleted = CountDownLatch(1)
         val lease = FakeCaptureRouteLease {
             retirementEntered.countDown()
@@ -231,11 +232,14 @@ class VoiceAudioRouteControllerTest {
         val autonomous = thread(name = "autonomous-capture-retirement") { lease.retire() }
         assertTrue(retirementEntered.await(5, TimeUnit.SECONDS))
         val stopOrRelease = thread(name = "explicit-capture-retirement") {
+            competingRetirementAttempted.countDown()
             lease.retire()
             competingRetirementCompleted.countDown()
         }
 
         try {
+            assertTrue(competingRetirementAttempted.await(5, TimeUnit.SECONDS))
+            assertTrue(awaitThreadState(stopOrRelease, Thread.State.WAITING))
             assertFalse(competingRetirementCompleted.await(100, TimeUnit.MILLISECONDS))
         } finally {
             releaseRetirement.countDown()
@@ -383,4 +387,16 @@ class VoiceAudioRouteControllerTest {
         }
     }
 
+}
+
+private fun awaitThreadState(
+    thread: Thread,
+    expectedState: Thread.State,
+): Boolean {
+    val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+    while (System.nanoTime() < deadlineNanos) {
+        if (thread.state == expectedState) return true
+        Thread.yield()
+    }
+    return thread.state == expectedState
 }

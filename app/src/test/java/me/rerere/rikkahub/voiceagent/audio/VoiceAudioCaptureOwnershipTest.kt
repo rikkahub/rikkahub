@@ -18,6 +18,8 @@ class VoiceAudioCaptureOwnershipTest {
         val routeFailure = IllegalStateException("route retirement failed")
         val resultPublished = CountDownLatch(1)
         val allowOwnershipRelease = CountDownLatch(1)
+        val stopAttemptingRetirement = CountDownLatch(1)
+        val releaseAttemptingRetirement = CountDownLatch(1)
         val stopReturned = CountDownLatch(1)
         val releaseReturned = CountDownLatch(1)
         val ownerResult = AtomicReference<Throwable?>()
@@ -40,15 +42,21 @@ class VoiceAudioCaptureOwnershipTest {
         }
         assertTrue(resultPublished.await(5, TimeUnit.SECONDS))
         val stop = thread(name = "capture-result-publication-stop") {
+            stopAttemptingRetirement.countDown()
             stopResult.set(runCatching { ownership.stop() }.exceptionOrNull())
             stopReturned.countDown()
         }
         val release = thread(name = "capture-result-publication-release") {
+            releaseAttemptingRetirement.countDown()
             releaseResult.set(runCatching { ownership.release() }.exceptionOrNull())
             releaseReturned.countDown()
         }
 
         try {
+            assertTrue(stopAttemptingRetirement.await(5, TimeUnit.SECONDS))
+            assertTrue(releaseAttemptingRetirement.await(5, TimeUnit.SECONDS))
+            assertTrue(awaitThreadState(stop, Thread.State.BLOCKED))
+            assertTrue(awaitThreadState(release, Thread.State.BLOCKED))
             assertFalse(stopReturned.await(100, TimeUnit.MILLISECONDS))
             assertFalse(releaseReturned.await(100, TimeUnit.MILLISECONDS))
         } finally {
@@ -206,6 +214,7 @@ class VoiceAudioCaptureOwnershipTest {
     fun `autonomous termination retains completion boundary for concurrent release`() {
         val routeRetirementEntered = CountDownLatch(1)
         val allowRouteRetirement = CountDownLatch(1)
+        val releaseAttemptingRetirement = CountDownLatch(1)
         val releaseReturned = CountDownLatch(1)
         val closeBoundaryCrossed = CountDownLatch(1)
         val lease = FakeCaptureRouteLease {
@@ -222,12 +231,15 @@ class VoiceAudioCaptureOwnershipTest {
         }
         assertTrue(routeRetirementEntered.await(5, TimeUnit.SECONDS))
         val release = thread(name = "capture-release") {
+            releaseAttemptingRetirement.countDown()
             ownership.release()
             releaseReturned.countDown()
             closeBoundaryCrossed.countDown()
         }
 
         try {
+            assertTrue(releaseAttemptingRetirement.await(5, TimeUnit.SECONDS))
+            assertTrue(awaitThreadState(release, Thread.State.WAITING))
             assertFalse(releaseReturned.await(100, TimeUnit.MILLISECONDS))
             assertFalse(closeBoundaryCrossed.await(0, TimeUnit.MILLISECONDS))
         } finally {
@@ -246,6 +258,7 @@ class VoiceAudioCaptureOwnershipTest {
     fun `terminate first makes concurrent stop join exact retirement`() {
         val routeRetirementEntered = CountDownLatch(1)
         val allowRouteRetirement = CountDownLatch(1)
+        val stopAttemptingRetirement = CountDownLatch(1)
         val stopReturned = CountDownLatch(1)
         val staleLease = FakeCaptureRouteLease {
             routeRetirementEntered.countDown()
@@ -261,11 +274,14 @@ class VoiceAudioCaptureOwnershipTest {
         }
         assertTrue(routeRetirementEntered.await(5, TimeUnit.SECONDS))
         val stop = thread(name = "capture-stop") {
+            stopAttemptingRetirement.countDown()
             ownership.stop()
             stopReturned.countDown()
         }
 
         try {
+            assertTrue(stopAttemptingRetirement.await(5, TimeUnit.SECONDS))
+            assertTrue(awaitThreadState(stop, Thread.State.WAITING))
             assertFalse(stopReturned.await(100, TimeUnit.MILLISECONDS))
         } finally {
             allowRouteRetirement.countDown()
@@ -309,6 +325,8 @@ class VoiceAudioCaptureOwnershipTest {
         lateinit var token: VoiceAudioCaptureToken
         val routeRetirementEntered = CountDownLatch(1)
         val allowRouteRetirement = CountDownLatch(1)
+        val competingStopAttemptingRetirement = CountDownLatch(1)
+        val releaseAttemptingRetirement = CountDownLatch(1)
         val competingStopReturned = CountDownLatch(1)
         val releaseReturned = CountDownLatch(1)
         val lease = FakeCaptureRouteLease {
@@ -323,15 +341,21 @@ class VoiceAudioCaptureOwnershipTest {
         val owner = thread(name = "reentrant-capture-retirement-owner") { ownership.stop() }
         assertTrue(routeRetirementEntered.await(5, TimeUnit.SECONDS))
         val competingStop = thread(name = "reentrant-capture-stop-waiter") {
+            competingStopAttemptingRetirement.countDown()
             ownership.stop()
             competingStopReturned.countDown()
         }
         val release = thread(name = "reentrant-capture-release-waiter") {
+            releaseAttemptingRetirement.countDown()
             ownership.release()
             releaseReturned.countDown()
         }
 
         try {
+            assertTrue(competingStopAttemptingRetirement.await(5, TimeUnit.SECONDS))
+            assertTrue(releaseAttemptingRetirement.await(5, TimeUnit.SECONDS))
+            assertTrue(awaitThreadState(competingStop, Thread.State.WAITING))
+            assertTrue(awaitThreadState(release, Thread.State.WAITING))
             assertFalse(competingStopReturned.await(100, TimeUnit.MILLISECONDS))
             assertFalse(releaseReturned.await(100, TimeUnit.MILLISECONDS))
         } finally {
@@ -357,6 +381,7 @@ class VoiceAudioCaptureOwnershipTest {
         val routeFailure = AssertionError("route failed")
         val cancelEntered = CountDownLatch(1)
         val allowCancelFailure = CountDownLatch(1)
+        val waiterAttemptingRetirement = CountDownLatch(1)
         val waiterReturned = CountDownLatch(1)
         val ownerResult = AtomicReference<Throwable?>()
         val waiterResult = AtomicReference<Throwable?>()
@@ -380,11 +405,14 @@ class VoiceAudioCaptureOwnershipTest {
         }
         assertTrue(cancelEntered.await(5, TimeUnit.SECONDS))
         val waiter = thread(name = "failing-capture-retirement-waiter") {
+            waiterAttemptingRetirement.countDown()
             waiterResult.set(runCatching { ownership.stop() }.exceptionOrNull())
             waiterReturned.countDown()
         }
 
         try {
+            assertTrue(waiterAttemptingRetirement.await(5, TimeUnit.SECONDS))
+            assertTrue(awaitThreadState(waiter, Thread.State.WAITING))
             assertFalse(waiterReturned.await(100, TimeUnit.MILLISECONDS))
         } finally {
             allowCancelFailure.countDown()
@@ -490,4 +518,16 @@ class VoiceAudioCaptureOwnershipTest {
             onCancel()
         }
     }
+}
+
+private fun awaitThreadState(
+    thread: Thread,
+    expectedState: Thread.State,
+): Boolean {
+    val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+    while (System.nanoTime() < deadlineNanos) {
+        if (thread.state == expectedState) return true
+        Thread.yield()
+    }
+    return thread.state == expectedState
 }
