@@ -10,6 +10,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class VoiceAgentTelecomRetirementTest {
@@ -46,6 +47,41 @@ class VoiceAgentTelecomRetirementTest {
         runCatching { retirement.retire(Unit) }
 
         assertEquals(listOf("retiring", "setDisconnected", "destroy", "callback"), events)
+    }
+
+    @Test
+    fun `retirement preserves first cleanup failure and replays aggregate`() {
+        val events = mutableListOf<String>()
+        val retiringFailure = IllegalStateException("retiring failed")
+        val disconnectFailure = IllegalArgumentException("disconnect failed")
+        val destroyFailure = UnsupportedOperationException("destroy failed")
+        val retiredFailure = AssertionError("retired failed")
+        val retirement = VoiceAgentTelecomRetirement<Unit>(
+            onRetiring = {
+                events += "retiring"
+                throw retiringFailure
+            },
+            setDisconnected = {
+                events += "setDisconnected"
+                throw disconnectFailure
+            },
+            destroy = {
+                events += "destroy"
+                throw destroyFailure
+            },
+            onRetired = {
+                events += "retired"
+                throw retiredFailure
+            },
+        )
+
+        val first = runCatching { retirement.retire(Unit) }.exceptionOrNull()
+        val later = runCatching { retirement.retire(Unit) }.exceptionOrNull()
+
+        assertEquals(listOf("retiring", "setDisconnected", "destroy", "retired"), events)
+        assertSame(retiringFailure, first)
+        assertEquals(listOf(disconnectFailure, destroyFailure, retiredFailure), first?.suppressed?.toList())
+        assertSame(first, later)
     }
 
     @Test

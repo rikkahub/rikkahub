@@ -174,19 +174,12 @@ internal class VoiceAgentTelecomRetirement<Cause>(
 
     fun retire(cause: Cause) {
         retirement.retire {
-            try {
-                try {
-                    onRetiring()
-                } finally {
-                    try {
-                        setDisconnected(cause)
-                    } finally {
-                        destroy()
-                    }
-                }
-            } finally {
-                onRetired()
-            }
+            runVoiceAgentCleanupStages(
+                onRetiring,
+                { setDisconnected(cause) },
+                destroy,
+                onRetired,
+            )
         }
     }
 }
