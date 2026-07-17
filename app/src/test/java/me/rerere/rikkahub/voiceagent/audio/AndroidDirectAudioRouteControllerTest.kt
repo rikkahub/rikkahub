@@ -295,6 +295,23 @@ class AndroidDirectAudioRouteControllerTest {
     }
 
     @Test
+    fun `completed capture retirement rejects later recorder configuration without mutation`() {
+        val fixture = DirectAudioCapabilitiesFixture()
+        val controller = fixture.controller()
+        val lease = controller.acquireCapture()
+
+        lease.retire()
+        val eventsAfterRetirement = fixture.events.toList()
+        lease.configureRecorder(uninitializedAudioRecord())
+        lease.retire()
+
+        assertEquals(0, fixture.device.configureCalls)
+        assertEquals(0, fixture.device.retireCalls)
+        assertEquals(eventsAfterRetirement, fixture.events)
+        controller.close()
+    }
+
+    @Test
     fun `retirement failures do not skip remaining resources`() {
         val fixture = DirectAudioCapabilitiesFixture().apply {
             device.retireFailure = IllegalStateException("device")
@@ -339,6 +356,7 @@ class AndroidDirectAudioRouteControllerTest {
         }
 
         try {
+            assertTrue(awaitThreadState(close, Thread.State.BLOCKED))
             assertFalse(closeCompleted.await(100, TimeUnit.MILLISECONDS))
         } finally {
             releaseFocus.countDown()
@@ -378,6 +396,7 @@ class AndroidDirectAudioRouteControllerTest {
         }
 
         try {
+            assertTrue(awaitThreadState(retirement, Thread.State.BLOCKED))
             assertFalse(retirementCompleted.await(100, TimeUnit.MILLISECONDS))
         } finally {
             releaseDevice.countDown()

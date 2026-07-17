@@ -187,7 +187,7 @@ internal class SystemDirectBluetoothCaptureCapability(
     private var closed = false
 
     override fun acquire(): DirectAudioResourceLease? {
-        if (!probeDirectAudioPermission(operations::hasConnectPermission)) {
+        if (!operations.hasConnectPermission()) {
             logCapabilityDebug("Direct Bluetooth SCO skipped: BLUETOOTH_CONNECT not granted")
             return null
         }
@@ -361,7 +361,7 @@ internal class SystemDirectCaptureDeviceCapability(
     private val operations: DirectCaptureDeviceOperations,
 ) : DirectCaptureDeviceCapability {
     override fun configure(recorder: AudioRecord): DirectAudioResourceLease? {
-        if (!probeDirectAudioPermission(operations::hasConnectPermission)) {
+        if (!operations.hasConnectPermission()) {
             logCapabilityDebug("Direct Bluetooth route skipped: BLUETOOTH_CONNECT not granted")
             return null
         }
@@ -556,8 +556,6 @@ private fun retirementLease(retire: () -> Unit): DirectAudioResourceLease {
     val retirement = RetirementBarrier()
     return DirectAudioResourceLease { retirement.retire(retire) }
 }
-
-private fun probeDirectAudioPermission(probe: () -> Boolean): Boolean = probe()
 
 private fun hasBluetoothConnectPermission(context: Context): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
