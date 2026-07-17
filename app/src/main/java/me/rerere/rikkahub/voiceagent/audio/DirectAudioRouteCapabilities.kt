@@ -235,21 +235,26 @@ internal class SystemDirectBluetoothCaptureCapability(
             check(!closed) { "Direct Bluetooth capture capability is closed" }
             wantsVoiceRecognition = true
         }
-        val connected = headsetProxyOrNull()
-        if (isClosed()) return null
-        if (connected == null) {
-            logCapabilityDebug("Direct Bluetooth headset voice recognition skipped: profile unavailable")
-        } else {
-            requestVoiceRecognition(connected)
+        try {
+            val connected = headsetProxyOrNull()
+            if (isClosed()) return null
+            if (connected == null) {
+                logCapabilityDebug("Direct Bluetooth headset voice recognition skipped: profile unavailable")
+            } else {
+                requestVoiceRecognition(connected)
+            }
+            if (isClosed()) return null
+            runCatching {
+                operations.startBluetoothSco()
+                synchronized(lock) { startedSco = true }
+                if (!isClosed()) operations.setBluetoothScoEnabled(true)
+                logCapabilityDebug("Direct requested Bluetooth SCO")
+            }.onFailure { logCapabilityWarning("Direct Bluetooth SCO request failed", it) }
+            return retirementLease(::clearRouting)
+        } catch (failure: Throwable) {
+            runCatching(::clearRouting).onFailure(failure::addSuppressed)
+            throw failure
         }
-        if (isClosed()) return null
-        runCatching {
-            operations.startBluetoothSco()
-            synchronized(lock) { startedSco = true }
-            if (!isClosed()) operations.setBluetoothScoEnabled(true)
-            logCapabilityDebug("Direct requested Bluetooth SCO")
-        }.onFailure { logCapabilityWarning("Direct Bluetooth SCO request failed", it) }
-        return retirementLease(::clearRouting)
     }
 
     fun beginClose() {

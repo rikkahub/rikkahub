@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.voiceagent.audio
 
 import android.media.AudioRecord
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -148,6 +150,11 @@ internal class FakeBluetoothCaptureOperations : DirectBluetoothCaptureOperations
     var throwWhenDisablingSco = false
     var dispatchImmediately = true
     var permissionProbeFailure: Throwable? = null
+    var awaitFailure: Throwable? = null
+    var waitUntilStopped = false
+    val awaitEntered = CountDownLatch(1)
+    val awaitStopObserved = CountDownLatch(1)
+    val releaseAwait = CountDownLatch(1)
     var permissionChecks = 0
     var startScoCalls = 0
     val scoEnabledValues = mutableListOf<Boolean>()
@@ -179,7 +186,17 @@ internal class FakeBluetoothCaptureOperations : DirectBluetoothCaptureOperations
     override fun awaitHeadset(
         current: () -> DirectBluetoothHeadset?,
         shouldStop: () -> Boolean,
-    ): DirectBluetoothHeadset? = current().takeUnless { shouldStop() }
+    ): DirectBluetoothHeadset? {
+        awaitEntered.countDown()
+        awaitFailure?.let { throw it }
+        if (waitUntilStopped) {
+            while (!shouldStop() && !releaseAwait.await(10, TimeUnit.MILLISECONDS)) {
+                // Poll the real capability's terminal predicate deterministically.
+            }
+            if (shouldStop()) awaitStopObserved.countDown()
+        }
+        return current().takeUnless { shouldStop() }
+    }
 
     override fun closeHeadsetProxy(headset: DirectBluetoothHeadset) {
         closedHeadsets += headset

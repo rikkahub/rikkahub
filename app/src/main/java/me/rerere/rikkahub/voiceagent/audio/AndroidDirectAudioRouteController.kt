@@ -24,6 +24,7 @@ internal class AndroidDirectAudioRouteController(
     private var communicationModeLease: DirectAudioResourceLease? = null
     private var bluetoothCaptureLease: DirectAudioResourceLease? = null
     private var captureDeviceLease: DirectAudioResourceLease? = null
+    private var captureDeviceGeneration: Long? = null
     private var closed = false
     private var captureGeneration = 0L
 
@@ -129,10 +130,14 @@ internal class AndroidDirectAudioRouteController(
         synchronized(captureTransitionLock) {
             check(nonFocusOperations.enter()) { "Direct audio route controller is closed" }
             try {
-                synchronized(lock) {
+                val priorDeviceLease = synchronized(lock) {
                     check(!closed) { "Direct audio route controller is closed" }
                     check(captureGeneration == generation) { "Direct audio capture route lease is stale" }
-                    if (captureDeviceLease != null) return
+                    if (captureDeviceLease != null && captureDeviceGeneration == generation) return
+                    detachCaptureDeviceLease()
+                }
+                priorDeviceLease?.let {
+                    retireBestEffort("Direct capture device retirement failed", it)
                 }
                 val acquired = capabilityBestEffort("Direct capture device configuration failed") {
                     capabilities.captureDevice.configure(recorder)
@@ -142,6 +147,7 @@ internal class AndroidDirectAudioRouteController(
                         true
                     } else {
                         captureDeviceLease = acquired
+                        captureDeviceGeneration = generation
                         false
                     }
                 }
@@ -181,7 +187,7 @@ internal class AndroidDirectAudioRouteController(
         nonFocusOperations.closeAndAwait()
         val owned = synchronized(lock) {
             DetachedDirectAudioResources(
-                captureDevice = captureDeviceLease.also { captureDeviceLease = null },
+                captureDevice = detachCaptureDeviceLease(),
                 bluetoothCapture = bluetoothCaptureLease.also { bluetoothCaptureLease = null },
                 communicationMode = communicationModeLease.also { communicationModeLease = null },
                 focus = focusLease.also { focusLease = null },
@@ -194,11 +200,17 @@ internal class AndroidDirectAudioRouteController(
 
     private fun detachCaptureResources(): DetachedDirectAudioResources =
         DetachedDirectAudioResources(
-            captureDevice = captureDeviceLease.also { captureDeviceLease = null },
+            captureDevice = detachCaptureDeviceLease(),
             bluetoothCapture = bluetoothCaptureLease.also { bluetoothCaptureLease = null },
             communicationMode = communicationModeLease.also { communicationModeLease = null },
             focus = null,
         )
+
+    private fun detachCaptureDeviceLease(): DirectAudioResourceLease? =
+        captureDeviceLease.also {
+            captureDeviceLease = null
+            captureDeviceGeneration = null
+        }
 
     private fun DetachedDirectAudioResources.retireBestEffort() {
         captureDevice?.let { retireBestEffort("Direct capture device retirement failed", it) }

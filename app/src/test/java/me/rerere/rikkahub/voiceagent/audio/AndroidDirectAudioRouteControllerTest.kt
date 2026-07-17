@@ -211,6 +211,59 @@ class AndroidDirectAudioRouteControllerTest {
     }
 
     @Test
+    fun `replacement capture configures its recorder and retires prior device lease`() {
+        val fixture = DirectAudioCapabilitiesFixture()
+        val controller = fixture.controller()
+        val stale = controller.acquireCapture()
+        stale.configureRecorder(uninitializedAudioRecord())
+
+        val current = controller.acquireCapture()
+        current.configureRecorder(uninitializedAudioRecord())
+
+        assertEquals(2, fixture.device.configureCalls)
+        assertEquals(1, fixture.device.retireCalls)
+
+        stale.retire()
+        assertEquals(1, fixture.device.retireCalls)
+
+        current.retire()
+        assertEquals(2, fixture.device.retireCalls)
+        controller.close()
+    }
+
+    @Test
+    fun `Bluetooth await failure clears routing intent and later capture acquires normally`() {
+        val awaitFailure = IllegalStateException("Bluetooth profile wait failed")
+        val operations = FakeBluetoothCaptureOperations().apply {
+            recognitionAccepted = true
+            this.awaitFailure = awaitFailure
+        }
+        val bluetooth = SystemDirectBluetoothCaptureCapability(operations)
+        val fixture = DirectAudioCapabilitiesFixture(
+            bluetoothOverride = bluetooth,
+            beginCloseOverride = bluetooth::beginClose,
+            closeOverride = bluetooth::close,
+        )
+        val controller = fixture.controller()
+
+        val failedCapture = controller.acquireCapture()
+        operations.deliverHeadset()
+
+        assertTrue(operations.recognitionStarts.isEmpty())
+        assertEquals(0, operations.startScoCalls)
+
+        failedCapture.retire()
+        operations.awaitFailure = null
+        val recoveredCapture = controller.acquireCapture()
+
+        assertEquals(listOf(operations.headset to operations.device), operations.recognitionStarts)
+        assertEquals(1, operations.startScoCalls)
+
+        recoveredCapture.retire()
+        controller.close()
+    }
+
+    @Test
     fun `new acquisition waits for physical retirement to finish`() {
         val retirementEntered = CountDownLatch(1)
         val releaseRetirement = CountDownLatch(1)
@@ -324,6 +377,7 @@ class AndroidDirectAudioRouteControllerTest {
         }
 
         try {
+            assertTrue(fixture.beginCloseObserved.await(5, TimeUnit.SECONDS))
             assertFalse(closeCompleted.await(100, TimeUnit.MILLISECONDS))
         } finally {
             releaseMode.countDown()
@@ -369,6 +423,44 @@ class AndroidDirectAudioRouteControllerTest {
     }
 
     @Test
+    fun `close interrupts real Bluetooth capability await without routing mutation`() {
+        val operations = FakeBluetoothCaptureOperations().apply {
+            waitUntilStopped = true
+        }
+        val bluetooth = SystemDirectBluetoothCaptureCapability(operations)
+        val fixture = DirectAudioCapabilitiesFixture(
+            bluetoothOverride = bluetooth,
+            beginCloseOverride = bluetooth::beginClose,
+            closeOverride = bluetooth::close,
+        )
+        val controller = fixture.controller()
+        val acquisition = thread(name = "real-direct-bluetooth-acquisition") {
+            controller.acquireCapture()
+        }
+        assertTrue(operations.awaitEntered.await(5, TimeUnit.SECONDS))
+        val close = thread(name = "direct-close-during-real-bluetooth") {
+            controller.close()
+        }
+
+        try {
+            assertTrue(operations.awaitStopObserved.await(5, TimeUnit.SECONDS))
+            acquisition.join(5_000)
+            close.join(5_000)
+        } finally {
+            operations.releaseAwait.countDown()
+            acquisition.join(5_000)
+            close.join(5_000)
+        }
+
+        assertFalse(acquisition.isAlive)
+        assertFalse(close.isAlive)
+        assertEquals(0, operations.startScoCalls)
+        assertTrue(operations.recognitionStarts.isEmpty())
+        assertEquals(1, fixture.mode.retireCalls)
+        assertEquals(1, fixture.focus.retireCalls)
+    }
+
+    @Test
     fun `close joins recorder device configuration and retires late resource once`() {
         val deviceEntered = CountDownLatch(1)
         val releaseDevice = CountDownLatch(1)
@@ -393,6 +485,7 @@ class AndroidDirectAudioRouteControllerTest {
         }
 
         try {
+            assertTrue(fixture.beginCloseObserved.await(5, TimeUnit.SECONDS))
             assertFalse(closeCompleted.await(100, TimeUnit.MILLISECONDS))
         } finally {
             releaseDevice.countDown()
