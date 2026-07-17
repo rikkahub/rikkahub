@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.takeOrElse
+import io.ratex.DisplayList
 import io.ratex.RaTeXEngine
 import io.ratex.compose.RaTeX
 import io.ratex.measure
@@ -34,6 +35,10 @@ data class LatexMetrics(
  *
  * 如果 RaTeX 返回的尺寸无效（NaN、Infinity 或超出 Compose 限制），
  * 返回 null。调用者应使用 0 作为安全降级 Placeholder 尺寸。
+ *
+ * 注：此函数不传 color 参数，因为 color 不影响 DisplayList 尺寸
+ * （Rust 端 LayoutOptions.with_color 只设置默认绘制颜色，不改变布局算法）。
+ * 主要用于 splitLatex 候选段宽度测量和独立 LatexText 备用路径。
  */
 fun assumeLatexSize(
     latex: String,
@@ -56,8 +61,10 @@ fun assumeLatexSize(
 /**
  * 用 RaTeX 引擎渲染 LaTeX 公式的 Composable。
  *
- * 签名兼容旧版 [LatexText]，新增 [displayMode] 参数供块级/行内选择。
- * 渲染失败时退化到纯文本显示原始 LaTeX。
+ * [displayList] 为可选预解析结果；投喂时直接使用无需解析，
+ * 用于 [InlineTextContent] 场景下与 Placeholder 测量共享同一 DisplayList。
+ * 未投喂时通过 [remember] 同步解析并缓存（主线程，短公式 <5ms）。
+ * 首个公式缓存缺失后再次出现零开销。
  */
 @Composable
 fun LatexText(
@@ -67,24 +74,27 @@ fun LatexText(
     color: Color = Color.Unspecified,
     style: TextStyle = LocalTextStyle.current,
     displayMode: Boolean = false,
+    displayList: DisplayList? = null,
 ) {
     val resolvedColor = if (color == Color.Unspecified) style.color else color
     val resolvedFontSize = fontSize.takeOrElse { style.fontSize }
 
-    val displayList = remember(latex, displayMode, resolvedColor) {
-        runCatching {
-            RaTeXEngine.parseBlocking(latex, displayMode = displayMode, color = resolvedColor)
-        }.getOrNull()
+    val dl = if (displayList != null) {
+        displayList
+    } else {
+        remember(latex, displayMode, resolvedColor) {
+            runCatching { RaTeXEngine.parseBlocking(latex, displayMode = displayMode, color = resolvedColor) }.getOrNull()
+        }
     }
 
-    if (displayList != null) {
+    if (dl != null) {
         RaTeX(
-            displayList = displayList,
+            displayList = dl,
             modifier = modifier,
             fontSize = resolvedFontSize,
         )
     } else {
-        // 降级：显示原始 LaTeX 文本
+        // 降级：显示原始 LaTeX 文本（异步解析未完成或解析失败时）
         Text(
             text = latex,
             style = style.merge(color = resolvedColor, fontSize = resolvedFontSize),

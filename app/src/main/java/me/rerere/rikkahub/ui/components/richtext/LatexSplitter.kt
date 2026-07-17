@@ -167,7 +167,10 @@ private fun findStyleRanges(latex: String): List<Pair<Int, String>> {
                 val braceStart = latex.indexOf('{', cmdEnd)
                 if (braceStart >= 0) {
                     val braceEnd = findMatchingBrace(latex, braceStart)
-                    if (braceEnd > braceStart) {
+                    // 只有匹配到真正的 '}' 才算有效；若 findMatchingBrace 返回
+                    // braceStart（即无右括号），跳过以避免 substring(i, braceStart + 1)
+                    // 产生畸形字符串。
+                    if (braceEnd > braceStart && latex[braceEnd] == '}') {
                         ranges.add(i to latex.substring(i, braceEnd + 1))
                         i = braceEnd + 1
                         continue
