@@ -238,7 +238,7 @@ private class SystemBluetoothCaptureLease(
                 return
             }
             logCapabilityDebug("Direct Bluetooth headset profile connected")
-            callbackDispatcher.dispatch { activateRouting(headset) }
+            callbackDispatcher.dispatch { activateConnectedHeadset(headset) }
         }
 
         override fun onDisconnected() {
@@ -266,8 +266,9 @@ private class SystemBluetoothCaptureLease(
         if (connected == null) {
             logCapabilityDebug("Direct Bluetooth headset voice recognition skipped: profile unavailable")
         } else {
-            activateRouting(connected)
+            requestVoiceRecognition(connected)
         }
+        requestBluetoothSco()
     }
 
     override fun retire() = retirement.retire {
@@ -296,11 +297,15 @@ private class SystemBluetoothCaptureLease(
         connected?.let(::closeHeadsetProxy)
     }
 
-    private fun activateRouting(connected: DirectBluetoothHeadset) {
+    private fun activateConnectedHeadset(connected: DirectBluetoothHeadset) {
         requestVoiceRecognition(connected)
+        requestBluetoothSco()
+    }
+
+    private fun requestBluetoothSco() {
         runCatching {
             synchronized(lock) {
-                if (closed || headset !== connected || scoAttempted) return@runCatching
+                if (closed || scoAttempted) return@runCatching
                 scoAttempted = true
                 operations.startBluetoothSco()
                 startedSco = true

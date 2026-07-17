@@ -43,8 +43,12 @@ class DirectAudioRouteCapabilitiesTest {
         val lease = requireNotNull(capability.acquire())
 
         assertTrue(operations.recognitionStarts.isEmpty())
-        assertEquals(0, operations.startScoCalls)
+        assertEquals(1, operations.startScoCalls)
+        assertEquals(listOf(true), operations.scoEnabledValues)
         lease.retire()
+        lease.retire()
+        assertEquals(listOf(true, false), operations.scoEnabledValues)
+        assertEquals(1, operations.stopScoCalls)
         capability.close()
     }
 
@@ -140,7 +144,8 @@ class DirectAudioRouteCapabilitiesTest {
         assertEquals(mutationsBeforeCallback + "close-proxy", operations.mutations)
         assertEquals(listOf(operations.headset), operations.closedHeadsets)
         assertTrue(operations.recognitionStarts.isEmpty())
-        assertEquals(0, operations.startScoCalls)
+        assertEquals(1, operations.startScoCalls)
+        assertEquals(1, operations.stopScoCalls)
         capability.close()
     }
 
@@ -175,8 +180,9 @@ class DirectAudioRouteCapabilitiesTest {
         operations.deliverHeadset(listenerIndex = 1)
 
         assertEquals(1, operations.closedHeadsets.size)
-        assertEquals(1, operations.startScoCalls)
+        assertEquals(2, operations.startScoCalls)
         second.retire()
+        assertEquals(2, operations.stopScoCalls)
         capability.close()
     }
 
@@ -188,12 +194,13 @@ class DirectAudioRouteCapabilitiesTest {
         val capability = SystemDirectBluetoothCaptureCapability(operations)
         val lease = requireNotNull(capability.acquire())
 
-        assertEquals(0, operations.startScoCalls)
+        assertEquals(1, operations.startScoCalls)
         operations.deliverHeadset()
 
         assertEquals(1, operations.startScoCalls)
         assertEquals(1, operations.recognitionStarts.size)
         lease.retire()
+        assertEquals(1, operations.stopScoCalls)
         capability.close()
     }
 
