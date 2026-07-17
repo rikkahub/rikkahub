@@ -279,17 +279,15 @@ class AndroidDirectAudioRouteControllerTest {
             oldLease.retire()
         }
         assertTrue(retirementEntered.await(5, TimeUnit.SECONDS))
-        val newAcquisitionEntered = CountDownLatch(1)
         val newAcquisitionCompleted = CountDownLatch(1)
         val newLease = AtomicReference<VoiceAudioCaptureRouteLease?>()
         val newAcquisition = thread(name = "new-direct-route-acquisition") {
-            newAcquisitionEntered.countDown()
             newLease.set(controller.acquireCapture())
             newAcquisitionCompleted.countDown()
         }
 
         try {
-            assertTrue(newAcquisitionEntered.await(5, TimeUnit.SECONDS))
+            assertTrue(awaitThreadState(newAcquisition, Thread.State.BLOCKED))
             assertFalse(newAcquisitionCompleted.await(100, TimeUnit.MILLISECONDS))
         } finally {
             releaseRetirement.countDown()
@@ -698,4 +696,16 @@ private fun uninitializedAudioRecord(): AudioRecord {
     val unsafeField = Unsafe::class.java.getDeclaredField("theUnsafe")
     unsafeField.isAccessible = true
     return (unsafeField.get(null) as Unsafe).allocateInstance(AudioRecord::class.java) as AudioRecord
+}
+
+private fun awaitThreadState(
+    thread: Thread,
+    expectedState: Thread.State,
+): Boolean {
+    val deadlineNanos = System.nanoTime() + TimeUnit.SECONDS.toNanos(1)
+    while (System.nanoTime() < deadlineNanos) {
+        if (thread.state == expectedState) return true
+        Thread.yield()
+    }
+    return thread.state == expectedState
 }
