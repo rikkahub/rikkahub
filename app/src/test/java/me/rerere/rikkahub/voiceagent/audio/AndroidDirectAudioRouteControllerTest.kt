@@ -279,14 +279,17 @@ class AndroidDirectAudioRouteControllerTest {
             oldLease.retire()
         }
         assertTrue(retirementEntered.await(5, TimeUnit.SECONDS))
+        val newAcquisitionEntered = CountDownLatch(1)
         val newAcquisitionCompleted = CountDownLatch(1)
         val newLease = AtomicReference<VoiceAudioCaptureRouteLease?>()
         val newAcquisition = thread(name = "new-direct-route-acquisition") {
+            newAcquisitionEntered.countDown()
             newLease.set(controller.acquireCapture())
             newAcquisitionCompleted.countDown()
         }
 
         try {
+            assertTrue(newAcquisitionEntered.await(5, TimeUnit.SECONDS))
             assertFalse(newAcquisitionCompleted.await(100, TimeUnit.MILLISECONDS))
         } finally {
             releaseRetirement.countDown()
@@ -515,6 +518,38 @@ class AndroidDirectAudioRouteControllerTest {
         controller.close()
 
         assertEquals(eventsAfterClose, fixture.events)
+    }
+
+    @Test
+    fun `controller close makes late active lease retirement inert`() {
+        val fixture = DirectAudioCapabilitiesFixture()
+        val controller = fixture.controller()
+        val lease = controller.acquireCapture()
+        lease.configureRecorder(uninitializedAudioRecord())
+
+        controller.close()
+        val eventsAfterClose = fixture.events.toList()
+        val retireCountsAfterClose = listOf(
+            fixture.device.retireCalls,
+            fixture.bluetooth.retireCalls,
+            fixture.mode.retireCalls,
+            fixture.focus.retireCalls,
+        )
+        assertEquals(listOf(1, 1, 1, 1), retireCountsAfterClose)
+
+        lease.retire()
+        lease.retire()
+
+        assertEquals(eventsAfterClose, fixture.events)
+        assertEquals(
+            retireCountsAfterClose,
+            listOf(
+                fixture.device.retireCalls,
+                fixture.bluetooth.retireCalls,
+                fixture.mode.retireCalls,
+                fixture.focus.retireCalls,
+            ),
+        )
     }
 }
 

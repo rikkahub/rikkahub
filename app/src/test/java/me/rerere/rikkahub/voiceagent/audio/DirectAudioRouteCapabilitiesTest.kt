@@ -12,6 +12,19 @@ import sun.misc.Unsafe
 
 class DirectAudioRouteCapabilitiesTest {
     @Test
+    fun `missing audio manager disables Bluetooth capture before permission probe`() {
+        var permissionChecks = 0
+
+        val available = directBluetoothCaptureAvailable(audioManagerAvailable = false) {
+            permissionChecks += 1
+            true
+        }
+
+        assertFalse(available)
+        assertEquals(0, permissionChecks)
+    }
+
+    @Test
     fun `Bluetooth permission denial performs no routing mutation`() {
         val operations = FakeBluetoothCaptureOperations().apply { permissionGranted = false }
         val capability = SystemDirectBluetoothCaptureCapability(operations)

@@ -397,7 +397,9 @@ private class AndroidDirectBluetoothCaptureOperations(
 ) : DirectBluetoothCaptureOperations {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    override fun hasConnectPermission(): Boolean = hasBluetoothConnectPermission(context)
+    override fun hasConnectPermission(): Boolean = directBluetoothCaptureAvailable(audioManager != null) {
+        hasBluetoothConnectPermission(context)
+    }
 
     @SuppressLint("MissingPermission")
     override fun requestHeadsetProxy(listener: DirectBluetoothHeadsetListener): Boolean {
@@ -486,6 +488,11 @@ private class AndroidDirectBluetoothCaptureOperations(
         const val BLUETOOTH_HEADSET_PROFILE_WAIT_MS = 100L
     }
 }
+
+internal fun directBluetoothCaptureAvailable(
+    audioManagerAvailable: Boolean,
+    hasConnectPermission: () -> Boolean,
+): Boolean = audioManagerAvailable && hasConnectPermission()
 
 private class AndroidDirectCaptureDeviceOperations(
     private val context: Context,
