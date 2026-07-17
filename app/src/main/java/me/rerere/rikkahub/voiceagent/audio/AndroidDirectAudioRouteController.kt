@@ -3,6 +3,8 @@ package me.rerere.rikkahub.voiceagent.audio
 import android.content.Context
 import android.media.AudioRecord
 import android.util.Log
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import me.rerere.rikkahub.voiceagent.RetirementBarrier
 
 internal class AndroidDirectAudioRouteController(
@@ -15,7 +17,9 @@ internal class AndroidDirectAudioRouteController(
     )
 
     private val lock = Any()
+    private val closeLock = Any()
     private val captureTransitionLock = Any()
+    private val nonFocusOperations = DirectAudioOperationGate()
     private var focusLease: DirectAudioResourceLease? = null
     private var communicationModeLease: DirectAudioResourceLease? = null
     private var bluetoothCaptureLease: DirectAudioResourceLease? = null
@@ -77,63 +81,78 @@ internal class AndroidDirectAudioRouteController(
     }
 
     private fun acquireCommunicationModeIfNeeded() {
-        val shouldAcquire = synchronized(lock) { !closed && communicationModeLease == null }
-        if (!shouldAcquire) return
-        val acquired = runCatching(capabilities.communicationMode::acquire)
-            .onFailure { logWarning("Direct communication mode setup failed", it) }
-            .getOrNull() ?: return
-        val retireImmediately = synchronized(lock) {
-            if (closed || communicationModeLease != null) {
-                true
-            } else {
-                communicationModeLease = acquired
-                false
+        if (!nonFocusOperations.enter()) return
+        try {
+            val shouldAcquire = synchronized(lock) { !closed && communicationModeLease == null }
+            if (!shouldAcquire) return
+            val acquired = runCatching(capabilities.communicationMode::acquire)
+                .onFailure { logWarning("Direct communication mode setup failed", it) }
+                .getOrNull() ?: return
+            val retireImmediately = synchronized(lock) {
+                if (closed || communicationModeLease != null) {
+                    true
+                } else {
+                    communicationModeLease = acquired
+                    false
+                }
             }
+            if (retireImmediately) retireBestEffort("Direct communication mode retirement failed", acquired)
+        } finally {
+            nonFocusOperations.exit()
         }
-        if (retireImmediately) retireBestEffort("Direct communication mode retirement failed", acquired)
     }
 
     private fun acquireBluetoothCaptureIfNeeded() {
-        val shouldAcquire = synchronized(lock) { !closed && bluetoothCaptureLease == null }
-        if (!shouldAcquire) return
-        val acquired = runCatching(capabilities.bluetoothCapture::acquire)
-            .onFailure { logWarning("Direct Bluetooth capture setup failed", it) }
-            .getOrNull() ?: return
-        val retireImmediately = synchronized(lock) {
-            if (closed || bluetoothCaptureLease != null) {
-                true
-            } else {
-                bluetoothCaptureLease = acquired
-                false
+        if (!nonFocusOperations.enter()) return
+        try {
+            val shouldAcquire = synchronized(lock) { !closed && bluetoothCaptureLease == null }
+            if (!shouldAcquire) return
+            val acquired = runCatching(capabilities.bluetoothCapture::acquire)
+                .onFailure { logWarning("Direct Bluetooth capture setup failed", it) }
+                .getOrNull() ?: return
+            val retireImmediately = synchronized(lock) {
+                if (closed || bluetoothCaptureLease != null) {
+                    true
+                } else {
+                    bluetoothCaptureLease = acquired
+                    false
+                }
             }
+            if (retireImmediately) retireBestEffort("Direct Bluetooth capture retirement failed", acquired)
+        } finally {
+            nonFocusOperations.exit()
         }
-        if (retireImmediately) retireBestEffort("Direct Bluetooth capture retirement failed", acquired)
     }
 
     private fun configureCaptureRecorder(generation: Long, recorder: AudioRecord) {
         synchronized(captureTransitionLock) {
-            synchronized(lock) {
-                check(!closed) { "Direct audio route controller is closed" }
-                check(captureGeneration == generation) { "Direct audio capture route lease is stale" }
-                if (captureDeviceLease != null) return
-            }
-            val acquired = runCatching { capabilities.captureDevice.configure(recorder) }
-                .onFailure { logWarning("Direct capture device configuration failed", it) }
-                .getOrNull() ?: return
-            val retireImmediately = synchronized(lock) {
-                if (closed || captureGeneration != generation || captureDeviceLease != null) {
-                    true
-                } else {
-                    captureDeviceLease = acquired
-                    false
-                }
-            }
-            if (retireImmediately) {
-                retireBestEffort("Direct capture device retirement failed", acquired)
+            check(nonFocusOperations.enter()) { "Direct audio route controller is closed" }
+            try {
                 synchronized(lock) {
                     check(!closed) { "Direct audio route controller is closed" }
                     check(captureGeneration == generation) { "Direct audio capture route lease is stale" }
+                    if (captureDeviceLease != null) return
                 }
+                val acquired = runCatching { capabilities.captureDevice.configure(recorder) }
+                    .onFailure { logWarning("Direct capture device configuration failed", it) }
+                    .getOrNull() ?: return
+                val retireImmediately = synchronized(lock) {
+                    if (closed || captureGeneration != generation || captureDeviceLease != null) {
+                        true
+                    } else {
+                        captureDeviceLease = acquired
+                        false
+                    }
+                }
+                if (retireImmediately) {
+                    retireBestEffort("Direct capture device retirement failed", acquired)
+                    synchronized(lock) {
+                        check(!closed) { "Direct audio route controller is closed" }
+                        check(captureGeneration == generation) { "Direct audio capture route lease is stale" }
+                    }
+                }
+            } finally {
+                nonFocusOperations.exit()
             }
         }
     }
@@ -150,11 +169,16 @@ internal class AndroidDirectAudioRouteController(
         owned?.retireBestEffort()
     }
 
-    override fun close() {
-        val owned = synchronized(lock) {
+    override fun close(): Unit = synchronized(closeLock) {
+        synchronized(lock) {
             if (closed) return
             closed = true
             captureGeneration += 1
+        }
+        runCatching(capabilities.beginClose)
+            .onFailure { logWarning("Direct audio capabilities close signal failed", it) }
+        nonFocusOperations.closeAndAwait()
+        val owned = synchronized(lock) {
             DetachedDirectAudioResources(
                 captureDevice = captureDeviceLease.also { captureDeviceLease = null },
                 bluetoothCapture = bluetoothCaptureLease.also { bluetoothCaptureLease = null },
@@ -206,6 +230,30 @@ private data class DetachedDirectAudioResources(
     val communicationMode: DirectAudioResourceLease?,
     val focus: DirectAudioResourceLease?,
 )
+
+private class DirectAudioOperationGate {
+    private val lock = ReentrantLock()
+    private val idle = lock.newCondition()
+    private var closing = false
+    private var active = 0
+
+    fun enter(): Boolean = lock.withLock {
+        if (closing) return false
+        active += 1
+        true
+    }
+
+    fun exit() = lock.withLock {
+        check(active > 0) { "Direct audio operation gate underflow" }
+        active -= 1
+        if (active == 0) idle.signalAll()
+    }
+
+    fun closeAndAwait() = lock.withLock {
+        closing = true
+        while (active > 0) idle.awaitUninterruptibly()
+    }
+}
 
 internal class DirectVoiceAudioCaptureRouteLease(
     private val configureAudioRecord: (AudioRecord) -> Unit,
