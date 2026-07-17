@@ -1,8 +1,6 @@
 package me.rerere.rikkahub.voiceagent.audio
 
 import android.media.AudioRecord
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -36,8 +34,62 @@ class DirectAudioRouteCapabilitiesTest {
     }
 
     @Test
+    fun `unavailable Bluetooth profile remains nonfatal`() {
+        val operations = FakeBluetoothCaptureOperations().apply {
+            profileRequestAccepted = false
+        }
+        val capability = SystemDirectBluetoothCaptureCapability(operations)
+
+        val lease = requireNotNull(capability.acquire())
+
+        assertTrue(operations.recognitionStarts.isEmpty())
+        assertEquals(0, operations.startScoCalls)
+        lease.retire()
+        capability.close()
+    }
+
+    @Test
+    fun `rejected voice recognition remains nonfatal and is not stopped`() {
+        val operations = FakeBluetoothCaptureOperations().apply {
+            deliverHeadsetDuringRequest = true
+            recognitionAccepted = false
+        }
+        val capability = SystemDirectBluetoothCaptureCapability(operations)
+
+        val lease = requireNotNull(capability.acquire())
+
+        assertEquals(1, operations.recognitionStarts.size)
+        lease.retire()
+        assertTrue(operations.recognitionStops.isEmpty())
+        capability.close()
+    }
+
+    @Test
+    fun `Bluetooth setup failure retires armed callback and routing state`() {
+        val failure = IllegalStateException("profile wait failed")
+        val operations = FakeBluetoothCaptureOperations().apply {
+            deliverHeadsetDuringRequest = true
+            recognitionAccepted = true
+            awaitFailure = failure
+        }
+        val capability = SystemDirectBluetoothCaptureCapability(operations)
+
+        val thrown = runCatching { capability.acquire() }.exceptionOrNull()
+
+        assertTrue(thrown === failure)
+        val pair = operations.headset to operations.device
+        assertEquals(listOf(pair), operations.recognitionStarts)
+        assertEquals(listOf(pair), operations.recognitionStops)
+        assertEquals(listOf(operations.headset), operations.closedHeadsets)
+        assertEquals(1, operations.startScoCalls)
+        assertEquals(1, operations.stopScoCalls)
+        capability.close()
+    }
+
+    @Test
     fun `partial SCO setup retires once and stop continues after disable failure`() {
         val operations = FakeBluetoothCaptureOperations().apply {
+            deliverHeadsetDuringRequest = true
             throwWhenEnablingSco = true
             throwWhenDisablingSco = true
         }
@@ -76,25 +128,24 @@ class DirectAudioRouteCapabilitiesTest {
     }
 
     @Test
-    fun `callback delivered after capability close only closes proxy`() {
+    fun `callback delivered after capture retirement only closes its proxy`() {
         val operations = FakeBluetoothCaptureOperations()
         val capability = SystemDirectBluetoothCaptureCapability(operations)
         val lease = requireNotNull(capability.acquire())
         lease.retire()
 
-        capability.beginClose()
-        capability.close()
         val mutationsBeforeCallback = operations.mutations.toList()
         operations.deliverHeadset()
 
         assertEquals(mutationsBeforeCallback + "close-proxy", operations.mutations)
         assertEquals(listOf(operations.headset), operations.closedHeadsets)
         assertTrue(operations.recognitionStarts.isEmpty())
-        assertEquals(1, operations.startScoCalls)
+        assertEquals(0, operations.startScoCalls)
+        capability.close()
     }
 
     @Test
-    fun `queued recognition callback observes close before Android mutation`() {
+    fun `queued recognition callback observes capture retirement before Android mutation`() {
         val operations = FakeBluetoothCaptureOperations().apply {
             dispatchImmediately = false
         }
@@ -103,14 +154,63 @@ class DirectAudioRouteCapabilitiesTest {
         operations.deliverHeadset()
         assertEquals(1, operations.pendingDispatchCount)
 
-        capability.beginClose()
         lease.retire()
-        capability.close()
-        val mutationsAfterClose = operations.mutations.toList()
+        val mutationsAfterRetirement = operations.mutations.toList()
         operations.drainDispatches()
 
         assertTrue(operations.recognitionStarts.isEmpty())
-        assertEquals(mutationsAfterClose, operations.mutations)
+        assertEquals(mutationsAfterRetirement, operations.mutations)
+        capability.close()
+    }
+
+    @Test
+    fun `each Bluetooth acquisition owns an independent callback listener`() {
+        val operations = FakeBluetoothCaptureOperations()
+        val capability = SystemDirectBluetoothCaptureCapability(operations)
+        val first = requireNotNull(capability.acquire())
+        val second = requireNotNull(capability.acquire())
+
+        first.retire()
+        operations.deliverHeadset(listenerIndex = 0)
+        operations.deliverHeadset(listenerIndex = 1)
+
+        assertEquals(1, operations.closedHeadsets.size)
+        assertEquals(1, operations.startScoCalls)
+        second.retire()
+        capability.close()
+    }
+
+    @Test
+    fun `late callback activates routing only while capture is active`() {
+        val operations = FakeBluetoothCaptureOperations().apply {
+            recognitionAccepted = true
+        }
+        val capability = SystemDirectBluetoothCaptureCapability(operations)
+        val lease = requireNotNull(capability.acquire())
+
+        assertEquals(0, operations.startScoCalls)
+        operations.deliverHeadset()
+
+        assertEquals(1, operations.startScoCalls)
+        assertEquals(1, operations.recognitionStarts.size)
+        lease.retire()
+        capability.close()
+    }
+
+    @Test
+    fun `factory close does not cancel callback owned by active capture`() {
+        val operations = FakeBluetoothCaptureOperations().apply {
+            recognitionAccepted = true
+        }
+        val capability = SystemDirectBluetoothCaptureCapability(operations)
+        val lease = requireNotNull(capability.acquire())
+
+        capability.close()
+        operations.deliverHeadset()
+
+        assertEquals(1, operations.recognitionStarts.size)
+        assertEquals(1, operations.startScoCalls)
+        lease.retire()
     }
 
     @Test
@@ -157,6 +257,7 @@ internal class FakeBluetoothCaptureOperations : DirectBluetoothCaptureOperations
     val headset: DirectBluetoothHeadset = FakeBluetoothHeadset
     val device: DirectBluetoothDevice = FakeBluetoothDevice("headset:00:11")
     var permissionGranted = true
+    var profileRequestAccepted = true
     var deliverHeadsetDuringRequest = false
     var recognitionAccepted = false
     var throwWhenEnablingSco = false
@@ -164,10 +265,6 @@ internal class FakeBluetoothCaptureOperations : DirectBluetoothCaptureOperations
     var dispatchImmediately = true
     var permissionProbeFailure: Throwable? = null
     var awaitFailure: Throwable? = null
-    var waitUntilStopped = false
-    val awaitEntered = CountDownLatch(1)
-    val awaitStopObserved = CountDownLatch(1)
-    val releaseAwait = CountDownLatch(1)
     var permissionChecks = 0
     var startScoCalls = 0
     val scoEnabledValues = mutableListOf<Boolean>()
@@ -177,11 +274,29 @@ internal class FakeBluetoothCaptureOperations : DirectBluetoothCaptureOperations
     val closedHeadsets = mutableListOf<DirectBluetoothHeadset>()
     var closeCalls = 0
     val mutations = mutableListOf<String>()
-    private var listener: DirectBluetoothHeadsetListener? = null
+    private val listeners = mutableListOf<DirectBluetoothHeadsetListener>()
     private val pendingDispatches = ArrayDeque<() -> Unit>()
 
     val pendingDispatchCount: Int
         get() = pendingDispatches.size
+
+    override fun createCallbackDispatcher(): DirectBluetoothCallbackDispatcher =
+        object : DirectBluetoothCallbackDispatcher {
+            private var closed = false
+
+            override fun dispatch(block: () -> Unit) {
+                if (dispatchImmediately) {
+                    if (!closed) block()
+                } else {
+                    pendingDispatches.addLast { if (!closed) block() }
+                }
+            }
+
+            override fun close() {
+                closeCalls += 1
+                closed = true
+            }
+        }
 
     override fun hasConnectPermission(): Boolean {
         permissionChecks += 1
@@ -190,24 +305,17 @@ internal class FakeBluetoothCaptureOperations : DirectBluetoothCaptureOperations
     }
 
     override fun requestHeadsetProxy(listener: DirectBluetoothHeadsetListener): Boolean {
-        this.listener = listener
+        listeners += listener
         mutations += "request-proxy"
         if (deliverHeadsetDuringRequest) listener.onConnected(headset)
-        return true
+        return profileRequestAccepted
     }
 
     override fun awaitHeadset(
         current: () -> DirectBluetoothHeadset?,
         shouldStop: () -> Boolean,
     ): DirectBluetoothHeadset? {
-        awaitEntered.countDown()
         awaitFailure?.let { throw it }
-        if (waitUntilStopped) {
-            while (!shouldStop() && !releaseAwait.await(10, TimeUnit.MILLISECONDS)) {
-                // Poll the real capability's terminal predicate deterministically.
-            }
-            if (shouldStop()) awaitStopObserved.countDown()
-        }
         return current().takeUnless { shouldStop() }
     }
 
@@ -249,16 +357,8 @@ internal class FakeBluetoothCaptureOperations : DirectBluetoothCaptureOperations
         mutations += "stop-sco"
     }
 
-    override fun dispatch(block: () -> Unit) {
-        if (dispatchImmediately) block() else pendingDispatches.addLast(block)
-    }
-
-    override fun close() {
-        closeCalls += 1
-    }
-
-    fun deliverHeadset() {
-        requireNotNull(listener).onConnected(headset)
+    fun deliverHeadset(listenerIndex: Int = listeners.lastIndex) {
+        listeners[listenerIndex].onConnected(headset)
     }
 
     fun drainDispatches() {

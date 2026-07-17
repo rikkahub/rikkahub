@@ -43,16 +43,11 @@ internal fun interface DirectCaptureDeviceCapability {
     fun configure(recorder: AudioRecord): DirectAudioResourceLease?
 }
 
-internal class DirectAudioPermissionProbeFailure(
-    val permissionFailure: Throwable,
-) : RuntimeException("Direct audio permission probe failed", permissionFailure)
-
 internal data class DirectAudioRouteCapabilities(
     val focus: DirectAudioFocusCapability,
     val communicationMode: DirectCommunicationModeCapability,
     val bluetoothCapture: DirectBluetoothCaptureCapability,
     val captureDevice: DirectCaptureDeviceCapability,
-    val beginClose: () -> Unit = {},
     val close: () -> Unit,
 )
 
@@ -68,6 +63,7 @@ internal interface DirectBluetoothHeadsetListener {
 }
 
 internal interface DirectBluetoothCaptureOperations {
+    fun createCallbackDispatcher(): DirectBluetoothCallbackDispatcher
     fun hasConnectPermission(): Boolean
     fun requestHeadsetProxy(listener: DirectBluetoothHeadsetListener): Boolean
     fun awaitHeadset(
@@ -81,6 +77,9 @@ internal interface DirectBluetoothCaptureOperations {
     fun startBluetoothSco()
     fun setBluetoothScoEnabled(enabled: Boolean)
     fun stopBluetoothSco()
+}
+
+internal interface DirectBluetoothCallbackDispatcher {
     fun dispatch(block: () -> Unit)
     fun close()
 }
@@ -113,7 +112,6 @@ internal fun systemDirectAudioRouteCapabilities(context: Context): DirectAudioRo
         captureDevice = SystemDirectCaptureDeviceCapability(
             AndroidDirectCaptureDeviceOperations(context, audioManager),
         ),
-        beginClose = bluetoothCapture::beginClose,
         close = bluetoothCapture::close,
     )
 }
@@ -187,107 +185,102 @@ internal class SystemDirectBluetoothCaptureCapability(
     private val lock = Any()
     private val factoryRetirement = RetirementBarrier()
     private var closed = false
-    private var wantsVoiceRecognition = false
-    private var profileProxyRequested = false
-    private var headset: DirectBluetoothHeadset? = null
-    private var recognitionDevice: DirectBluetoothDevice? = null
-    private var startedSco = false
-    private val listener = object : DirectBluetoothHeadsetListener {
-        override fun onConnected(headset: DirectBluetoothHeadset) {
-            val state = synchronized(lock) {
-                if (closed) {
-                    ConnectedBluetoothState(shouldClose = true, shouldRequestVoiceRecognition = false)
-                } else {
-                    this@SystemDirectBluetoothCaptureCapability.headset = headset
-                    ConnectedBluetoothState(
-                        shouldClose = false,
-                        shouldRequestVoiceRecognition = wantsVoiceRecognition,
-                    )
-                }
-            }
-            if (state.shouldClose) {
-                closeHeadsetProxy(headset)
-                return
-            }
-            logCapabilityDebug("Direct Bluetooth headset profile connected")
-            if (state.shouldRequestVoiceRecognition) {
-                operations.dispatch { requestVoiceRecognition(headset) }
-            }
-        }
-
-        override fun onDisconnected() {
-            synchronized(lock) {
-                headset = null
-                recognitionDevice = null
-                profileProxyRequested = false
-                wantsVoiceRecognition = false
-            }
-            logCapabilityDebug("Direct Bluetooth headset profile disconnected")
-        }
-    }
 
     override fun acquire(): DirectAudioResourceLease? {
         if (!probeDirectAudioPermission(operations::hasConnectPermission)) {
             logCapabilityDebug("Direct Bluetooth SCO skipped: BLUETOOTH_CONNECT not granted")
             return null
         }
-        synchronized(lock) {
+        return synchronized(lock) {
             check(!closed) { "Direct Bluetooth capture capability is closed" }
-            wantsVoiceRecognition = true
-        }
-        try {
-            val connected = headsetProxyOrNull()
-            if (isClosed()) return null
-            if (connected == null) {
-                logCapabilityDebug("Direct Bluetooth headset voice recognition skipped: profile unavailable")
-            } else {
-                requestVoiceRecognition(connected)
+            val lease = SystemBluetoothCaptureLease(operations)
+            try {
+                lease.acquireRouting()
+                lease
+            } catch (failure: Throwable) {
+                runCatching(lease::retire).onFailure(failure::addSuppressed)
+                throw failure
             }
-            if (isClosed()) return null
-            runCatching {
-                operations.startBluetoothSco()
-                synchronized(lock) { startedSco = true }
-                if (!isClosed()) operations.setBluetoothScoEnabled(true)
-                logCapabilityDebug("Direct requested Bluetooth SCO")
-            }.onFailure { logCapabilityWarning("Direct Bluetooth SCO request failed", it) }
-            return retirementLease(::clearRouting)
-        } catch (failure: Throwable) {
-            runCatching(::clearRouting).onFailure(failure::addSuppressed)
-            throw failure
-        }
-    }
-
-    fun beginClose() {
-        synchronized(lock) {
-            closed = true
-            wantsVoiceRecognition = false
         }
     }
 
     fun close() = factoryRetirement.retire {
-        beginClose()
-        clearRouting()
-        val connected = synchronized(lock) {
-            recognitionDevice = null
-            startedSco = false
-            headset.also {
-                headset = null
-                profileProxyRequested = false
-            }
+        synchronized(lock) {
+            closed = true
         }
-        connected?.let(::closeHeadsetProxy)
-        operations.close()
+    }
+}
+
+private class SystemBluetoothCaptureLease(
+    private val operations: DirectBluetoothCaptureOperations,
+) : DirectAudioResourceLease {
+    private val lock = Any()
+    private val retirement = RetirementBarrier()
+    private val callbackDispatcher = operations.createCallbackDispatcher()
+    private var closed = false
+    private var headset: DirectBluetoothHeadset? = null
+    private var recognitionDevice: DirectBluetoothDevice? = null
+    private var recognitionAttempted = false
+    private var scoAttempted = false
+    private var startedSco = false
+    private val listener = object : DirectBluetoothHeadsetListener {
+        override fun onConnected(headset: DirectBluetoothHeadset) {
+            val reject = synchronized(lock) {
+                if (closed) {
+                    true
+                } else {
+                    this@SystemBluetoothCaptureLease.headset = headset
+                    false
+                }
+            }
+            if (reject) {
+                closeHeadsetProxy(headset)
+                return
+            }
+            logCapabilityDebug("Direct Bluetooth headset profile connected")
+            callbackDispatcher.dispatch { activateRouting(headset) }
+        }
+
+        override fun onDisconnected() {
+            synchronized(lock) {
+                headset = null
+                recognitionDevice = null
+                recognitionAttempted = false
+            }
+            logCapabilityDebug("Direct Bluetooth headset profile disconnected")
+        }
     }
 
-    private fun clearRouting() {
+    fun acquireRouting() {
+        val proxyRequested = runCatching { operations.requestHeadsetProxy(listener) }
+            .onFailure { logCapabilityWarning("Direct Bluetooth headset profile request failed", it) }
+            .getOrDefault(false)
+        val connected = if (proxyRequested) {
+            operations.awaitHeadset(
+                current = { synchronized(lock) { headset.takeUnless { closed } } },
+                shouldStop = { synchronized(lock) { closed } },
+            )
+        } else {
+            null
+        }
+        if (connected == null) {
+            logCapabilityDebug("Direct Bluetooth headset voice recognition skipped: profile unavailable")
+        } else {
+            activateRouting(connected)
+        }
+    }
+
+    override fun retire() = retirement.retire {
         val owned = synchronized(lock) {
-            wantsVoiceRecognition = false
+            closed = true
             BluetoothCaptureResources(
-                headset = headset,
+                headset = headset.also { headset = null },
                 recognitionDevice = recognitionDevice.also { recognitionDevice = null },
                 stoppedSco = startedSco.also { startedSco = false },
             )
         }
+        runCatching(callbackDispatcher::close)
+            .onFailure { logCapabilityWarning("Direct Bluetooth callback dispatcher close failed", it) }
         val connected = owned.headset
         val recognized = owned.recognitionDevice
         if (connected != null && recognized != null) {
@@ -300,27 +293,31 @@ internal class SystemDirectBluetoothCaptureCapability(
             runCatching(operations::stopBluetoothSco)
                 .onFailure { logCapabilityWarning("Direct Bluetooth SCO stop failed", it) }
         }
+        connected?.let(::closeHeadsetProxy)
     }
 
-    private fun headsetProxyOrNull(): DirectBluetoothHeadset? {
-        synchronized(lock) {
-            headset?.let { return it }
-            if (closed) return null
-            if (!profileProxyRequested) {
-                profileProxyRequested = runCatching { operations.requestHeadsetProxy(listener) }
-                    .onFailure { logCapabilityWarning("Direct Bluetooth headset profile request failed", it) }
-                    .getOrDefault(false)
+    private fun activateRouting(connected: DirectBluetoothHeadset) {
+        requestVoiceRecognition(connected)
+        runCatching {
+            synchronized(lock) {
+                if (closed || headset !== connected || scoAttempted) return@runCatching
+                scoAttempted = true
+                operations.startBluetoothSco()
+                startedSco = true
+                operations.setBluetoothScoEnabled(true)
             }
-        }
-        return operations.awaitHeadset(
-            current = { synchronized(lock) { headset.takeUnless { closed } } },
-            shouldStop = ::isClosed,
-        )
+            logCapabilityDebug("Direct requested Bluetooth SCO")
+        }.onFailure { logCapabilityWarning("Direct Bluetooth SCO request failed", it) }
     }
 
     private fun requestVoiceRecognition(connected: DirectBluetoothHeadset) {
         val shouldRequest = synchronized(lock) {
-            !closed && wantsVoiceRecognition && recognitionDevice == null
+            if (closed || headset !== connected || recognitionAttempted) {
+                false
+            } else {
+                recognitionAttempted = true
+                true
+            }
         }
         if (!shouldRequest) return
         val device = runCatching { operations.connectedDevices(connected).firstOrNull() }
@@ -332,7 +329,7 @@ internal class SystemDirectBluetoothCaptureCapability(
         }
         val accepted = runCatching {
             synchronized(lock) {
-                if (closed || !wantsVoiceRecognition || recognitionDevice != null) {
+                if (closed || headset !== connected || recognitionDevice != null) {
                     false
                 } else {
                     operations.startVoiceRecognition(connected, device).also { started ->
@@ -353,8 +350,6 @@ internal class SystemDirectBluetoothCaptureCapability(
         runCatching { operations.closeHeadsetProxy(connected) }
             .onFailure { logCapabilityWarning("Direct Bluetooth headset profile close failed", it) }
     }
-
-    private fun isClosed(): Boolean = synchronized(lock) { closed }
 }
 
 internal class SystemDirectCaptureDeviceCapability(
@@ -395,7 +390,8 @@ private class AndroidDirectBluetoothCaptureOperations(
     private val context: Context,
     private val audioManager: AudioManager?,
 ) : DirectBluetoothCaptureOperations {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    override fun createCallbackDispatcher(): DirectBluetoothCallbackDispatcher =
+        AndroidDirectBluetoothCallbackDispatcher()
 
     override fun hasConnectPermission(): Boolean = directBluetoothCaptureAvailable(audioManager != null) {
         hasBluetoothConnectPermission(context)
@@ -469,14 +465,6 @@ private class AndroidDirectBluetoothCaptureOperations(
         audioManager?.stopBluetoothSco()
     }
 
-    override fun dispatch(block: () -> Unit) {
-        scope.launch { block() }
-    }
-
-    override fun close() {
-        scope.cancel()
-    }
-
     private fun DirectBluetoothHeadset.requireAndroidHeadset(): BluetoothHeadset =
         requireNotNull(this as? AndroidDirectBluetoothHeadset) { "Unexpected direct Bluetooth headset handle" }.headset
 
@@ -486,6 +474,18 @@ private class AndroidDirectBluetoothCaptureOperations(
     private companion object {
         const val BLUETOOTH_HEADSET_PROFILE_WAIT_STEPS = 10
         const val BLUETOOTH_HEADSET_PROFILE_WAIT_MS = 100L
+    }
+}
+
+private class AndroidDirectBluetoothCallbackDispatcher : DirectBluetoothCallbackDispatcher {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override fun dispatch(block: () -> Unit) {
+        scope.launch { block() }
+    }
+
+    override fun close() {
+        scope.cancel()
     }
 }
 
@@ -528,11 +528,6 @@ private class AndroidDirectCaptureDeviceOperations(
         }.device
 }
 
-private data class ConnectedBluetoothState(
-    val shouldClose: Boolean,
-    val shouldRequestVoiceRecognition: Boolean,
-)
-
 private data class BluetoothCaptureResources(
     val headset: DirectBluetoothHeadset?,
     val recognitionDevice: DirectBluetoothDevice?,
@@ -557,12 +552,7 @@ private fun retirementLease(retire: () -> Unit): DirectAudioResourceLease {
     return DirectAudioResourceLease { retirement.retire(retire) }
 }
 
-private fun probeDirectAudioPermission(probe: () -> Boolean): Boolean =
-    try {
-        probe()
-    } catch (failure: Throwable) {
-        throw DirectAudioPermissionProbeFailure(failure)
-    }
+private fun probeDirectAudioPermission(probe: () -> Boolean): Boolean = probe()
 
 private fun hasBluetoothConnectPermission(context: Context): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
