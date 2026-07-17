@@ -8,7 +8,12 @@ internal class RetirementBarrier {
     private var ownerThread: Thread? = null
     private var result: Result<Unit>? = null
 
-    fun retire(block: () -> Unit) {
+    fun retire(block: () -> Unit) = retire(afterResultPublished = {}, block = block)
+
+    fun retire(
+        afterResultPublished: (Result<Unit>) -> Unit,
+        block: () -> Unit,
+    ) {
         val current = Thread.currentThread()
         val owns = synchronized(lock) {
             result?.let { it.getOrThrow(); return }
@@ -25,8 +30,12 @@ internal class RetirementBarrier {
             synchronized(lock) { requireNotNull(result) }.getOrThrow()
             return
         }
-        val completedResult = runCatching(block)
-        synchronized(lock) { result = completedResult }
+        val cleanupResult = runCatching(block)
+        val completedResult = synchronized(lock) {
+            result = cleanupResult
+            val hookFailure = runCatching { afterResultPublished(cleanupResult) }.exceptionOrNull()
+            cleanupResult.withLaterFailure(hookFailure).also { result = it }
+        }
         completed.countDown()
         completedResult.getOrThrow()
     }
@@ -42,5 +51,12 @@ internal class RetirementBarrier {
             }
         }
         if (interrupted) Thread.currentThread().interrupt()
+    }
+
+    private fun Result<Unit>.withLaterFailure(failure: Throwable?): Result<Unit> {
+        if (failure == null) return this
+        val primary = exceptionOrNull() ?: return Result.failure(failure)
+        if (primary !== failure) primary.addSuppressed(failure)
+        return this
     }
 }

@@ -61,6 +61,7 @@ internal class VoiceAudioCaptureOwnership<Recorder : Any, CaptureTask : Any>(
     private val releaseRecorder: (Recorder) -> Unit,
     private val startTask: (CaptureTask) -> Unit,
     private val cancelTask: (CaptureTask) -> Unit,
+    private val onRetirementResultPublished: (Result<Unit>) -> Unit = {},
 ) {
     private val lock = Any()
     private val recorderLock = Any()
@@ -96,9 +97,11 @@ internal class VoiceAudioCaptureOwnership<Recorder : Any, CaptureTask : Any>(
             }
         }
         if (!published) {
-            cancelTask(task)
-            releaseRecorder(recorder)
-            token.routeLease.retire()
+            runVoiceAgentCleanupStages(
+                { cancelTask(task) },
+                { releaseRecorder(recorder) },
+                token.routeLease::retire,
+            )
             return VoiceAudioCaptureStartOutcome.Rejected
         }
         if (!isCurrent(token, recorder)) {
@@ -229,20 +232,24 @@ internal class VoiceAudioCaptureOwnership<Recorder : Any, CaptureTask : Any>(
     }
 
     private fun retireOwnedCapture(owned: OwnedCapture<Recorder, CaptureTask>) {
-        owned.retirement.retire {
-            try {
-                synchronized(recorderLock) {
-                    runVoiceAgentCleanupStages(
-                        { owned.task?.let(cancelTask) },
-                        { owned.recorder?.let(stopRecorder) },
-                        { owned.recorder?.let(releaseRecorder) },
-                        { owned.routeLease?.retire() },
-                    )
+        owned.retirement.retire(
+            afterResultPublished = { result ->
+                try {
+                    onRetirementResultPublished(result)
+                } finally {
+                    synchronized(lock) {
+                        if (inFlightRetirement === owned) inFlightRetirement = null
+                    }
                 }
-            } finally {
-                synchronized(lock) {
-                    if (inFlightRetirement === owned) inFlightRetirement = null
-                }
+            },
+        ) {
+            synchronized(recorderLock) {
+                runVoiceAgentCleanupStages(
+                    { owned.task?.let(cancelTask) },
+                    { owned.recorder?.let(stopRecorder) },
+                    { owned.recorder?.let(releaseRecorder) },
+                    { owned.routeLease?.retire() },
+                )
             }
         }
     }
@@ -308,15 +315,12 @@ internal fun ensureVoiceAudioCaptureRecorderInitialized(
     routeLease: VoiceAudioCaptureRouteLease,
 ) {
     if (initialized) return
-    val failure = IllegalStateException("AudioRecord initialization failed")
-    listOf(
+    throwVoiceAudioCaptureSetupFailure(
+        IllegalStateException("AudioRecord initialization failed"),
         releaseRecorder,
         clearRouteLease,
         routeLease::retire,
-    ).forEach { cleanup ->
-        runCatching(cleanup).exceptionOrNull()?.let(failure::addSuppressed)
-    }
-    throw failure
+    )
 }
 
 internal fun configureVoiceAudioCaptureRecorder(
@@ -328,14 +332,12 @@ internal fun configureVoiceAudioCaptureRecorder(
     try {
         configureRecorder()
     } catch (failure: Throwable) {
-        listOf(
+        throwVoiceAudioCaptureSetupFailure(
+            failure,
             releaseRecorder,
             clearRouteLease,
             routeLease::retire,
-        ).forEach { cleanup ->
-            runCatching(cleanup).exceptionOrNull()?.let(failure::addSuppressed)
-        }
-        throw failure
+        )
     }
 }
 
@@ -346,14 +348,11 @@ internal fun <Recorder> createVoiceAudioCaptureRecorder(
 ): Recorder = try {
     createRecorder()
 } catch (cause: Throwable) {
-    val failure = IllegalStateException("AudioRecord creation failed", cause)
-    listOf(
+    throwVoiceAudioCaptureSetupFailure(
+        IllegalStateException("AudioRecord creation failed", cause),
         clearRouteLease,
         routeLease::retire,
-    ).forEach { cleanup ->
-        runCatching(cleanup).exceptionOrNull()?.let(failure::addSuppressed)
-    }
-    throw failure
+    )
 }
 
 internal fun acquireVoiceAudioCaptureBufferSize(
@@ -363,13 +362,22 @@ internal fun acquireVoiceAudioCaptureBufferSize(
 ): Int = try {
     lookupBufferSize()
 } catch (failure: Throwable) {
-    listOf(
+    throwVoiceAudioCaptureSetupFailure(
+        failure,
         clearRouteLease,
         routeLease::retire,
-    ).forEach { cleanup ->
-        runCatching(cleanup).exceptionOrNull()?.let(failure::addSuppressed)
-    }
-    throw failure
+    )
+}
+
+private fun throwVoiceAudioCaptureSetupFailure(
+    failure: Throwable,
+    vararg cleanupStages: () -> Unit,
+): Nothing {
+    runVoiceAgentCleanupStages(
+        { throw failure },
+        *cleanupStages,
+    )
+    error("Capture setup cleanup returned without its primary failure")
 }
 
 class AndroidVoiceAudioEngine(

@@ -14,6 +14,66 @@ import org.junit.Test
 
 class RetirementBarrierTest {
     @Test
+    fun `owner publishes result through hook before any caller observes completion`() {
+        val barrier = RetirementBarrier()
+        val failure = IllegalStateException("retirement failed")
+        val hookEntered = CountDownLatch(1)
+        val allowHookCompletion = CountDownLatch(1)
+        val waiterReturned = CountDownLatch(1)
+        val hookCalls = AtomicInteger()
+        val nestedHookCalls = AtomicInteger()
+        val cleanupCalls = AtomicInteger()
+        val ownerResult = AtomicReference<Throwable?>()
+        val waiterResult = AtomicReference<Throwable?>()
+        val owner = thread(name = "retirement-result-owner") {
+            ownerResult.set(
+                runCatching {
+                    barrier.retire(
+                        afterResultPublished = { published ->
+                            assertSame(failure, published.exceptionOrNull())
+                            hookCalls.incrementAndGet()
+                            val nested = runCatching {
+                                barrier.retire(
+                                    afterResultPublished = { nestedHookCalls.incrementAndGet() },
+                                ) { cleanupCalls.incrementAndGet() }
+                            }.exceptionOrNull()
+                            assertSame(failure, nested)
+                            hookEntered.countDown()
+                            allowHookCompletion.await(5, TimeUnit.SECONDS)
+                        },
+                    ) {
+                        cleanupCalls.incrementAndGet()
+                        throw failure
+                    }
+                }.exceptionOrNull(),
+            )
+        }
+        assertTrue(hookEntered.await(5, TimeUnit.SECONDS))
+        val waiter = thread(name = "retirement-result-waiter") {
+            waiterResult.set(
+                runCatching { barrier.retire { cleanupCalls.incrementAndGet() } }.exceptionOrNull(),
+            )
+            waiterReturned.countDown()
+        }
+
+        try {
+            assertFalse(waiterReturned.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            allowHookCompletion.countDown()
+            owner.join(5_000)
+            waiter.join(5_000)
+        }
+
+        assertFalse(owner.isAlive)
+        assertFalse(waiter.isAlive)
+        assertSame(failure, ownerResult.get())
+        assertSame(failure, waiterResult.get())
+        assertEquals(1, hookCalls.get())
+        assertEquals(0, nestedHookCalls.get())
+        assertEquals(1, cleanupCalls.get())
+    }
+
+    @Test
     fun `reentrant retirement executes cleanup once`() {
         val barrier = RetirementBarrier()
         val cleanupCalls = AtomicInteger()

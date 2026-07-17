@@ -14,6 +14,87 @@ import org.junit.Test
 
 class VoiceAudioCaptureOwnershipTest {
     @Test
+    fun `terminal result remains joinable until ownership publication hook completes`() {
+        val routeFailure = IllegalStateException("route retirement failed")
+        val resultPublished = CountDownLatch(1)
+        val allowOwnershipRelease = CountDownLatch(1)
+        val stopReturned = CountDownLatch(1)
+        val releaseReturned = CountDownLatch(1)
+        val ownerResult = AtomicReference<Throwable?>()
+        val stopResult = AtomicReference<Throwable?>()
+        val releaseResult = AtomicReference<Throwable?>()
+        val ownership = fakeOwnership(
+            onRetirementResultPublished = { published ->
+                assertSame(routeFailure, published.exceptionOrNull())
+                resultPublished.countDown()
+                allowOwnershipRelease.await(5, TimeUnit.SECONDS)
+            },
+        )
+        val lease = FakeCaptureRouteLease { throw routeFailure }
+        val recorder = FakeCaptureRecorder()
+        val task = FakeCaptureTask()
+        val token = ownership.begin(lease)
+        ownership.publishAndStart(token, recorder, task)
+        val owner = thread(name = "capture-result-publication-owner") {
+            ownerResult.set(runCatching { ownership.terminate(token, recorder) }.exceptionOrNull())
+        }
+        assertTrue(resultPublished.await(5, TimeUnit.SECONDS))
+        val stop = thread(name = "capture-result-publication-stop") {
+            stopResult.set(runCatching { ownership.stop() }.exceptionOrNull())
+            stopReturned.countDown()
+        }
+        val release = thread(name = "capture-result-publication-release") {
+            releaseResult.set(runCatching { ownership.release() }.exceptionOrNull())
+            releaseReturned.countDown()
+        }
+
+        try {
+            assertFalse(stopReturned.await(100, TimeUnit.MILLISECONDS))
+            assertFalse(releaseReturned.await(100, TimeUnit.MILLISECONDS))
+        } finally {
+            allowOwnershipRelease.countDown()
+            owner.join(5_000)
+            stop.join(5_000)
+            release.join(5_000)
+        }
+
+        assertFalse(owner.isAlive)
+        assertFalse(stop.isAlive)
+        assertFalse(release.isAlive)
+        assertSame(routeFailure, ownerResult.get())
+        assertSame(routeFailure, stopResult.get())
+        assertSame(routeFailure, releaseResult.get())
+        assertRetiredExactlyOnce(lease, recorder, task)
+    }
+
+    @Test
+    fun `publication rejection runs every cleanup stage and preserves ordered failures`() {
+        val cancelFailure = IllegalStateException("cancel failed")
+        val releaseFailure = IllegalArgumentException("release failed")
+        val routeFailure = UnsupportedOperationException("route failed")
+        val ownership = fakeOwnership()
+        val rejectedLease = FakeCaptureRouteLease { throw routeFailure }
+        val rejectedToken = ownership.begin(rejectedLease)
+        val currentLease = FakeCaptureRouteLease()
+        val currentToken = ownership.begin(currentLease)
+        val recorder = FakeCaptureRecorder(releaseFailure = releaseFailure)
+        val task = FakeCaptureTask(onCancel = { throw cancelFailure })
+
+        val thrown = runCatching {
+            ownership.publishAndStart(rejectedToken, recorder, task)
+        }.exceptionOrNull()
+
+        assertSame(cancelFailure, thrown)
+        assertEquals(listOf(releaseFailure, routeFailure), cancelFailure.suppressed.toList())
+        assertEquals(1, task.cancelCalls)
+        assertEquals(0, recorder.stopCalls)
+        assertEquals(1, recorder.releaseCalls)
+        assertEquals(1, rejectedLease.retireCalls)
+        assertEquals(0, currentLease.retireCalls)
+        assertTrue(ownership.isCurrentLease(currentToken, currentLease))
+    }
+
+    @Test
     fun `publication rejection retires acquired lease once`() {
         val ownership = fakeOwnership()
         val lease = FakeCaptureRouteLease()
@@ -321,13 +402,16 @@ class VoiceAudioCaptureOwnershipTest {
         assertEquals(1, lease.retireCalls)
     }
 
-    private fun fakeOwnership() = VoiceAudioCaptureOwnership(
+    private fun fakeOwnership(
+        onRetirementResultPublished: (Result<Unit>) -> Unit = {},
+    ) = VoiceAudioCaptureOwnership(
         startRecorder = { recorder: FakeCaptureRecorder -> recorder.start() },
         isRecorderRecording = FakeCaptureRecorder::recording,
         stopRecorder = FakeCaptureRecorder::stop,
         releaseRecorder = FakeCaptureRecorder::release,
         startTask = FakeCaptureTask::start,
         cancelTask = FakeCaptureTask::cancel,
+        onRetirementResultPublished = onRetirementResultPublished,
     )
 
     private class FakeCaptureRouteLease(
