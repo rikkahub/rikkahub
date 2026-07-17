@@ -60,7 +60,16 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
             required = listOf("query")
         )
 
-    override fun scrapingParameters(options: SearchServiceOptions.ExaOptions): InputSchema? = null
+    override fun scrapingParameters(options: SearchServiceOptions.ExaOptions): InputSchema? =
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("url", buildJsonObject {
+                    put("type", "string")
+                    put("description", "url to scrape")
+                })
+            },
+            required = listOf("url")
+        )
 
     override suspend fun search(
         params: JsonObject,
@@ -119,8 +128,52 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
         params: JsonObject,
         commonOptions: SearchCommonOptions,
         serviceOptions: SearchServiceOptions.ExaOptions
-    ): Result<ScrapedResult> {
-        return Result.failure(Exception("Scraping is not supported for Exa"))
+    ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
+        runCatching {
+            val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
+            val body = buildJsonObject {
+                put("urls", buildJsonArray {
+                    add(JsonPrimitive(url))
+                })
+                put("text", JsonPrimitive(true))
+            }
+            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
+
+            val request = Request.Builder()
+                .url("https://api.exa.ai/contents")
+                .post(json.encodeToString(body).toRequestBody("application/json".toMediaType()))
+                .addHeader("Authorization", "Bearer $apiKey")
+                .build()
+
+            val response = httpClient.newCall(request).execute()
+            if (response.isSuccessful) {
+                val bodyRaw = response.body.string()
+                val data = runCatching {
+                    json.decodeFromString<ExaData>(bodyRaw)
+                }.onFailure {
+                    it.printStackTrace()
+                    println(bodyRaw)
+                    error("Failed to decode response: $bodyRaw")
+                }.getOrThrow()
+
+                return@withContext Result.success(
+                    ScrapedResult(
+                        urls = data.results.map {
+                            ScrapedResultUrl(
+                                url = it.url,
+                                content = it.text ?: "",
+                                metadata = ScrapedResultMetadata(
+                                    title = it.title,
+                                )
+                            )
+                        }
+                    )
+                )
+            } else {
+                println(response.body.string())
+                error("response failed #${response.code}")
+            }
+        }
     }
 
     @Serializable
