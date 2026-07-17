@@ -138,7 +138,7 @@ class DirectAudioRouteCapabilitiesTest {
     }
 }
 
-private class FakeBluetoothCaptureOperations : DirectBluetoothCaptureOperations {
+internal class FakeBluetoothCaptureOperations : DirectBluetoothCaptureOperations {
     val headset: DirectBluetoothHeadset = FakeBluetoothHeadset
     val device: DirectBluetoothDevice = FakeBluetoothDevice("headset:00:11")
     var permissionGranted = true
@@ -147,6 +147,7 @@ private class FakeBluetoothCaptureOperations : DirectBluetoothCaptureOperations 
     var throwWhenEnablingSco = false
     var throwWhenDisablingSco = false
     var dispatchImmediately = true
+    var permissionProbeFailure: Throwable? = null
     var permissionChecks = 0
     var startScoCalls = 0
     val scoEnabledValues = mutableListOf<Boolean>()
@@ -164,6 +165,7 @@ private class FakeBluetoothCaptureOperations : DirectBluetoothCaptureOperations 
 
     override fun hasConnectPermission(): Boolean {
         permissionChecks += 1
+        permissionProbeFailure?.let { throw it }
         return permissionGranted
     }
 
@@ -234,7 +236,7 @@ private class FakeBluetoothCaptureOperations : DirectBluetoothCaptureOperations 
     }
 }
 
-private class FakeCaptureDeviceOperations : DirectCaptureDeviceOperations {
+internal class FakeCaptureDeviceOperations : DirectCaptureDeviceOperations {
     val device = DirectAudioCaptureDevice(
         routeDevice = VoiceAudioRouteDevice(
             id = 7,
@@ -246,6 +248,7 @@ private class FakeCaptureDeviceOperations : DirectCaptureDeviceOperations {
     )
     var permissionGranted = true
     var communicationDeviceAccepted = false
+    var permissionProbeFailure: Throwable? = null
     var permissionChecks = 0
     var captureDeviceQueries = 0
     val preferredDevices = mutableListOf<DirectAudioCaptureDevice>()
@@ -254,6 +257,7 @@ private class FakeCaptureDeviceOperations : DirectCaptureDeviceOperations {
 
     override fun hasConnectPermission(): Boolean {
         permissionChecks += 1
+        permissionProbeFailure?.let { throw it }
         return permissionGranted
     }
 

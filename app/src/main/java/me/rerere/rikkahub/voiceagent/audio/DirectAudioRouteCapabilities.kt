@@ -43,6 +43,10 @@ internal fun interface DirectCaptureDeviceCapability {
     fun configure(recorder: AudioRecord): DirectAudioResourceLease?
 }
 
+internal class DirectAudioPermissionProbeFailure(
+    val permissionFailure: Throwable,
+) : RuntimeException("Direct audio permission probe failed", permissionFailure)
+
 internal data class DirectAudioRouteCapabilities(
     val focus: DirectAudioFocusCapability,
     val communicationMode: DirectCommunicationModeCapability,
@@ -223,7 +227,7 @@ internal class SystemDirectBluetoothCaptureCapability(
     }
 
     override fun acquire(): DirectAudioResourceLease? {
-        if (!operations.hasConnectPermission()) {
+        if (!probeDirectAudioPermission(operations::hasConnectPermission)) {
             logCapabilityDebug("Direct Bluetooth SCO skipped: BLUETOOTH_CONNECT not granted")
             return null
         }
@@ -352,7 +356,7 @@ internal class SystemDirectCaptureDeviceCapability(
     private val operations: DirectCaptureDeviceOperations,
 ) : DirectCaptureDeviceCapability {
     override fun configure(recorder: AudioRecord): DirectAudioResourceLease? {
-        if (!operations.hasConnectPermission()) {
+        if (!probeDirectAudioPermission(operations::hasConnectPermission)) {
             logCapabilityDebug("Direct Bluetooth route skipped: BLUETOOTH_CONNECT not granted")
             return null
         }
@@ -540,6 +544,13 @@ private fun retirementLease(retire: () -> Unit): DirectAudioResourceLease {
     val retirement = RetirementBarrier()
     return DirectAudioResourceLease { retirement.retire(retire) }
 }
+
+private fun probeDirectAudioPermission(probe: () -> Boolean): Boolean =
+    try {
+        probe()
+    } catch (failure: Throwable) {
+        throw DirectAudioPermissionProbeFailure(failure)
+    }
 
 private fun hasBluetoothConnectPermission(context: Context): Boolean =
     Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||

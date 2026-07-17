@@ -107,9 +107,10 @@ internal class AndroidDirectAudioRouteController(
         try {
             val shouldAcquire = synchronized(lock) { !closed && bluetoothCaptureLease == null }
             if (!shouldAcquire) return
-            val acquired = runCatching(capabilities.bluetoothCapture::acquire)
-                .onFailure { logWarning("Direct Bluetooth capture setup failed", it) }
-                .getOrNull() ?: return
+            val acquired = capabilityBestEffort(
+                message = "Direct Bluetooth capture setup failed",
+                action = capabilities.bluetoothCapture::acquire,
+            ) ?: return
             val retireImmediately = synchronized(lock) {
                 if (closed || bluetoothCaptureLease != null) {
                     true
@@ -133,9 +134,9 @@ internal class AndroidDirectAudioRouteController(
                     check(captureGeneration == generation) { "Direct audio capture route lease is stale" }
                     if (captureDeviceLease != null) return
                 }
-                val acquired = runCatching { capabilities.captureDevice.configure(recorder) }
-                    .onFailure { logWarning("Direct capture device configuration failed", it) }
-                    .getOrNull() ?: return
+                val acquired = capabilityBestEffort("Direct capture device configuration failed") {
+                    capabilities.captureDevice.configure(recorder)
+                } ?: return
                 val retireImmediately = synchronized(lock) {
                     if (closed || captureGeneration != generation || captureDeviceLease != null) {
                         true
@@ -210,6 +211,16 @@ internal class AndroidDirectAudioRouteController(
         runCatching(lease::retire)
             .onFailure { logWarning(message, it) }
     }
+
+    private fun <T> capabilityBestEffort(message: String, action: () -> T): T? =
+        try {
+            action()
+        } catch (failure: DirectAudioPermissionProbeFailure) {
+            throw failure.permissionFailure
+        } catch (failure: Throwable) {
+            logWarning(message, failure)
+            null
+        }
 
     private fun isClosed(): Boolean = synchronized(lock) { closed }
 

@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -98,6 +99,58 @@ class AndroidDirectAudioRouteControllerTest {
             ),
             fixture.events,
         )
+    }
+
+    @Test
+    fun `Bluetooth permission probe failure propagates and rolls back mode while retaining focus`() {
+        val permissionFailure = IllegalStateException("Bluetooth permission lookup failed")
+        val operations = FakeBluetoothCaptureOperations().apply {
+            permissionProbeFailure = permissionFailure
+        }
+        val bluetooth = SystemDirectBluetoothCaptureCapability(operations)
+        val fixture = DirectAudioCapabilitiesFixture(
+            bluetoothOverride = bluetooth,
+            beginCloseOverride = bluetooth::beginClose,
+            closeOverride = bluetooth::close,
+        )
+        val controller = fixture.controller()
+
+        val thrown = assertThrows(IllegalStateException::class.java) {
+            controller.acquireCapture()
+        }
+
+        assertSame(permissionFailure, thrown)
+        assertEquals(1, fixture.mode.retireCalls)
+        assertEquals(0, fixture.focus.retireCalls)
+        assertTrue(operations.mutations.isEmpty())
+
+        controller.close()
+
+        assertEquals(1, fixture.mode.retireCalls)
+        assertEquals(1, fixture.focus.retireCalls)
+    }
+
+    @Test
+    fun `recorder permission probe failure propagates without device mutation`() {
+        val permissionFailure = IllegalStateException("Bluetooth permission lookup failed")
+        val operations = FakeCaptureDeviceOperations().apply {
+            permissionProbeFailure = permissionFailure
+        }
+        val fixture = DirectAudioCapabilitiesFixture(
+            captureDeviceOverride = SystemDirectCaptureDeviceCapability(operations),
+        )
+        val controller = fixture.controller()
+        val lease = controller.acquireCapture()
+
+        val thrown = assertThrows(IllegalStateException::class.java) {
+            lease.configureRecorder(uninitializedAudioRecord())
+        }
+
+        assertSame(permissionFailure, thrown)
+        assertEquals(0, operations.captureDeviceQueries)
+        assertTrue(operations.preferredDevices.isEmpty())
+        assertTrue(operations.communicationDevices.isEmpty())
+        controller.close()
     }
 
     @Test
@@ -372,7 +425,12 @@ class AndroidDirectAudioRouteControllerTest {
     }
 }
 
-private class DirectAudioCapabilitiesFixture {
+private class DirectAudioCapabilitiesFixture(
+    bluetoothOverride: DirectBluetoothCaptureCapability? = null,
+    captureDeviceOverride: DirectCaptureDeviceCapability? = null,
+    beginCloseOverride: (() -> Unit)? = null,
+    closeOverride: (() -> Unit)? = null,
+) {
     val events: MutableList<String> = Collections.synchronizedList(mutableListOf())
     val focus = FakeDirectAudioFocusCapability(events)
     val mode = FakeDirectCommunicationModeCapability(events)
@@ -384,12 +442,13 @@ private class DirectAudioCapabilitiesFixture {
     private val capabilities = DirectAudioRouteCapabilities(
         focus = focus,
         communicationMode = mode,
-        bluetoothCapture = bluetooth,
-        captureDevice = device,
-        beginClose = beginCloseObserved::countDown,
+        bluetoothCapture = bluetoothOverride ?: bluetooth,
+        captureDevice = captureDeviceOverride ?: device,
+        beginClose = beginCloseOverride ?: beginCloseObserved::countDown,
         close = {
             closeCalls += 1
             events += "capabilities-close"
+            closeOverride?.invoke()
         },
     )
 
