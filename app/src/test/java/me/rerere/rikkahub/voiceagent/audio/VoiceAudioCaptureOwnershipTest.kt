@@ -87,6 +87,7 @@ class VoiceAudioCaptureOwnershipTest {
         assertSame(cancelFailure, thrown)
         assertEquals(listOf(releaseFailure, routeFailure), cancelFailure.suppressed.toList())
         assertEquals(1, task.cancelCalls)
+        assertEquals(0, task.startCalls)
         assertEquals(0, recorder.stopCalls)
         assertEquals(1, recorder.releaseCalls)
         assertEquals(1, rejectedLease.retireCalls)
@@ -107,6 +108,7 @@ class VoiceAudioCaptureOwnershipTest {
 
         assertEquals(VoiceAudioCaptureStartOutcome.Rejected, outcome)
         assertEquals(1, task.cancelCalls)
+        assertEquals(0, task.startCalls)
         assertEquals(1, recorder.releaseCalls)
         assertEquals(1, lease.retireCalls)
     }
@@ -123,6 +125,7 @@ class VoiceAudioCaptureOwnershipTest {
 
         assertEquals("AudioRecord start failed", thrown?.message)
         assertEquals(1, task.cancelCalls)
+        assertEquals(0, task.startCalls)
         assertEquals(1, recorder.releaseCalls)
         assertEquals(1, lease.retireCalls)
     }
@@ -139,6 +142,7 @@ class VoiceAudioCaptureOwnershipTest {
 
         assertEquals("AudioRecord start failed", thrown?.message)
         assertEquals(1, task.cancelCalls)
+        assertEquals(0, task.startCalls)
         assertEquals(1, recorder.releaseCalls)
         assertEquals(1, lease.retireCalls)
     }
@@ -157,6 +161,7 @@ class VoiceAudioCaptureOwnershipTest {
         val currentToken = ownership.begin(currentLease)
 
         assertEquals(VoiceAudioCaptureStartOutcome.Rejected, outcome)
+        assertEquals(0, staleTask.startCalls)
         assertEquals(1, staleLease.retireCalls)
         assertEquals(0, currentLease.retireCalls)
         assertTrue(ownership.isCurrentLease(currentToken, currentLease))
@@ -170,6 +175,7 @@ class VoiceAudioCaptureOwnershipTest {
         val task = FakeCaptureTask()
         val token = ownership.begin(lease)
         assertEquals(VoiceAudioCaptureStartOutcome.Started, ownership.publishAndStart(token, recorder, task))
+        assertEquals(1, task.startCalls)
 
         ownership.stop()
         ownership.release()
@@ -178,7 +184,7 @@ class VoiceAudioCaptureOwnershipTest {
     }
 
     @Test
-    fun `release retires active exact lease`() {
+    fun `release returns true once retires exactly once and rejects later begin`() {
         val ownership = fakeOwnership()
         val lease = FakeCaptureRouteLease()
         val recorder = FakeCaptureRecorder()
@@ -186,9 +192,14 @@ class VoiceAudioCaptureOwnershipTest {
         val token = ownership.begin(lease)
         ownership.publishAndStart(token, recorder, task)
 
-        ownership.release()
+        assertTrue(ownership.release())
+        assertFalse(ownership.release())
+        val rejectedLease = FakeCaptureRouteLease()
+        val thrown = runCatching { ownership.begin(rejectedLease) }.exceptionOrNull()
 
         assertRetiredExactlyOnce(lease, recorder, task)
+        assertEquals("Voice audio engine is released", thrown?.message)
+        assertEquals(0, rejectedLease.retireCalls)
     }
 
     @Test
