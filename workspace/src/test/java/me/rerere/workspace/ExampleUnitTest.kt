@@ -149,7 +149,28 @@ class ExampleUnitTest {
 
         assertEquals(0, result.exitCode)
         assertTrue(result.truncated)
+        assertTrue(result.stdoutTruncated)
+        assertFalse(result.stderrTruncated)
         assertEquals(MAX_OUTPUT_CHARS, result.stdout.length)
+    }
+
+    @Test
+    fun stderrOnlyTruncationIsFlaggedSeparately() {
+        val baseDir = Files.createTempDirectory("workspace-truncate-stderr-test").toFile()
+        val manager = WorkspaceManager(baseDir)
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+
+        val result = manager.executeCommand(
+            root,
+            "awk 'BEGIN { for (i = 0; i < 300000; i++) printf \"a\" }' 1>&2",
+        )
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.truncated)
+        assertFalse(result.stdoutTruncated)
+        assertTrue(result.stderrTruncated)
+        assertEquals(MAX_OUTPUT_CHARS, result.stderr.length)
     }
 
     @Test

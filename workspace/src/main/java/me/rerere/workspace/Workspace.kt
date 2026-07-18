@@ -63,5 +63,8 @@ data class WorkspaceCommandResult(
     val stdout: String,
     val stderr: String,
     val timedOut: Boolean = false,
+    /** stdout 或 stderr 任一超出上限被截断 */
     val truncated: Boolean = false,
+    val stdoutTruncated: Boolean = false,
+    val stderrTruncated: Boolean = false,
 )

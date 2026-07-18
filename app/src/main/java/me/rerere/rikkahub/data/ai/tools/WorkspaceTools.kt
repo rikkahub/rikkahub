@@ -14,6 +14,7 @@ import me.rerere.ai.ui.toMetadata
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.utils.generateUnifiedDiff
+import me.rerere.workspace.MAX_OUTPUT_CHARS
 import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
@@ -258,10 +259,14 @@ private fun createShellTool(
             UIMessagePart.Text(
                 buildJsonObject {
                     put("exitCode", result.exitCode)
-                    put("stdout", result.stdout)
-                    put("stderr", result.stderr)
+                    // 运行器在流超出上限时静默截断, 这里给被截的流补上字段级提示,
+                    // 否则仅 stdout 或仅 stderr 被截时内容看起来完整, LLM 与用户都无感
+                    put("stdout", result.stdout.appendTruncationNotice("stdout", result.stdoutTruncated))
+                    put("stderr", result.stderr.appendTruncationNotice("stderr", result.stderrTruncated))
                     put("timedOut", result.timedOut)
                     if (result.truncated) put("truncated", true)
+                    if (result.stdoutTruncated) put("stdoutTruncated", true)
+                    if (result.stderrTruncated) put("stderrTruncated", true)
                 }.toString()
             )
         )
@@ -270,6 +275,10 @@ private fun createShellTool(
 
 private fun kotlinx.serialization.json.JsonObject.string(name: String): String? =
     this[name]?.jsonPrimitive?.contentOrNull
+
+private fun String.appendTruncationNotice(streamName: String, truncated: Boolean): String =
+    if (!truncated) this
+    else this + "\n[... $streamName truncated: output exceeded $MAX_OUTPUT_CHARS characters limit ...]"
 
 private suspend fun WorkspaceRepository.readTextInRootfs(
     workspaceId: String,
