@@ -64,6 +64,8 @@ class ExampleUnitTest {
         val installer = RootfsInstaller(manager)
         val archive = tarGz(
             TarTestEntry("bin/", type = '5'),
+            // 安装前会校验归档含已知 shell, 否则按非法 rootfs 拒绝
+            TarTestEntry("bin/sh", content = "#!/bin/sh\n".toByteArray(), mode = 493),
             TarTestEntry("bin/hello", content = "echo hello\n".toByteArray(), mode = 493),
             TarTestEntry("usr/bin/hello-link", type = '2', linkName = "../../bin/hello"),
         )

@@ -317,6 +317,13 @@ object ShellToolUI : ToolUIRenderer {
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ShellExitStatus(content, MaterialTheme.typography.labelSmall)
+            if (content.boolean("truncated") == true) {
+                Text(
+                    text = stringResource(R.string.tool_ui_shell_truncated),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (combined.isNotEmpty()) {
                 Box(
                     modifier = Modifier

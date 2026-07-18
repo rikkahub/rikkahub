@@ -1164,7 +1164,7 @@
   <string name="workspace_detail_tool_delete_file">Удалить файл</string>
   <string name="workspace_detail_tool_move_file">Переместить файл</string>
   <string name="workspace_detail_tool_shell">Выполнить команду</string>
-  <string name="workspace_detail_install_rootfs_desc">Загрузит tar.gz и распакует в каталог Linux %s.</string>
+  <string name="workspace_detail_install_rootfs_desc">Установит Rootfs в каталог linux %s из локального архивного файла или по URL.</string>
   <string name="workspace_detail_download_url">URL для скачивания tar.gz</string>
   <string name="workspace_detail_area_files">Файлы</string>
   <string name="workspace_detail_area_rootfs">Корневая ФС</string>
@@ -1281,4 +1281,9 @@
   <string name="chat_page_delete_folder_generating">Некоторые беседы в этой папке все еще генерируются. Пожалуйста, остановите их перед удалением.</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS не читает текст в скобках</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">Если включено, TTS не будет читать содержимое в скобках</string>
+  <string name="workspace_detail_uploading">Отправка %1$s%2$s</string>
+  <string name="workspace_detail_install_from_local_file">Установить из локального файла</string>
+  <string name="workspace_detail_install_from_url">Или установить по URL</string>
+  <string name="tool_ui_shell_truncated">вывод обрезан</string>
 </resources>
+
