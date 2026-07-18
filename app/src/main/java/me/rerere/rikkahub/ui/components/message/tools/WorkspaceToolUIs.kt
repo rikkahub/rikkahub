@@ -304,9 +304,11 @@ object ShellToolUI : ToolUIRenderer {
         return stringResource(R.string.tool_ui_shell, truncated)
     }
 
-    // 输出必须是 JSON 对象才按 shell 结果渲染; 解析失败/非对象时回退默认工具展示, 避免渲染出 "exit ?" 空壳
+    // 输出必须是含 exitCode 的 shell 结果对象才按 shell 结果渲染; 解析失败、非对象、
+    // 或执行失败的错误输出 ({"error": ...}, 如 tool call 入参 JSON 损坏) 一律回退
+    // 默认工具展示, 避免渲染出 "exit ?" 空壳
     private fun contentObject(context: ToolUIContext): JsonElement? =
-        context.content?.jsonObjectOrNull
+        context.content?.jsonObjectOrNull?.takeIf { it.containsKey("exitCode") }
 
     override fun hasSummary(context: ToolUIContext): Boolean = contentObject(context) != null
 
