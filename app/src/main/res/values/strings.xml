@@ -1196,7 +1196,7 @@
   <string name="workspace_detail_tool_delete_file">Delete File</string>
   <string name="workspace_detail_tool_move_file">Move File</string>
   <string name="workspace_detail_tool_shell">Execute Command</string>
-  <string name="workspace_detail_install_rootfs_desc">Will download tar.gz and extract to the linux directory of %s.</string>
+  <string name="workspace_detail_install_rootfs_desc">Install Rootfs into the linux directory of %s from a local archive file or a URL.</string>
   <string name="workspace_detail_download_url">tar.gz download URL</string>
   <string name="workspace_detail_area_files">Files</string>
   <string name="workspace_detail_area_rootfs">Rootfs</string>
@@ -1283,4 +1283,9 @@
   <string name="chat_page_folder_add">New</string>
   <string name="chat_page_delete_folder_confirm">Delete folder "%1$s"? Conversations inside will not be deleted, only removed from the folder.</string>
   <string name="chat_page_delete_folder_generating">Some conversations in this folder are still generating. Please stop them before deleting.</string>
+  <string name="workspace_detail_uploading">Uploading %1$s%2$s</string>
+  <string name="workspace_detail_install_from_local_file">Install from local file</string>
+  <string name="workspace_detail_install_from_url">Or install from a URL</string>
+  <string name="tool_ui_shell_truncated">output truncated</string>
 </resources>
+

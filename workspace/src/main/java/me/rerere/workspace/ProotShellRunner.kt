@@ -17,13 +17,12 @@ class ProotShellRunner(
     private val patcher: RootfsPatcher = RootfsPatcher(),
 ) : WorkspaceShellRunner {
     override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
-        if (!context.linuxDir.hasUsableRootfs()) {
-            return WorkspaceCommandResult(
+        val shell = detectRootfsShell(context.linuxDir)
+            ?: return WorkspaceCommandResult(
                 exitCode = 127,
                 stdout = "",
                 stderr = "Rootfs is not installed",
             )
-        }
 
         val proot = File(nativeLibraryDir, PROOT_EXEC)
         val loader = File(nativeLibraryDir, PROOT_LOADER)
@@ -44,7 +43,7 @@ class ProotShellRunner(
 
         context.tempDir.mkdirs()
         patcher.patch(context.linuxDir)
-        val process = ProcessBuilder(buildCommand(context, proot))
+        val process = ProcessBuilder(buildCommand(context, proot, shell))
             .directory(context.filesDir)
             .redirectErrorStream(false)
             .apply {
@@ -60,6 +59,7 @@ class ProotShellRunner(
     private fun buildCommand(
         context: WorkspaceShellContext,
         proot: File,
+        shell: String,
     ): List<String> {
         val command = mutableListOf(
             proot.absolutePath,
@@ -96,10 +96,11 @@ class ProotShellRunner(
             "TERM=xterm-256color",
             "LANG=C.UTF-8",
             "LC_ALL=C.UTF-8",
-            "/bin/bash",
+            shell,
             "-l",
             "-c",
-            // 命令通过位置参数传入, 避免任何转义; eval "$2" 对命令文本只求值一次, 等价于 bash -c "$cmd"
+            // 命令通过位置参数传入, 避免任何转义; eval "$2" 对命令文本只求值一次, 等价于 bash -c "$cmd";
+            // 该写法为 POSIX 语法, bash/ash/dash/sh 均可执行
             "cd -- \"\$1\" && eval \"\$2\"",
             "rikkahub",
             context.prootCwd(),
@@ -116,9 +117,6 @@ class ProotShellRunner(
             "$WORKSPACE_DIR/$normalized"
         }
     }
-
-    private fun File.hasUsableRootfs(): Boolean =
-        isDirectory && File(this, "bin/sh").isFile
 
     private companion object {
         private const val PROOT_EXEC = "libproot_exec.so"

@@ -55,6 +55,8 @@ fun Process.readResult(timeoutMillis: Long, stdin: ByteArray? = null): Workspace
             stderr = stderr.text(),
             timedOut = !finished,
             truncated = stdout.truncated || stderr.truncated,
+            stdoutTruncated = stdout.truncated,
+            stderrTruncated = stderr.truncated,
         )
     } catch (e: InterruptedException) {
         // 调用方线程被中断（如协程取消时的 runInterruptible），杀掉进程避免命令继续执行

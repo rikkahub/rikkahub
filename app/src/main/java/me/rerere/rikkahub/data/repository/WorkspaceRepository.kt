@@ -113,13 +113,43 @@ class WorkspaceRepository(
         id: String,
         url: String,
         onProgress: (RootfsInstallProgress) -> Unit = {},
+    ): Boolean = installRootfsInternal(id, describeSource = "url=$url") { root ->
+        rootfsInstaller.install(root, url, onProgress)
+    }
+
+    /**
+     * 从已打开的本地归档输入流安装 rootfs (SAF content:// 场景).
+     * [fileName] 用于识别归档格式 (.tar.gz / .tar.xz / .txz), [totalBytes] 用于上传进度, 可为 null.
+     */
+    suspend fun installRootfsFromFile(
+        id: String,
+        fileName: String,
+        totalBytes: Long?,
+        inputStream: InputStream,
+        onProgress: (RootfsInstallProgress) -> Unit = {},
+    ): Boolean = inputStream.use { input ->
+        installRootfsInternal(id, describeSource = "file=$fileName") { root ->
+            rootfsInstaller.install(
+                root = root,
+                input = input,
+                format = RootfsInstaller.ArchiveFormat.fromUrl(fileName),
+                totalBytes = totalBytes,
+                onProgress = onProgress,
+            )
+        }
+    }
+
+    private suspend fun installRootfsInternal(
+        id: String,
+        describeSource: String,
+        install: (root: String) -> Unit,
     ): Boolean {
         val workspace = dao.getById(id) ?: return false
         updateShellState(workspace, WorkspaceShellStatus.INSTALLING.name)
         try {
             // runInterruptible 让协程取消转成线程中断, 打断 install 内阻塞的下载/解压循环
             runInterruptible(Dispatchers.IO) {
-                rootfsInstaller.install(workspace.root, url, onProgress)
+                install(workspace.root)
             }
             updateShellState(workspace, WorkspaceShellStatus.READY.name)
             return true
@@ -134,7 +164,7 @@ class WorkspaceRepository(
             }
             throw CancellationException("Rootfs install cancelled").also { it.initCause(e) }
         } catch (e: Throwable) {
-            Log.e(TAG, "installRootfs failed: workspace=${workspace.id}, root=${workspace.root}, url=$url", e)
+            Log.e(TAG, "installRootfs failed: workspace=${workspace.id}, root=${workspace.root}, $describeSource", e)
             updateShellState(workspace, WorkspaceShellStatus.BROKEN.name)
             throw e
         }

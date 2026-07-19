@@ -1162,7 +1162,7 @@
   <string name="workspace_detail_tool_delete_file">刪除檔案</string>
   <string name="workspace_detail_tool_move_file">移動檔案</string>
   <string name="workspace_detail_tool_shell">執行命令</string>
-  <string name="workspace_detail_install_rootfs_desc">將下載 tar.gz 並解壓縮到 %s 的 linux 目錄。</string>
+  <string name="workspace_detail_install_rootfs_desc">從本機封存檔或網址安裝 Rootfs 到 %s 的 linux 目錄。</string>
   <string name="workspace_detail_download_url">tar.gz 下載網址</string>
   <string name="workspace_detail_area_files">檔案</string>
   <string name="workspace_detail_area_rootfs">Rootfs</string>
@@ -1279,4 +1279,9 @@
   <string name="chat_page_delete_folder_generating">此資料夾中的部分對話仍在生成中。請先停止它們再刪除。</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 不朗讀括號內的內容</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">啟用後，TTS 將不朗讀括號內的內容</string>
+  <string name="workspace_detail_uploading">正在上傳 %1$s%2$s</string>
+  <string name="workspace_detail_install_from_local_file">從本機檔案安裝</string>
+  <string name="workspace_detail_install_from_url">或從網址安裝</string>
+  <string name="tool_ui_shell_truncated">輸出已截斷</string>
 </resources>
+

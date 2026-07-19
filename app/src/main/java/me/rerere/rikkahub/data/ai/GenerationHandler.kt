@@ -12,6 +12,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -469,19 +470,52 @@ class GenerationHandler(
         Log.i(TAG, "maybeTruncateToolOutput: truncating tool $toolCallId output ($totalChars chars)")
 
         val fullText = textParts.joinToString("\n") { it.text }
-        val preview = fullText.take(TOOL_OUTPUT_PREVIEW_CHARS)
 
         val fileName = "${toolCallId}.txt"
         val outputDir = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() }
         File(outputDir, fileName).writeText(fullText)
 
+        val reminder = buildString {
+            append("Tool output was truncated ($totalChars characters total). ")
+            append("Full output saved to: /tool_outputs/$fileName. ")
+            append("Use shell to read it, e.g. `cat /tool_outputs/$fileName` ")
+            append("or `grep \"pattern\" /tool_outputs/$fileName`.")
+        }
+
+        // 结构化输出 (如 workspace_shell 的 exitCode/stdout/stderr): 保留 JSON 结构,
+        // 只截断超长的字符串字段. 整体扁平成纯文本会让 UI 解析不到 exitCode/stdout,
+        // 显示成 "exit ?" 且无任何输出内容
+        val single = textParts.singleOrNull()
+        val jsonObject = single?.let {
+            runCatching { json.parseToJsonElement(it.text) }.getOrNull() as? JsonObject
+        }
+        if (jsonObject != null) {
+            val truncatedJson = buildJsonObject {
+                jsonObject.forEach { (key, value) ->
+                    val stringValue = (value as? JsonPrimitive)?.takeIf { p -> p.isString }?.content
+                    if (stringValue != null && stringValue.length > TOOL_OUTPUT_PREVIEW_CHARS) {
+                        val omitted = stringValue.length - TOOL_OUTPUT_PREVIEW_CHARS
+                        put(
+                            key,
+                            stringValue.take(TOOL_OUTPUT_PREVIEW_CHARS) +
+                                "\n[... truncated, $omitted more characters ...]"
+                        )
+                    } else {
+                        put(key, value)
+                    }
+                }
+                put("truncated", true)
+                put("systemReminder", reminder)
+            }
+            return listOf(UIMessagePart.Text(truncatedJson.toString(), metadata = single.metadata)) + nonTextParts
+        }
+
+        // 非结构化输出: 退回纯文本预览
+        val preview = fullText.take(TOOL_OUTPUT_PREVIEW_CHARS)
         return listOf(
             UIMessagePart.Text(
                 buildString {
-                    appendLine("[Tool output truncated: $totalChars characters total]")
-                    appendLine("Full output saved to: /tool_outputs/$fileName")
-                    appendLine("Use shell to read: `cat /tool_outputs/$fileName`")
-                    appendLine("Use shell to search: `grep \"pattern\" /tool_outputs/$fileName`")
+                    appendLine("[$reminder]")
                     appendLine()
                     append(preview)
                 }

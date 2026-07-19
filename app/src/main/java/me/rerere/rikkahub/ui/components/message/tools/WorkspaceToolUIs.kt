@@ -304,11 +304,17 @@ object ShellToolUI : ToolUIRenderer {
         return stringResource(R.string.tool_ui_shell, truncated)
     }
 
-    override fun hasSummary(context: ToolUIContext): Boolean = context.content != null
+    // 输出必须是含 exitCode 的 shell 结果对象才按 shell 结果渲染; 解析失败、非对象、
+    // 或执行失败的错误输出 ({"error": ...}, 如 tool call 入参 JSON 损坏) 一律回退
+    // 默认工具展示, 避免渲染出 "exit ?" 空壳
+    private fun contentObject(context: ToolUIContext): JsonElement? =
+        context.content?.jsonObjectOrNull?.takeIf { it.containsKey("exitCode") }
+
+    override fun hasSummary(context: ToolUIContext): Boolean = contentObject(context) != null
 
     @Composable
     override fun Summary(context: ToolUIContext) {
-        val content = context.content ?: return
+        val content = contentObject(context) ?: return
         val combined = remember(content) {
             listOf(content.getStringContent("stdout"), content.getStringContent("stderr"))
                 .filterNot { it.isNullOrBlank() }
@@ -317,6 +323,13 @@ object ShellToolUI : ToolUIRenderer {
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ShellExitStatus(content, MaterialTheme.typography.labelSmall)
+            if (content.boolean("truncated") == true) {
+                Text(
+                    text = stringResource(R.string.tool_ui_shell_truncated),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (combined.isNotEmpty()) {
                 Box(
                     modifier = Modifier
@@ -341,7 +354,7 @@ object ShellToolUI : ToolUIRenderer {
 
     @Composable
     override fun Preview(context: ToolUIContext, onDismissRequest: () -> Unit) {
-        val content = context.content
+        val content = contentObject(context)
         if (content == null) {
             DefaultToolPreview(context = context)
             return
@@ -368,6 +381,13 @@ object ShellToolUI : ToolUIRenderer {
                     modifier = Modifier.weight(1f),
                 )
                 ShellExitStatus(content, MaterialTheme.typography.labelMedium)
+            }
+            if (content.boolean("truncated") == true) {
+                Text(
+                    text = stringResource(R.string.tool_ui_shell_truncated),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             HighlightCodeBlock(
                 code = if (cwd.isNullOrBlank()) command else "# cwd: $cwd\n$command",

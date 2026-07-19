@@ -177,12 +177,38 @@ class WorkspaceDetailVM(
     }
 
     fun installRootfs(url: String) {
+        val workspace = state.value.workspace ?: return
+        launchInstall { onProgress ->
+            repository.installRootfs(id = workspace.id, url = url, onProgress = onProgress)
+        }
+    }
+
+    fun installRootfsFromFile(inputStream: InputStream, fileName: String, totalBytes: Long?) {
+        val workspace = state.value.workspace
+        if (workspace == null) {
+            runCatching { inputStream.close() }
+            return
+        }
+        launchInstall(initialStage = RootfsInstallStage.UPLOADING) { onProgress ->
+            repository.installRootfsFromFile(
+                id = workspace.id,
+                fileName = fileName,
+                totalBytes = totalBytes,
+                inputStream = inputStream,
+                onProgress = onProgress,
+            )
+        }
+    }
+
+    private fun launchInstall(
+        initialStage: RootfsInstallStage = RootfsInstallStage.DOWNLOADING,
+        install: suspend (onProgress: (RootfsInstallProgress) -> Unit) -> Unit,
+    ) {
         viewModelScope.launch {
             _installError.value = null
-            val workspace = state.value.workspace ?: return@launch
-            _installProgress.value = RootfsInstallProgress(stage = RootfsInstallStage.DOWNLOADING)
+            _installProgress.value = RootfsInstallProgress(stage = initialStage)
             try {
-                repository.installRootfs(workspace.id, url) { progress ->
+                install { progress ->
                     _installProgress.value = progress
                 }
                 loadWorkspace()

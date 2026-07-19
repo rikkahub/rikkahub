@@ -64,6 +64,8 @@ class ExampleUnitTest {
         val installer = RootfsInstaller(manager)
         val archive = tarGz(
             TarTestEntry("bin/", type = '5'),
+            // 安装前会校验归档含已知 shell, 否则按非法 rootfs 拒绝
+            TarTestEntry("bin/sh", content = "#!/bin/sh\n".toByteArray(), mode = 493),
             TarTestEntry("bin/hello", content = "echo hello\n".toByteArray(), mode = 493),
             TarTestEntry("usr/bin/hello-link", type = '2', linkName = "../../bin/hello"),
         )
@@ -147,7 +149,28 @@ class ExampleUnitTest {
 
         assertEquals(0, result.exitCode)
         assertTrue(result.truncated)
+        assertTrue(result.stdoutTruncated)
+        assertFalse(result.stderrTruncated)
         assertEquals(MAX_OUTPUT_CHARS, result.stdout.length)
+    }
+
+    @Test
+    fun stderrOnlyTruncationIsFlaggedSeparately() {
+        val baseDir = Files.createTempDirectory("workspace-truncate-stderr-test").toFile()
+        val manager = WorkspaceManager(baseDir)
+        val root = "test-workspace"
+        manager.ensureWorkspace(root)
+
+        val result = manager.executeCommand(
+            root,
+            "awk 'BEGIN { for (i = 0; i < 300000; i++) printf \"a\" }' 1>&2",
+        )
+
+        assertEquals(0, result.exitCode)
+        assertTrue(result.truncated)
+        assertFalse(result.stdoutTruncated)
+        assertTrue(result.stderrTruncated)
+        assertEquals(MAX_OUTPUT_CHARS, result.stderr.length)
     }
 
     @Test
