@@ -40,11 +40,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +61,7 @@ import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.Placeholder
@@ -99,6 +102,9 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.utils.toDp
+import io.ratex.DisplayList
+import io.ratex.RaTeXEngine
+import io.ratex.measure
 import org.intellij.markdown.IElementType
 import org.intellij.markdown.MarkdownElementTypes
 import org.intellij.markdown.MarkdownTokenTypes
@@ -536,7 +542,7 @@ private fun MarkdownNode(
         }
 
         GFMElementTypes.INLINE_MATH -> {
-            val formula = node.getTextInNode(content)
+            val formula = node.getTextInNode(content).trimStart('$').trimEnd('$').trim()
             val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
             if (enableLatexRendering) {
                 MathInline(
@@ -553,7 +559,7 @@ private fun MarkdownNode(
         }
 
         GFMElementTypes.BLOCK_MATH -> {
-            val formula = node.getTextInNode(content)
+            val formula = node.getTextInNode(content).trimStart('$').trimEnd('$').trim()
             val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
             if (enableLatexRendering) {
                 MathBlock(
@@ -769,7 +775,10 @@ private fun Paragraph(
 ) {
     // dumpAst(node, content)
     if (node.findChildOfTypeRecursive(MarkdownElementTypes.IMAGE, GFMElementTypes.BLOCK_MATH) != null) {
-        FlowRow(modifier = modifier) {
+        FlowRow(
+            modifier = modifier,
+            itemVerticalAlignment = Alignment.CenterVertically,
+        ) {
             node.children.fastForEach { child ->
                 MarkdownNode(
                     node = child, content = content, onClickCitation = onClickCitation
@@ -783,21 +792,40 @@ private fun Paragraph(
     val inlineContents = remember {
         mutableStateMapOf<String, InlineTextContent>()
     }
+    val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
     val hasInlineMath = remember(node) {
         node.findChildOfTypeRecursive(GFMElementTypes.INLINE_MATH) != null
     }
-    val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
 
     val textStyle = LocalTextStyle.current
     val density = LocalDensity.current
     val latexColorArgb = LocalContentColor.current.toArgb()
+    val formulaDisplayLists = remember(latexColorArgb) {
+        mutableMapOf<String, DisplayList?>()
+    }
+    val resolvedColor = LocalContentColor.current
+    val fontSizePx = with(density) {
+        if (textStyle.fontSize != TextUnit.Unspecified) textStyle.fontSize.toPx()
+        else MaterialTheme.typography.bodyMedium.fontSize.toPx()
+    }
+    // 用 onSizeChanged 拿可用宽度，避免 BoxWithConstraints（SubcomposeLayout），
+    // 后者不支持 intrinsic 测量，在 NavDisplay 的 LookaheadScope 下会让父级
+    // ListItem/Column 查询 minIntrinsicHeight 时抛 "Asking for intrinsic
+    // measurements of SubcomposeLayout layouts is not supported" 崩溃。
+    var maxWidthPx by remember { mutableFloatStateOf(0f) }
+    val effectiveMaxWidthPx = if (maxWidthPx > 0f) maxWidthPx else Float.MAX_VALUE
+
     FlowRow(
-        modifier = modifier.then(
-            if (node.nextSibling() != null) Modifier.padding(bottom = LocalTextStyle.current.fontSize.toDp())
-            else Modifier
-        )
+        modifier = Modifier
+            .fillMaxWidth()
+            .onSizeChanged { maxWidthPx = it.width.toFloat() }
+            .then(modifier)
+            .then(
+                if (node.nextSibling() != null) Modifier.padding(bottom = LocalTextStyle.current.fontSize.toDp())
+                else Modifier
+            )
     ) {
-        val annotatedString = remember(content, enableLatexRendering, latexColorArgb) {
+        val annotatedString = remember(content, enableLatexRendering, latexColorArgb, maxWidthPx) {
             buildAnnotatedString {
                 node.children.fastForEach { child ->
                     appendMarkdownNodeContent(
@@ -811,6 +839,10 @@ private fun Paragraph(
                         trim = trim,
                         enableLatexRendering = enableLatexRendering,
                         latexColorArgb = latexColorArgb,
+                        maxWidthPx = effectiveMaxWidthPx,
+                        fontSizePx = fontSizePx,
+                        formulaDisplayLists = formulaDisplayLists,
+                        resolvedColor = resolvedColor,
                     )
                 }
             }
@@ -823,7 +855,7 @@ private fun Paragraph(
             overflow = TextOverflow.Visible,
             style = LocalTextStyle.current.copy(
                 lineHeight = if (hasInlineMath && enableLatexRendering) TextUnit.Unspecified else LocalTextStyle.current.lineHeight
-            )
+            ),
         )
     }
 }
@@ -996,6 +1028,10 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
     enableLatexRendering: Boolean = true,
     latexColorArgb: Int = 0,
     onClickCitation: (String) -> Unit = {},
+    maxWidthPx: Float = Float.MAX_VALUE,
+    fontSizePx: Float = Float.MAX_VALUE,
+    formulaDisplayLists: MutableMap<String, DisplayList?>? = null,
+    resolvedColor: Color = Color.Unspecified,
 ) {
     when {
         node.type == MarkdownTokenTypes.BLOCK_QUOTE -> {}
@@ -1034,7 +1070,11 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                         style = style,
                         enableLatexRendering = enableLatexRendering,
                         latexColorArgb = latexColorArgb,
-                        onClickCitation = onClickCitation
+                        onClickCitation = onClickCitation,
+                        maxWidthPx = maxWidthPx,
+                        fontSizePx = fontSizePx,
+                        formulaDisplayLists = formulaDisplayLists,
+                        resolvedColor = resolvedColor,
                     )
                 }
             }
@@ -1052,7 +1092,11 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                         style = style,
                         enableLatexRendering = enableLatexRendering,
                         latexColorArgb = latexColorArgb,
-                        onClickCitation = onClickCitation
+                        onClickCitation = onClickCitation,
+                        maxWidthPx = maxWidthPx,
+                        fontSizePx = fontSizePx,
+                        formulaDisplayLists = formulaDisplayLists,
+                        resolvedColor = resolvedColor,
                     )
                 }
             }
@@ -1070,7 +1114,11 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                         style = style,
                         enableLatexRendering = enableLatexRendering,
                         latexColorArgb = latexColorArgb,
-                        onClickCitation = onClickCitation
+                        onClickCitation = onClickCitation,
+                        maxWidthPx = maxWidthPx,
+                        fontSizePx = fontSizePx,
+                        formulaDisplayLists = formulaDisplayLists,
+                        resolvedColor = resolvedColor,
                     )
                 }
             }
@@ -1158,57 +1206,61 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
         }
 
         node.type == GFMElementTypes.INLINE_MATH -> {
-            val formula = node.getTextInNode(content)
+            val rawFormula = node.getTextInNode(content)
+            val formula = rawFormula.trimStart('$').trimEnd('$').trim()
             if (enableLatexRendering) {
-                val fontSizePx = with(density) { style.fontSize.toPx() }
-                // 将过长的行内公式按顶层运算符水平拆分为多段，每段最大宽度限制为字号的两倍，
-                // 使其能在文本流中换行，避免单体公式超出可用宽度被挤出屏幕
-                val drawables = splitLatex(
+                // 在顶层运算符处分段，段间插 ZWSP 允许换行
+                val segments = splitLatex(
                     latex = formula,
-                    maxWidthPx = fontSizePx * 2,
-                    fontSize = fontSizePx,
-                    color = latexColorArgb,
+                    maxWidthPx = maxWidthPx,
+                    fontSizePx = fontSizePx,
                 )
-                if (drawables.isEmpty()) {
-                    // 拆分失败时回退为单体内联渲染
-                    appendInlineContent(formula, "[Latex]")
-                    val (width, height) = with(density) {
-                        assumeLatexSize(
-                            latex = formula, fontSize = fontSizePx
-                        ).let {
-                            it.width().toSp() to it.height().toSp()
+
+                segments.forEachIndexed { index, segment ->
+                    if (index > 0) append("​")
+                    val key = "${formula}_$index"
+                    appendInlineContent(key, "[Latex]")
+
+                    // 优先使用预解析的 DisplayList（解析一次，测量 Placeholder + 渲染复用）
+                    val parsedDisplayList = if (formulaDisplayLists != null && resolvedColor != Color.Unspecified) {
+                        formulaDisplayLists.getOrPut(key) {
+                            runCatching {
+                                RaTeXEngine.parseBlocking(segment, displayMode = false, color = resolvedColor)
+                            }.getOrNull()
                         }
+                    } else {
+                        // 无缓存路径（兜底）：仍用 assumeLatexSize 测尺寸
+                        null
                     }
-                    inlineContents.putIfAbsent(/* key = */ formula,/* value = */ InlineTextContent(
-                        placeholder = Placeholder(
-                            width = width,
-                            height = height,
-                            placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
-                        ), children = {
-                            MathInline(
-                                latex = formula, modifier = Modifier
-                            )
-                        })
-                    )
-                } else {
-                    drawables.forEachIndexed { index, drawable ->
-                        // 段间插入零宽空格，提供换行点
-                        if (index > 0) append('\u200B')
-                        val key = "latex:${formula.hashCode()}:$index"
-                        appendInlineContent(key, "[Latex]")
-                        val (width, height) = with(density) {
-                            drawable.bounds.width().toSp() to drawable.bounds.height().toSp()
-                        }
-                        inlineContents.putIfAbsent(
-                            key, InlineTextContent(
+
+                    if (parsedDisplayList != null) {
+                        val m = parsedDisplayList.measure(fontSizePx)
+                        val placeholderWidth = with(density) { m.widthPx.toSp() }
+                        val placeholderHeight = with(density) { (m.heightPx + m.depthPx).toSp() }
+                        inlineContents[key] =
+                            InlineTextContent(
                                 placeholder = Placeholder(
-                                    width = width,
-                                    height = height,
-                                    placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter
-                                ), children = {
-                                    LatexDrawable(drawable = drawable)
-                                })
-                        )
+                                    width = placeholderWidth,
+                                    height = placeholderHeight,
+                                    placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
+                                ),
+                                children = {
+                                    MathInline(latex = segment, modifier = Modifier, displayList = parsedDisplayList)
+                                }
+                            )
+                    } else {
+                        // parse 失败：Placeholder 0 尺寸；MathInline 会自行重试/降级渲染
+                        inlineContents[key] =
+                            InlineTextContent(
+                                placeholder = Placeholder(
+                                    width = 0.sp,
+                                    height = 0.sp,
+                                    placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
+                                ),
+                                children = {
+                                    MathInline(latex = segment, modifier = Modifier)
+                                }
+                            )
                     }
                 }
             } else {
@@ -1236,7 +1288,11 @@ private fun AnnotatedString.Builder.appendMarkdownNodeContent(
                     style = style,
                     enableLatexRendering = enableLatexRendering,
                     latexColorArgb = latexColorArgb,
-                    onClickCitation = onClickCitation
+                    onClickCitation = onClickCitation,
+                    maxWidthPx = maxWidthPx,
+                    fontSizePx = fontSizePx,
+                    formulaDisplayLists = formulaDisplayLists,
+                    resolvedColor = resolvedColor,
                 )
             }
         }

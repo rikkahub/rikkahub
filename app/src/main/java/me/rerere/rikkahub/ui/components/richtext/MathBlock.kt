@@ -13,36 +13,46 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.takeOrElse
+import io.ratex.DisplayList
 
+/**
+ * 行内公式渲染。
+ * [displayList] 为可选预解析 DisplayList，由 Markdown.kt 的 INLINE_MATH 缓存提供。
+ */
 @Composable
 fun MathInline(
     latex: String,
     modifier: Modifier = Modifier,
-    fontSize: TextUnit = TextUnit.Unspecified
+    fontSize: TextUnit = TextUnit.Unspecified,
+    displayList: DisplayList? = null,
 ) {
-    val proceededLatex = latex
     LatexText(
-        latex = proceededLatex,
+        latex = latex,
         color = LocalContentColor.current,
         fontSize = fontSize.takeOrElse { LocalTextStyle.current.fontSize },
+        displayMode = false,
         modifier = modifier,
+        displayList = displayList,
     )
 }
 
+/**
+ * 块级公式渲染，带居中 + 水平滚动。
+ */
 @Composable
 fun MathBlock(
     latex: String,
     modifier: Modifier = Modifier,
     fontSize: TextUnit = TextUnit.Unspecified
 ) {
-    val proceededLatex = latex
     Box(
         modifier = modifier.padding(8.dp)
     ) {
         LatexText(
-            latex = proceededLatex,
+            latex = latex,
             color = LocalContentColor.current,
             fontSize = fontSize.takeOrElse { LocalTextStyle.current.fontSize },
+            displayMode = true,
             modifier = Modifier
                 .align(Alignment.Center)
                 .horizontalScroll(
