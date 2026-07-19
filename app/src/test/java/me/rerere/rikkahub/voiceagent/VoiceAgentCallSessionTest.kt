@@ -481,6 +481,9 @@ class VoiceAgentCallSessionTest {
 
         gemini.eventHandlers.single()(GeminiLiveEvent.GenerationComplete)
 
+        withTimeout(500) {
+            while (audio.startCaptureCalls < 2) delay(10)
+        }
         assertEquals(2, audio.startCaptureCalls)
     }
 
@@ -511,6 +514,16 @@ class VoiceAgentCallSessionTest {
         }
         session.setMuted(true)
         session.setMuted(false)
+
+        withTimeout(500) {
+            while (
+                observability.events.count {
+                    it.name == "hermes_voice.mobile.audio.capture_started"
+                } < 2
+            ) {
+                delay(10)
+            }
+        }
 
         assertEquals(
             listOf(

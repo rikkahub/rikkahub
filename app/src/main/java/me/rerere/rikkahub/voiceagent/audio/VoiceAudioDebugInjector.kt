@@ -33,8 +33,21 @@ object VoiceAudioDebugInjector {
     fun registerCapture(
         onPcm16: (ByteArray) -> Unit,
         onInjectionComplete: () -> Unit,
-    ): Registration {
+    ): Registration = requireNotNull(
+        registerCaptureIfCurrent(
+            onPcm16 = onPcm16,
+            onInjectionComplete = onInjectionComplete,
+            isCurrent = { true },
+        ),
+    )
+
+    internal fun registerCaptureIfCurrent(
+        onPcm16: (ByteArray) -> Unit,
+        onInjectionComplete: () -> Unit,
+        isCurrent: () -> Boolean,
+    ): Registration? {
         val registration = synchronized(lock) {
+            if (!isCurrent()) return@synchronized null
             nextRegistrationId += 1
             CaptureRegistration(
                 id = nextRegistrationId,
@@ -43,7 +56,7 @@ object VoiceAudioDebugInjector {
             ).also {
                 activeCapture = it
             }
-        }
+        } ?: return null
         return Registration {
             synchronized(lock) {
                 if (activeCapture === registration) {

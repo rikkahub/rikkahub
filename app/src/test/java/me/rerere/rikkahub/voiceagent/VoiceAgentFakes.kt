@@ -85,6 +85,7 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     var failTextTurns = false
     private var recordedCloseCalls = 0
     var onBeforeToolResponseRecorded: (() -> Unit)? = null
+    var onBeforeAudioSend: (() -> Unit)? = null
     var onClose: (() -> Unit)? = null
     var connectEvent: GeminiLiveEvent? = null
     var activateOutboundSessionEvent: GeminiLiveEvent? = null
@@ -97,14 +98,20 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     private val connected = CompletableDeferred<Unit>()
     private val blockedResponses = mutableMapOf<String, MutableList<BlockedToolResponse>>()
     private val blockedConnectCompletions = mutableListOf<BlockedConnect>()
+    private val blockedAudioSends = mutableListOf<BlockedPlayback>()
+    private val blockedAudioStreamEnds = mutableListOf<BlockedPlayback>()
     private val outboundSendLock = Any()
     private var outboundSessionId: Long? = null
+    private val recordedAudioControlEvents = mutableListOf<String>()
 
     val audioMessages: List<String>
         get() = synchronized(outboundSendLock) { recordedAudioMessages.toList() }
 
     val audioStreamEndSessionIds: List<Long?>
         get() = synchronized(outboundSendLock) { recordedAudioStreamEndSessionIds.toList() }
+
+    val audioControlEvents: List<String>
+        get() = synchronized(outboundSendLock) { recordedAudioControlEvents.toList() }
 
     val toolResponses: List<Pair<String, String>>
         get() = synchronized(outboundSendLock) { recordedToolResponses.toList() }
@@ -141,6 +148,18 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
         }
     }
 
+    internal fun blockNextAudioSend(): BlockedPlayback = BlockedPlayback().also { blocked ->
+        synchronized(blockedAudioSends) {
+            blockedAudioSends += blocked
+        }
+    }
+
+    internal fun blockNextAudioStreamEnd(): BlockedPlayback = BlockedPlayback().also { blocked ->
+        synchronized(blockedAudioStreamEnds) {
+            blockedAudioStreamEnds += blocked
+        }
+    }
+
     override suspend fun connect(
         token: String,
         websocketUrl: String,
@@ -165,11 +184,15 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     }
 
     override fun sendAudio(base64Pcm16: String, sessionId: Long?): Boolean {
+        onBeforeAudioSend?.invoke()
+        synchronized(blockedAudioSends) { blockedAudioSends.removeFirstOrNull() }
+            ?.awaitRelease()
         synchronized(outboundSendLock) {
             if (sessionId != null && outboundSessionId != sessionId) {
                 return false
             }
             recordedAudioMessages += base64Pcm16
+            recordedAudioControlEvents += "audio"
             return true
         }
     }
@@ -184,11 +207,14 @@ class FakeGeminiLiveVoiceClient : GeminiLiveVoiceClient {
     }
 
     override fun sendAudioStreamEnd(sessionId: Long?): Boolean {
+        synchronized(blockedAudioStreamEnds) { blockedAudioStreamEnds.removeFirstOrNull() }
+            ?.awaitRelease()
         synchronized(outboundSendLock) {
             if (sessionId != null && outboundSessionId != sessionId) {
                 return false
             }
             recordedAudioStreamEndSessionIds += sessionId
+            recordedAudioControlEvents += "stream_end"
             return true
         }
     }

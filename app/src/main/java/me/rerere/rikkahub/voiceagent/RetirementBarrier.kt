@@ -5,6 +5,7 @@ import java.util.concurrent.CountDownLatch
 internal class RetirementBarrier {
     private val lock = Any()
     private val completed = CountDownLatch(1)
+    private var started = false
     private var ownerThread: Thread? = null
     private var result: Result<Unit>? = null
 
@@ -16,6 +17,7 @@ internal class RetirementBarrier {
     ) {
         val current = Thread.currentThread()
         val owns = synchronized(lock) {
+            started = true
             result?.let { it.getOrThrow(); return }
             if (ownerThread === current) return
             if (ownerThread == null) {
@@ -38,6 +40,24 @@ internal class RetirementBarrier {
         }
         completed.countDown()
         completedResult.getOrThrow()
+    }
+
+    fun begin() {
+        synchronized(lock) {
+            started = true
+        }
+    }
+
+    fun replayIfStarted(): Boolean {
+        val current = Thread.currentThread()
+        synchronized(lock) {
+            result?.let { it.getOrThrow(); return true }
+            if (!started) return false
+            if (ownerThread === current) return true
+        }
+        awaitCompletionUninterruptibly()
+        synchronized(lock) { requireNotNull(result) }.getOrThrow()
+        return true
     }
 
     private fun awaitCompletionUninterruptibly() {

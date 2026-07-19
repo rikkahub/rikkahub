@@ -1,9 +1,16 @@
 package me.rerere.rikkahub.voiceagent
 
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -63,8 +70,11 @@ class VoiceAgentCallStartupTest {
         assertEquals(2, factory.created.size)
         assertEquals(1, previousLease.retireCalls)
         assertEquals(0, installedLiveLease.retireCalls)
-        assertEquals(null, manager.matchingRouteMetadata(conversationId, firstConfig))
-        assertEquals(installedLiveLease.lease.metadata, manager.matchingRouteMetadata(conversationId, secondConfig))
+        assertEquals(VoiceAgentRouteMatchResult.NoMatch, manager.matchingRoute(conversationId, firstConfig))
+        assertEquals(
+            VoiceAgentRouteMatchResult.Existing(installedLiveLease.lease.metadata),
+            manager.matchingRoute(conversationId, secondConfig),
+        )
     }
 
     @Test
@@ -152,31 +162,57 @@ class VoiceAgentCallStartupTest {
         resolved.complete(DirectFallbackVoiceAgentRouteLease(VoiceAgentTelecomFailure("fallback", "fallback")))
         assertTrue((pending.await() as VoiceAgentCallStartupResult.Started).startedNewSession)
     }
-}
 
-internal class CountingTelecomLease(
-    disconnectFailure: Throwable? = null,
-) {
-    private val registry = VoiceAgentTelecomCallRegistry()
-    private val call = CountingTelecomCall(disconnectFailure)
-    private val attempt = registry.beginAttempt()
-    val lease: VoiceAgentRouteLease
-    val retireCalls: Int get() = call.disconnectCalls
+    @Test
+    fun `terminal route supersession maps to stale without resolving another route`() = runTest {
+        val releaseFailure = CountDownLatch(1)
+        val creationFailure = StartupNonCopyableException(Any(), "first factory failed")
+        val newerSession = StartupFakeManagedSession()
+        val factory = StartupBlockingFirstFailingFactory(
+            releaseFirstFailure = releaseFailure,
+            firstFailure = creationFailure,
+            subsequentSession = newerSession,
+        )
+        val manager = VoiceAgentCallManager(factory)
+        val failedConversation = Uuid.random()
+        val failedConfig = fakeStartupLaunchConfig()
+        val failedOwnerLease = CountingTelecomLease()
+        val failedOwner = async(Dispatchers.Default) {
+            manager.start(failedConversation, failedConfig, failedOwnerLease.lease, this@runTest)
+        }
+        assertTrue(factory.firstCreateEntered.await(1, TimeUnit.SECONDS))
+        var resolveCalls = 0
+        val startup = VoiceAgentCallStartup(manager) {
+            resolveCalls += 1
+            error("terminal supersession must not resolve another route")
+        }
+        val retryGate = StartupBlockedRetryDispatcher()
+        try {
+            val result = async(retryGate.dispatcher, start = CoroutineStart.UNDISPATCHED) {
+                startup.start(failedConversation, failedConfig, this@runTest) { true }
+            }
 
-    init {
-        check(registry.activate(attempt, call))
-        registry.acknowledgeOutcome(attempt)
-        lease = TelecomVoiceAgentRouteLease(attempt, registry)
-    }
-}
+            releaseFailure.countDown()
+            assertSame(creationFailure, runCatching { failedOwner.await() }.exceptionOrNull())
+            val newerConversation = Uuid.random()
+            val newerLease = CountingTelecomLease()
+            assertEquals(
+                VoiceAgentManagerStartResult.Started(newerLease.lease.metadata),
+                manager.start(newerConversation, fakeStartupLaunchConfig(), newerLease.lease, this),
+            )
 
-private class CountingTelecomCall(
-    private val disconnectFailure: Throwable?,
-) : VoiceAgentTelecomCall {
-    var disconnectCalls = 0
-    override fun disconnectFromApp() {
-        disconnectCalls += 1
-        disconnectFailure?.let { throw it }
+            retryGate.release()
+            assertEquals(
+                VoiceAgentCallStartupResult.Stale(failedOwnerLease.lease.metadata),
+                result.await(),
+            )
+            assertEquals(0, resolveCalls)
+            assertEquals(1, failedOwnerLease.retireCalls)
+            assertEquals(0, newerLease.retireCalls)
+            assertEquals(newerConversation, manager.activeConversationId.value)
+        } finally {
+            retryGate.close()
+        }
     }
 }
 
@@ -223,6 +259,60 @@ private class StartupConsumingFailingFactory(private val failure: Throwable) : V
         throw failure
     }
 }
+
+private class StartupBlockingFirstFailingFactory(
+    private val releaseFirstFailure: CountDownLatch,
+    private val firstFailure: Throwable,
+    private val subsequentSession: ManagedVoiceCallSession,
+) : VoiceAgentCallFactory {
+    val firstCreateEntered = CountDownLatch(1)
+    private val createdCalls = AtomicInteger()
+
+    override fun create(
+        conversationId: Uuid,
+        config: VoiceAgentLaunchConfig,
+        routeLease: VoiceAgentRouteLease,
+        scope: CoroutineScope,
+    ): RouteOwnedManagedVoiceCallSession {
+        if (createdCalls.getAndIncrement() == 0) {
+            firstCreateEntered.countDown()
+            check(releaseFirstFailure.await(1, TimeUnit.SECONDS)) {
+                "timed out waiting to release first startup factory failure"
+            }
+            routeLease.retire()
+            throw firstFailure
+        }
+        return RouteOwnedVoiceCallSession(subsequentSession, routeLease)
+    }
+}
+
+private class StartupBlockedRetryDispatcher {
+    val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+    private val releaseLatch = CountDownLatch(1)
+    private val blockerEntered = CountDownLatch(1)
+
+    init {
+        dispatcher.executor.execute {
+            blockerEntered.countDown()
+            check(releaseLatch.await(5, TimeUnit.SECONDS)) {
+                "timed out waiting to release startup retry dispatcher"
+            }
+        }
+        check(blockerEntered.await(1, TimeUnit.SECONDS)) { "startup retry dispatcher blocker did not start" }
+    }
+
+    fun release() = releaseLatch.countDown()
+
+    fun close() {
+        release()
+        dispatcher.close()
+    }
+}
+
+private class StartupNonCopyableException(
+    @Suppress("unused") private val identityMarker: Any,
+    message: String,
+) : IllegalStateException(message)
 
 private fun fakeStartupLaunchConfig(voiceModelId: String = "gemini-flash") = VoiceAgentLaunchConfig(
     hermesVoiceBaseUrl = "https://voice.test",

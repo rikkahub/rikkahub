@@ -31,8 +31,14 @@ class VoiceAgentCallStartup internal constructor(
         scope: CoroutineScope,
         isCurrent: () -> Boolean,
     ): VoiceAgentCallStartupResult {
-        manager.matchingRouteMetadata(conversationId, config)?.let { existing ->
-            return VoiceAgentCallStartupResult.Started(existing, startedNewSession = false)
+        when (val match = manager.matchingRoute(conversationId, config)) {
+            is VoiceAgentRouteMatchResult.Existing -> {
+                return VoiceAgentCallStartupResult.Started(match.route, startedNewSession = false)
+            }
+            is VoiceAgentRouteMatchResult.Superseded -> {
+                return VoiceAgentCallStartupResult.Stale(match.route)
+            }
+            VoiceAgentRouteMatchResult.NoMatch -> Unit
         }
 
         val routeLease = resolveRoute()
@@ -42,17 +48,19 @@ class VoiceAgentCallStartup internal constructor(
             return VoiceAgentCallStartupResult.Stale(route)
         }
 
-        val startedNewSession = manager.start(
+        return when (val result = manager.start(
             conversationId = conversationId,
             config = config,
             routeLease = routeLease,
             scope = scope,
-        )
-        val installedRoute = if (startedNewSession) {
-            route
-        } else {
-            manager.matchingRouteMetadata(conversationId, config) ?: route
+        )) {
+            is VoiceAgentManagerStartResult.Started -> {
+                VoiceAgentCallStartupResult.Started(result.route, startedNewSession = true)
+            }
+            is VoiceAgentManagerStartResult.Existing -> {
+                VoiceAgentCallStartupResult.Started(result.route, startedNewSession = false)
+            }
+            VoiceAgentManagerStartResult.Superseded -> VoiceAgentCallStartupResult.Stale(route)
         }
-        return VoiceAgentCallStartupResult.Started(installedRoute, startedNewSession)
     }
 }

@@ -5,16 +5,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Collections
 import java.util.IdentityHashMap
 
-sealed interface VoiceAgentEndDrainOutcome {
-    class Completed internal constructor(val failure: Throwable?) : VoiceAgentEndDrainOutcome
-    class Failed internal constructor(val failure: Throwable) : VoiceAgentEndDrainOutcome
-    class TimedOut internal constructor(val failure: Throwable) : VoiceAgentEndDrainOutcome
-}
-
 interface RouteOwnedManagedVoiceCallSession : ManagedVoiceCallSession {
     val routeMetadata: VoiceAgentRouteMetadata
     val isRouteUsable: Boolean
-    suspend fun endAndDrainWithin(timeoutMillis: Long): VoiceAgentEndDrainOutcome
+    suspend fun endAndDrainWithin(timeoutMillis: Long)
 }
 
 class RouteOwnedVoiceCallSession(
@@ -43,7 +37,7 @@ class RouteOwnedVoiceCallSession(
         delegate::endAndDrain,
     )
 
-    override suspend fun endAndDrainWithin(timeoutMillis: Long): VoiceAgentEndDrainOutcome {
+    override suspend fun endAndDrainWithin(timeoutMillis: Long) {
         require(timeoutMillis > 0) { "timeoutMillis must be positive" }
         var failure = runCatching(routeLease::retire).exceptionOrNull()
         var drainFailure: Throwable? = null
@@ -61,17 +55,20 @@ class RouteOwnedVoiceCallSession(
             drainFailure = error
             false
         }
-        if (completedNormally) return VoiceAgentEndDrainOutcome.Completed(failure)
+        if (completedNormally) {
+            failure?.let { throw it }
+            return
+        }
 
         drainFailure?.let { failure = failure.withEndDrainFailure(it) }
         if (drainFailure != null) {
             failure = closeDelegateNow(failure)
-            return VoiceAgentEndDrainOutcome.Failed(checkNotNull(failure))
+            throw checkNotNull(failure)
         }
 
         failure = failure.withEndDrainFailure(VoiceAgentEndDrainTimeoutException(timeoutMillis))
         failure = closeDelegateNow(failure)
-        return VoiceAgentEndDrainOutcome.TimedOut(checkNotNull(failure))
+        throw checkNotNull(failure)
     }
 
     private fun closeDelegateNow(failure: Throwable?): Throwable? =

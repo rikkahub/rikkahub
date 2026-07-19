@@ -9,15 +9,22 @@ import android.media.MediaRecorder
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
+import java.util.Collections
+import java.util.IdentityHashMap
+import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import me.rerere.rikkahub.voiceagent.RetirementBarrier
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.voiceagent.runVoiceAgentCleanupStages
 
 private fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (this) {
@@ -33,241 +40,6 @@ private fun VoicePlaybackDiagnostic.audioErrorMessageOrNull(): String? = when (t
     is VoicePlaybackDiagnostic.PlaybackSuppressed,
     VoicePlaybackDiagnostic.Released,
     -> null
-}
-
-internal class VoiceAudioCaptureLifecycle {
-    private val lock = Any()
-
-    fun <T> transition(block: () -> T): T = synchronized(lock) { block() }
-
-    fun <T> callback(block: () -> T): T = synchronized(lock) { block() }
-}
-
-internal enum class VoiceAudioCaptureStartOutcome {
-    Started,
-    Rejected,
-}
-
-internal class VoiceAudioCaptureToken internal constructor(
-    internal val generation: Long,
-    internal val routeLease: VoiceAudioCaptureRouteLease,
-    internal val retirement: RetirementBarrier,
-)
-
-internal class VoiceAudioCaptureOwnership<Recorder : Any, CaptureTask : Any>(
-    private val startRecorder: (Recorder) -> Unit,
-    private val isRecorderRecording: (Recorder) -> Boolean,
-    private val stopRecorder: (Recorder) -> Unit,
-    private val releaseRecorder: (Recorder) -> Unit,
-    private val startTask: (CaptureTask) -> Unit,
-    private val cancelTask: (CaptureTask) -> Unit,
-    private val onRetirementResultPublished: (Result<Unit>) -> Unit = {},
-) {
-    private val lock = Any()
-    private val recorderLock = Any()
-    private var generation = 0L
-    private var task: CaptureTask? = null
-    private var recorder: Recorder? = null
-    private var routeLease: VoiceAudioCaptureRouteLease? = null
-    private var currentRetirement: RetirementBarrier? = null
-    private var inFlightRetirement: OwnedCapture<Recorder, CaptureTask>? = null
-    private var released = false
-
-    fun begin(routeLease: VoiceAudioCaptureRouteLease): VoiceAudioCaptureToken = synchronized(lock) {
-        check(!released) { "Voice audio engine is released" }
-        generation += 1
-        val retirement = RetirementBarrier()
-        this.routeLease = routeLease
-        currentRetirement = retirement
-        VoiceAudioCaptureToken(generation, routeLease, retirement)
-    }
-
-    fun publishAndStart(
-        token: VoiceAudioCaptureToken,
-        recorder: Recorder,
-        task: CaptureTask,
-    ): VoiceAudioCaptureStartOutcome {
-        val published = synchronized(lock) {
-            if (isCurrentLeaseLocked(token, token.routeLease)) {
-                this.recorder = recorder
-                this.task = task
-                true
-            } else {
-                false
-            }
-        }
-        if (!published) {
-            runVoiceAgentCleanupStages(
-                { cancelTask(task) },
-                { releaseRecorder(recorder) },
-                token.routeLease::retire,
-            )
-            return VoiceAudioCaptureStartOutcome.Rejected
-        }
-        if (!isCurrent(token, recorder)) {
-            retire(token, recorder)
-            return VoiceAudioCaptureStartOutcome.Rejected
-        }
-
-        return synchronized(recorderLock) {
-            if (!isCurrent(token, recorder)) {
-                retire(token, recorder)
-                return@synchronized VoiceAudioCaptureStartOutcome.Rejected
-            }
-
-            try {
-                startRecorder(recorder)
-            } catch (failure: RuntimeException) {
-                val stillCurrent = isCurrent(token, recorder)
-                retire(token, recorder)
-                if (stillCurrent) throw IllegalStateException("AudioRecord start failed", failure)
-                return@synchronized VoiceAudioCaptureStartOutcome.Rejected
-            }
-
-            if (!isRecorderRecording(recorder)) {
-                val stillCurrent = isCurrent(token, recorder)
-                retire(token, recorder)
-                if (stillCurrent) throw IllegalStateException("AudioRecord start failed")
-                return@synchronized VoiceAudioCaptureStartOutcome.Rejected
-            }
-
-            if (isCurrent(token, recorder)) {
-                startTask(task)
-                VoiceAudioCaptureStartOutcome.Started
-            } else {
-                retire(token, recorder)
-                VoiceAudioCaptureStartOutcome.Rejected
-            }
-        }
-    }
-
-    fun stop() {
-        val owned = synchronized(lock) {
-            claimCurrentForRetirementLocked() ?: inFlightRetirement
-        } ?: return
-        retireOwnedCapture(owned)
-    }
-
-    fun release(): Boolean {
-        val (firstRelease, owned) = synchronized(lock) {
-            val first = !released
-            if (first) {
-                released = true
-                generation += 1
-            }
-            first to (claimCurrentForRetirementLocked() ?: inFlightRetirement)
-        }
-        owned?.let(::retireOwnedCapture)
-        return firstRelease
-    }
-
-    fun terminate(token: VoiceAudioCaptureToken, recorder: Recorder): Boolean = retire(token, recorder)
-
-    private fun retire(token: VoiceAudioCaptureToken, recorder: Recorder): Boolean {
-        val (claimed, owned) = synchronized(lock) {
-            val claimedCapture = claimCurrentForRetirementLocked(token, recorder)
-            val capture = claimedCapture
-                ?: inFlightRetirement?.takeIf { it.retirement === token.retirement }
-                ?: OwnedCapture<Recorder, CaptureTask>(
-                    task = null,
-                    recorder = recorder,
-                    routeLease = token.routeLease,
-                    retirement = token.retirement,
-                )
-            (claimedCapture != null) to capture
-        }
-        retireOwnedCapture(owned)
-        return claimed
-    }
-
-    fun clearLease(token: VoiceAudioCaptureToken, lease: VoiceAudioCaptureRouteLease) {
-        synchronized(lock) {
-            if (isCurrentLeaseLocked(token, lease)) {
-                routeLease = null
-                currentRetirement = null
-            }
-        }
-    }
-
-    fun isCurrent(token: VoiceAudioCaptureToken, recorder: Recorder): Boolean = synchronized(lock) {
-        !released &&
-            generation == token.generation &&
-            currentRetirement === token.retirement &&
-            this.recorder === recorder
-    }
-
-    fun isCurrentLease(token: VoiceAudioCaptureToken, lease: VoiceAudioCaptureRouteLease): Boolean =
-        synchronized(lock) { isCurrentLeaseLocked(token, lease) }
-
-    fun invalidate(token: VoiceAudioCaptureToken, recorder: Recorder) {
-        synchronized(lock) {
-            if (currentRetirement === token.retirement && this.recorder === recorder) generation += 1
-        }
-    }
-
-    fun isReleased(): Boolean = synchronized(lock) { released }
-
-    private fun claimCurrentForRetirementLocked(
-        token: VoiceAudioCaptureToken? = null,
-        expectedRecorder: Recorder? = null,
-    ): OwnedCapture<Recorder, CaptureTask>? {
-        if (token != null && currentRetirement !== token.retirement) return null
-        if (expectedRecorder != null && recorder !== expectedRecorder) return null
-        val ownedTask = task
-        val ownedRecorder = recorder
-        val ownedLease = routeLease
-        val retirement = currentRetirement
-        if (ownedTask == null && ownedRecorder == null && ownedLease == null && retirement == null) return null
-        generation += 1
-        task = null
-        recorder = null
-        routeLease = null
-        currentRetirement = null
-        return OwnedCapture(
-            task = ownedTask,
-            recorder = ownedRecorder,
-            routeLease = ownedLease,
-            retirement = requireNotNull(retirement),
-        ).also { inFlightRetirement = it }
-    }
-
-    private fun retireOwnedCapture(owned: OwnedCapture<Recorder, CaptureTask>) {
-        owned.retirement.retire(
-            afterResultPublished = { result ->
-                try {
-                    onRetirementResultPublished(result)
-                } finally {
-                    synchronized(lock) {
-                        if (inFlightRetirement === owned) inFlightRetirement = null
-                    }
-                }
-            },
-        ) {
-            synchronized(recorderLock) {
-                runVoiceAgentCleanupStages(
-                    { owned.task?.let(cancelTask) },
-                    { owned.recorder?.let(stopRecorder) },
-                    { owned.recorder?.let(releaseRecorder) },
-                    { owned.routeLease?.retire() },
-                )
-            }
-        }
-    }
-
-    private fun isCurrentLeaseLocked(
-        token: VoiceAudioCaptureToken,
-        lease: VoiceAudioCaptureRouteLease,
-    ): Boolean = !released &&
-        generation == token.generation &&
-        currentRetirement === token.retirement &&
-        routeLease === lease
-
-    private data class OwnedCapture<Recorder, CaptureTask>(
-        val task: CaptureTask?,
-        val recorder: Recorder?,
-        val routeLease: VoiceAudioCaptureRouteLease?,
-        val retirement: RetirementBarrier,
-    )
 }
 
 internal fun runVoiceAudioCaptureLoop(
@@ -308,65 +80,76 @@ internal fun runVoiceAudioCaptureLoop(
     }
 }
 
-internal fun ensureVoiceAudioCaptureRecorderInitialized(
-    initialized: Boolean,
-    releaseRecorder: () -> Unit,
-    clearRouteLease: () -> Unit,
-    routeLease: VoiceAudioCaptureRouteLease,
-) {
-    if (initialized) return
-    throwVoiceAudioCaptureSetupFailure(
-        IllegalStateException("AudioRecord initialization failed"),
-        releaseRecorder,
-        clearRouteLease,
-        routeLease::retire,
-    )
-}
+internal data class VoiceAudioCaptureSetup<Recorder : Any>(
+    val token: VoiceAudioCaptureToken,
+    val bufferSize: Int,
+    val recorder: Recorder,
+)
 
-internal fun configureVoiceAudioCaptureRecorder(
-    configureRecorder: () -> Unit,
-    releaseRecorder: () -> Unit,
-    clearRouteLease: () -> Unit,
-    routeLease: VoiceAudioCaptureRouteLease,
-) {
+internal data class VoiceAudioCaptureAdmission<Recorder : Any>(
+    val token: VoiceAudioCaptureToken,
+    val recorder: Recorder,
+)
+
+internal suspend fun <Recorder : Any, CaptureTask : Any> setupVoiceAudioCapture(
+    ownership: VoiceAudioCaptureOwnership<Recorder, CaptureTask>,
+    acquireRoute: () -> VoiceAudioCaptureRouteLease,
+    lookupBufferSize: () -> Int,
+    createRecorder: (Int) -> Recorder,
+    configureRecorder: (VoiceAudioCaptureRouteLease, Recorder) -> Unit,
+    isRecorderInitialized: (Recorder) -> Boolean,
+    releaseRecorder: (Recorder) -> Unit,
+): VoiceAudioCaptureSetup<Recorder>? {
+    val token = ownership.reserve()
     try {
-        configureRecorder()
+        currentCoroutineContext().ensureActive()
+    } catch (cancellation: CancellationException) {
+        throwVoiceAudioCaptureSetupFailure(cancellation, { ownership.abort(token) })
+    }
+    val routeLease = try {
+        acquireRoute()
+    } catch (failure: Throwable) {
+        throwVoiceAudioCaptureSetupFailure(failure, { ownership.abort(token) })
+    }
+    if (!ownership.publishRoute(token, routeLease)) {
+        routeLease.retire()
+        return null
+    }
+    try {
+        routeLease.prepare()
+    } catch (failure: Throwable) {
+        throwVoiceAudioCaptureSetupFailure(failure, { ownership.abort(token) })
+    }
+    val bufferSize = try {
+        lookupBufferSize()
+    } catch (failure: Throwable) {
+        throwVoiceAudioCaptureSetupFailure(failure, { ownership.abort(token) })
+    }
+    val recorder = try {
+        createRecorder(bufferSize)
+    } catch (cause: Throwable) {
+        throwVoiceAudioCaptureSetupFailure(
+            IllegalStateException("AudioRecord creation failed", cause),
+            { ownership.abort(token) },
+        )
+    }
+    try {
+        configureRecorder(routeLease, recorder)
     } catch (failure: Throwable) {
         throwVoiceAudioCaptureSetupFailure(
             failure,
-            releaseRecorder,
-            clearRouteLease,
-            routeLease::retire,
+            { releaseRecorder(recorder) },
+            { ownership.abort(token) },
         )
     }
-}
-
-internal fun <Recorder> createVoiceAudioCaptureRecorder(
-    createRecorder: () -> Recorder,
-    clearRouteLease: () -> Unit,
-    routeLease: VoiceAudioCaptureRouteLease,
-): Recorder = try {
-    createRecorder()
-} catch (cause: Throwable) {
-    throwVoiceAudioCaptureSetupFailure(
-        IllegalStateException("AudioRecord creation failed", cause),
-        clearRouteLease,
-        routeLease::retire,
-    )
-}
-
-internal fun acquireVoiceAudioCaptureBufferSize(
-    lookupBufferSize: () -> Int,
-    clearRouteLease: () -> Unit,
-    routeLease: VoiceAudioCaptureRouteLease,
-): Int = try {
-    lookupBufferSize()
-} catch (failure: Throwable) {
-    throwVoiceAudioCaptureSetupFailure(
-        failure,
-        clearRouteLease,
-        routeLease::retire,
-    )
+    if (!isRecorderInitialized(recorder)) {
+        throwVoiceAudioCaptureSetupFailure(
+            IllegalStateException("AudioRecord initialization failed"),
+            { releaseRecorder(recorder) },
+            { ownership.abort(token) },
+        )
+    }
+    return VoiceAudioCaptureSetup(token, bufferSize, recorder)
 }
 
 private fun throwVoiceAudioCaptureSetupFailure(
@@ -380,6 +163,75 @@ private fun throwVoiceAudioCaptureSetupFailure(
     error("Capture setup cleanup returned without its primary failure")
 }
 
+internal suspend fun <Recorder : Any, CaptureTask : Any> publishVoiceAudioCapture(
+    ownership: VoiceAudioCaptureOwnership<Recorder, CaptureTask>,
+    setup: VoiceAudioCaptureSetup<Recorder>,
+    task: CaptureTask,
+    cancelTask: (CaptureTask) -> Unit,
+    releaseRecorder: (Recorder) -> Unit,
+): VoiceAudioCaptureStartOutcome {
+    try {
+        currentCoroutineContext().ensureActive()
+    } catch (cancellation: CancellationException) {
+        throwVoiceAudioCaptureSetupFailure(
+            cancellation,
+            { cancelTask(task) },
+            { releaseRecorder(setup.recorder) },
+            { ownership.abort(setup.token) },
+        )
+    }
+    return ownership.publishAndStart(setup.token, setup.recorder, task)
+}
+
+internal suspend fun <Recorder : Any> runVoiceAudioCaptureStartOnDispatcher(
+    dispatcher: CoroutineDispatcher,
+    startCapture: suspend (onStarted: (VoiceAudioCaptureAdmission<Recorder>) -> Unit) -> Unit,
+    retireCapture: (VoiceAudioCaptureAdmission<Recorder>) -> Unit,
+    unregisterDebugCapture: (VoiceAudioCaptureAdmission<Recorder>) -> Unit,
+) {
+    val admission = AtomicReference<VoiceAudioCaptureAdmission<Recorder>?>()
+    try {
+        withContext(dispatcher) {
+            startCapture(admission::set)
+        }
+    } catch (cancellation: CancellationException) {
+        val callerCancellation = cancellation.canonicalVoiceAudioCaptureCancellation()
+        admission.get()?.let { admittedCapture ->
+            runCatching {
+                runVoiceAgentCleanupStages(
+                    { retireCapture(admittedCapture) },
+                    { unregisterDebugCapture(admittedCapture) },
+                )
+            }
+                .exceptionOrNull()
+                ?.let(callerCancellation::addVoiceAudioCaptureCleanupFailures)
+        }
+        throw callerCancellation
+    }
+}
+
+private fun CancellationException.addVoiceAudioCaptureCleanupFailures(failure: Throwable) {
+    val seen = Collections.newSetFromMap(IdentityHashMap<Throwable, Boolean>())
+    seen += this
+    suppressed.forEach { seen += it }
+    (sequenceOf(failure) + failure.suppressed.asSequence())
+        .filter(seen::add)
+        .forEach(::addSuppressed)
+}
+
+private fun CancellationException.canonicalVoiceAudioCaptureCancellation(): CancellationException {
+    var canonical = this
+    val visited = Collections.newSetFromMap(
+        IdentityHashMap<CancellationException, Boolean>(),
+    )
+    visited += canonical
+    while (true) {
+        val original = canonical.cause as? CancellationException ?: return canonical
+        if (original.message != canonical.message || !visited.add(original)) return canonical
+        canonical = original
+    }
+}
+
 class AndroidVoiceAudioEngine(
     context: Context,
     routeOwner: VoiceAudioRouteOwner,
@@ -387,7 +239,6 @@ class AndroidVoiceAudioEngine(
     private val context = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val lock = Any()
-    private val captureLifecycle = VoiceAudioCaptureLifecycle()
     private val routeController = selectVoiceAudioRouteController(routeOwner) {
         AndroidDirectAudioRouteController(this.context, ::notifyAudioError)
     }
@@ -410,7 +261,12 @@ class AndroidVoiceAudioEngine(
         onDiagnostic = ::handlePlaybackDiagnostic,
         onPlaybackEvent = ::notifyPlaybackEvent,
     )
-    private var debugCaptureRegistration: VoiceAudioDebugInjector.Registration? = null
+    private val debugCaptureRegistrations =
+        VoiceAudioDebugCaptureRegistrationOwner<
+            VoiceAudioCaptureToken,
+            AudioRecord,
+            VoiceAudioDebugInjector.Registration,
+        >(VoiceAudioDebugInjector.Registration::close)
     private var errorHandler: ((String) -> Unit)? = null
 
     init {
@@ -427,13 +283,25 @@ class AndroidVoiceAudioEngine(
         playbackEventOwner.setHandler(onEvent)
     }
 
-    override fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) {
-        captureLifecycle.transition {
-            startCaptureLocked(onPcm16, onDebugInjectionComplete)
-        }
-    }
+    override suspend fun startCapture(
+        onPcm16: (ByteArray) -> Unit,
+        onDebugInjectionComplete: () -> Unit,
+    ) = runVoiceAudioCaptureStartOnDispatcher<AudioRecord>(
+        dispatcher = Dispatchers.IO,
+        startCapture = { onStarted ->
+            startCaptureInternal(onPcm16, onDebugInjectionComplete, onStarted)
+        },
+        retireCapture = { admission -> captureOwnership.abort(admission.token) },
+        unregisterDebugCapture = { admission ->
+            debugCaptureRegistrations.unregister(admission.token, admission.recorder)
+        },
+    )
 
-    private fun startCaptureLocked(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) {
+    private suspend fun startCaptureInternal(
+        onPcm16: (ByteArray) -> Unit,
+        onDebugInjectionComplete: () -> Unit,
+        onStarted: (VoiceAudioCaptureAdmission<AudioRecord>) -> Unit,
+    ) {
         if (
             ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
@@ -441,37 +309,19 @@ class AndroidVoiceAudioEngine(
             throw IllegalStateException("Microphone permission is required")
         }
 
-        stopCaptureLocked()
-        val routeLease = routeController.acquireCapture()
-        val token = try {
-            captureOwnership.begin(routeLease)
-        } catch (error: Throwable) {
-            routeLease.retire()
-            throw error
-        }
-        val bufferSize = acquireVoiceAudioCaptureBufferSize(
+        stopCaptureInternal()
+        val setup = setupVoiceAudioCapture(
+            ownership = captureOwnership,
+            acquireRoute = routeController::acquireCapture,
             lookupBufferSize = ::captureBufferSize,
-            clearRouteLease = { captureOwnership.clearLease(token, routeLease) },
-            routeLease = routeLease,
-        )
-        val recorder = createVoiceAudioCaptureRecorder(
-            createRecorder = { createCaptureRecord(bufferSize = bufferSize) },
-            clearRouteLease = { captureOwnership.clearLease(token, routeLease) },
-            routeLease = routeLease,
-        )
-        configureVoiceAudioCaptureRecorder(
-            configureRecorder = { routeLease.configureRecorder(recorder) },
-            releaseRecorder = { recorder.releaseSafely() },
-            clearRouteLease = { captureOwnership.clearLease(token, routeLease) },
-            routeLease = routeLease,
-        )
-
-        ensureVoiceAudioCaptureRecorderInitialized(
-            initialized = recorder.state == AudioRecord.STATE_INITIALIZED,
-            releaseRecorder = { recorder.releaseSafely() },
-            clearRouteLease = { captureOwnership.clearLease(token, routeLease) },
-            routeLease = routeLease,
-        )
+            createRecorder = { bufferSize -> createCaptureRecord(bufferSize) },
+            configureRecorder = { routeLease, recorder -> routeLease.configureRecorder(recorder) },
+            isRecorderInitialized = { recorder -> recorder.state == AudioRecord.STATE_INITIALIZED },
+            releaseRecorder = { recorder -> recorder.releaseSafely() },
+        ) ?: return
+        val token = setup.token
+        val bufferSize = setup.bufferSize
+        val recorder = setup.recorder
 
         val job = scope.launch(start = CoroutineStart.LAZY) {
             var captureLevelChunks = 0
@@ -505,24 +355,39 @@ class AndroidVoiceAudioEngine(
                     }
                 },
                 onTerminated = {
-                    if (captureOwnership.terminate(token, recorder)) unregisterDebugCapture()
+                    try {
+                        captureOwnership.terminate(token, recorder)
+                    } finally {
+                        debugCaptureRegistrations.unregister(token, recorder)
+                    }
                 },
             )
         }
 
-        if (captureOwnership.publishAndStart(token, recorder, job) == VoiceAudioCaptureStartOutcome.Started) {
+        if (
+            publishVoiceAudioCapture(
+                ownership = captureOwnership,
+                setup = setup,
+                task = job,
+                cancelTask = Job::cancel,
+                releaseRecorder = { it.releaseSafely() },
+            ) == VoiceAudioCaptureStartOutcome.Started
+        ) {
+            onStarted(VoiceAudioCaptureAdmission(token, recorder))
             registerDebugCapture(token, recorder, onPcm16, onDebugInjectionComplete)
         }
     }
 
     override fun stopCapture() {
-        captureLifecycle.transition(::stopCaptureLocked)
+        stopCaptureInternal()
     }
 
-    private fun stopCaptureLocked() {
-        unregisterDebugCapture()
-        captureOwnership.stop()
-        waitForCaptureCallbacks()
+    private fun stopCaptureInternal() {
+        try {
+            captureOwnership.stop()
+        } finally {
+            unregisterDebugCapture()
+        }
     }
 
     override fun playPcm16(base64Pcm16: String, sessionId: Long?): Boolean {
@@ -545,17 +410,20 @@ class AndroidVoiceAudioEngine(
     }
 
     override fun release() {
-        captureLifecycle.transition(::releaseLocked)
+        releaseInternal()
     }
 
-    private fun releaseLocked() {
-        unregisterDebugCapture()
-        if (!captureOwnership.release()) return
+    private fun releaseInternal() {
+        val firstRelease = try {
+            captureOwnership.release()
+        } finally {
+            unregisterDebugCapture()
+        }
+        if (!firstRelease) return
         playbackTracks.markReleased()
         playbackEventOwner.releasePlayback(playbackWriter::release)
         playbackTracks.releaseAll()
         routeController.close()
-        waitForCaptureCallbacks()
         scope.cancel()
     }
 
@@ -565,7 +433,7 @@ class AndroidVoiceAudioEngine(
         onPcm16: (ByteArray) -> Unit,
         onInjectionComplete: () -> Unit,
     ) {
-        val registration = VoiceAudioDebugInjector.registerCapture(
+        val registration = VoiceAudioDebugInjector.registerCaptureIfCurrent(
             onPcm16 = { buffer ->
                 deliverInjectedCaptureBuffer(
                     token = token,
@@ -575,30 +443,19 @@ class AndroidVoiceAudioEngine(
                 )
             },
             onInjectionComplete = {
-                captureLifecycle.callback {
-                    if (captureOwnership.isCurrent(token, recorder)) {
-                        onInjectionComplete()
-                    }
+                captureOwnership.runCallbackIfCurrent(token, recorder) {
+                    onInjectionComplete()
                 }
             },
-        )
-        synchronized(lock) {
-            if (captureOwnership.isCurrent(token, recorder)) {
-                unregisterDebugCaptureLocked()
-                debugCaptureRegistration = registration
-            } else {
-                registration.close()
-            }
+            isCurrent = { captureOwnership.isCurrent(token, recorder) },
+        ) ?: return
+        debugCaptureRegistrations.publish(token, recorder, registration) {
+            captureOwnership.isCurrent(token, recorder)
         }
     }
 
-    private fun unregisterDebugCaptureLocked() {
-        debugCaptureRegistration?.close()
-        debugCaptureRegistration = null
-    }
-
     private fun unregisterDebugCapture() {
-        synchronized(lock, ::unregisterDebugCaptureLocked)
+        debugCaptureRegistrations.unregister()
     }
 
     private fun deliverCaptureBuffer(
@@ -607,10 +464,8 @@ class AndroidVoiceAudioEngine(
         buffer: ByteArray,
         onPcm16: (ByteArray) -> Unit,
     ) {
-        captureLifecycle.callback {
-            if (captureOwnership.isCurrent(token, recorder)) {
-                onPcm16(buffer)
-            }
+        captureOwnership.runCallbackIfCurrent(token, recorder) {
+            onPcm16(buffer)
         }
     }
 
@@ -620,21 +475,21 @@ class AndroidVoiceAudioEngine(
         buffer: ByteArray,
         onPcm16: (ByteArray) -> Unit,
     ) {
-        captureLifecycle.callback {
-            if (!captureOwnership.isCurrent(token, recorder)) return@callback
-            try {
-                onPcm16(buffer)
-            } catch (e: Exception) {
-                Log.w(TAG, "Stopping capture after debug PCM injection callback failure", e)
-                captureOwnership.invalidate(token, recorder)
-            }
-        }
-    }
-
-    private fun waitForCaptureCallbacks() {
-        captureLifecycle.callback {
-            // Wait for any in-flight capture callback that passed its final generation check.
-        }
+        debugCaptureRegistrations.deliver(
+            token = token,
+            recorder = recorder,
+            buffer = buffer,
+            isCurrent = { captureOwnership.isCurrent(token, recorder) },
+            onPcm16 = { admittedBuffer ->
+                captureOwnership.runCallbackIfCurrent(token, recorder) {
+                    onPcm16(admittedBuffer)
+                }
+            },
+            terminate = { captureOwnership.terminate(token, recorder) },
+            onFailure = { error ->
+                Log.w(TAG, "Stopping capture after debug PCM injection callback failure", error)
+            },
+        )
     }
 
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)

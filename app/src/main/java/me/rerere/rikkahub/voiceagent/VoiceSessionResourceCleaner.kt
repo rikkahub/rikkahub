@@ -8,6 +8,8 @@ internal class VoiceSessionResourceCleaner(
     private val coordinator: VoiceAgentCoordinator,
     private val gemini: GeminiLiveVoiceClient,
     private val audio: VoiceAudioEngine,
+    private val cancelCaptureStart: () -> Unit,
+    private val retireCaptureEpoch: () -> Unit,
     private val hermesBridgeProvider: () -> HermesSessionBridge?,
     private val clearHermesBridge: () -> Unit,
 ) {
@@ -29,18 +31,20 @@ internal class VoiceSessionResourceCleaner(
         isAutomaticReconnectCurrentUnderCleanupLock: () -> Boolean = { true },
     ): Boolean {
         if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false
-        prepare()
-        detachHermesBridge()
-        if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false
-        invalidateAudioSessions()
-        if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false
-        audio.stopCapture()
-        if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false
-        audio.suppressPlayback()
-        if (!isAutomaticReconnectCurrentUnderCleanupLock()) return false
-        if (closeGemini) {
-            gemini.close()
+        fun runIfCurrent(stage: () -> Unit) {
+            if (isAutomaticReconnectCurrentUnderCleanupLock()) stage()
         }
+
+        runVoiceAgentCleanupStages(
+            prepare,
+            cancelCaptureStart,
+            retireCaptureEpoch,
+            ::detachHermesBridge,
+            { runIfCurrent(::invalidateAudioSessions) },
+            { runIfCurrent(audio::stopCapture) },
+            { runIfCurrent(audio::suppressPlayback) },
+            { if (closeGemini) runIfCurrent(gemini::close) },
+        )
         return isAutomaticReconnectCurrentUnderCleanupLock()
     }
 

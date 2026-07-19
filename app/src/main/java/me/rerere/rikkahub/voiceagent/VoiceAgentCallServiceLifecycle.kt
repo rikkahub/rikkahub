@@ -128,12 +128,7 @@ internal class VoiceAgentCallServiceLifecycle(
     }
 
     private suspend fun drainOwnedSession(session: RouteOwnedManagedVoiceCallSession) {
-        val failure = when (val outcome = session.endAndDrainWithin(endDrainTimeoutMillis)) {
-            is VoiceAgentEndDrainOutcome.Completed -> outcome.failure
-            is VoiceAgentEndDrainOutcome.Failed -> outcome.failure
-            is VoiceAgentEndDrainOutcome.TimedOut -> outcome.failure
-        }
-        failure?.let { throw it }
+        session.endAndDrainWithin(endDrainTimeoutMillis)
     }
 
     private fun reportCleanupFailureSafely(error: Throwable) {

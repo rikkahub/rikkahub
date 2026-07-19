@@ -4,8 +4,55 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 class VoiceAudioDebugInjectorTest {
+    @Test
+    fun `stale delayed registration cannot replace newer active capture`() {
+        VoiceAudioDebugInjector.clearForTest()
+        val currentOwner = AtomicReference("A")
+        val staleReady = CountDownLatch(1)
+        val publishStale = CountDownLatch(1)
+        val staleChunks = mutableListOf<ByteArray>()
+        val currentChunks = mutableListOf<ByteArray>()
+        var staleRegistration: VoiceAudioDebugInjector.Registration? = null
+        val staleThread = Thread {
+            staleReady.countDown()
+            publishStale.await()
+            staleRegistration = VoiceAudioDebugInjector.registerCaptureIfCurrent(
+                onPcm16 = staleChunks::add,
+                onInjectionComplete = {},
+                isCurrent = { currentOwner.get() == "A" },
+            )
+        }
+        staleThread.start()
+        assertTrue(staleReady.await(5, TimeUnit.SECONDS))
+
+        currentOwner.set("B")
+        val currentRegistration = VoiceAudioDebugInjector.registerCaptureIfCurrent(
+            onPcm16 = currentChunks::add,
+            onInjectionComplete = {},
+            isCurrent = { currentOwner.get() == "B" },
+        )
+        publishStale.countDown()
+        staleThread.join(5_000)
+
+        assertFalse(staleThread.isAlive)
+        assertEquals(null, staleRegistration)
+        assertTrue(currentRegistration != null)
+        val result = VoiceAudioDebugInjector.injectPcm16(
+            pcm16 = byteArrayOf(1, 2),
+            chunkBytes = 2,
+            chunkDelayMs = 0L,
+        )
+        assertTrue(result.delivered)
+        assertEquals(emptyList<ByteArray>(), staleChunks)
+        assertEquals(listOf(byteArrayOf(1, 2).toList()), currentChunks.map(ByteArray::toList))
+        currentRegistration?.close()
+    }
+
     @Test
     fun `inject rejects when no capture callback is active`() {
         VoiceAudioDebugInjector.clearForTest()
