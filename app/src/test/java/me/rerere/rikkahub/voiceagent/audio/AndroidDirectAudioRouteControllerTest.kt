@@ -395,6 +395,7 @@ class AndroidDirectAudioRouteControllerTest {
 
         try {
             assertTrue(retirementCompleted.await(1, TimeUnit.SECONDS))
+            retirement.join(1_000)
             assertFalse(retirement.isAlive)
             assertEquals(0, fixture.device.retireCalls)
         } finally {
