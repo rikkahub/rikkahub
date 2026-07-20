@@ -22,7 +22,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.core.net.toUri
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,7 +34,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
-import androidx.core.net.toUri
 import coil3.compose.AsyncImage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
@@ -40,7 +42,9 @@ import me.rerere.hugeicons.stroke.Files02
 import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.Video01
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.ui.components.ui.ImageInfoDialog
 import me.rerere.rikkahub.ui.hooks.ChatInputState
+import me.rerere.rikkahub.ui.context.LocalSettings
 import org.koin.compose.koinInject
 
 @Composable
@@ -48,12 +52,22 @@ internal fun MediaFileInputRow(
     state: ChatInputState,
 ) {
     val filesManager: FilesManager = koinInject()
+    val settings = LocalSettings.current
     val managedFiles by filesManager.observe().collectAsState(initial = emptyList())
     val displayNameByRelativePath = remember(managedFiles) {
         managedFiles.associate { it.relativePath to it.displayName }
     }
     val displayNameByFileName = remember(managedFiles) {
         managedFiles.associate { it.relativePath.substringAfterLast('/') to it.displayName }
+    }
+
+    var compressTarget by remember { mutableStateOf<UIMessagePart.Image?>(null) }
+
+    compressTarget?.let { part ->
+        ImageInfoDialog(
+            part = part,
+            onDismiss = { compressTarget = null },
+        )
     }
 
     fun removePart(part: UIMessagePart, url: String) {
@@ -73,6 +87,9 @@ internal fun MediaFileInputRow(
         state.messageContent.fastForEach { part ->
             when (part) {
                 is UIMessagePart.Image -> {
+                    val ext = part.url.substringAfterLast('.').lowercase()
+                    val canCompress = settings.displaySetting.manualImageCompression &&
+                            ext in listOf("jpg", "jpeg", "png")
                     AttachmentChip(
                         title = attachmentNameFromUrl(
                             url = part.url,
@@ -94,6 +111,7 @@ internal fun MediaFileInputRow(
                                 )
                             }
                         },
+                        onClick = if (canCompress) {{ compressTarget = part }} else null,
                         onRemove = { removePart(part, part.url) }
                     )
                 }
@@ -148,6 +166,7 @@ private fun AttachmentChip(
     title: String,
     leading: @Composable () -> Unit,
     onRemove: () -> Unit,
+    onClick: (() -> Unit)? = null,
 ) {
     Surface(
         shape = RoundedCornerShape(18.dp),
@@ -159,9 +178,13 @@ private fun AttachmentChip(
         Row(
             modifier = Modifier
                 .height(44.dp)
+                .then(
+                    if (onClick != null) Modifier.clickable { onClick?.invoke() }
+                    else Modifier
+                )
                 .padding(start = 8.dp, end = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             leading()
             Text(

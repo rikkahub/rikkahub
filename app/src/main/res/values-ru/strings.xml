@@ -688,6 +688,9 @@
   <string name="setting_display_page_show_user_avatar_title">Показывать аватар пользователя</string>
   <string name="setting_display_page_skip_crop_image_desc">Пропустить обрезку после импорта изображений или съёмки</string>
   <string name="setting_display_page_skip_crop_image_title">Пропустить редактирование изображения</string>
+  <string name="setting_display_page_manual_image_compression_desc">Нажмите на изображение, чтобы уменьшить его размер перед отправкой</string>
+  <string name="setting_display_page_manual_image_compression_title">Ручное сжатие изображений</string>
+  <string name="image_compression_header">Сжать</string>
   <string name="setting_display_page_title">Настройки отображения</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">Если включено, TTS читает только текст в кавычках</string>
   <string name="setting_display_page_tts_only_read_quoted_title">TTS читать только цитированный контент</string>

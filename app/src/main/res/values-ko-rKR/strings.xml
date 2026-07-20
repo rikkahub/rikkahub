@@ -688,6 +688,9 @@
   <string name="setting_display_page_show_user_avatar_title">사용자 아바타 표시</string>
   <string name="setting_display_page_skip_crop_image_desc">이미지를 가져오거나 사진을 찍은 후 자르기 화면 건너뛰기</string>
   <string name="setting_display_page_skip_crop_image_title">이미지 편집 건너뛰기</string>
+  <string name="setting_display_page_manual_image_compression_desc">첨부 이미지를 클릭하여 해상도를 줄인 후 전송</string>
+  <string name="setting_display_page_manual_image_compression_title">수동 이미지 압축</string>
+  <string name="image_compression_header">압축</string>
   <string name="setting_display_page_title">디스플레이 설정</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">활성화하면 TTS가 따옴표 안의 내용만 읽습니다</string>
   <string name="setting_display_page_tts_only_read_quoted_title">TTS가 인용 콘텐츠만 읽기</string>
