@@ -385,6 +385,13 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    // 兼容不带 kimi 前缀的裸 id "k3"
+    private val KIMI_K3_ALIAS = defineModel {
+        exact("k3")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val STEP_3 = defineModel {
         tokens("step", "3")
         visionInput()
@@ -549,6 +556,7 @@ object ModelRegistry {
         KIMI_K2_5,
         KIMI_K2_6,
         KIMI_K3,
+        KIMI_K3_ALIAS,
         STEP_3,
         STEP_3_7_FLASH,
         INTERN_S1,
