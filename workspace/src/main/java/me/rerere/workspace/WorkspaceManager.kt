@@ -151,13 +151,10 @@ class WorkspaceManager(
         root: String,
         command: String,
         maxBytes: Int,
-        outputStream: OutputStream,
         cwd: String = "",
         timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
-        stdin: ByteArray? = null,
     ): RawCommandResult {
         require(command.isNotBlank()) { "Command is required" }
-        require(maxBytes >= 0) { "maxBytes must be non-negative: $maxBytes" }
         val workingDir = fileSystem.resolve(filesDir(root), cwd)
         require(workingDir.exists()) { "Working directory does not exist: $cwd" }
         require(workingDir.isDirectory) { "Working path is not a directory: $cwd" }
@@ -172,10 +169,8 @@ class WorkspaceManager(
                 tempDir = tempDir(root),
                 workingDir = workingDir,
                 timeoutMillis = timeoutMillis,
-                stdin = stdin,
             ),
             maxBytes = maxBytes,
-            outputStream = outputStream,
         )
     }
 

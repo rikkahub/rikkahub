@@ -31,7 +31,6 @@ class ProotShellRunner(
     override fun executeRaw(
         context: WorkspaceShellContext,
         maxBytes: Int,
-        outputStream: java.io.OutputStream,
     ): RawCommandResult {
         environmentError(context)?.let { message ->
             return RawCommandResult(
@@ -40,7 +39,7 @@ class ProotShellRunner(
             )
         }
 
-        return startProcess(context).readRawResult(context.timeoutMillis, maxBytes, outputStream, context.stdin)
+        return startProcess(context).readRawResult(context.timeoutMillis, maxBytes)
     }
 
     private fun environmentError(context: WorkspaceShellContext): String? {

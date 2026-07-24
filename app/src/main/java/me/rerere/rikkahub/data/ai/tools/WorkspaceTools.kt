@@ -20,7 +20,6 @@ import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.java.KoinJavaComponent.getKoin
-import java.io.ByteArrayOutputStream
 
 private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
 private const val MAX_READ_FILE_BYTES = 8L * 1024 * 1024
@@ -275,9 +274,32 @@ private fun kotlinx.serialization.json.JsonObject.string(name: String): String? 
 private suspend fun WorkspaceRepository.readTextInRootfs(
     workspaceId: String,
     path: String,
-): String {
+): String = readBytesInRootfs(workspaceId, path).toString(Charsets.UTF_8)
+
+private suspend fun WorkspaceRepository.readImageInRootfs(
+    workspaceId: String,
+    path: String,
+): List<UIMessagePart> {
+    val bytes = readBytesInRootfs(workspaceId, path)
+
+    val filesManager = getKoin().get<FilesManager>()
+    val uris = filesManager.createChatFilesByByteArrays(listOf(bytes))
+    return listOf(
+        UIMessagePart.Image(url = uris.first().toString()),
+        UIMessagePart.Text(
+            buildJsonObject {
+                put("path", path)
+                put("description", "Image file read successfully")
+            }.toString()
+        ),
+    )
+}
+
+private suspend fun WorkspaceRepository.readBytesInRootfs(
+    workspaceId: String,
+    path: String,
+): ByteArray {
     val pathArg = path.shellQuote()
-    val buffer = ByteArrayOutputStream()
     val rawResult = executeRawCommand(
         id = workspaceId,
         command = """
@@ -298,48 +320,9 @@ private suspend fun WorkspaceRepository.readTextInRootfs(
             cat -- $pathArg
         """.trimIndent(),
         maxBytes = MAX_READ_FILE_BYTES.toInt(),
-        outputStream = buffer,
     )
     rawResult.requireSuccess("Read file")
-    return buffer.toString(Charsets.UTF_8.name())
-}
-
-private suspend fun WorkspaceRepository.readImageInRootfs(
-    workspaceId: String,
-    path: String,
-): List<UIMessagePart> {
-    val pathArg = path.shellQuote()
-    val buffer = ByteArrayOutputStream()
-    val rawResult = executeRawCommand(
-        id = workspaceId,
-        command = """
-            if [ ! -e $pathArg ]; then
-              printf '%s\n' ${"File does not exist: $path".shellQuote()} >&2
-              exit 1
-            fi
-            if [ ! -f $pathArg ]; then
-              printf '%s\n' ${"Path is not a file: $path".shellQuote()} >&2
-              exit 1
-            fi
-            cat -- $pathArg
-        """.trimIndent(),
-        maxBytes = MAX_READ_FILE_BYTES.toInt(),
-        outputStream = buffer,
-    )
-    rawResult.requireSuccess("Read image file")
-    val bytes = buffer.toByteArray()
-
-    val filesManager = getKoin().get<FilesManager>()
-    val uris = filesManager.createChatFilesByByteArrays(listOf(bytes))
-    return listOf(
-        UIMessagePart.Image(url = uris.first().toString()),
-        UIMessagePart.Text(
-            buildJsonObject {
-                put("path", path)
-                put("description", "Image file read successfully")
-            }.toString()
-        ),
-    )
+    return rawResult.stdout
 }
 
 private fun RawCommandResult.requireSuccess(action: String) {

@@ -7,12 +7,13 @@ import java.util.concurrent.TimeUnit
 
 interface WorkspaceShellRunner {
     fun execute(context: WorkspaceShellContext): WorkspaceCommandResult
-    fun executeRaw(context: WorkspaceShellContext, maxBytes: Int, outputStream: java.io.OutputStream): RawCommandResult
+    fun executeRaw(context: WorkspaceShellContext, maxBytes: Int): RawCommandResult
 }
 
 data class RawCommandResult(
     val exitCode: Int,
     val stderr: String,
+    val stdout: ByteArray = byteArrayOf(),
     val timedOut: Boolean = false,
     val truncated: Boolean = false,
 )
@@ -41,13 +42,12 @@ class HostShellRunner : WorkspaceShellRunner {
     override fun executeRaw(
         context: WorkspaceShellContext,
         maxBytes: Int,
-        outputStream: java.io.OutputStream,
     ): RawCommandResult {
         val process = ProcessBuilder(defaultShell(), "-c", context.command)
             .directory(context.workingDir)
             .redirectErrorStream(false)
             .start()
-        return process.readRawResult(context.timeoutMillis, maxBytes, outputStream, context.stdin)
+        return process.readRawResult(context.timeoutMillis, maxBytes)
     }
 
     private fun defaultShell(): String =
@@ -90,23 +90,16 @@ fun Process.readResult(timeoutMillis: Long, stdin: ByteArray? = null): Workspace
 fun Process.readRawResult(
     timeoutMillis: Long,
     maxBytes: Int,
-    targetOutputStream: java.io.OutputStream,
-    stdin: ByteArray? = null,
 ): RawCommandResult {
-    val stdout = ByteStreamCollector(inputStream, targetOutputStream, maxBytes)
+    val stdout = ByteStreamCollector(inputStream, maxBytes)
     val stderr = StreamCollector(errorStream)
-    val stdinWriter = stdin?.let { bytes -> StreamWriter(outputStream, bytes) }
     try {
         val finished = waitFor(timeoutMillis, TimeUnit.MILLISECONDS)
         if (!finished) {
             destroyForcibly()
         }
-        stdinWriter?.join(1_000)
         val stdoutFinished = stdout.join(5_000)
         val stderrFinished = stderr.join(1_000)
-
-        // 优先处理明确的目标流写入异常
-        stdout.writeError?.let { throw it }
 
         // 如果进程未超时且未强杀，从 stdout 读过程发生的异常应抛出；若超时强杀导致读取中断，则保留 timeout 逻辑
         if (finished && stdout.readError != null) {
@@ -118,12 +111,12 @@ fun Process.readRawResult(
         return RawCommandResult(
             exitCode = if (finished) exitValue() else -1,
             stderr = stderr.text(),
+            stdout = stdout.bytes(),
             timedOut = timedOut,
             truncated = stdout.truncated || stderr.truncated,
         )
     } catch (e: InterruptedException) {
         destroyForcibly()
-        stdinWriter?.join(1_000)
         stdout.join(1_000)
         stderr.join(1_000)
         throw e
@@ -156,7 +149,6 @@ private class StreamWriter(
 
 private class ByteStreamCollector(
     private val stream: InputStream,
-    private val outputStream: java.io.OutputStream,
     private val maxBytes: Int,
 ) {
     @Volatile
@@ -167,10 +159,7 @@ private class ByteStreamCollector(
     var readError: Throwable? = null
         private set
 
-    @Volatile
-    var writeError: Throwable? = null
-        private set
-
+    private val output = java.io.ByteArrayOutputStream()
     private var writtenBytes = 0
 
     private val thread = Thread {
@@ -186,22 +175,12 @@ private class ByteStreamCollector(
             val remaining = maxBytes - writtenBytes
             if (remaining > 0) {
                 val toWrite = minOf(read, remaining)
-                try {
-                    outputStream.write(buffer, 0, toWrite)
-                } catch (e: Throwable) {
-                    writeError = e
-                    break
-                }
+                output.write(buffer, 0, toWrite)
                 writtenBytes += toWrite
             }
             if (read > remaining) {
                 truncated = true
             }
-        }
-        try {
-            outputStream.flush()
-        } catch (e: Throwable) {
-            if (writeError == null) writeError = e
         }
     }.apply {
         isDaemon = true
@@ -212,6 +191,8 @@ private class ByteStreamCollector(
         thread.join(millis)
         return !thread.isAlive
     }
+
+    fun bytes(): ByteArray = output.toByteArray()
 }
 
 private class StreamCollector(
