@@ -14,6 +14,7 @@ import me.rerere.ai.ui.toMetadata
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.utils.generateUnifiedDiff
+import me.rerere.workspace.RawCommandResult
 import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
@@ -275,32 +276,57 @@ private suspend fun WorkspaceRepository.readTextInRootfs(
     workspaceId: String,
     path: String,
 ): String {
-    val (area, relativePath) = rootfsPathToAreaAndRelative(path)
-    val size = fileSize(workspaceId, area, relativePath)
-    require(size <= MAX_READ_FILE_BYTES) {
-        "File is too large to read: $path (${size / 1024 / 1024}MB, max ${MAX_READ_FILE_BYTES / 1024 / 1024}MB). Use shell commands like head, tail, or grep to read parts of it."
-    }
-    val buffer = ByteArrayOutputStream(size.toInt())
-    exportFile(workspaceId, area, relativePath, buffer)
+    val pathArg = path.shellQuote()
+    val buffer = ByteArrayOutputStream()
+    val rawResult = executeRawCommand(
+        id = workspaceId,
+        command = """
+            if [ ! -e $pathArg ]; then
+              printf '%s\n' ${"File does not exist: $path".shellQuote()} >&2
+              exit 1
+            fi
+            if [ ! -f $pathArg ]; then
+              printf '%s\n' ${"Path is not a file: $path".shellQuote()} >&2
+              exit 1
+            fi
+            size=${'$'}(stat -c '%s' -- $pathArg) || exit 1
+            if [ "${'$'}size" -gt $MAX_READ_FILE_BYTES ]; then
+              printf 'File is too large to read: %s (%dMB, max %dMB).\n' \
+                $pathArg ${'$'}((size / 1024 / 1024)) ${'$'}((MAX_READ_FILE_BYTES / 1024 / 1024)) >&2
+              exit 1
+            fi
+            cat -- $pathArg
+        """.trimIndent(),
+        maxBytes = MAX_READ_FILE_BYTES.toInt(),
+        outputStream = buffer,
+    )
+    rawResult.requireSuccess("Read file")
     return buffer.toString(Charsets.UTF_8.name())
-}
-
-private fun rootfsPathToAreaAndRelative(path: String): Pair<WorkspaceStorageArea, String> {
-    val trimmed = path.trimEnd('/')
-    return if (trimmed == "/workspace" || trimmed.startsWith("/workspace/")) {
-        WorkspaceStorageArea.FILES to trimmed.removePrefix("/workspace").trimStart('/')
-    } else {
-        WorkspaceStorageArea.LINUX to trimmed.trimStart('/')
-    }
 }
 
 private suspend fun WorkspaceRepository.readImageInRootfs(
     workspaceId: String,
     path: String,
 ): List<UIMessagePart> {
-    val (area, relativePath) = rootfsPathToAreaAndRelative(path)
+    val pathArg = path.shellQuote()
     val buffer = ByteArrayOutputStream()
-    exportFile(workspaceId, area, relativePath, buffer)
+    val rawResult = executeRawCommand(
+        id = workspaceId,
+        command = """
+            if [ ! -e $pathArg ]; then
+              printf '%s\n' ${"File does not exist: $path".shellQuote()} >&2
+              exit 1
+            fi
+            if [ ! -f $pathArg ]; then
+              printf '%s\n' ${"Path is not a file: $path".shellQuote()} >&2
+              exit 1
+            fi
+            cat -- $pathArg
+        """.trimIndent(),
+        maxBytes = MAX_READ_FILE_BYTES.toInt(),
+        outputStream = buffer,
+    )
+    rawResult.requireSuccess("Read image file")
     val bytes = buffer.toByteArray()
 
     val filesManager = getKoin().get<FilesManager>()
@@ -314,6 +340,15 @@ private suspend fun WorkspaceRepository.readImageInRootfs(
             }.toString()
         ),
     )
+}
+
+private fun RawCommandResult.requireSuccess(action: String) {
+    if (timedOut) error("$action timed out")
+    if (exitCode != 0) {
+        val message = stderr.trim()
+        error(if (message.isBlank()) "$action failed with exit code $exitCode" else message)
+    }
+    if (truncated) error("$action output is too large")
 }
 
 private suspend fun WorkspaceRepository.writeTextInRootfs(

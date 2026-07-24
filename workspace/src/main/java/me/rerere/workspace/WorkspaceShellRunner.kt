@@ -7,7 +7,15 @@ import java.util.concurrent.TimeUnit
 
 interface WorkspaceShellRunner {
     fun execute(context: WorkspaceShellContext): WorkspaceCommandResult
+    fun executeRaw(context: WorkspaceShellContext, maxBytes: Int, outputStream: java.io.OutputStream): RawCommandResult
 }
+
+data class RawCommandResult(
+    val exitCode: Int,
+    val stderr: String,
+    val timedOut: Boolean = false,
+    val truncated: Boolean = false,
+)
 
 data class WorkspaceShellContext(
     val root: String,
@@ -28,6 +36,18 @@ class HostShellRunner : WorkspaceShellRunner {
             .redirectErrorStream(false)
             .start()
         return process.readResult(context.timeoutMillis, context.stdin)
+    }
+
+    override fun executeRaw(
+        context: WorkspaceShellContext,
+        maxBytes: Int,
+        outputStream: java.io.OutputStream,
+    ): RawCommandResult {
+        val process = ProcessBuilder(defaultShell(), "-c", context.command)
+            .directory(context.workingDir)
+            .redirectErrorStream(false)
+            .start()
+        return process.readRawResult(context.timeoutMillis, maxBytes, outputStream, context.stdin)
     }
 
     private fun defaultShell(): String =
@@ -67,6 +87,49 @@ fun Process.readResult(timeoutMillis: Long, stdin: ByteArray? = null): Workspace
     }
 }
 
+fun Process.readRawResult(
+    timeoutMillis: Long,
+    maxBytes: Int,
+    targetOutputStream: java.io.OutputStream,
+    stdin: ByteArray? = null,
+): RawCommandResult {
+    val stdout = ByteStreamCollector(inputStream, targetOutputStream, maxBytes)
+    val stderr = StreamCollector(errorStream)
+    val stdinWriter = stdin?.let { bytes -> StreamWriter(outputStream, bytes) }
+    try {
+        val finished = waitFor(timeoutMillis, TimeUnit.MILLISECONDS)
+        if (!finished) {
+            destroyForcibly()
+        }
+        stdinWriter?.join(1_000)
+        val stdoutFinished = stdout.join(5_000)
+        val stderrFinished = stderr.join(1_000)
+
+        // 优先处理明确的目标流写入异常
+        stdout.writeError?.let { throw it }
+
+        // 如果进程未超时且未强杀，从 stdout 读过程发生的异常应抛出；若超时强杀导致读取中断，则保留 timeout 逻辑
+        if (finished && stdout.readError != null) {
+            throw stdout.readError!!
+        }
+
+        val timedOut = !finished || !stdoutFinished || !stderrFinished
+
+        return RawCommandResult(
+            exitCode = if (finished) exitValue() else -1,
+            stderr = stderr.text(),
+            timedOut = timedOut,
+            truncated = stdout.truncated || stderr.truncated,
+        )
+    } catch (e: InterruptedException) {
+        destroyForcibly()
+        stdinWriter?.join(1_000)
+        stdout.join(1_000)
+        stderr.join(1_000)
+        throw e
+    }
+}
+
 private class StreamWriter(
     private val stream: java.io.OutputStream,
     private val bytes: ByteArray,
@@ -85,7 +148,70 @@ private class StreamWriter(
         start()
     }
 
-    fun join(millis: Long) = thread.join(millis)
+    fun join(millis: Long): Boolean {
+        thread.join(millis)
+        return !thread.isAlive
+    }
+}
+
+private class ByteStreamCollector(
+    private val stream: InputStream,
+    private val outputStream: java.io.OutputStream,
+    private val maxBytes: Int,
+) {
+    @Volatile
+    var truncated = false
+        private set
+
+    @Volatile
+    var readError: Throwable? = null
+        private set
+
+    @Volatile
+    var writeError: Throwable? = null
+        private set
+
+    private var writtenBytes = 0
+
+    private val thread = Thread {
+        val buffer = ByteArray(8192)
+        while (true) {
+            val read = try {
+                stream.read(buffer)
+            } catch (e: Throwable) {
+                readError = e
+                break
+            }
+            if (read < 0) break
+            val remaining = maxBytes - writtenBytes
+            if (remaining > 0) {
+                val toWrite = minOf(read, remaining)
+                try {
+                    outputStream.write(buffer, 0, toWrite)
+                } catch (e: Throwable) {
+                    writeError = e
+                    break
+                }
+                writtenBytes += toWrite
+            }
+            if (read > remaining) {
+                truncated = true
+            }
+        }
+        try {
+            outputStream.flush()
+        } catch (e: Throwable) {
+            if (writeError == null) writeError = e
+        }
+    }.apply {
+        isDaemon = true
+        start()
+    }
+
+    fun join(millis: Long): Boolean {
+        thread.join(millis)
+        return !thread.isAlive
+    }
 }
 
 private class StreamCollector(
@@ -127,7 +253,10 @@ private class StreamCollector(
         start()
     }
 
-    fun join(millis: Long) = thread.join(millis)
+    fun join(millis: Long): Boolean {
+        thread.join(millis)
+        return !thread.isAlive
+    }
 
     fun text(): String = synchronized(builder) { builder.toString() }
 }
