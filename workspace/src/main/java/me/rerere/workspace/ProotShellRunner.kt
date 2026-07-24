@@ -17,34 +17,47 @@ class ProotShellRunner(
     private val patcher: RootfsPatcher = RootfsPatcher(),
 ) : WorkspaceShellRunner {
     override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
-        if (!context.linuxDir.hasUsableRootfs()) {
+        environmentError(context)?.let { message ->
             return WorkspaceCommandResult(
                 exitCode = 127,
                 stdout = "",
-                stderr = "Rootfs is not installed",
+                stderr = message,
             )
         }
+
+        return startProcess(context).readResult(context.timeoutMillis, context.stdin)
+    }
+
+    override fun executeRaw(
+        context: WorkspaceShellContext,
+        maxBytes: Int,
+    ): RawCommandResult {
+        environmentError(context)?.let { message ->
+            return RawCommandResult(
+                exitCode = 127,
+                stderr = message,
+            )
+        }
+
+        return startProcess(context).readRawResult(context.timeoutMillis, maxBytes)
+    }
+
+    private fun environmentError(context: WorkspaceShellContext): String? {
+        if (!context.linuxDir.hasUsableRootfs()) return "Rootfs is not installed"
 
         val proot = File(nativeLibraryDir, PROOT_EXEC)
         val loader = File(nativeLibraryDir, PROOT_LOADER)
-        if (!proot.isFile) {
-            return WorkspaceCommandResult(
-                exitCode = 127,
-                stdout = "",
-                stderr = "proot executable not found: ${proot.absolutePath}",
-            )
-        }
-        if (!loader.isFile) {
-            return WorkspaceCommandResult(
-                exitCode = 127,
-                stdout = "",
-                stderr = "proot loader not found: ${loader.absolutePath}",
-            )
-        }
+        if (!proot.isFile) return "proot executable not found: ${proot.absolutePath}"
+        if (!loader.isFile) return "proot loader not found: ${loader.absolutePath}"
+        return null
+    }
 
+    private fun startProcess(context: WorkspaceShellContext): Process {
+        val proot = File(nativeLibraryDir, PROOT_EXEC)
+        val loader = File(nativeLibraryDir, PROOT_LOADER)
         context.tempDir.mkdirs()
         patcher.patch(context.linuxDir)
-        val process = ProcessBuilder(buildCommand(context, proot))
+        return ProcessBuilder(buildCommand(context, proot))
             .directory(context.filesDir)
             .redirectErrorStream(false)
             .apply {
@@ -53,8 +66,6 @@ class ProotShellRunner(
                 environment()["TMPDIR"] = context.tempDir.absolutePath
             }
             .start()
-
-        return process.readResult(context.timeoutMillis, context.stdin)
     }
 
     private fun buildCommand(
