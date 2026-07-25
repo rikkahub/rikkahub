@@ -2,6 +2,7 @@ package me.rerere.rikkahub.service
 
 import android.app.Application
 import android.content.Context
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
@@ -90,6 +91,7 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
+private const val GENERATION_CHECKPOINT_INTERVAL_MS = 1_000L
 
 internal fun backgroundTextGenerationParams(
     model: Model,
@@ -149,6 +151,8 @@ class ChatService(
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
 ) {
+    private val activeGenerations = ActiveGenerationRegistry()
+
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
 
@@ -479,6 +483,7 @@ class ChatService(
         } else {
             model.displayName
         }
+        val checkpointPolicy = GenerationCheckpointPolicy(GENERATION_CHECKPOINT_INTERVAL_MS)
 
         runCatching {
 
@@ -502,7 +507,7 @@ class ChatService(
 
             // start generating
             val session = getOrCreateSession(conversationId)
-            generationHandler.generateText(
+            val generationFlow = generationHandler.generateText(
                 settings = settings,
                 model = model,
                 processingStatus = session.processingStatus,
@@ -577,7 +582,13 @@ class ChatService(
                         )
                     }
                 },
-            ).onCompletion {
+            )
+
+            if (activeGenerations.add(conversationId.toString())) {
+                ChatGenerationService.start(context, conversationId.toString(), senderName)
+            }
+
+            generationFlow.onCompletion {
                 // 可能被取消了，或者意外结束，兜底更新
                 val updatedConversation = getConversationFlow(conversationId).value.copy(
                     messageNodes = getConversationFlow(conversationId).value.messageNodes.map { node ->
@@ -586,6 +597,9 @@ class ChatService(
                     updateAt = Instant.now()
                 )
                 updateConversation(conversationId, updatedConversation)
+                if (checkpointPolicy.shouldCheckpoint(SystemClock.elapsedRealtime(), force = true)) {
+                    conversationRepo.updateConversation(updatedConversation)
+                }
 
                 // 生成结束：取消 Live Update 通知，后台时发送完成通知
                 appEventBus.emit(
@@ -602,6 +616,9 @@ class ChatService(
                         val updatedConversation = getConversationFlow(conversationId).value
                             .updateCurrentMessages(chunk.messages)
                         updateConversation(conversationId, updatedConversation)
+                        if (checkpointPolicy.shouldCheckpoint(SystemClock.elapsedRealtime())) {
+                            conversationRepo.updateConversation(updatedConversation)
+                        }
 
                         // 通知等边缘副作用由 ChatNotificationManager 消费；
                         // tryEmit 不挂起，事件丢失只影响单次通知更新，不能反压生成链
@@ -614,6 +631,8 @@ class ChatService(
                 }
             }
         }.onFailure {
+            stopGenerationForegroundService(conversationId)
+
             // 兜底取消 Live Update 通知（生成开始前失败时 onCompletion 不会执行）
             appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
 
@@ -622,6 +641,8 @@ class ChatService(
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
         }.onSuccess {
+            stopGenerationForegroundService(conversationId)
+
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
 
@@ -631,6 +652,12 @@ class ChatService(
             launchWithConversationReference(conversationId) {
                 generateSuggestion(conversationId, finalConversation)
             }
+        }
+    }
+
+    private fun stopGenerationForegroundService(conversationId: Uuid) {
+        if (activeGenerations.remove(conversationId.toString())) {
+            ChatGenerationService.stop(context)
         }
     }
 
