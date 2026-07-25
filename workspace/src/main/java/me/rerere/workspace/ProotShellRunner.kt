@@ -13,7 +13,6 @@ data class WorkspaceBindMount(
 
 class ProotShellRunner(
     private val nativeLibraryDir: File,
-    private val extraBindMounts: List<WorkspaceBindMount> = emptyList(),
     private val patcher: RootfsPatcher = RootfsPatcher(),
 ) : WorkspaceShellRunner {
     override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
@@ -74,14 +73,14 @@ class ProotShellRunner(
             "${context.filesDir.absolutePath}:$WORKSPACE_DIR",
         )
 
-        extraBindMounts.forEach { mount ->
+        context.bindMounts.forEach { mount ->
             if (mount.source.exists()) {
                 command += "-b"
                 command += "${mount.source.absolutePath}:${mount.target.trimEnd('/')}"
             }
         }
 
-        listOf("/dev", "/proc", "/sys").forEach { path ->
+        WorkspaceManager.KERNEL_FS_MOUNTS.forEach { path ->
             if (File(path).exists()) {
                 command += "-b"
                 command += path
@@ -123,6 +122,6 @@ class ProotShellRunner(
     private companion object {
         private const val PROOT_EXEC = "libproot_exec.so"
         private const val PROOT_LOADER = "libproot_loader.so"
-        private const val WORKSPACE_DIR = "/workspace"
+        private val WORKSPACE_DIR = WorkspaceManager.ROOTFS_WORKSPACE_DIR
     }
 }

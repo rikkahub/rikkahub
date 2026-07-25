@@ -10,8 +10,12 @@ class WorkspaceManager(
     private val baseDir: File,
     private val config: WorkspaceConfig = WorkspaceConfig(),
     private val shellRunner: WorkspaceShellRunner = HostShellRunner(),
+    private val bindMounts: List<WorkspaceBindMount> = emptyList(),
 ) {
     private val fileSystem = WorkspaceFileSystem(config)
+
+    // 按 target 长度降序, 保证 /a/b 优先于 /a 匹配
+    private val sortedBindMounts = bindMounts.sortedByDescending { it.target.trimEnd('/').length }
 
     init {
         baseDir.mkdirs()
@@ -96,6 +100,59 @@ class WorkspaceManager(
         outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
     }
 
+    /**
+     * 把 Rootfs 内的绝对路径映射到宿主机上的真实文件。
+     *
+     * bind mount 的 source 本身就是 Android 侧的普通目录, 因此 /skills 这类挂载路径
+     * 可以直接用文件 IO 访问, 无需经过 PRoot; 只是 Rootfs 目录里对应位置是个空挂载点,
+     * 按 [WorkspaceStorageArea.LINUX] 解析必然落空。
+     */
+    fun resolveRootfsPath(root: String, path: String): RootfsLocation {
+        val trimmed = path.trim().trimEnd('/').ifBlank { "/" }
+        require(trimmed.startsWith("/")) { "Rootfs path must be absolute: $path" }
+
+        sortedBindMounts.forEach { mount ->
+            val target = mount.target.trimEnd('/')
+            if (trimmed == target) return RootfsLocation(mount.source, "")
+            if (trimmed.startsWith("$target/")) {
+                return RootfsLocation(mount.source, trimmed.removePrefix("$target/"))
+            }
+        }
+
+        if (trimmed == ROOTFS_WORKSPACE_DIR || trimmed.startsWith("$ROOTFS_WORKSPACE_DIR/")) {
+            return RootfsLocation(
+                rootDir = filesDir(root),
+                relativePath = trimmed.removePrefix(ROOTFS_WORKSPACE_DIR).trimStart('/'),
+            )
+        }
+
+        // 内核伪文件系统: 显式拒绝, 而不是回落到一个必然读不到的物理路径
+        KERNEL_FS_MOUNTS.firstOrNull { trimmed == it || trimmed.startsWith("$it/") }?.let {
+            error("$it is a kernel filesystem and cannot be read as a file, use workspace_shell instead")
+        }
+
+        return RootfsLocation(linuxDir(root), trimmed.trimStart('/'))
+    }
+
+    fun rootfsFileSize(root: String, path: String): Long =
+        resolveRootfsFile(root, path).also { it.requireReadableFile(path) }.length()
+
+    fun exportRootfsFile(root: String, path: String, outputStream: OutputStream) {
+        val file = resolveRootfsFile(root, path)
+        file.requireReadableFile(path)
+        outputStream.use { out -> file.inputStream().use { it.copyTo(out) } }
+    }
+
+    private fun resolveRootfsFile(root: String, path: String): File {
+        val location = resolveRootfsPath(root, path)
+        return fileSystem.resolve(location.rootDir, location.relativePath)
+    }
+
+    private fun File.requireReadableFile(path: String) {
+        require(exists()) { "File does not exist: $path" }
+        require(isFile) { "Path is not a file: $path" }
+    }
+
     fun deleteFile(
         root: String,
         path: String,
@@ -143,6 +200,7 @@ class WorkspaceManager(
                 workingDir = workingDir,
                 timeoutMillis = timeoutMillis,
                 stdin = stdin,
+                bindMounts = bindMounts,
             )
         )
     }
@@ -176,6 +234,19 @@ class WorkspaceManager(
         private const val LINUX_DIR = "linux"
         private const val TEMP_DIR = "tmp"
         const val DEFAULT_COMMAND_TIMEOUT_MS = 30_000L
+
+        /** Rootfs 内工作区文件区的挂载点 */
+        const val ROOTFS_WORKSPACE_DIR = "/workspace"
+
+        /** 由宿主机透传的内核伪文件系统, 只能通过 shell 访问 */
+        val KERNEL_FS_MOUNTS = listOf("/dev", "/proc", "/sys")
+
         private val ROOT_NAME_REGEX = Regex("[A-Za-z0-9._-]+")
     }
 }
+
+/** Rootfs 内绝对路径在宿主机上的落点 */
+data class RootfsLocation(
+    val rootDir: File,
+    val relativePath: String,
+)
