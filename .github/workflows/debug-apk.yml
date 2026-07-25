@@ -1,0 +1,132 @@
+name: Debug APK
+
+# Fork 友好：无需签名 / Firebase Secrets，手动或 push 触发，产物上传为 Artifact
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag, or commit SHA to build'
+        required: true
+        default: 'feat/agent-runtime-cc-codex'
+  push:
+    branches:
+      - feat/agent-runtime-cc-codex
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+
+concurrency:
+  group: debug-apk-${{ github.workflow }}-${{ github.event.inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+
+      - name: Install web-ui dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-debug-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/libs.versions.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-debug-
+
+      - name: Prepare local build files (no secrets)
+        run: |
+          # sdk.dir 由 setup-java / Android SDK 在 runner 上处理；仅补占位 google-services
+          # debug applicationId 为 me.rerere.rikkahub.debug
+          cat > app/google-services.json <<'EOF'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "rikkahub-ci-debug",
+              "storage_bucket": "rikkahub-ci-debug.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+                  "android_client_info": { "package_name": "me.rerere.rikkahub" }
+                },
+                "oauth_client": [],
+                "api_key": [{ "current_key": "AIzaSyDummyKeyForCiDebugBuildOnly0000" }],
+                "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+              },
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:1111111111111111111111",
+                  "android_client_info": { "package_name": "me.rerere.rikkahub.debug" }
+                },
+                "oauth_client": [],
+                "api_key": [{ "current_key": "AIzaSyDummyKeyForCiDebugBuildOnly0000" }],
+                "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          # 去掉 heredoc 缩进空格，保证合法 JSON
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("app/google-services.json")
+          text = "\n".join(line.lstrip() for line in p.read_text().splitlines())
+          p.write_text(text + "\n")
+          PY
+
+      - name: Build debug APK
+        env:
+          ORG_GRADLE_OPTS: -Xmx6g -Dfile.encoding=UTF-8
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-configuration-cache --stacktrace
+
+      - name: List APK outputs
+        if: always()
+        run: |
+          find app/build/outputs/apk -type f -name '*.apk' -printf '%p %s\n' 2>/dev/null || true
+          ls -laR app/build/outputs/apk 2>/dev/null || true
+
+      - name: Upload debug APKs
+        uses: actions/upload-artifact@v4
+        with:
+          name: rikkahub-debug-apk-${{ github.run_number }}
+          path: |
+            app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+          retention-days: 14
