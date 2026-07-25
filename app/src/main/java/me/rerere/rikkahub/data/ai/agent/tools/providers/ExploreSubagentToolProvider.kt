@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.agent.tools.providers
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -22,6 +23,7 @@ import me.rerere.rikkahub.data.ai.agent.prompt.ProjectDocsTransformer
 import me.rerere.rikkahub.data.ai.agent.tools.ToolProvider
 import me.rerere.rikkahub.data.ai.agent.tools.ToolProviderOrder
 import me.rerere.rikkahub.data.ai.agent.tools.ToolResolveContext
+import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 
@@ -108,7 +110,8 @@ class ExploreSubagentToolProvider(
                 val maxSteps = obj["max_steps"]?.jsonPrimitive?.intOrNull
                     ?: SubagentSpec.DEFAULT_MAX_STEPS
 
-                val status = ctx.processingStatus ?: kotlinx.coroutines.flow.MutableStateFlow(null)
+                val status: MutableStateFlow<String?> =
+                    ctx.processingStatus ?: MutableStateFlow(null)
                 val result = subagentRunner().run(
                     SubagentRequest(
                         settings = ctx.settings,
