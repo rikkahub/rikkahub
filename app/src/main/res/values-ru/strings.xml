@@ -63,10 +63,6 @@
   <string name="assistant_page_chat_model_desc">Установить модель чата по умолчанию для ассистента. Если не задано, будет использована глобальная модель чата по умолчанию</string>
   <string name="assistant_page_clone">Клонировать</string>
   <string name="assistant_page_confirm">Подтвердить</string>
-  <string name="assistant_page_context_message_count">Размер контекстных сообщений: %d</string>
-  <string name="assistant_page_context_message_desc">Управляет количеством исторических сообщений, отправляемых модели в качестве контекста. Сообщения, превышающие это число, будут игнорироваться; будут сохранены только последние N сообщений, что позволяет экономить токены</string>
-  <string name="assistant_page_context_message_size">Размер контекстного сообщения</string>
-  <string name="assistant_page_context_message_unlimited">Неограниченные контекстные сообщения</string>
   <string name="assistant_page_creative">Творческий</string>
   <string name="assistant_page_current_assistant">Текущий ассистент</string>
   <string name="assistant_page_custom_bodies">Пользовательский контекст</string>
@@ -1252,7 +1248,6 @@
   <string name="setting_asr_configure_step_hotwords_desc">Список горячих слов через запятую для повышения точности распознавания имён собственных и терминов предметной области</string>
   <string name="log_page_record_requests">Записывать запросы</string>
   <string name="log_page_record_requests_desc">Записывать заголовки запросов, тела и метаданные ответов</string>
-  <string name="assistant_page_context_message_truncation_warning">Ограничение контекста может привести к частому усечению контекста и предотвратить кэширование промптов</string>
   <string name="chat_message_tool_recent_chats">Посмотреть недавние чаты</string>
   <string name="chat_message_tool_conversation_search">История поиска: %1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">Экранное время</string>

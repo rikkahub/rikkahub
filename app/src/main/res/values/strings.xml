@@ -63,10 +63,6 @@
   <string name="assistant_page_chat_model_desc">Set the default chat model for the assistant. If not set, the global default chat model will be used</string>
   <string name="assistant_page_clone">Clone</string>
   <string name="assistant_page_confirm">Confirm</string>
-  <string name="assistant_page_context_message_count">Context Message Size: %d</string>
-  <string name="assistant_page_context_message_desc">Controls how many historical messages will be sent to the model as context. Messages exceeding this number will be ignored, only the most recent N messages will be retained, which can save tokens</string>
-  <string name="assistant_page_context_message_size">Context Message Size</string>
-  <string name="assistant_page_context_message_unlimited">Unlimited context messages</string>
   <string name="assistant_page_creative">Creative</string>
   <string name="assistant_page_current_assistant">Current Assistant</string>
   <string name="assistant_page_custom_bodies">Custom Body</string>
@@ -1260,7 +1256,6 @@
   <string name="setting_mcp_page_name_invalid">Name can only contain English letters and numbers</string>
   <string name="log_page_record_requests">Record requests</string>
   <string name="log_page_record_requests_desc">Capture request headers, bodies, and response metadata</string>
-  <string name="assistant_page_context_message_truncation_warning">Limiting context may cause frequent context truncation and prevent prompt caching</string>
   <string name="chat_message_tool_recent_chats">View recent chats</string>
   <string name="chat_message_tool_conversation_search">Search history: %1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">Screen Time</string>

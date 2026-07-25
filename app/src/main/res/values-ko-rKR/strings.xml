@@ -63,10 +63,6 @@
   <string name="assistant_page_chat_model_desc">어시스턴트의 기본 채팅 모델 설정. 미설정 시 전역 기본 채팅 모델 사용</string>
   <string name="assistant_page_clone">복제</string>
   <string name="assistant_page_confirm">확인</string>
-  <string name="assistant_page_context_message_count">컨텍스트 메시지 수: %d</string>
-  <string name="assistant_page_context_message_desc">과거 메시지 중 몇 개를 모델에 컨텍스트로 보낼지 제어. 이 수를 초과한 메시지는 무시되고 가장 최근 N개 메시지만 유지되어 토큰을 절약할 수 있습니다</string>
-  <string name="assistant_page_context_message_size">컨텍스트 메시지 수</string>
-  <string name="assistant_page_context_message_unlimited">무제한 컨텍스트 메시지</string>
   <string name="assistant_page_creative">창의적</string>
   <string name="assistant_page_current_assistant">현재 어시스턴트</string>
   <string name="assistant_page_custom_bodies">사용자 정의 본문</string>
@@ -1252,7 +1248,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_asr_configure_step_hotwords_desc">고유명사/도메인 용어 인식 정확도를 높이기 위한 쉼표로 구분된 핫워드 목록</string>
   <string name="log_page_record_requests">요청 기록</string>
   <string name="log_page_record_requests_desc">요청 헤더, 본문 및 응답 메타데이터를 기록합니다.</string>
-  <string name="assistant_page_context_message_truncation_warning">컨텍스트를 제한하면 빈번한 컨텍스트 절단이 발생하고 프롬프트 캐싱을 방해할 수 있습니다.</string>
   <string name="chat_message_tool_recent_chats">최근 채팅 보기</string>
   <string name="chat_message_tool_conversation_search">검색 기록: %1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">화면 시간</string>

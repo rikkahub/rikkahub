@@ -269,51 +269,6 @@ fun List<UIMessagePart>.isEmptyUIMessage(): Boolean {
     }
 }
 
-fun List<UIMessage>.limitContext(size: Int): List<UIMessage> {
-    if (size <= 0 || this.size <= size) return this
-
-    val startIndex = this.size - size
-    var adjustedStartIndex = startIndex
-
-    // 循环往前查找，直到满足所有依赖条件
-    var needsAdjustment = true
-    val visitedIndices = mutableSetOf<Int>()
-
-    while (needsAdjustment && adjustedStartIndex > 0) {
-        needsAdjustment = false
-
-        // 防止无限循环
-        if (adjustedStartIndex in visitedIndices) break
-        visitedIndices.add(adjustedStartIndex)
-
-        val currentMessage = this[adjustedStartIndex]
-
-        // 如果当前消息包含已执行的tool（有output），往前查找对应的tool call
-        if (currentMessage.getTools().any { it.isExecuted }) {
-            for (i in adjustedStartIndex - 1 downTo 0) {
-                if (this[i].getTools().any { !it.isExecuted }) {
-                    adjustedStartIndex = i
-                    needsAdjustment = true
-                    break
-                }
-            }
-        }
-
-        // 如果当前消息包含未执行的tool call，往前查找对应的用户消息
-        if (currentMessage.getTools().any { !it.isExecuted }) {
-            for (i in adjustedStartIndex - 1 downTo 0) {
-                if (this[i].role == MessageRole.USER) {
-                    adjustedStartIndex = i
-                    needsAdjustment = true
-                    break
-                }
-            }
-        }
-    }
-
-    return this.subList(adjustedStartIndex, this.size)
-}
-
 @Serializable
 sealed class ToolApprovalState {
     @Serializable

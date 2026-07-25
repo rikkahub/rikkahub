@@ -63,10 +63,6 @@
   <string name="assistant_page_chat_model_desc">设置助手的默认聊天模型，如果不设置，则使用全局默认聊天模型</string>
   <string name="assistant_page_clone">复制</string>
   <string name="assistant_page_confirm">确定</string>
-  <string name="assistant_page_context_message_count">上下文消息数量: %d</string>
-  <string name="assistant_page_context_message_desc">控制多少条历史消息会被作为上下文发送给模型, 超过此数量的消息会被忽略，只有最近的N条消息会被保留，可以节省token</string>
-  <string name="assistant_page_context_message_size">上下文消息数量</string>
-  <string name="assistant_page_context_message_unlimited">无限制的上下文消息</string>
   <string name="assistant_page_creative">创造</string>
   <string name="assistant_page_current_assistant">当前助手</string>
   <string name="assistant_page_custom_bodies">自定义 Body</string>
@@ -1257,7 +1253,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="error_mcp_invalid_server_name">无效的MCP服务器名称（仅允许字母数字字符）：%1$s</string>
   <string name="log_page_record_requests">记录请求</string>
   <string name="log_page_record_requests_desc">捕获请求标头、正文和响应元数据</string>
-  <string name="assistant_page_context_message_truncation_warning">限制上下文可能导致频繁的上下文截断，并阻止提示词缓存</string>
   <string name="chat_message_tool_recent_chats">查看最近的对话</string>
   <string name="chat_message_tool_conversation_search">搜索历史：%1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">屏幕时间</string>

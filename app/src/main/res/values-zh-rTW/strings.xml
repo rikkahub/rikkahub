@@ -63,10 +63,6 @@
   <string name="assistant_page_chat_model_desc">設定助手的預設聊天模型，如果不設定，則使用全域預設聊天模型</string>
   <string name="assistant_page_clone">複製</string>
   <string name="assistant_page_confirm">確定</string>
-  <string name="assistant_page_context_message_count">上下文訊息數量: %d</string>
-  <string name="assistant_page_context_message_desc">控制多少條歷史訊息會被作為上下文發送給模型, 超過此數量的訊息會被忽略，只有最近的N條訊息會被保留，可以節省token</string>
-  <string name="assistant_page_context_message_size">上下文訊息數量</string>
-  <string name="assistant_page_context_message_unlimited">無限上下文訊息</string>
   <string name="assistant_page_creative">創造</string>
   <string name="assistant_page_current_assistant">當前助手</string>
   <string name="assistant_page_custom_bodies">自定義 Body</string>
@@ -1250,7 +1246,6 @@
   <string name="setting_asr_configure_step_hotwords_desc">以逗號分隔的熱詞清單，用於提升專有名詞／領域術語的辨識準確率</string>
   <string name="log_page_record_requests">記錄請求</string>
   <string name="log_page_record_requests_desc">擷取請求標頭、請求主體和回應元數據</string>
-  <string name="assistant_page_context_message_truncation_warning">限制上下文可能導致頻繁的上下文截斷，並妨礙提示詞快取</string>
   <string name="chat_message_tool_recent_chats">查看最近聊天</string>
   <string name="chat_message_tool_conversation_search">搜尋歷史：%1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">螢幕使用時間</string>
