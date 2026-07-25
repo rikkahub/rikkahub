@@ -84,12 +84,12 @@ val appModule = module {
             generationHandler = get(),
             templateTransformer = get(),
             providerManager = get(),
-            localTools = get(),
             mcpManager = get(),
             filesManager = get(),
-            skillManager = get(),
             workspaceRepository = get(),
-            folderRepository = get()
+            folderRepository = get(),
+            toolRegistry = get(),
+            projectDocsTransformer = get(),
         )
     }
 

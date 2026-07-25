@@ -153,11 +153,61 @@ val dataSourceModule = module {
     single { McpManager(settingsStore = get(), appScope = get(), filesManager = get(), appEventBus = get()) }
 
     single {
+        me.rerere.rikkahub.data.ai.agent.AgentLoop(
+            context = get(),
+            providerManager = get(),
+            json = get(),
+            hooks = me.rerere.rikkahub.data.ai.agent.hooks.NoOpAgentHook,
+        )
+    }
+
+    single {
         GenerationHandler(
             context = get(),
             providerManager = get(),
             json = get(),
-            memoryRepo = get()
+            agentLoop = get(),
+        )
+    }
+
+    single {
+        me.rerere.rikkahub.data.ai.agent.prompt.ProjectDocsLoader(workspaceRepository = get())
+    }
+
+    single {
+        me.rerere.rikkahub.data.ai.agent.prompt.ProjectDocsTransformer(
+            workspaceRepository = get(),
+            loader = get(),
+        )
+    }
+
+    single {
+        me.rerere.rikkahub.data.ai.agent.tools.ToolRegistry(
+            providers = listOf(
+                me.rerere.rikkahub.data.ai.agent.tools.providers.SearchToolProvider(),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.LocalToolProvider(localTools = get()),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.ConversationToolProvider(conversationRepo = get()),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.WorkspaceToolProvider(workspaceRepository = get()),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.ExploreSubagentToolProvider(
+                    subagentRunner = { get() },
+                    json = get(),
+                    workspaceRepository = get(),
+                    projectDocsTransformer = get(),
+                ),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.SkillToolProvider(skillManager = get()),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.McpToolProvider(mcpManager = get()),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.MemoryToolProvider(
+                    json = get(),
+                    memoryRepo = get(),
+                ),
+            )
+        )
+    }
+
+    single<me.rerere.rikkahub.data.ai.agent.subagent.SubagentRunner> {
+        me.rerere.rikkahub.data.ai.agent.subagent.DefaultSubagentRunner(
+            agentLoop = get(),
+            toolRegistry = get(),
         )
     }
 

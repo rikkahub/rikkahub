@@ -8,6 +8,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.InstantSerializer
+import me.rerere.rikkahub.data.ai.agent.AgentMode
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANT_ID
 import java.time.Instant
 import kotlin.uuid.Uuid
@@ -31,6 +32,8 @@ data class Conversation(
     val workspaceCwd: String? = null,
     // 所属文件夹（助手内分组），null 表示未归入任何文件夹
     val folderId: Uuid? = null,
+    /** Agent 运行模式，默认 CHAT = 改造前行为 */
+    val agentMode: AgentMode = AgentMode.CHAT,
     @Transient
     val newConversation: Boolean = false
 ) {

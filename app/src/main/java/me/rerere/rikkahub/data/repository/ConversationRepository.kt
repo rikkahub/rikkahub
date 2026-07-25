@@ -362,6 +362,7 @@ class ConversationRepository(
             lorebookIds = JsonInstant.encodeToString(conversation.lorebookIds),
             workspaceCwd = conversation.workspaceCwd ?: "",
             folderId = conversation.folderId?.toString() ?: "",
+            agentMode = conversation.agentMode.name,
         )
     }
 
@@ -383,6 +384,7 @@ class ConversationRepository(
             lorebookIds = JsonInstant.decodeFromString(conversationEntity.lorebookIds),
             workspaceCwd = conversationEntity.workspaceCwd.ifEmpty { null },
             folderId = conversationEntity.folderId.ifEmpty { null }?.let { Uuid.parse(it) },
+            agentMode = me.rerere.rikkahub.data.ai.agent.AgentMode.fromStorage(conversationEntity.agentMode),
         )
     }
 

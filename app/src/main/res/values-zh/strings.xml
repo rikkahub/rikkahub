@@ -1155,6 +1155,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_workspace">工作区</string>
   <string name="assistant_page_workspace_desc">绑定后，Agent 可以使用此工作区的文件和沙盒功能</string>
   <string name="assistant_page_workspace_unbound">未绑定</string>
+  <string name="agent_mode_chat">聊天</string>
+  <string name="agent_mode_plan">计划</string>
+  <string name="agent_mode_agent">执行</string>
+  <string name="agent_mode_label">模式：%1$s</string>
+  <string name="agent_mode_hint">聊天=全工具；计划=只读探索；执行=可写/可 shell</string>
   <string name="workspace_page_title">工作区</string>
   <string name="workspace_page_create">创建工作区</string>
   <string name="workspace_page_rename">重命名工作区</string>
@@ -1255,6 +1260,20 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="log_page_record_requests">记录请求</string>
   <string name="log_page_record_requests_desc">捕获请求标头、正文和响应元数据</string>
   <string name="chat_message_tool_recent_chats">查看最近的对话</string>
+  <string name="chat_message_tool_explore_subagent">探索子代理</string>
+  <string name="chat_message_tool_explore_subagent_task">探索：%1$s</string>
+  <string name="chat_message_tool_explore_subagent_running">调查中…</string>
+  <string name="chat_message_tool_explore_subagent_panel_title">探索轨迹</string>
+  <string name="chat_message_tool_explore_subagent_task_label">任务</string>
+  <string name="chat_message_tool_explore_subagent_trace">工具时间线</string>
+  <string name="chat_message_tool_explore_subagent_trace_empty">没有记录到工具步骤</string>
+  <string name="chat_message_tool_explore_subagent_report">报告</string>
+  <string name="chat_message_tool_explore_subagent_meta">%1$d 步 · %2$d 个工具</string>
+  <string name="chat_message_tool_explore_subagent_steps">%1$d 步</string>
+  <string name="chat_message_tool_explore_subagent_status_ok">成功</string>
+  <string name="chat_message_tool_explore_subagent_status_fail">失败</string>
+  <string name="chat_message_tool_explore_subagent_input">入参</string>
+  <string name="chat_message_tool_explore_subagent_output">输出</string>
   <string name="chat_message_tool_conversation_search">搜索历史：%1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">屏幕时间</string>
   <string name="assistant_page_local_tools_screen_time_desc">让AI读取你的应用屏幕使用时间</string>
