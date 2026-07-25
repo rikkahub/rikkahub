@@ -90,4 +90,57 @@ class ToolRegistryTest {
         )
         assertEquals(listOf("get_time_info"), registry.resolve(ctx()).map { it.name })
     }
+
+    @Test
+    fun `chat mode keeps full workspace tool set including write and shell`() = runBlocking {
+        val workspaceTools = listOf(
+            "workspace_read_file",
+            "workspace_write_file",
+            "workspace_edit_file",
+            "workspace_shell",
+        )
+        val registry = ToolRegistry(
+            listOf(
+                FixedProvider(ToolProviderOrder.MEMORY, listOf("memory_tool")),
+                FixedProvider(ToolProviderOrder.SEARCH, listOf("search_web")),
+                FixedProvider(ToolProviderOrder.WORKSPACE, workspaceTools),
+                FixedProvider(ToolProviderOrder.SUBAGENT, listOf("explore_subagent")),
+            )
+        )
+        val chatNames = registry.resolve(ctx(AgentMode.CHAT)).map { it.name }
+        assertEquals(
+            listOf(
+                "memory_tool",
+                "search_web",
+                "workspace_read_file",
+                "workspace_write_file",
+                "workspace_edit_file",
+                "workspace_shell",
+                "explore_subagent",
+            ),
+            chatNames,
+        )
+        assertTrue(chatNames.containsAll(PlanModeBlockedTools))
+    }
+
+    @Test
+    fun `agent mode same full set as chat for workspace tools`() = runBlocking {
+        val registry = ToolRegistry(
+            listOf(
+                FixedProvider(
+                    ToolProviderOrder.WORKSPACE,
+                    listOf(
+                        "workspace_read_file",
+                        "workspace_write_file",
+                        "workspace_edit_file",
+                        "workspace_shell",
+                    ),
+                )
+            )
+        )
+        assertEquals(
+            registry.resolve(ctx(AgentMode.CHAT)).map { it.name },
+            registry.resolve(ctx(AgentMode.AGENT)).map { it.name },
+        )
+    }
 }

@@ -90,6 +90,7 @@ val appModule = module {
             folderRepository = get(),
             toolRegistry = get(),
             projectDocsTransformer = get(),
+            compactPolicy = get(),
         )
     }
 

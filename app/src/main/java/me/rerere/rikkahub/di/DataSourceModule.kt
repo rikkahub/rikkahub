@@ -152,12 +152,24 @@ val dataSourceModule = module {
 
     single { McpManager(settingsStore = get(), appScope = get(), filesManager = get(), appEventBus = get()) }
 
+    single<me.rerere.rikkahub.data.ai.agent.hooks.AgentHook> {
+        me.rerere.rikkahub.data.ai.agent.hooks.CompositeAgentHook(
+            hooks = listOf(
+                me.rerere.rikkahub.data.ai.agent.hooks.LoggingAgentHook(),
+            )
+        )
+    }
+
+    single<me.rerere.rikkahub.data.ai.agent.compact.CompactPolicy> {
+        me.rerere.rikkahub.data.ai.agent.compact.DefaultCompactPolicy
+    }
+
     single {
         me.rerere.rikkahub.data.ai.agent.AgentLoop(
             context = get(),
             providerManager = get(),
             json = get(),
-            hooks = me.rerere.rikkahub.data.ai.agent.hooks.NoOpAgentHook,
+            hooks = get(),
         )
     }
 

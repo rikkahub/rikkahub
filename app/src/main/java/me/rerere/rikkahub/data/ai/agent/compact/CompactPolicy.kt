@@ -5,7 +5,7 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 
 /**
  * 上下文压缩策略接口（学 CC/Codex compact）。
- * 现有压缩 UI 对话框仍走原路径；本接口为可插拔扩展点。
+ * 由 [me.rerere.rikkahub.service.ChatService.compressConversation] 调用。
  */
 interface CompactPolicy {
     /**
@@ -14,19 +14,21 @@ interface CompactPolicy {
     fun shouldAutoCompact(messages: List<UIMessage>): Boolean = false
 
     /**
-     * 构建压缩用 system/user 提示（占位符与现有 [DEFAULT_COMPRESS_PROMPT] 对齐）。
+     * 构建压缩用提示。
+     * @param template 用户可配置的模板（settings.compressPrompt）；默认 [DEFAULT_COMPRESS_PROMPT]
      */
     fun buildCompressPrompt(
         content: String,
         targetTokens: Int,
         locale: String,
         additionalContext: String,
-    ): String = DEFAULT_COMPRESS_PROMPT
+        template: String = DEFAULT_COMPRESS_PROMPT,
+    ): String = template
         .replace("{content}", content)
         .replace("{target_tokens}", targetTokens.toString())
         .replace("{locale}", locale)
         .replace("{additional_context}", additionalContext)
 }
 
-/** 默认：不自动压缩，提示模板与现状一致。 */
+/** 默认：不自动压缩，占位符替换与历史行为一致。 */
 object DefaultCompactPolicy : CompactPolicy

@@ -1,11 +1,12 @@
 # Agent Runtime 设计文档（对齐 Claude Code / Codex，功能全保留）
 
-> 状态：**已实现（Phase 0–5 骨架落地）**  
+> 状态：**里程碑已交付（CHAT 兼容 + Plan/Agent + Explore Subagent + Hooks/Compact）**  
 > 日期：2026-07-26  
 > 范围：在 **不删除、不降级** RikkaHub 现有能力的前提下，对自研 Agent 做结构化演进  
 > 相关文档：[chat-generation-pipeline.md](./chat-generation-pipeline.md)  
 >  
-> 实现入口：`data/ai/agent/`，门面 `GenerationHandler`，编排 `ChatService` + `ToolRegistry`
+> 实现入口：`data/ai/agent/`，门面 `GenerationHandler`，编排 `ChatService` + `ToolRegistry`  
+> UI：聊天顶栏 Agent 模式 Chip（助手绑定 Workspace 时可见）+ FilesPicker 模式按钮 + Explore 轨迹面板
 
 ---
 
@@ -419,16 +420,13 @@ data class PermissionPolicy(
 
 ---
 
-## 12. 开放问题（实现前需确认）
+## 12. 已决议（本里程碑）
 
-1. **Plan 模式下写操作**：硬拒绝 vs 强制 Pending？  
-   - 推荐：硬拒绝 + 提示「切换到执行模式」，减少误执行。  
-2. **项目文档文件名优先级**：`RIKKA.md` > `AGENTS.md` > `CLAUDE.md` 或可配置列表？  
-   - 推荐：默认 `AGENTS.md`、`CLAUDE.md`、`RIKKA.md` 皆可，按配置列表顺序取第一个存在的，或全部拼接（需限长）。  
-3. **权限说明注入范围**：仅 Workspace，还是所有启用工具的助手？  
-   - 推荐：Workspace 默认开；其他助手默认关。  
-4. **Subagent 是否进入路线图 v1**：建议 v1 不做，仅留扩展点说明。  
-5. **是否暴露用户可见的「Agent 引擎设置页」**：建议 Phase 3+ 再做，避免 Phase 1–2 增加产品面。
+1. **Plan 写操作**：硬拒绝（工具不注册 + 执行期兜底错误「切换到 AGENT」）。  
+2. **项目文档**：默认同时尝试 `AGENTS.md` / `CLAUDE.md` / `RIKKA.md`，级联拼接，32KiB 上限。  
+3. **权限注入**：`AgentMode != CHAT` 时注入；CHAT 不注入。  
+4. **Explore Subagent**：已实现并默认注册（父会话）；GENERAL 子代理 deferred。  
+5. **UI**：顶栏 AssistChip（助手绑定 Workspace 时）+ FilesPicker 模式按钮；无独立 Agent 设置页。
 
 ---
 
@@ -510,3 +508,4 @@ data class PermissionPolicy(
 |------|------|
 | 2026-07-26 | 初稿：对齐 CC/Codex 的自研演进方案，硬约束功能全保留 |
 | 2026-07-26 | 实现 Explore Subagent 隔离探索会话并接入主路径 |
+| 2026-07-26 | 顶栏模式 Chip、LoggingAgentHook、CompactPolicy 接入 compress；里程碑验收测试补全 |

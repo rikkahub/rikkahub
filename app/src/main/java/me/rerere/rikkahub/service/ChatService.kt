@@ -44,6 +44,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.agent.AgentMode
+import me.rerere.rikkahub.data.ai.agent.compact.CompactPolicy
 import me.rerere.rikkahub.data.ai.agent.permission.PermissionPolicy
 import me.rerere.rikkahub.data.ai.agent.prompt.ProjectDocsTransformer
 import me.rerere.rikkahub.data.ai.agent.tools.ToolRegistry
@@ -145,6 +146,7 @@ class ChatService(
     private val folderRepository: FolderRepository,
     private val toolRegistry: ToolRegistry,
     private val projectDocsTransformer: ProjectDocsTransformer,
+    private val compactPolicy: CompactPolicy,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -500,9 +502,9 @@ class ChatService(
             // start generating
             val session = getOrCreateSession(conversationId)
             val agentMode = conversation.agentMode
+            // Plan/Agent 始终注入权限说明（学 Codex developer permission）；CHAT 默认不注入
             val permissionPolicy = PermissionPolicy.compatibleDefault(
-                injectPromptForWorkspace = assistant.workspaceId != null &&
-                    agentMode != AgentMode.CHAT
+                injectPromptForWorkspace = agentMode != AgentMode.CHAT
             )
             val tools = try {
                 toolRegistry.resolve(
@@ -842,13 +844,18 @@ class ChatService(
 
         suspend fun compressMessages(messages: List<UIMessage>): String {
             val contentToCompress = messages.joinToString("\n\n") { it.summaryAsText(maxLength = 2000) }
-            val prompt = settings.compressPrompt.applyPlaceholders(
-                "content" to contentToCompress,
-                "target_tokens" to targetTokens.toString(),
-                "additional_context" to if (additionalPrompt.isNotBlank()) {
-                    "Additional instructions from user: $additionalPrompt"
-                } else "",
-                "locale" to Locale.getDefault().displayName
+            val additionalContext = if (additionalPrompt.isNotBlank()) {
+                "Additional instructions from user: $additionalPrompt"
+            } else {
+                ""
+            }
+            // 走 CompactPolicy，模板仍用用户 settings.compressPrompt（默认 = DEFAULT_COMPRESS_PROMPT）
+            val prompt = compactPolicy.buildCompressPrompt(
+                content = contentToCompress,
+                targetTokens = targetTokens,
+                locale = Locale.getDefault().displayName,
+                additionalContext = additionalContext,
+                template = settings.compressPrompt,
             )
 
             val result = providerHandler.generateText(

@@ -1165,6 +1165,7 @@
   <string name="agent_mode_agent">Agent</string>
   <string name="agent_mode_label">Mode: %1$s</string>
   <string name="agent_mode_hint">Chat = full tools. Plan = read-only. Agent = execute after plan.</string>
+  <string name="agent_mode_workspace_not_ready">Workspace shell is not ready yet. Mode is saved and applies when READY.</string>
   <string name="workspace_page_title">Workspace</string>
   <string name="workspace_page_create">Create Workspace</string>
   <string name="workspace_page_rename">Rename Workspace</string>

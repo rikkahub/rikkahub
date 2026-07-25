@@ -1160,6 +1160,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="agent_mode_agent">执行</string>
   <string name="agent_mode_label">模式：%1$s</string>
   <string name="agent_mode_hint">聊天=全工具；计划=只读探索；执行=可写/可 shell</string>
+  <string name="agent_mode_workspace_not_ready">工作区 shell 尚未就绪，模式已保存，就绪后生效。</string>
   <string name="workspace_page_title">工作区</string>
   <string name="workspace_page_create">创建工作区</string>
   <string name="workspace_page_rename">重命名工作区</string>

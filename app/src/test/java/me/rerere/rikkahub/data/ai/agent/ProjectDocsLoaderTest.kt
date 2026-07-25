@@ -25,4 +25,9 @@ class ProjectDocsLoaderTest {
         assertTrue(ProjectDocsLoader.DEFAULT_FILE_NAMES.contains("RIKKA.md"))
         assertEquals(32 * 1024, ProjectDocsLoader.DEFAULT_MAX_CHARS)
     }
+
+    @Test
+    fun `max chars default is 32kib codex-aligned`() {
+        assertEquals(32 * 1024, ProjectDocsLoader.DEFAULT_MAX_CHARS)
+    }
 }
