@@ -1092,6 +1092,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="text_area_save">保存</string>
   <string name="theme_name_autumn">秋黄</string>
   <string name="theme_name_black">中性黑</string>
+  <string name="theme_name_minimal">极简白</string>
   <string name="theme_name_ocean">海湾蓝</string>
   <string name="theme_name_sakura">樱花粉</string>
   <string name="theme_name_spring">原野绿</string>

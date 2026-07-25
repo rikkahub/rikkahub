@@ -1057,6 +1057,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="text_area_save">저장</string>
   <string name="theme_name_autumn">가을 노랑</string>
   <string name="theme_name_black">중립 검정</string>
+  <string name="theme_name_minimal">미니멀 화이트</string>
   <string name="theme_name_ocean">해양 청색</string>
   <string name="theme_name_sakura">벚꽃 핑크</string>
   <string name="theme_name_spring">들판 녹색</string>
