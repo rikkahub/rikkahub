@@ -70,6 +70,42 @@ private const val TAG = "ChatCompletionsAPI"
 // 月之暗面系 host：开放平台（国内/国际）与 Kimi Code 网关（api.kimi.com/coding）
 private val MOONSHOT_HOSTS = setOf("api.moonshot.cn", "api.moonshot.ai", "api.kimi.com")
 
+// OpenAI 兼容网关的方言家族。URL -> 方言的映射全仓库只存在于 fromHost，
+// 各分支一律按方言分派，不再直接比较 host 字符串
+private enum class OpenAIDialect {
+    OPENAI,
+    OPENROUTER,
+    DASHSCOPE,
+    VOLCES,
+    MISTRAL,
+    INTERNLM,
+    SILICONFLOW,
+    AIPING,
+    BIGMODEL,
+    MOONSHOT,
+    DEEPSEEK,
+    NVIDIA,
+    OPENCODE;
+
+    companion object {
+        fun fromHost(host: String): OpenAIDialect = when (host) {
+            "openrouter.ai" -> OPENROUTER
+            "dashscope.aliyuncs.com" -> DASHSCOPE
+            "ark.cn-beijing.volces.com" -> VOLCES
+            "api.mistral.ai" -> MISTRAL
+            "chat.intern-ai.org.cn" -> INTERNLM
+            "api.siliconflow.cn" -> SILICONFLOW
+            "aiping.cn" -> AIPING
+            "open.bigmodel.cn" -> BIGMODEL
+            in MOONSHOT_HOSTS -> MOONSHOT
+            "api.deepseek.com" -> DEEPSEEK
+            "integrate.api.nvidia.com" -> NVIDIA
+            "opencode.ai" -> OPENCODE
+            else -> OPENAI
+        }
+    }
+}
+
 class ChatCompletionsAPI(
     private val client: OkHttpClient,
     private val keyRoulette: KeyRoulette
@@ -261,7 +297,7 @@ class ChatCompletionsAPI(
         providerSetting: ProviderSetting.OpenAI,
         stream: Boolean = false,
     ): JsonObject {
-        val host = providerSetting.baseUrl.toHttpUrl().host
+        val dialect = OpenAIDialect.fromHost(providerSetting.baseUrl.toHttpUrl().host)
         return buildJsonObject {
             put("model", params.model.modelId)
             put(
@@ -273,7 +309,7 @@ class ChatCompletionsAPI(
                 )
             )
 
-            if (isModelAllowTemperature(params.model, host)) {
+            if (isModelAllowTemperature(params.model, dialect)) {
                 if (params.temperature != null) put("temperature", params.temperature)
                 if (params.topP != null) put("top_p", params.topP)
             }
@@ -281,7 +317,7 @@ class ChatCompletionsAPI(
 
             put("stream", stream)
             if (stream) {
-                if (host != "api.mistral.ai") { // mistral 不支持 stream_options
+                if (dialect != OpenAIDialect.MISTRAL) { // mistral 不支持 stream_options
                     put("stream_options", buildJsonObject {
                         put("include_usage", true)
                     })
@@ -289,8 +325,8 @@ class ChatCompletionsAPI(
             }
 
             // open router适配
-            if(host == "openrouter.ai") {
-                if(params.model.outputModalities.contains(Modality.IMAGE)) {
+            if (dialect == OpenAIDialect.OPENROUTER) {
+                if (params.model.outputModalities.contains(Modality.IMAGE)) {
                     put("modalities", buildJsonArray {
                         add("image")
                         add("text")
@@ -300,8 +336,8 @@ class ChatCompletionsAPI(
 
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
                 val level = params.reasoningLevel
-                when (host) {
-                    "openrouter.ai" -> {
+                when (dialect) {
+                    OpenAIDialect.OPENROUTER -> {
                         // https://openrouter.ai/docs/use-cases/reasoning-tokens
                         put("reasoning", buildJsonObject {
                             when (level) {
@@ -312,31 +348,31 @@ class ChatCompletionsAPI(
                         })
                     }
 
-                    "dashscope.aliyuncs.com" -> {
+                    OpenAIDialect.DASHSCOPE -> {
                         // 阿里云百炼
                         // https://bailian.console.aliyun.com/console?tab=doc#/doc/?type=model&url=https%3A%2F%2Fhelp.aliyun.com%2Fdocument_detail%2F2870973.html&renderType=iframe
                         put("enable_thinking", level.isEnabled)
                         if (level != ReasoningLevel.AUTO) put("thinking_budget", level.budgetTokens)
                     }
 
-                    "ark.cn-beijing.volces.com" -> {
+                    OpenAIDialect.VOLCES -> {
                         // 豆包 (火山)
                         put("thinking", buildJsonObject {
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
                         })
                     }
 
-                    "api.mistral.ai" -> {
+                    OpenAIDialect.MISTRAL -> {
                         // Mistral 不支持
                     }
 
-                    "chat.intern-ai.org.cn" -> {
+                    OpenAIDialect.INTERNLM -> {
                         // 书生
                         // https://internlm.intern-ai.org.cn/api/document?lang=zh
                         put("thinking_mode", level.isEnabled)
                     }
 
-                    "api.siliconflow.cn" -> {
+                    OpenAIDialect.SILICONFLOW -> {
                         // https://docs.siliconflow.cn/cn/userguide/capabilities/reasoning#3-1-api-%E5%8F%82%E6%95%B0
                         val modelId = params.model.modelId
                         val siliconflowThinkingModels = setOf(
@@ -371,19 +407,17 @@ class ChatCompletionsAPI(
                         }
                     }
 
-                    "aiping.cn" -> {
+                    OpenAIDialect.AIPING -> {
                         put("enable_thinking", level.isEnabled)
                     }
 
-                    "open.bigmodel.cn" -> {
+                    OpenAIDialect.BIGMODEL -> {
                         put("thinking", buildJsonObject {
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
                         })
                     }
 
-                    // api.kimi.com 是 Kimi Code 网关（用户常以 https://api.kimi.com/coding/v1 配置），
-                    // 与开放平台共用同一套月之暗面方言
-                    in MOONSHOT_HOSTS -> {
+                    OpenAIDialect.MOONSHOT -> {
                         // 月之暗面各模型的思考参数体系不同，需按模型 id 区分（#1573）
                         when {
                             // K3 系列（kimi-k3* / k3 / k3-256k）：不使用 thinking 参数，
@@ -422,7 +456,7 @@ class ChatCompletionsAPI(
                         }
                     }
 
-                    "api.deepseek.com" -> {
+                    OpenAIDialect.DEEPSEEK -> {
                         put("thinking", buildJsonObject {
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
                         })
@@ -431,7 +465,7 @@ class ChatCompletionsAPI(
                         }
                     }
 
-                    "integrate.api.nvidia.com" -> {
+                    OpenAIDialect.NVIDIA -> {
                         if ("deepseek-v4" in params.model.modelId.lowercase()) {
                             if (level != ReasoningLevel.AUTO) {
                                 val effort = when (level) {
@@ -448,13 +482,13 @@ class ChatCompletionsAPI(
                         }
                     }
 
-                    "opencode.ai" -> {
+                    OpenAIDialect.OPENCODE -> {
                         if (level != ReasoningLevel.AUTO) {
                             put("reasoning_effort", level.effort)
                         }
                     }
 
-                    else -> {
+                    OpenAIDialect.OPENAI -> {
                         // OpenAI 官方
                         // 文档中，completions API 只支持 "low", "medium", "high"
                         if (level != ReasoningLevel.AUTO) {
@@ -486,12 +520,12 @@ class ChatCompletionsAPI(
         }.mergeCustomBody(params.customBody)
     }
 
-    private fun isModelAllowTemperature(model: Model, host: String): Boolean {
+    private fun isModelAllowTemperature(model: Model, dialect: OpenAIDialect): Boolean {
         if (ModelRegistry.OPENAI_O_MODELS.match(model.modelId) || ModelRegistry.GPT_5.match(model.modelId)) {
             return false
         }
         // 月之暗面 K2.5 及以上模型的 temperature/top_p 为固定值，显式传入会被 API 以 400 拒绝（#1574）
-        if (host in MOONSHOT_HOSTS && ModelRegistry.KIMI_K2_5_PLUS.match(model.modelId)) {
+        if (dialect == OpenAIDialect.MOONSHOT && ModelRegistry.KIMI_K2_5_PLUS.match(model.modelId)) {
             return false
         }
         return true
