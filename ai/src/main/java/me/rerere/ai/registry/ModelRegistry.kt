@@ -379,17 +379,52 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
-    private val KIMI_K3 = defineModel {
+    // kimi-k2.7-code（含 -highspeed）：始终开启思考，不应传 thinking 参数。
+    // 纯 matcher，不加入 ALL_MODELS，能力/模态解析仍由 KIMI_K2 承担
+    private val KIMI_K2_7_CODE = defineModel {
+        tokens("kimi", "k", "2", "7")
+    }
+
+    // Kimi Code 网关（api.kimi.com/coding）的 kimi-for-coding（含 -highspeed），
+    // 即网关上 K2.7 Code 系列的模型 id，方言与 kimi-k2.7-code 一致
+    val KIMI_FOR_CODING = defineModel {
+        tokens("kimi", "for", "coding")
+        toolReasoningAbility()
+    }
+
+    // K2.7 Code 系列：始终开启思考，仅作为方言分派的 matcher 使用
+    val KIMI_K2_7 = defineGroup {
+        add(KIMI_K2_7_CODE, KIMI_FOR_CODING)
+    }
+
+    val KIMI_K3 = defineModel {
         tokens("kimi", "k", "3")
         visionInput()
         toolReasoningAbility()
     }
 
     // 兼容不带 kimi 前缀的裸 id "k3"
-    private val KIMI_K3_ALIAS = defineModel {
+    val KIMI_K3_ALIAS = defineModel {
         exact("k3")
         visionInput()
         toolReasoningAbility()
+    }
+
+    // Kimi Code 网关的 k3-256k（K3 的 256K 上下文版本）
+    val KIMI_K3_256K = defineModel {
+        exact("k3-256k")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    // K3 系列：使用顶层 reasoning_effort（low/high/max），不使用 thinking 参数
+    val KIMI_K3_FAMILY = defineGroup {
+        add(KIMI_K3, KIMI_K3_ALIAS, KIMI_K3_256K)
+    }
+
+    // 月之暗面 K2.5 及以上模型：temperature/top_p 为固定值，显式传入会被 API 拒绝
+    val KIMI_K2_5_PLUS = defineGroup {
+        add(KIMI_K2_5, KIMI_K2_6, KIMI_K2_7, KIMI_K3_FAMILY)
     }
 
     private val STEP_3 = defineModel {
@@ -555,8 +590,10 @@ object ModelRegistry {
         KIMI_K2,
         KIMI_K2_5,
         KIMI_K2_6,
+        KIMI_FOR_CODING,
         KIMI_K3,
         KIMI_K3_ALIAS,
+        KIMI_K3_256K,
         STEP_3,
         STEP_3_7_FLASH,
         INTERN_S1,

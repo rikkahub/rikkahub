@@ -67,6 +67,9 @@ import kotlin.time.Clock
 
 private const val TAG = "ChatCompletionsAPI"
 
+// 月之暗面系 host：开放平台（国内/国际）与 Kimi Code 网关（api.kimi.com/coding）
+private val MOONSHOT_HOSTS = setOf("api.moonshot.cn", "api.moonshot.ai", "api.kimi.com")
+
 class ChatCompletionsAPI(
     private val client: OkHttpClient,
     private val keyRoulette: KeyRoulette
@@ -270,7 +273,7 @@ class ChatCompletionsAPI(
                 )
             )
 
-            if (isModelAllowTemperature(params.model)) {
+            if (isModelAllowTemperature(params.model, host)) {
                 if (params.temperature != null) put("temperature", params.temperature)
                 if (params.topP != null) put("top_p", params.topP)
             }
@@ -378,15 +381,45 @@ class ChatCompletionsAPI(
                         })
                     }
 
-                    "api.moonshot.cn" -> {
-                        put("thinking", buildJsonObject {
-                            put("type", if (!level.isEnabled) "disabled" else "enabled")
-                            // K2.6 的 thinking.keep 默认为 null（忽略历史思考），思考开启时
-                            // 需显式传 "all" 才是保留式思考；文档推荐与 enabled 搭配（#1586）
-                            if (level.isEnabled && ModelRegistry.KIMI_K2_6.match(params.model.modelId)) {
-                                put("keep", "all")
+                    // api.kimi.com 是 Kimi Code 网关（用户常以 https://api.kimi.com/coding/v1 配置），
+                    // 与开放平台共用同一套月之暗面方言
+                    in MOONSHOT_HOSTS -> {
+                        // 月之暗面各模型的思考参数体系不同，需按模型 id 区分（#1573）
+                        when {
+                            // K3 系列（kimi-k3* / k3 / k3-256k）：不使用 thinking 参数，
+                            // 顶层 reasoning_effort 仅接受 low/high/max，客户端需自行映射；
+                            // K3 始终推理，OFF 映射为 low
+                            ModelRegistry.KIMI_K3_FAMILY.match(params.model.modelId) -> {
+                                if (level != ReasoningLevel.AUTO) {
+                                    put(
+                                        "reasoning_effort", when (level) {
+                                            ReasoningLevel.OFF, ReasoningLevel.LOW -> "low"
+                                            ReasoningLevel.MEDIUM, ReasoningLevel.HIGH -> "high"
+                                            ReasoningLevel.XHIGH -> "max"
+                                            // 不可达（外层已排除 AUTO），与 Kimi Code 官方默认一致
+                                            ReasoningLevel.AUTO -> "high"
+                                        }
+                                    )
+                                }
                             }
-                        })
+                            // K2.7 Code 系列（kimi-k2.7-code / kimi-for-coding，均含 -highspeed）
+                            // 始终开启思考，显式设置 thinking 仅接受 {"type":"enabled","keep":"all"}，
+                            // 传入 disabled 会报错，官方建议完全不传
+                            ModelRegistry.KIMI_K2_7.match(params.model.modelId) -> {
+                                // 不传任何思考参数
+                            }
+                            // K2.5/K2.6 等：支持 enabled/disabled
+                            else -> {
+                                put("thinking", buildJsonObject {
+                                    put("type", if (!level.isEnabled) "disabled" else "enabled")
+                                    // K2.6 的 thinking.keep 默认为 null（忽略历史思考），思考开启时
+                                    // 需显式传 "all" 才是保留式思考；文档推荐与 enabled 搭配（#1586）
+                                    if (level.isEnabled && ModelRegistry.KIMI_K2_6.match(params.model.modelId)) {
+                                        put("keep", "all")
+                                    }
+                                })
+                            }
+                        }
                     }
 
                     "api.deepseek.com" -> {
@@ -453,8 +486,15 @@ class ChatCompletionsAPI(
         }.mergeCustomBody(params.customBody)
     }
 
-    private fun isModelAllowTemperature(model: Model): Boolean {
-        return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && !ModelRegistry.GPT_5.match(model.modelId)
+    private fun isModelAllowTemperature(model: Model, host: String): Boolean {
+        if (ModelRegistry.OPENAI_O_MODELS.match(model.modelId) || ModelRegistry.GPT_5.match(model.modelId)) {
+            return false
+        }
+        // 月之暗面 K2.5 及以上模型的 temperature/top_p 为固定值，显式传入会被 API 以 400 拒绝（#1574）
+        if (host in MOONSHOT_HOSTS && ModelRegistry.KIMI_K2_5_PLUS.match(model.modelId)) {
+            return false
+        }
+        return true
     }
 
     private fun buildMessages(

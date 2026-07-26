@@ -103,4 +103,45 @@ class ModelRegistryTest {
             ModelRegistry.MODEL_ABILITIES.getData("deepseek-v4-pro")
         )
     }
+
+    @Test
+    fun testKimiDialectMatchers() {
+        // K3 系列（含 Kimi Code 网关的裸 id k3 / k3-256k）
+        assertTrue(ModelRegistry.KIMI_K3_FAMILY.match("kimi-k3"))
+        assertTrue(ModelRegistry.KIMI_K3_FAMILY.match("Kimi-K3.5"))
+        assertTrue(ModelRegistry.KIMI_K3_FAMILY.match("k3"))
+        assertTrue(ModelRegistry.KIMI_K3_FAMILY.match("k3-256k"))
+        assertFalse(ModelRegistry.KIMI_K3_ALIAS.match("kimi-k3"))
+        assertFalse(ModelRegistry.KIMI_K3_FAMILY.match("kimi-k2.5"))
+
+        // K2.7 Code 系列：kimi-k2.7-code（含 -highspeed）与网关的 kimi-for-coding（含 -highspeed）
+        assertTrue(ModelRegistry.KIMI_K2_7.match("kimi-k2.7-code"))
+        assertTrue(ModelRegistry.KIMI_K2_7.match("kimi-k2.7-code-highspeed"))
+        assertTrue(ModelRegistry.KIMI_K2_7.match("kimi-for-coding"))
+        assertTrue(ModelRegistry.KIMI_K2_7.match("kimi-for-coding-highspeed"))
+        assertFalse(ModelRegistry.KIMI_K2_7.match("kimi-k2.5"))
+        assertFalse(ModelRegistry.KIMI_K2_7.match("kimi-k2-0905-preview"))
+
+        // K2.5 及以上（采样参数固定的模型集合）
+        assertTrue(ModelRegistry.KIMI_K2_5_PLUS.match("kimi-k2.5"))
+        assertTrue(ModelRegistry.KIMI_K2_5_PLUS.match("kimi-k2.6"))
+        assertTrue(ModelRegistry.KIMI_K2_5_PLUS.match("kimi-k2.7-code"))
+        assertTrue(ModelRegistry.KIMI_K2_5_PLUS.match("kimi-for-coding"))
+        assertTrue(ModelRegistry.KIMI_K2_5_PLUS.match("kimi-k3"))
+        assertTrue(ModelRegistry.KIMI_K2_5_PLUS.match("k3"))
+        assertTrue(ModelRegistry.KIMI_K2_5_PLUS.match("k3-256k"))
+        assertFalse(ModelRegistry.KIMI_K2_5_PLUS.match("kimi-k2"))
+        assertFalse(ModelRegistry.KIMI_K2_5_PLUS.match("kimi-k2-0905-preview"))
+        assertFalse(ModelRegistry.KIMI_K2_5_PLUS.match("kimi-k2-thinking"))
+
+        // 网关模型 id 的能力注册
+        assertEquals(
+            listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+            ModelRegistry.MODEL_ABILITIES.getData("k3-256k")
+        )
+        assertEquals(
+            listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+            ModelRegistry.MODEL_ABILITIES.getData("kimi-for-coding")
+        )
+    }
 }
