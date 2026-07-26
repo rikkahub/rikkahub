@@ -142,15 +142,26 @@ class ResponseAPI(
                     return
                 }
                 Log.d(TAG, "onEvent: $id/$type $data")
-                val json = json.parseToJsonElement(data).jsonObject
-                val chunk = parseResponseDelta(json)
-                if (chunk != null) {
-                    trySend(chunk).onFailure { e ->
-                        Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                // onEvent 运行在 OkHttp 调度线程上，解析失败与失败事件都必须交给 Flow：
+                // 直接抛出收集方永远收不到（流卡死），且未捕获异常可能导致应用崩溃（#1575）
+                runCatching {
+                    val json = json.parseToJsonElement(data).jsonObject
+                    if (type == "response.failed" || type == "error") {
+                        throw (json["response"]?.jsonObject?.get("error")?.parseErrorDetail()
+                            ?: json.parseErrorDetail())
                     }
-                }
-                if (type == "response.completed") {
-                    close()
+                    val chunk = parseResponseDelta(json)
+                    if (chunk != null) {
+                        trySend(chunk).onFailure { e ->
+                            Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                        }
+                    }
+                    if (type == "response.completed") {
+                        close()
+                    }
+                }.onFailure { e ->
+                    Log.w(TAG, "onEvent: closing stream with error", e)
+                    close(e)
                 }
             }
 
