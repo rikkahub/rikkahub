@@ -286,8 +286,9 @@ fun ChatDrawerContent(
             AssistantPicker(
                 settings = settings,
                 onUpdateSettings = {
-                    vm.updateSettings(it)
+                    val updateJob = vm.updateSettings(it)
                     scope.launch {
+                        updateJob.join()
                         val id = if (context.readBooleanPreference("create_new_conversation_on_start", true)) {
                             Uuid.random()
                         } else {
