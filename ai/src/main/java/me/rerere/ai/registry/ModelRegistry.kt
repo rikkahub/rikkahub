@@ -373,7 +373,7 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
-    private val KIMI_K2_6 = defineModel {
+    val KIMI_K2_6 = defineModel {
         tokens("kimi", "k", "2", "6")
         visionInput()
         toolReasoningAbility()

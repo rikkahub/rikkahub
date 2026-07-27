@@ -381,6 +381,11 @@ class ChatCompletionsAPI(
                     "api.moonshot.cn" -> {
                         put("thinking", buildJsonObject {
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
+                            // K2.6 的 thinking.keep 默认为 null（忽略历史思考），思考开启时
+                            // 需显式传 "all" 才是保留式思考；文档推荐与 enabled 搭配（#1586）
+                            if (level.isEnabled && ModelRegistry.KIMI_K2_6.match(params.model.modelId)) {
+                                put("keep", "all")
+                            }
                         })
                     }
 
