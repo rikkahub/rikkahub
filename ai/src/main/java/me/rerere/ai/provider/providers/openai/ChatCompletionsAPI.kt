@@ -265,7 +265,9 @@ class ChatCompletionsAPI(
                 "messages",
                 buildMessages(
                     messages = messages,
-                    includeHistoryReasoning = providerSetting.includeHistoryReasoning,
+                    // DeepSeek 思考模式下，工具调用轮次必须回传 reasoning_content，否则 400；
+                    // 其余轮次回传会被服务端忽略，因此对该 host 强制回放历史思考（#1587）
+                    includeHistoryReasoning = providerSetting.includeHistoryReasoning || host == "api.deepseek.com",
                     supportInputModalities = params.model.inputModalities,
                 )
             )

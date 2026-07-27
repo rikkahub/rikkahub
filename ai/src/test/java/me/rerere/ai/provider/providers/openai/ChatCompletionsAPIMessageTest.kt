@@ -1,12 +1,16 @@
 package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Modality
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
@@ -49,6 +53,29 @@ class ChatCompletionsAPIMessageTest {
             includeHistoryReasoning,
             listOf(Modality.TEXT, Modality.IMAGE)
         ) as JsonArray
+    }
+
+    // Helper to invoke private buildChatCompletionRequest via reflection and return its messages array
+    private fun buildRequestMessages(
+        baseUrl: String,
+        includeHistoryReasoning: Boolean,
+        messages: List<UIMessage>,
+    ): JsonArray {
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
+            "buildChatCompletionRequest",
+            List::class.java,
+            TextGenerationParams::class.java,
+            ProviderSetting.OpenAI::class.java,
+            Boolean::class.javaPrimitiveType
+        )
+        method.isAccessible = true
+        val params = TextGenerationParams(model = Model(modelId = "test-model"))
+        val providerSetting = ProviderSetting.OpenAI(
+            baseUrl = baseUrl,
+            includeHistoryReasoning = includeHistoryReasoning,
+        )
+        val body = method.invoke(api, messages, params, providerSetting, true) as JsonObject
+        return body.getValue("messages").jsonArray
     }
 
     @Test
@@ -383,6 +410,59 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("assistant", result[1].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("thinking", result[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
         assertEquals("", result[1].jsonObject["content"]?.jsonPrimitive?.content)
+    }
+
+    // #1587: DeepSeek 思考模式下工具调用轮次必须回传 reasoning_content，否则 API 400；
+    // 其余轮次回传会被服务端忽略，因此 api.deepseek.com 强制回放历史思考，无视开关
+    @Test
+    fun `deepseek host forces history reasoning replay even when disabled`() {
+        val messages = listOf(
+            UIMessage.user("Question 1"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "thinking"),
+                    UIMessagePart.Text("answer")
+                )
+            )
+        )
+
+        val result = buildRequestMessages(
+            baseUrl = "https://api.deepseek.com/v1",
+            includeHistoryReasoning = false,
+            messages = messages,
+        )
+
+        val assistant = result.single {
+            it.jsonObject["role"]?.jsonPrimitive?.content == "assistant"
+        }.jsonObject
+        assertEquals("thinking", assistant["reasoning_content"]?.jsonPrimitive?.content)
+    }
+
+    // #1587 对照组：非 deepseek host 仍然尊重 includeHistoryReasoning 开关
+    @Test
+    fun `other hosts still strip history reasoning when disabled`() {
+        val messages = listOf(
+            UIMessage.user("Question 1"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "thinking"),
+                    UIMessagePart.Text("answer")
+                )
+            )
+        )
+
+        val result = buildRequestMessages(
+            baseUrl = "https://api.openai.com/v1",
+            includeHistoryReasoning = false,
+            messages = messages,
+        )
+
+        val assistant = result.single {
+            it.jsonObject["role"]?.jsonPrimitive?.content == "assistant"
+        }.jsonObject
+        assertFalse(assistant.containsKey("reasoning_content"))
     }
 
     // ==================== Helper Functions ====================
