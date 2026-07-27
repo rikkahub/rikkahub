@@ -1277,4 +1277,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_delete_folder_generating">フォルダ内の一部の会話がまだ生成中です。削除する前にそれらを停止してください。</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 括弧内を読み上げない</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">有効にすると、TTS は括弧内の内容を読み上げません</string>
+  <string name="assistant_page_context_message_limit">コンテキストメッセージ上限</string>
+  <string name="assistant_page_context_message_limit_desc">モデルに送信する直近のメッセージ数の上限を設定します。上限を超えた場合、ターンごとに1件ずつ削除するのではなく、一度にコンテキストを約半分まで切り詰めます。これによりリクエストのプレフィックスが安定し、プロンプトキャッシュが多くのターンにわたって有効に働きます。</string>
+  <string name="assistant_page_context_message_limit_count">コンテキストメッセージ制限: %d</string>
+  <string name="assistant_page_context_message_limit_unlimited">コンテキストメッセージ無制限</string>
+  <string name="assistant_page_context_message_limit_warning">0 以外の値を設定すると、コンテキストが切り詰められるたびにプロンプトキャッシュが無効になります。上限が大きいほど切り詰めの頻度は下がります。0 なら切り詰めは発生せず、キャッシュは完全に保持されます。</string>
 </resources>
+
