@@ -11,8 +11,11 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.sync.importer.ChatboxImporter
 import me.rerere.rikkahub.data.sync.importer.CherryStudioProviderImporter
+import me.rerere.rikkahub.data.sync.importer.LocalJsonImporter
+import me.rerere.rikkahub.data.sync.importer.LocalJsonImportResult
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.sync.S3BackupItem
@@ -27,6 +30,7 @@ class BackupVM(
     private val webDavSync: WebDavSync,
     private val s3Sync: S3Sync,
     private val conversationRepository: ConversationRepository,
+    private val memoryRepository: MemoryRepository,
 ) : ViewModel() {
     val settings = settingsStore.settingsFlow.stateIn(
         scope = viewModelScope,
@@ -157,6 +161,32 @@ class BackupVM(
                 providers = importProviders + settings.value.providers,
             )
         )
+    }
+
+    suspend fun restoreFromLocalJson(file: File): LocalJsonImportResult {
+        val result = LocalJsonImporter.import(
+            file = file,
+            assistantId = settings.value.assistantId,
+            conversationRepo = conversationRepository,
+            memoryRepo = memoryRepository,
+        )
+
+        val targetAssistantId = settings.value.assistantId
+        if (result.hasSystemPrompt) {
+            settingsStore.update(
+                settings.value.copy(
+                    assistants = settings.value.assistants.map { assistant ->
+                        if (assistant.id == targetAssistantId) {
+                            assistant.copy(
+                                systemPrompt = LocalJsonImporter.extractSystemPrompt(file) ?: "",
+                                enableMemory = true,
+                            )
+                        } else assistant
+                    }
+                )
+            )
+        }
+        return result
     }
 
     // S3 Backup methods

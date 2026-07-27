@@ -178,6 +178,8 @@
   <string name="backup_page_import_chatbox_desc">导入 ChatBox 提供商配置和完整聊天记录</string>
   <string name="backup_page_import_cherry_studio_desc">导入Cherry Studio提供商配置</string>
   <string name="backup_page_import_desc">导入本地备份文件</string>
+  <string name="backup_page_import_from_local_json">从本地导入聊天记录</string>
+  <string name="backup_page_import_local_json_desc">导入本地 JSON 格式的聊天记录文件</string>
   <string name="backup_page_import_export">本地</string>
   <string name="backup_page_import_from_chatbox">从ChatBox导入</string>
   <string name="backup_page_import_from_cherry_studio">从Cherry Studio导入</string>

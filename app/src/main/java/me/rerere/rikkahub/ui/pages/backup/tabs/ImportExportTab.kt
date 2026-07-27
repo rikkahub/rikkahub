@@ -47,7 +47,7 @@ fun ImportExportTab(
     var isExporting by remember { mutableStateOf(false) }
     var isRestoring by remember { mutableStateOf(false) }
 
-    // 导入类型：local 为本地备份，chatbox 为 Chatbox 导入，cherry 为 Cherry Studio 导入
+    // local 本地备份 / chatbox Chatbox / cherry Cherry Studio / json 本地JSON导入
     var importType by remember { mutableStateOf("local") }
 
     // 创建文件保存的launcher
@@ -147,6 +147,18 @@ fun ImportExportTab(
                             vm.restoreFromCherryStudio(tempFile)
 
                             // 清理临时文件
+                            tempFile.delete()
+                        }
+
+                        "json" -> {
+                            val tempFile =
+                                File(context.cacheDir, "temp_json_${System.currentTimeMillis()}.json")
+                            context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
+                                FileOutputStream(tempFile).use { outputStream ->
+                                    inputStream.copyTo(outputStream)
+                                }
+                            }
+                            vm.restoreFromLocalJson(tempFile)
                             tempFile.delete()
                         }
                     }
@@ -273,6 +285,24 @@ fun ImportExportTab(
                     supportingContent = { Text(stringResource(R.string.backup_page_import_cherry_studio_desc)) },
                     leadingContent = {
                         if (isRestoring && importType == "cherry") {
+                            CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
+                        } else {
+                            Icon(HugeIcons.FileImport, null)
+                        }
+                    },
+                )
+
+                item(
+                    onClick = if (!isRestoring) {
+                        {
+                            importType = "json"
+                            openDocumentLauncher.launch(arrayOf("application/json"))
+                        }
+                    } else null,
+                    headlineContent = { Text(stringResource(R.string.backup_page_import_from_local_json)) },
+                    supportingContent = { Text(stringResource(R.string.backup_page_import_local_json_desc)) },
+                    leadingContent = {
+                        if (isRestoring && importType == "json") {
                             CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
                         } else {
                             Icon(HugeIcons.FileImport, null)
