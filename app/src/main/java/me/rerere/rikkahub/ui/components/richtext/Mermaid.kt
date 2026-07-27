@@ -28,6 +28,8 @@ import me.rerere.hugeicons.stroke.Download01
 import me.rerere.hugeicons.stroke.View
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.ui.components.webview.WEB_VIEW_ASSET_URL
+import me.rerere.rikkahub.ui.components.webview.WEB_VIEW_BASE_URL
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.WebViewContentCache
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
@@ -92,6 +94,7 @@ fun Mermaid(
 
     val webViewState = rememberWebViewState(
         data = html,
+        baseUrl = WEB_VIEW_BASE_URL,
         mimeType = "text/html",
         encoding = "UTF-8",
         interfaces = mapOf(
@@ -182,7 +185,7 @@ private fun buildMermaidHtml(
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=1024">
-            <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+            <script src="${WEB_VIEW_ASSET_URL}/html/mermaid.min.js"></script>
             <style>
                 body {
                     margin: 0;
