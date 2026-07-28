@@ -368,6 +368,49 @@ internal fun AssistantBasicContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
+                    Text(stringResource(R.string.assistant_page_context_message_limit))
+                },
+                description = {
+                    Text(
+                        text = stringResource(R.string.assistant_page_context_message_limit_desc),
+                    )
+                }
+            ) {
+                Slider(
+                    value = assistant.contextMessageLimit.toFloat(),
+                    onValueChange = { value ->
+                        onUpdate(
+                            assistant.copy(
+                                contextMessageLimit = snapContextMessageLimit(value)
+                            )
+                        )
+                    },
+                    valueRange = 0f..512f,
+                    steps = 0,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = if (assistant.contextMessageLimit > 0) stringResource(
+                        R.string.assistant_page_context_message_limit_count,
+                        assistant.contextMessageLimit
+                    ) else stringResource(R.string.assistant_page_context_message_limit_unlimited),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
+                )
+
+                if (assistant.contextMessageLimit > 0) {
+                    Text(
+                        text = stringResource(R.string.assistant_page_context_message_limit_warning),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
                     Text(stringResource(R.string.assistant_page_stream_output))
                 },
                 description = {
@@ -517,5 +560,25 @@ internal fun AssistantBasicContent(
                 }
             }
         }
+    }
+}
+
+/**
+ * 上下文限制的最小有效值
+ *
+ * 低于此值时截断点几乎每轮都在移动, 提示词缓存命中率跌破 90%,
+ * 且保留的上下文通常达不到可缓存的最小长度, 限制本身失去意义
+ */
+private const val MIN_CONTEXT_MESSAGE_LIMIT = 20
+
+/**
+ * 把滑块取值吸附到 0(不限制) 或不低于 [MIN_CONTEXT_MESSAGE_LIMIT] 的有效档位
+ */
+private fun snapContextMessageLimit(value: Float): Int {
+    val raw = value.roundToInt()
+    return when {
+        raw < MIN_CONTEXT_MESSAGE_LIMIT / 2 -> 0
+        raw < MIN_CONTEXT_MESSAGE_LIMIT -> MIN_CONTEXT_MESSAGE_LIMIT
+        else -> raw
     }
 }
