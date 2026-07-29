@@ -155,7 +155,7 @@ case "$args" in
   "-s RZ logcat -v time "*)
     cat <<'LOGS'
 06-11 12:00:00.000 D/VoiceAgentGemini(1): event kind=SetupComplete
-06-11 12:00:01.000 I/VoiceAudioDebugInjection(1): debug_audio_injection result delivered=true
+06-11 12:00:01.000 D/VoiceAgentCallSession(1): capture source complete; stopping capture and sending audio stream end sessionId=1
 06-11 12:00:01.524 D/VoiceAgentGemini(1): event kind=SessionResumptionUpdate
 LOGS
     case "${FAKE_QUEUE_SCENARIO:-pass}" in
@@ -183,7 +183,7 @@ LOGS
 06-11 12:00:09.000 D/AndroidVoiceAudioEngine(1): Voice playback queued bytes=3200
 06-11 12:00:10.000 D/AndroidVoiceAudioEngine(1): Voice playback wrote bytes=3200
 06-11 12:00:10.500 D/VoiceAgentGemini(1): event kind=GenerationComplete
-06-11 12:00:11.000 I/VoiceAudioDebugInjection(1): debug_audio_injection result delivered=true
+06-11 12:00:11.000 D/VoiceAgentCallSession(1): capture source complete; stopping capture and sending audio stream end sessionId=1
 LOGS
     case "${FAKE_QUEUE_SCENARIO:-pass}" in
       one-complete)
@@ -305,7 +305,7 @@ LOGS
     ;;
   "-s RZ shell run-as me.rerere.rikkahub.debug rm -f no_backup/voice-e2e/trace-queue/hermes-answer.txt")
     ;;
-  "-s RZ shell am start-foreground-service -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.VoiceAgentCallService -a me.rerere.rikkahub.voiceagent.action.START --es conversationId conversation-1")
+  "-s RZ shell am start-foreground-service -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.VoiceAgentCallService -a me.rerere.rikkahub.voiceagent.action.START --es conversationId conversation-1 --es transport direct_gemini --es captureFixtureToken fixture-1")
     rm -f "${FAKE_ADB_END_MARKER:?}"
     rm -f "${FAKE_ADB_DRAINED_MARKER:?}"
     ;;
@@ -313,6 +313,7 @@ LOGS
     : > "${FAKE_ADB_END_MARKER:?}"
     ;;
   "-s RZ shell am broadcast "*)
+    printf 'Broadcast completed: result=0, data="status=ok\\naction=arm\\ntoken=fixture-1"\n'
     ;;
   "-s RZ exec-out run-as me.rerere.rikkahub.debug cat no_backup/voice-e2e/latest-trace-id.txt")
     case "${FAKE_ADB_LATEST_TRACE_ID:-trace-queue}" in

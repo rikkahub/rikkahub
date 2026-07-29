@@ -73,6 +73,15 @@ val voiceAgentSentryTracesSampleRate = resolvedVoiceAgentSetting(
     "voiceAgentSentryTracesSampleRate",
     "VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE",
 )
+val voiceAgentLiveKitExperimentEnabled =
+    (providers.gradleProperty("voiceAgentLiveKitExperimentEnabled").orNull
+        ?: System.getenv("VOICE_AGENT_LIVEKIT_EXPERIMENT_ENABLED")) == "true"
+
+configurations.configureEach {
+    if (name.endsWith("UnitTestRuntimeClasspath")) {
+        exclude(group = "uk.uuid.slf4j", module = "slf4j-android")
+    }
+}
 
 val validateVoiceAgentSentryDebug by tasks.registering {
     group = "verification"
@@ -117,6 +126,11 @@ android {
         buildConfigField("String", "VOICE_AGENT_HERMES_E2E_EXPECTED_HASH", "\"\"")
         buildConfigField("String", "VOICE_AGENT_SENTRY_DSN", voiceAgentSentryDsn.asBuildConfigString())
         buildConfigField("String", "VOICE_AGENT_SENTRY_ENVIRONMENT", voiceAgentSentryEnvironment.asBuildConfigString())
+        buildConfigField(
+            "boolean",
+            "VOICE_AGENT_LIVEKIT_EXPERIMENT_ENABLED",
+            voiceAgentLiveKitExperimentEnabled.toString(),
+        )
         buildConfigField(
             "String",
             "VOICE_AGENT_SENTRY_TRACES_SAMPLE_RATE",
@@ -187,6 +201,15 @@ android {
     }
     sourceSets {
         getByName("androidTest").assets.srcDirs("$projectDir/schemas")
+        val liveKitSourceDirectory = if (voiceAgentLiveKitExperimentEnabled) {
+            "src/livekitEnabled/java"
+        } else {
+            "src/livekitDisabled/java"
+        }
+        getByName("main").kotlin.directories.add(liveKitSourceDirectory)
+        if (voiceAgentLiveKitExperimentEnabled) {
+            getByName("test").kotlin.directories.add("src/livekitEnabledTest/java")
+        }
     }
     androidResources {
         generateLocaleConfig = true
@@ -251,6 +274,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.browser)
+    if (voiceAgentLiveKitExperimentEnabled) {
+        implementation(libs.livekit.android)
+    }
     implementation(libs.androidx.profileinstaller)
     implementation(libs.termux.terminal.view)
     implementation(libs.guava.listenablefuture)
@@ -402,8 +428,13 @@ dependencies {
 
     // tests
     testImplementation(libs.junit)
+    testImplementation(libs.mockk)
     testImplementation(libs.okhttp.mockwebserver)
     testImplementation(libs.kotlinx.coroutines.test)
+    if (voiceAgentLiveKitExperimentEnabled) {
+        testCompileOnly("com.google.protobuf:protobuf-javalite:3.22.0")
+    }
+    testRuntimeOnly("org.slf4j:slf4j-nop:2.0.17")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

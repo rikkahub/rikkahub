@@ -1,13 +1,12 @@
 package me.rerere.rikkahub.voiceagent
 
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import org.junit.Assert.assertEquals
@@ -15,18 +14,15 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class VoiceAgentRouteLeaseTest {
     @Test
     fun `Telecom lease exposes metadata and retires its exact attempt once`() {
         val registry = VoiceAgentTelecomCallRegistry()
-        val attempt = registry.beginAttempt()
+        val attempt = registry.beginAttempt().requireAllocatedAttemptId()
         val call = RecordingTelecomCall()
         assertTrue(registry.activate(attempt, call))
-        val lease = TelecomVoiceAgentRouteLease(attempt, registry)
+        val lease = registry.consumeActiveOutcome(attempt).requireResolvedLease()
 
         lease.retire()
         lease.retire()
@@ -37,13 +33,136 @@ class VoiceAgentRouteLeaseTest {
     }
 
     @Test
+    fun `failed exact Telecom retirement can retry same connection`() {
+        val firstFailure = IllegalStateException("first retirement failed")
+        val retirementFailure = AtomicReference<Throwable?>(firstFailure)
+        val retryEntered = CountDownLatch(1)
+        val releaseRetry = CountDownLatch(1)
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt().requireAllocatedAttemptId()
+        val call = object : VoiceAgentTelecomCall {
+            var disconnectCalls = 0
+
+            override fun disconnectFromApp() {
+                disconnectCalls += 1
+                if (disconnectCalls == 2) {
+                    retryEntered.countDown()
+                    check(releaseRetry.await(1, TimeUnit.SECONDS)) { "retry disconnect was not released" }
+                }
+                retirementFailure.get()?.let { throw it }
+            }
+        }
+        assertTrue(registry.activate(attempt, call))
+        val lease = registry.consumeActiveOutcome(attempt).requireResolvedLease()
+
+        assertSame(firstFailure, runCatching(lease::retire).exceptionOrNull())
+        assertEquals(1, call.disconnectCalls)
+        assertFalse(lease.isUsable)
+        assertSame(
+            firstFailure,
+            runCatching { registry.beginAttempt().requireAllocatedAttemptId() }.exceptionOrNull(),
+        )
+
+        retirementFailure.set(null)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val retry = executor.submit { lease.retire() }
+            check(retryEntered.await(1, TimeUnit.SECONDS)) { "retry disconnect did not start" }
+            assertFalse(lease.isUsable)
+            releaseRetry.countDown()
+            retry.get(1, TimeUnit.SECONDS)
+            assertEquals(2, call.disconnectCalls)
+
+            val replacementAttempt = registry.beginAttempt().requireAllocatedAttemptId()
+            val replacementCall = RecordingTelecomCall()
+            assertTrue(registry.activate(replacementAttempt, replacementCall))
+            lease.retire()
+            assertEquals(2, call.disconnectCalls)
+            assertEquals(0, replacementCall.disconnectCalls)
+        } finally {
+            releaseRetry.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `lease joins concurrent supersession failure before retrying exact connection`() {
+        val firstFailure = IllegalStateException("first retirement failed")
+        val retirementFailure = AtomicReference<Throwable?>(firstFailure)
+        val disconnectEntered = CountDownLatch(1)
+        val releaseDisconnect = CountDownLatch(1)
+        val leaseRetirementStarted = CountDownLatch(1)
+        val leaseRetirementThread = AtomicReference<Thread>()
+        val leaseRetirementInterrupted = AtomicBoolean()
+        val registry = VoiceAgentTelecomCallRegistry()
+        val attempt = registry.beginAttempt().requireAllocatedAttemptId()
+        val call = object : VoiceAgentTelecomCall {
+            var disconnectCalls = 0
+
+            override fun disconnectFromApp() {
+                disconnectCalls += 1
+                disconnectEntered.countDown()
+                check(releaseDisconnect.await(1, TimeUnit.SECONDS)) { "supersession disconnect was not released" }
+                retirementFailure.get()?.let { throw it }
+            }
+        }
+        assertTrue(registry.activate(attempt, call))
+        val lease = registry.consumeActiveOutcome(attempt).requireResolvedLease()
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val supersession = executor.submit<Throwable?> {
+                runCatching { registry.beginAttempt().requireAllocatedAttemptId() }.exceptionOrNull()
+            }
+            check(disconnectEntered.await(1, TimeUnit.SECONDS)) { "supersession disconnect did not start" }
+            val leaseRetirement = executor.submit<Throwable?> {
+                leaseRetirementThread.set(Thread.currentThread())
+                leaseRetirementStarted.countDown()
+                val failure = runCatching(lease::retire).exceptionOrNull()
+                leaseRetirementInterrupted.set(Thread.currentThread().isInterrupted)
+                failure
+            }
+            check(leaseRetirementStarted.await(1, TimeUnit.SECONDS)) { "lease retirement did not start" }
+            assertTrue(
+                "lease retirement did not join the supersession disconnect",
+                runCatching { leaseRetirement.get(100, TimeUnit.MILLISECONDS) }
+                    .exceptionOrNull() is TimeoutException,
+            )
+            leaseRetirementThread.get().interrupt()
+            assertTrue(
+                "interrupted lease retirement returned before the supersession result",
+                runCatching { leaseRetirement.get(100, TimeUnit.MILLISECONDS) }
+                    .exceptionOrNull() is TimeoutException,
+            )
+            releaseDisconnect.countDown()
+
+            assertSame(firstFailure, supersession.get(1, TimeUnit.SECONDS))
+            assertSame(firstFailure, leaseRetirement.get(1, TimeUnit.SECONDS))
+            assertEquals(1, call.disconnectCalls)
+            assertFalse(lease.isUsable)
+            assertTrue(leaseRetirementInterrupted.get())
+
+            retirementFailure.set(null)
+            lease.retire()
+            val replacementAttempt = registry.beginAttempt().requireAllocatedAttemptId()
+            val replacementCall = RecordingTelecomCall()
+            assertTrue(registry.activate(replacementAttempt, replacementCall))
+            lease.retire()
+            assertEquals(2, call.disconnectCalls)
+            assertEquals(0, replacementCall.disconnectCalls)
+        } finally {
+            releaseDisconnect.countDown()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun `stale Telecom lease retirement leaves replacement attempt untouched`() {
         val registry = VoiceAgentTelecomCallRegistry()
-        val ownedAttempt = registry.beginAttempt()
+        val ownedAttempt = registry.beginAttempt().requireAllocatedAttemptId()
         val ownedCall = RecordingTelecomCall()
         assertTrue(registry.activate(ownedAttempt, ownedCall))
-        val lease = TelecomVoiceAgentRouteLease(ownedAttempt, registry)
-        val replacementAttempt = registry.beginAttempt()
+        val lease = registry.consumeActiveOutcome(ownedAttempt).requireResolvedLease()
+        val replacementAttempt = registry.beginAttempt().requireAllocatedAttemptId()
         val replacementCall = RecordingTelecomCall()
         assertTrue(registry.activate(replacementAttempt, replacementCall))
         assertEquals(1, ownedCall.disconnectCalls)
@@ -58,15 +177,13 @@ class VoiceAgentRouteLeaseTest {
     @Test
     fun `Telecom lease usability follows external connection retirement`() {
         val registry = VoiceAgentTelecomCallRegistry()
-        val attempt = registry.beginAttempt()
+        val attempt = registry.beginAttempt().requireAllocatedAttemptId()
         val call = RecordingTelecomCall()
         assertTrue(registry.activate(attempt, call))
-        val lease = TelecomVoiceAgentRouteLease(attempt, registry)
+        val lease = registry.consumeActiveOutcome(attempt).requireResolvedLease()
 
         assertTrue(lease.isUsable)
-
         registry.retiring(call)
-
         assertFalse(lease.isUsable)
     }
 
@@ -78,10 +195,7 @@ class VoiceAgentRouteLeaseTest {
         lease.retire()
         lease.retire()
 
-        assertEquals(
-            VoiceAgentRouteMetadata(VoiceAudioRouteOwner.DirectFallback, failure),
-            lease.metadata,
-        )
+        assertEquals(VoiceAgentRouteMetadata(VoiceAudioRouteOwner.DirectFallback, failure), lease.metadata)
         assertTrue(lease.isUsable)
     }
 
@@ -115,445 +229,49 @@ class VoiceAgentRouteLeaseTest {
     }
 
     @Test
-    fun `end retires route before ending session`() {
+    fun `cleanup operation retires route before closing session`() = runTest {
         val events = mutableListOf<String>()
         val owned = RouteOwnedVoiceCallSession(
             delegate = RecordingManagedSession(events = events),
             routeLease = activeTelecomLease(events),
         )
 
-        owned.end()
+        val result = owned.cleanupOperation.run(VoiceAgentCleanupMode.Immediate)
 
-        assertEquals(listOf("route-retire", "session-end"), events)
-    }
-
-    @Test
-    fun `end preserves route failure and suppresses delegate failure`() {
-        val events = mutableListOf<String>()
-        val routeFailure = IllegalStateException("route retirement failed")
-        val sessionFailure = IllegalArgumentException("session end failed")
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = RecordingManagedSession(events = events, endFailure = sessionFailure),
-            routeLease = activeTelecomLease(events, routeFailure),
-        )
-
-        val thrown = runCatching { owned.end() }.exceptionOrNull()
-
-        assertSame(routeFailure, thrown)
-        assertEquals(listOf(sessionFailure), thrown?.suppressed?.toList())
-        assertEquals(listOf("route-retire", "session-end"), events)
-    }
-
-    @Test
-    fun `endAndDrain preserves route failure and suppresses delegate failure`() = runBlocking {
-        val events = mutableListOf<String>()
-        val routeFailure = IllegalStateException("route retirement failed")
-        val sessionFailure = IllegalArgumentException("session drain failed")
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = RecordingManagedSession(events = events, drainFailure = sessionFailure),
-            routeLease = activeTelecomLease(events, routeFailure),
-        )
-
-        val thrown = runCatching { owned.endAndDrain() }.exceptionOrNull()
-
-        assertSame(routeFailure, thrown)
-        assertEquals(listOf(sessionFailure), thrown?.suppressed?.toList())
-        assertEquals(listOf("route-retire", "session-end-and-drain"), events)
-    }
-
-    @Test
-    fun `timed end returns without closing after normal delegate drain`() = runTest {
-        val delegate = RecordingManagedSession()
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = delegate,
-            routeLease = DirectFallbackVoiceAgentRouteLease(
-                VoiceAgentTelecomFailure("fallback", "fallback"),
-            ),
-        )
-
-        owned.endAndDrainWithin(timeoutMillis = 100)
-
-        assertEquals(0, delegate.closeNowCalls)
-        assertEquals(listOf("session-end-and-drain"), delegate.events)
-    }
-
-    @Test
-    fun `timed end throws route failure without closing after normal delegate drain`() = runTest {
-        val events = mutableListOf<String>()
-        val routeFailure = IllegalStateException("route retirement failed")
-        val delegate = RecordingManagedSession(events = events)
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = delegate,
-            routeLease = activeTelecomLease(events, routeFailure),
-        )
-
-        val thrown = captureFailure {
-            owned.endAndDrainWithin(timeoutMillis = 100)
-        }
-
-        assertSame(routeFailure, thrown)
-        assertTrue(thrown?.suppressed?.isEmpty() == true)
-        assertEquals(0, delegate.closeNowCalls)
-        assertEquals(listOf("route-retire", "session-end-and-drain"), events)
-    }
-
-    @Test
-    fun `timed end throws drain failure and closes once after successful route retirement`() = runTest {
-        val drainFailure = UnsupportedOperationException("session drain failed")
-        val delegate = RecordingManagedSession(drainFailure = drainFailure)
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = delegate,
-            routeLease = DirectFallbackVoiceAgentRouteLease(
-                VoiceAgentTelecomFailure("fallback", "fallback"),
-            ),
-        )
-
-        val thrown = runCatching {
-            owned.endAndDrainWithin(timeoutMillis = 100)
-        }.exceptionOrNull()
-
-        assertEquals(drainFailure::class, thrown?.javaClass?.kotlin)
-        assertEquals(drainFailure.message, thrown?.message)
-        assertSame(drainFailure, thrown?.cause)
-        assertTrue(thrown?.suppressed?.isEmpty() == true)
-        assertEquals(1, delegate.closeNowCalls)
-        assertEquals(
-            listOf("session-end-and-drain", "session-close-now"),
-            delegate.events,
-        )
-    }
-
-    @Test
-    fun `timed end suppresses close failure behind drain failure after successful route retirement`() = runTest {
-        val drainFailure = UnsupportedOperationException("session drain failed")
-        val closeFailure = IllegalArgumentException("session close failed")
-        val delegate = RecordingManagedSession(
-            drainFailure = drainFailure,
-            closeFailure = closeFailure,
-        )
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = delegate,
-            routeLease = DirectFallbackVoiceAgentRouteLease(
-                VoiceAgentTelecomFailure("fallback", "fallback"),
-            ),
-        )
-
-        val thrown = captureFailure {
-            owned.endAndDrainWithin(timeoutMillis = 100)
-        }
-
-        assertEquals(drainFailure::class, thrown?.javaClass?.kotlin)
-        assertEquals(drainFailure.message, thrown?.message)
-        assertSame(drainFailure, thrown?.cause)
-        assertEquals(listOf(closeFailure), thrown?.suppressed?.toList())
-        assertEquals(1, delegate.closeNowCalls)
-        assertEquals(
-            listOf("session-end-and-drain", "session-close-now"),
-            delegate.events,
-        )
-    }
-
-    @Test
-    fun `timed end closes exact delegate and throws route drain close failure order`() = runTest {
-        val events = mutableListOf<String>()
-        val routeFailure = IllegalStateException("route retirement failed")
-        val drainFailure = UnsupportedOperationException("session drain failed")
-        val closeFailure = IllegalArgumentException("session close failed")
-        val registry = VoiceAgentTelecomCallRegistry()
-        val attempt = registry.beginAttempt()
-        val call = RecordingTelecomCall(events, routeFailure)
-        assertTrue(registry.activate(attempt, call))
-        val replacementCall = RecordingTelecomCall()
-        var replacementAttempt: VoiceAgentTelecomAttemptId? = null
-        val delegate = RecordingManagedSession(
-            events = events,
-            drainFailure = drainFailure,
-            closeFailure = closeFailure,
-            onDrain = {
-                replacementAttempt = registry.beginAttempt()
-                assertTrue(registry.activate(checkNotNull(replacementAttempt), replacementCall))
-            },
-        )
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = delegate,
-            routeLease = TelecomVoiceAgentRouteLease(attempt, registry),
-        )
-        try {
-            val thrown = captureFailure {
-                owned.endAndDrainWithin(timeoutMillis = 1_000)
-            }
-            assertSame(routeFailure, thrown)
-            assertEquals(2, thrown?.suppressed?.size)
-            val recoveredDrainFailure = thrown?.suppressed?.get(0)
-            assertEquals(drainFailure::class, recoveredDrainFailure?.javaClass?.kotlin)
-            assertEquals(drainFailure.message, recoveredDrainFailure?.message)
-            assertSame(drainFailure, recoveredDrainFailure?.cause)
-            assertSame(closeFailure, thrown?.suppressed?.get(1))
-            assertEquals(1, call.disconnectCalls)
-            assertEquals(1, delegate.closeNowCalls)
-            assertEquals(0, replacementCall.disconnectCalls)
-            assertEquals(
-                listOf("route-retire", "session-end-and-drain", "session-close-now"),
-                events,
-            )
-        } finally {
-            replacementAttempt?.let(registry::retireOwnedAttempt)
-        }
-    }
-
-    @Test
-    fun `timed end throws timeout and closes once after successful route retirement`() = runTest {
-        val neverCompletes = CompletableDeferred<Unit>()
-        val delegate = RecordingManagedSession(onDrain = { neverCompletes.await() })
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = delegate,
-            routeLease = DirectFallbackVoiceAgentRouteLease(
-                VoiceAgentTelecomFailure("fallback", "fallback"),
-            ),
-        )
-        try {
-            val thrown = captureFailure {
-                owned.endAndDrainWithin(timeoutMillis = 100)
-            }
-            assertTrue(thrown is VoiceAgentEndDrainTimeoutException)
-            assertTrue(thrown?.suppressed?.isEmpty() == true)
-            assertEquals(1, delegate.closeNowCalls)
-            assertEquals(
-                listOf("session-end-and-drain", "session-close-now"),
-                delegate.events,
-            )
-        } finally {
-            neverCompletes.complete(Unit)
-        }
-    }
-
-    @Test
-    fun `timed end suppresses close failure behind timeout after successful route retirement`() = runTest {
-        val closeFailure = IllegalArgumentException("session close failed")
-        val neverCompletes = CompletableDeferred<Unit>()
-        val delegate = RecordingManagedSession(
-            closeFailure = closeFailure,
-            onDrain = { neverCompletes.await() },
-        )
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = delegate,
-            routeLease = DirectFallbackVoiceAgentRouteLease(
-                VoiceAgentTelecomFailure("fallback", "fallback"),
-            ),
-        )
-        try {
-            val thrown = captureFailure {
-                owned.endAndDrainWithin(timeoutMillis = 100)
-            }
-            assertTrue(thrown is VoiceAgentEndDrainTimeoutException)
-            assertEquals(listOf(closeFailure), thrown?.suppressed?.toList())
-            assertEquals(1, delegate.closeNowCalls)
-            assertEquals(
-                listOf("session-end-and-drain", "session-close-now"),
-                delegate.events,
-            )
-        } finally {
-            neverCompletes.complete(Unit)
-        }
-    }
-
-    @Test
-    fun `caller cancellation closes detached delegate once and remains cancellation`() = runTest {
-        val events = mutableListOf<String>()
-        val routeFailure = IllegalStateException("route retirement failed")
-        val closeFailure = IllegalArgumentException("session close failed")
-        val callerCancellation = CancellationException("caller cancelled")
-        val drainStarted = CompletableDeferred<Unit>()
-        val neverCompletes = CompletableDeferred<Unit>()
-        val registry = VoiceAgentTelecomCallRegistry()
-        val attempt = registry.beginAttempt()
-        val call = RecordingTelecomCall(events, routeFailure)
-        assertTrue(registry.activate(attempt, call))
-        val delegate = RecordingManagedSession(
-            events = events,
-            closeFailure = closeFailure,
-            onDrain = {
-                drainStarted.complete(Unit)
-                neverCompletes.await()
-            },
-        )
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = delegate,
-            routeLease = TelecomVoiceAgentRouteLease(attempt, registry),
-        )
-        val outcome = async { owned.endAndDrainWithin(timeoutMillis = 1_000) }
-        var replacementAttempt: VoiceAgentTelecomAttemptId? = null
-        try {
-            drainStarted.await()
-            val replacementCall = RecordingTelecomCall()
-            replacementAttempt = registry.beginAttempt()
-            assertTrue(registry.activate(replacementAttempt, replacementCall))
-            outcome.cancel(callerCancellation)
-
-            val thrown = runCatching { outcome.await() }.exceptionOrNull()
-
-            assertTrue(thrown is CancellationException)
-            assertEquals(callerCancellation.message, thrown?.message)
-            assertSame(callerCancellation, thrown?.cause)
-            assertTrue(outcome.isCancelled)
-            val cleanupAggregate = callerCancellation.suppressed.single()
-            assertSame(routeFailure, cleanupAggregate)
-            assertEquals(listOf(closeFailure), cleanupAggregate.suppressed.toList())
-            assertEquals(1, call.disconnectCalls)
-            assertEquals(1, delegate.closeNowCalls)
-            assertEquals(0, replacementCall.disconnectCalls)
-            assertTrue(registry.isOwnedAttemptActive(replacementAttempt))
-            assertEquals(
-                listOf("route-retire", "session-end-and-drain", "session-close-now"),
-                events,
-            )
-        } finally {
-            neverCompletes.complete(Unit)
-            outcome.cancel()
-            replacementAttempt?.let(registry::retireOwnedAttempt)
-        }
-    }
-
-    @Test
-    fun `caller cancellation cause cycle terminates and aggregates cleanup once`() {
-        val routeFailure = IllegalStateException("route retirement failed")
-        val closeFailure = IllegalArgumentException("session close failed")
-        val cycleEntry = CancellationException("caller cancelled")
-        val cycleDeepest = CancellationException("caller cancelled")
-        cycleEntry.initCause(cycleDeepest)
-        cycleDeepest.initCause(cycleEntry)
-        val delegate = RecordingManagedSession(
-            closeFailure = closeFailure,
-            drainFailure = cycleEntry,
-        )
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = delegate,
-            routeLease = activeTelecomLease(mutableListOf(), routeFailure),
-        )
-        val executor = Executors.newSingleThreadExecutor { runnable ->
-            Thread(runnable, "voice-cancellation-cycle-test").apply { isDaemon = true }
-        }
-
-        val thrown = try {
-            executor.submit<Throwable?> {
-                runBlocking {
-                    runCatching { owned.endAndDrainWithin(timeoutMillis = 1_000) }.exceptionOrNull()
-                }
-            }.get(1, TimeUnit.SECONDS)
-        } finally {
-            executor.shutdownNow()
-        }
-
-        assertSame(cycleDeepest, thrown)
-        assertTrue(cycleEntry.suppressed.isEmpty())
-        assertEquals(listOf(routeFailure), cycleDeepest.suppressed.toList())
-        assertEquals(listOf(closeFailure), routeFailure.suppressed.toList())
-        assertEquals(1, delegate.closeNowCalls)
-    }
-
-    @Test
-    fun `timed end throws canonical route timeout close failure and leaves replacement untouched`() = runTest {
-        val events = mutableListOf<String>()
-        val routeFailure = IllegalStateException("route retirement failed")
-        val closeFailure = IllegalArgumentException("session close failed")
-        val neverCompletes = CompletableDeferred<Unit>()
-        val registry = VoiceAgentTelecomCallRegistry()
-        val attempt = registry.beginAttempt()
-        val call = RecordingTelecomCall(events, routeFailure)
-        assertTrue(registry.activate(attempt, call))
-        val replacementCall = RecordingTelecomCall()
-        var replacementAttempt: VoiceAgentTelecomAttemptId? = null
-        val delegate = RecordingManagedSession(
-            events = events,
-            closeFailure = closeFailure,
-            onDrain = {
-                replacementAttempt = registry.beginAttempt()
-                assertTrue(registry.activate(checkNotNull(replacementAttempt), replacementCall))
-                neverCompletes.await()
-            },
-        )
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = delegate,
-            routeLease = TelecomVoiceAgentRouteLease(attempt, registry),
-        )
-        try {
-            val thrown = captureFailure {
-                owned.endAndDrainWithin(timeoutMillis = 100)
-            }
-            assertSame(routeFailure, thrown)
-            assertEquals(2, thrown?.suppressed?.size)
-            assertTrue(thrown?.suppressed?.get(0) is VoiceAgentEndDrainTimeoutException)
-            assertSame(closeFailure, thrown?.suppressed?.get(1))
-            assertEquals(1, call.disconnectCalls)
-            assertEquals(1, delegate.closeNowCalls)
-            assertEquals(0, replacementCall.disconnectCalls)
-            assertEquals(
-                listOf("route-retire", "session-end-and-drain", "session-close-now"),
-                events,
-            )
-        } finally {
-            neverCompletes.complete(Unit)
-            replacementAttempt?.let(registry::retireOwnedAttempt)
-        }
-    }
-
-    @Test
-    fun `closeNow retires route before closing session`() {
-        val events = mutableListOf<String>()
-        val owned = RouteOwnedVoiceCallSession(
-            delegate = RecordingManagedSession(events = events),
-            routeLease = activeTelecomLease(events),
-        )
-
-        owned.closeNow()
-
+        assertSame(VoiceAgentCleanupResult.Completed, result)
         assertEquals(listOf("route-retire", "session-close-now"), events)
     }
 
-    private fun activeTelecomLease(
-        events: MutableList<String>,
-        retirementFailure: Throwable? = null,
-    ): VoiceAgentRouteLease {
+    private fun activeTelecomLease(events: MutableList<String>): VoiceAgentRouteLease {
         val registry = VoiceAgentTelecomCallRegistry()
-        val attempt = registry.beginAttempt()
-        assertTrue(
-            registry.activate(
-                attempt,
-                RecordingTelecomCall(events, retirementFailure),
-            ),
-        )
-        return TelecomVoiceAgentRouteLease(attempt, registry)
-    }
-
-    private suspend fun captureFailure(block: suspend () -> Unit): Throwable? = supervisorScope {
-        val outcome = async { block() }
-        outcome.join()
-        outcome.getCompletionExceptionOrNull()
+        val attempt = registry.beginAttempt().requireAllocatedAttemptId()
+        assertTrue(registry.activate(attempt, RecordingTelecomCall(events)))
+        return registry.consumeActiveOutcome(attempt).requireResolvedLease()
     }
 }
 
 private class RecordingTelecomCall(
     private val events: MutableList<String>? = null,
-    private val retirementFailure: Throwable? = null,
+    private val retirementFailure: AtomicReference<Throwable?>,
 ) : VoiceAgentTelecomCall {
+    constructor(
+        events: MutableList<String>? = null,
+        retirementFailure: Throwable? = null,
+    ) : this(events, AtomicReference(retirementFailure))
+
     var disconnectCalls = 0
 
     override fun disconnectFromApp() {
         disconnectCalls += 1
         events?.add("route-retire")
-        retirementFailure?.let { throw it }
+        retirementFailure.get()?.let { throw it }
     }
 }
 
 private class RecordingManagedSession(
     val events: MutableList<String> = mutableListOf(),
-    private val endFailure: Throwable? = null,
-    private val drainFailure: Throwable? = null,
-    private val closeFailure: Throwable? = null,
-    private val onDrain: suspend () -> Unit = {},
 ) : ManagedVoiceCallSession {
     override val state = MutableStateFlow(VoiceAgentUiState())
-    var closeNowCalls = 0
 
     override fun start() {
         events += "session-start"
@@ -577,18 +295,13 @@ private class RecordingManagedSession(
 
     override fun end() {
         events += "session-end"
-        endFailure?.let { throw it }
     }
 
     override suspend fun endAndDrain() {
         events += "session-end-and-drain"
-        onDrain()
-        drainFailure?.let { throw it }
     }
 
     override fun closeNow() {
-        closeNowCalls += 1
         events += "session-close-now"
-        closeFailure?.let { throw it }
     }
 }

@@ -17,7 +17,7 @@ class VoiceAgentConnectionService : ConnectionService() {
         val connection = VoiceAgentTelecomConnection(
             context = applicationContext,
             onRetiring = telecomCallRegistry::retiring,
-            onRetired = telecomCallRegistry::clear,
+            onRetired = telecomCallRegistry::retired,
         ).apply {
             setAudioModeIsVoip(true)
             setInitializing()

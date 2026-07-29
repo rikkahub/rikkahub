@@ -6,6 +6,13 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationCorrelationKind
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventInput
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventName
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRunBinding
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRunState
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRuntime
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationStatus
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
@@ -16,9 +23,162 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 import java.util.Base64
 
 class VoiceAgentCallSessionTest {
+    @Test
+    fun `direct attestation changes only with each consumed configuration value`() = runTest {
+        suspend fun capture(
+            modelId: String = "gemini-flash",
+            instruction: String = "system",
+            accountHash: String = ACCOUNT_STATE_HASH,
+            conversationHash: String = CONVERSATION_HASH,
+        ): VoiceAutomationEventInput {
+            val runtime = SessionRecordingAutomationRuntime()
+            val session = VoiceAgentCallSession(
+                modelId = modelId,
+                sessionApi = FakeVoiceSessionApi(),
+                toolApi = FakeVoiceToolApi(),
+                gemini = FakeGeminiLiveVoiceClient(),
+                audio = FakeVoiceAudioEngine(),
+                conversationStore = FakeVoiceConversationStore(),
+                contextProvider = FakeVoiceAgentContextProvider(
+                    VoiceContext(systemInstruction = instruction, turns = emptyList()),
+                ),
+                scope = this,
+                automationRuntimeProvider = { runtime },
+                directConfigurationBinding = VoiceDirectConfigurationBinding(
+                    directAccountConfigurationHash = accountHash,
+                    conversationHash = conversationHash,
+                ),
+            )
+            session.start()
+            withTimeout(500) {
+                while (runtime.events.none { it.name == VoiceAutomationEventName.DIRECT_CONFIG_ATTESTED }) {
+                    delay(10)
+                }
+            }
+            session.endAndDrain()
+            return runtime.events.single { it.name == VoiceAutomationEventName.DIRECT_CONFIG_ATTESTED }
+        }
+
+        val baseline = capture()
+        assertEquals(
+            baseline.copy(requestedModelHash = voiceConfigurationIdentity("other-model")),
+            capture(modelId = "other-model"),
+        )
+        assertEquals(
+            baseline.copy(instructionHash = voiceConfigurationIdentity("other prompt")),
+            capture(instruction = "other prompt"),
+        )
+        assertEquals(
+            baseline.copy(directAccountConfigurationHash = REPLACEMENT_AUTOMATION_RUN_HASH),
+            capture(accountHash = REPLACEMENT_AUTOMATION_RUN_HASH),
+        )
+        assertEquals(
+            baseline.copy(conversationHash = REPLACEMENT_AUTOMATION_RUN_HASH),
+            capture(conversationHash = REPLACEMENT_AUTOMATION_RUN_HASH),
+        )
+    }
+
+    @Test
+    fun `direct session records one owned call lifecycle`() = runTest {
+        val runtime = SessionRecordingAutomationRuntime()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = FakeGeminiLiveVoiceClient(),
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList()),
+            ),
+            scope = this,
+            automationRuntimeProvider = { runtime },
+            directConfigurationBinding = VoiceDirectConfigurationBinding(
+                directAccountConfigurationHash = ACCOUNT_STATE_HASH,
+                conversationHash = CONVERSATION_HASH,
+            ),
+        )
+
+        session.start()
+
+        withTimeout(500) {
+            while (runtime.events.none { it.name == VoiceAutomationEventName.CALL_ACTIVE }) {
+                delay(10)
+            }
+        }
+        session.endAndDrain()
+
+        assertEquals(
+            listOf(
+                VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_START_REQUESTED,
+                    observedTransport = VoiceAgentTransport.DirectGemini,
+                ),
+                VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.DIRECT_CONFIG_ATTESTED,
+                    requestedModelHash = voiceConfigurationIdentity("gemini-flash"),
+                    observedModelHash = voiceConfigurationIdentity("gemini-live-test"),
+                    voiceHash = voiceConfigurationIdentity("Puck"),
+                    instructionHash = voiceConfigurationIdentity("system"),
+                    directAccountConfigurationHash = ACCOUNT_STATE_HASH,
+                    conversationHash = CONVERSATION_HASH,
+                ),
+                VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_ACTIVE,
+                    observedTransport = VoiceAgentTransport.DirectGemini,
+                    correlationKind = VoiceAutomationCorrelationKind.APP,
+                    correlationHash = AUTOMATION_RUN_HASH,
+                ),
+                VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_STOPPED,
+                    succeeded = true,
+                ),
+            ),
+            runtime.events,
+        )
+    }
+
+    @Test
+    fun `direct callbacks cannot write into a replacement automation run`() = runTest {
+        val runtime = SessionRecordingAutomationRuntime()
+        val gemini = FakeGeminiLiveVoiceClient()
+        val blockedConnect = gemini.blockNextConnectCompletion()
+        val session = VoiceAgentCallSession(
+            modelId = "gemini-flash",
+            sessionApi = FakeVoiceSessionApi(),
+            toolApi = FakeVoiceToolApi(),
+            gemini = gemini,
+            audio = FakeVoiceAudioEngine(),
+            conversationStore = FakeVoiceConversationStore(),
+            contextProvider = FakeVoiceAgentContextProvider(
+                VoiceContext(systemInstruction = "system", turns = emptyList()),
+            ),
+            scope = this,
+            automationRuntimeProvider = { runtime },
+        )
+
+        session.start()
+        gemini.awaitConnect()
+        runtime.activeRunHash = REPLACEMENT_AUTOMATION_RUN_HASH
+        blockedConnect.release.complete(Unit)
+        delay(50)
+        session.endAndDrain()
+
+        assertEquals(
+            listOf(
+                VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_START_REQUESTED,
+                    observedTransport = VoiceAgentTransport.DirectGemini,
+                ),
+            ),
+            runtime.events,
+        )
+    }
+
     @Test
     fun `session starts forwards capture audio and closes resources`() = runTest {
         val sessionApi = FakeVoiceSessionApi()
@@ -431,7 +591,7 @@ class VoiceAgentCallSessionTest {
     }
 
     @Test
-    fun `debug injection completion stops capture and closes Gemini audio stream`() = runTest {
+    fun `fixture source completion stops capture and closes Gemini audio stream`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val audio = FakeVoiceAudioEngine()
         val session = VoiceAgentCallSession(
@@ -449,14 +609,14 @@ class VoiceAgentCallSessionTest {
 
         session.start()
         gemini.awaitConnect()
-        audio.completeDebugInjection()
+        audio.completeCaptureSource()
 
         assertEquals(1, audio.stopCaptureCalls)
         assertEquals(listOf(1L), gemini.audioStreamEndSessionIds)
     }
 
     @Test
-    fun `debug injection can resume capture after model generation completes`() = runTest {
+    fun `fixture source can resume capture after model generation completes`() = runTest {
         val gemini = FakeGeminiLiveVoiceClient()
         val audio = FakeVoiceAudioEngine()
         val session = VoiceAgentCallSession(
@@ -476,7 +636,7 @@ class VoiceAgentCallSessionTest {
         gemini.awaitConnect()
         assertEquals(1, audio.startCaptureCalls)
 
-        audio.completeDebugInjection()
+        audio.completeCaptureSource()
         assertEquals(1, audio.stopCaptureCalls)
 
         gemini.eventHandlers.single()(GeminiLiveEvent.GenerationComplete)
@@ -872,3 +1032,36 @@ class VoiceAgentCallSessionTest {
 
     private fun runTest(block: suspend CoroutineScope.() -> Unit) = runBlocking(block = block)
 }
+
+private class SessionRecordingAutomationRuntime : VoiceAutomationRuntime {
+    val events = mutableListOf<VoiceAutomationEventInput>()
+    var activeRunHash = AUTOMATION_RUN_HASH
+
+    override fun prepare(binding: VoiceAutomationRunBinding) = Unit
+
+    override fun record(event: VoiceAutomationEventInput) {
+        events += event
+    }
+
+    override fun status() = VoiceAutomationStatus(
+        state = VoiceAutomationRunState.Active,
+        runHash = activeRunHash,
+        comparisonHash = AUTOMATION_COMPARISON_HASH,
+        requestedTransport = VoiceAgentTransport.DirectGemini,
+    )
+
+    override fun finalizeRun(): File = error("not used")
+
+    override fun reset() = Unit
+}
+
+private const val AUTOMATION_RUN_HASH =
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+private const val AUTOMATION_COMPARISON_HASH =
+    "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+private const val REPLACEMENT_AUTOMATION_RUN_HASH =
+    "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+private const val ACCOUNT_STATE_HASH =
+    "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+private const val CONVERSATION_HASH =
+    "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"

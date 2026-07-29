@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE="${VOICE_AGENT_E2E_PACKAGE:-me.rerere.rikkahub.debug}"
 SERVICE_COMPONENT="$PACKAGE/me.rerere.rikkahub.voiceagent.VoiceAgentCallService"
-INJECT_COMPONENT="$PACKAGE/me.rerere.rikkahub.voiceagent.debug.VoiceAudioDebugInjectionReceiver"
-INJECT_ACTION="me.rerere.rikkahub.debug.voiceagent.INJECT_PCM"
+INJECT_COMPONENT="$PACKAGE/me.rerere.rikkahub.voiceagent.debug.VoiceCaptureFixtureDebugReceiver"
+FIXTURE_ARM_ACTION="me.rerere.rikkahub.debug.voiceagent.ARM_CAPTURE_FIXTURE"
 CALL_START_ACTION="me.rerere.rikkahub.voiceagent.action.START"
 CALL_END_ACTION="me.rerere.rikkahub.voiceagent.action.END"
 APP_PCM_PATH="voice-e2e/prompt.pcm"
@@ -42,6 +42,7 @@ CLEANUP_STATUS="not_started"
 CLEANUP_DETAIL=""
 DEVICE_TMP_PCM_CLEANUP_NEEDED=0
 APP_PCM_CLEANUP_NEEDED=0
+FIXTURE_TOKEN=""
 FFMPEG_PROMPT_TEXT_CLEANUP_PATH=""
 ADB_APP_CLEANUP_ENABLED=0
 REPORT_TEMP_CLEANUP_PATHS=()
@@ -610,7 +611,6 @@ adb_logcat logcat -v time \
   VoiceAgentCallSession:D \
   VoiceAgentGemini:D \
   VoiceAgentE2E:D \
-  VoiceAudioDebugInjection:I \
   AndroidVoiceAudioEngine:D \
   AndroidRuntime:E \
   '*:S' > "$LOG_FILE" &
@@ -626,33 +626,44 @@ if adb_cmd shell rm -f "$DEVICE_TMP_PCM" >/dev/null 2>&1; then
   DEVICE_TMP_PCM_CLEANUP_NEEDED=0
 fi
 
+printf 'Arming private PCM capture fixture...\n'
+arm_output="$(adb_cmd shell am broadcast \
+  -n "$INJECT_COMPONENT" \
+  -a "$FIXTURE_ARM_ACTION" \
+  --es initial_path "$APP_PCM_PATH" \
+  --ei chunk_bytes "${VOICE_AGENT_E2E_CHUNK_BYTES:-3200}" \
+  --el chunk_delay_ms "${VOICE_AGENT_E2E_CHUNK_DELAY_MS:-20}")"
+[[ "$arm_output" == *"result=0"* ]] || {
+  printf 'Capture fixture arm was rejected.\n' >&2
+  exit 1
+}
+FIXTURE_TOKEN="$(printf '%s\n' "$arm_output" | sed -n 's/.*token=\(fixture-[1-9][0-9]*\).*/\1/p' | tail -n 1)"
+[[ -n "$FIXTURE_TOKEN" ]] || {
+  printf 'Capture fixture arm returned no token.\n' >&2
+  exit 1
+}
+
 printf 'Starting Voice Agent foreground service...\n'
 if [[ "$MANUAL_REVIEW" == "1" ]]; then
   adb_cmd shell am start-foreground-service \
     -n "$SERVICE_COMPONENT" \
     -a "$CALL_START_ACTION" \
-    --es conversationId "$VOICE_AGENT_E2E_CONVERSATION_ID" >/dev/null
+    --es conversationId "$VOICE_AGENT_E2E_CONVERSATION_ID" \
+    --es transport direct_gemini \
+    --es captureFixtureToken "$FIXTURE_TOKEN" >/dev/null
 else
   adb_cmd shell am start-foreground-service \
     -n "$SERVICE_COMPONENT" \
     -a "$CALL_START_ACTION" \
-    --es conversationId "$VOICE_AGENT_E2E_CONVERSATION_ID" >/dev/null
+    --es conversationId "$VOICE_AGENT_E2E_CONVERSATION_ID" \
+    --es transport direct_gemini \
+    --es captureFixtureToken "$FIXTURE_TOKEN" >/dev/null
 fi
 CALL_STARTED=1
 
 wait_for_log "Gemini setup complete" 'VoiceAgentGemini.*event kind=SetupComplete' 120
 
-printf 'Injecting private PCM prompt...\n'
-adb_cmd shell am broadcast \
-  -n "$INJECT_COMPONENT" \
-  -a "$INJECT_ACTION" \
-  --es path "$APP_PCM_PATH" \
-  --ei chunk_bytes "${VOICE_AGENT_E2E_CHUNK_BYTES:-3200}" \
-  --el chunk_delay_ms "${VOICE_AGENT_E2E_CHUNK_DELAY_MS:-20}" \
-  --el leading_silence_ms "${VOICE_AGENT_E2E_LEADING_SILENCE_MS:-100}" \
-  --el trailing_silence_ms "${VOICE_AGENT_E2E_TRAILING_SILENCE_MS:-200}" >/dev/null
-
-wait_for_log "debug PCM delivered" 'VoiceAudioDebugInjection.*debug_audio_injection result delivered=true' 30
+wait_for_log "capture fixture delivered" 'VoiceAgentCallSession.*capture source complete' 30
 if ! wait_for_log "Gemini ask_hermes tool call received" \
   'VoiceAgentGemini.*receive kind=toolCall' \
   "$GEMINI_TOOL_CALL_TIMEOUT_SECONDS"; then

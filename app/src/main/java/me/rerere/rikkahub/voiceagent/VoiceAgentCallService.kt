@@ -6,39 +6,34 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.ServiceCompat
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
-import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import org.koin.android.ext.android.inject
 import kotlin.uuid.Uuid
 
 class VoiceAgentCallService : Service() {
-    private val manager: VoiceAgentCallManager by inject()
+    private val controller: VoiceAgentCallServiceController by inject()
     private val settingsStore: SettingsStore by inject()
     private val chatService: ChatService by inject()
     private val notificationFactory: VoiceAgentNotificationFactory by inject()
-    private val callStartup: VoiceAgentCallStartup by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private var notificationJob: Job? = null
     private val lifecycle by lazy(LazyThreadSafetyMode.NONE) {
         VoiceAgentCallServiceLifecycle(
-            manager = manager,
+            controller = controller,
             serviceScope = serviceScope,
             host = object : VoiceAgentCallServiceLifecycleHost {
-                override fun cancelNotification() {
-                    notificationJob?.cancel()
-                    notificationJob = null
-                }
+                override fun cancelNotification() = Unit
 
-                override fun startForeground(conversationId: String, state: VoiceAgentUiState) {
-                    startForegroundFor(conversationId, state)
+                override fun startForeground(
+                    conversationId: String,
+                    transport: VoiceAgentTransport,
+                    state: VoiceAgentUiState,
+                ) {
+                    startForegroundFor(conversationId, transport, state)
                 }
 
                 override fun endCompleted(conversationId: Uuid?) {
@@ -53,8 +48,8 @@ class VoiceAgentCallService : Service() {
                     this@VoiceAgentCallService.stopSelf()
                 }
 
-                override fun reportCleanupFailure(error: Throwable) {
-                    VoiceAgentLog.w(TAG, "service cleanup failed: ${error.toVoiceAgentLogDetail()}")
+                override fun reportFailure(error: Throwable) {
+                    VoiceAgentLog.w(TAG, "service operation failed: ${error.toVoiceAgentLogDetail()}")
                 }
 
                 override fun destroyBaseService() {
@@ -69,7 +64,7 @@ class VoiceAgentCallService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             VoiceAgentCallContract.ACTION_START -> startCall(intent)
-            VoiceAgentCallContract.ACTION_END -> endCall()
+            VoiceAgentCallContract.ACTION_END -> lifecycle.endCall()
             else -> stopSelf()
         }
         return START_NOT_STICKY
@@ -82,119 +77,60 @@ class VoiceAgentCallService : Service() {
     private fun destroyBaseService() = super.onDestroy()
 
     private fun startCall(intent: Intent) {
-        val id = intent.getStringExtra(VoiceAgentCallContract.EXTRA_CONVERSATION_ID)
-            ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
-            ?: run {
-                VoiceAgentLog.w(TAG, "start ignored: missing or invalid conversation id")
-                stopSelf()
-                return
-        }
-        VoiceAgentLog.d(TAG, "start requested conversationId=$id")
-        val startGeneration = lifecycle.beginStart()
-        val preserveDegradedStatus = manager.activeConversationId.value == id &&
-            manager.state.value.call is VoiceCallStatus.Degraded
-        if (!preserveDegradedStatus) {
-            manager.updateCallStatus(VoiceCallStatus.ForegroundStarting)
-        }
-        startForegroundFor(id.toString(), manager.state.value)
-        serviceScope.launch {
-            try {
-                VoiceAgentLog.d(TAG, "loading settings and conversation")
-                val settings = settingsStore.settingsFlow.first()
-                val conversation = chatService.getConversationFlow(id).value
-                if (!lifecycle.isCurrent(startGeneration)) {
-                    VoiceAgentLog.d(TAG, "start canceled before config resolution")
-                    return@launch
-                }
-                when (val result = VoiceAgentConfigResolver().resolve(settings = settings, conversation = conversation)) {
-                    is VoiceAgentConfigResult.Available -> {
-                        VoiceAgentLog.d(
-                            TAG,
-                            "config available voiceModelId=${result.config.voiceModelId} " +
-                                "baseUrl=${result.config.hermesVoiceBaseUrl}",
-                        )
-                        val startupResult = callStartup.start(
-                            conversationId = id,
-                            config = result.config,
-                            scope = serviceScope,
-                            isCurrent = { lifecycle.isCurrent(startGeneration) },
-                        )
-                        val started = when (startupResult) {
-                            is VoiceAgentCallStartupResult.Stale -> return@launch
-                            is VoiceAgentCallStartupResult.Started -> startupResult
-                        }
-                        val route = started.route
-                        val startedNewSession = started.startedNewSession
-                        VoiceAgentLog.d(TAG, "manager start returned startedNewSession=$startedNewSession")
-                        route.failure?.let { failure ->
-                            manager.recordDiagnostic(failure.diagnosticName, failure.detail)
-                            manager.updateCallStatus(
-                                VoiceCallStatus.Degraded("Telecom unavailable: ${failure.detail}"),
-                            )
-                        }
-                        if (
-                            shouldPublishVoiceCallBackgroundCapable(
-                                owner = route.owner,
-                                current = manager.state.value.call,
-                            )
-                        ) {
-                            manager.updateCallStatus(VoiceCallStatus.BackgroundCapable)
-                        }
-                        notificationJob = serviceScope.launch {
-                            manager.state.collect { state ->
-                                startForegroundFor(id.toString(), state)
-                            }
-                        }
-                        val serviceReconnect = !startedNewSession &&
-                            manager.state.value.session is VoiceSessionStatus.Error
-                        if (serviceReconnect) {
-                            VoiceAgentLog.d(TAG, "existing session is error; reconnecting")
-                            manager.reconnect()
-                        }
-                        if (startedNewSession) {
-                            VoiceAgentLog.d(TAG, "waiting for startup state")
-                            val startupState = manager.state.first { state ->
-                                lifecycle.isStartupTerminal(startGeneration, state.session)
-                            }
-                            if (!lifecycle.isCurrent(startGeneration)) {
-                                VoiceAgentLog.d(TAG, "start canceled while waiting for startup state")
-                                return@launch
-                            }
-                            VoiceAgentLog.d(TAG, "startup state=${startupState.session}")
-                            if (lifecycle.handleStartupTerminal(id, startupState.session)) {
-                                return@launch
-                            }
-                        }
-                    }
-                    is VoiceAgentConfigResult.Unavailable -> {
-                        VoiceAgentLog.w(TAG, "config unavailable: ${result.message.redactForVoiceAgentLog()}")
-                        manager.updateCallStatus(VoiceCallStatus.Degraded(result.message))
-                        startForegroundFor(id.toString(), manager.state.value)
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                        stopSelf()
-                    }
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Throwable) {
-                if (lifecycle.isCurrent(startGeneration)) {
-                    VoiceAgentLog.w(TAG, "start failed: ${error.toVoiceAgentLogDetail()}")
-                    lifecycle.tearDownFailedStart(
-                        conversationId = id,
-                        error = error,
-                        preserveSessionRequested = manager.activeConversationId.value == id,
+        val fields = parseStartFields(intent) ?: return
+        val conversationId = fields.conversationId
+        VoiceAgentLog.d(TAG, "start requested conversationId=$conversationId")
+        val generation = lifecycle.beginStart(conversationId, fields.transport)
+        lifecycle.launchStartConfiguration(generation, conversationId) {
+            VoiceAgentLog.d(TAG, "loading settings and conversation")
+            val settings = settingsStore.settingsFlow.first()
+            val conversation = chatService.getConversationFlow(conversationId).value
+            when (val result = VoiceAgentConfigResolver().resolve(settings, conversation)) {
+                is VoiceAgentConfigResult.Available -> {
+                    VoiceAgentLog.d(TAG, "config available voiceModelId=${result.config.voiceModelId}")
+                    VoiceAgentCallRequest(
+                        conversationId = conversationId,
+                        config = result.config,
+                        transport = fields.transport,
+                        captureFixtureToken = fields.captureFixtureToken,
                     )
+                }
+                is VoiceAgentConfigResult.Unavailable -> {
+                    val safeMessage = result.message.redactForVoiceAgentLog()
+                    VoiceAgentLog.w(TAG, "config unavailable: $safeMessage")
+                    throw VoiceAgentCallConfigurationException(safeMessage)
                 }
             }
         }
     }
 
-    private fun endCall() {
-        lifecycle.endCall()
+    private fun parseStartFields(intent: Intent): VoiceAgentCallStartFields? {
+        val fields = decodeVoiceAgentCallStartFields(
+            conversationId = intent.getStringExtra(VoiceAgentCallContract.EXTRA_CONVERSATION_ID),
+            transportWireName = intent.getStringExtra(VoiceAgentCallContract.EXTRA_TRANSPORT),
+            captureFixtureToken = intent.getStringExtra(
+                VoiceAgentCallContract.EXTRA_CAPTURE_FIXTURE_TOKEN,
+            ),
+        )
+        if (fields == null) {
+            VoiceAgentLog.w(TAG, "start ignored: missing or invalid start fields")
+            lifecycle.rejectInvalidStart(
+                VoiceAgentCallConfigurationException("Missing or invalid voice call start fields"),
+            )
+        }
+        return fields
     }
 
-    private fun startForegroundFor(conversationId: String, state: VoiceAgentUiState) {
-        val notification = notificationFactory.activeNotification(conversationId = conversationId, state = state)
+    private fun startForegroundFor(
+        conversationId: String,
+        transport: VoiceAgentTransport,
+        state: VoiceAgentUiState,
+    ) {
+        val notification = notificationFactory.activeNotification(
+            conversationId = conversationId,
+            transport = transport,
+            state = state,
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             ServiceCompat.startForeground(
                 this,
@@ -212,23 +148,19 @@ class VoiceAgentCallService : Service() {
     }
 }
 
-internal fun shouldStartForegroundForVoiceAgentEnd(activeConversationId: Uuid?): Boolean =
-    true
+internal class VoiceAgentCallConfigurationException(message: String) : IllegalStateException(message)
 
-internal fun shouldPublishVoiceCallBackgroundCapable(
-    owner: VoiceAudioRouteOwner,
-    current: VoiceCallStatus,
-): Boolean = owner == VoiceAudioRouteOwner.Telecom && current !is VoiceCallStatus.Degraded
+internal fun shouldStartForegroundForVoiceAgentEnd(activeConversationId: Uuid?): Boolean = true
 
 internal fun Throwable.toVoiceAgentLogDetail(): String =
-    "${javaClass.simpleName}: ${(message ?: "").redactForVoiceAgentLog()}"
+    "${javaClass.simpleName}: ${(message ?: "").redactForVoiceAgentLog()}".take(512)
 
 internal fun String.redactForVoiceAgentLog(): String =
     replace(Regex("""(?i)\b(Bearer\s+)[A-Za-z0-9._~+/=-]+"""), "$1[redacted]")
         .replace(
             Regex(
                 """(?i)\b(api[_-]?key|key|token|secret|password|client[_-]?id|client[_-]?secret|""" +
-                    """websocket[_-]?url|session[_-]?url)\s*[:=]\s*[^,\s;}]+"""
+                    """websocket[_-]?url|session[_-]?url)\s*[:=]\s*[^,\s;}]+""",
             ),
             "$1=[redacted]",
         )

@@ -5,14 +5,14 @@ import org.junit.Test
 import org.w3c.dom.Element
 import java.io.File
 import javax.xml.parsers.DocumentBuilderFactory
-import me.rerere.rikkahub.voiceagent.audio.VoiceAudioDebugInjector
+import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureFixtureArming
 import me.rerere.rikkahub.voiceagent.debug.VoiceAgentDebugSeedReceiver
 import me.rerere.rikkahub.voiceagent.debug.HermesTextDebugReceiver
 
 class VoiceAgentDebugManifestTest {
     @Test
     fun `debug receivers require shell held permission`() {
-        val audioReceiver = findReceiver(".voiceagent.debug.VoiceAudioDebugInjectionReceiver")
+        val audioReceiver = findReceiver(".voiceagent.debug.VoiceCaptureFixtureDebugReceiver")
         val seedReceiver = findReceiver(".voiceagent.debug.VoiceAgentDebugSeedReceiver")
         val textReceiver = findReceiver(".voiceagent.debug.HermesTextDebugReceiver")
 
@@ -24,7 +24,7 @@ class VoiceAgentDebugManifestTest {
 
     @Test
     fun `debug receivers remain exported for adb workflows`() {
-        val audioReceiver = findReceiver(".voiceagent.debug.VoiceAudioDebugInjectionReceiver")
+        val audioReceiver = findReceiver(".voiceagent.debug.VoiceCaptureFixtureDebugReceiver")
         val seedReceiver = findReceiver(".voiceagent.debug.VoiceAgentDebugSeedReceiver")
         val textReceiver = findReceiver(".voiceagent.debug.HermesTextDebugReceiver")
 
@@ -36,12 +36,15 @@ class VoiceAgentDebugManifestTest {
 
     @Test
     fun `debug receivers keep expected actions`() {
-        val audioReceiver = findReceiver(".voiceagent.debug.VoiceAudioDebugInjectionReceiver")
+        val audioReceiver = findReceiver(".voiceagent.debug.VoiceCaptureFixtureDebugReceiver")
         val seedReceiver = findReceiver(".voiceagent.debug.VoiceAgentDebugSeedReceiver")
         val textReceiver = findReceiver(".voiceagent.debug.HermesTextDebugReceiver")
 
         assertEquals(
-            listOf(VoiceAudioDebugInjector.ACTION_INJECT_PCM),
+            listOf(
+                VoiceCaptureFixtureArming.ACTION_ARM_FIXTURE,
+                VoiceCaptureFixtureArming.ACTION_TRIGGER_FIXTURE,
+            ),
             audioReceiver.actionNames(),
         )
         assertEquals(

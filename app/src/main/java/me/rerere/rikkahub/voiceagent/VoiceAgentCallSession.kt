@@ -13,6 +13,11 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationCorrelationKind
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventInput
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventName
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRunState
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRuntime
 import me.rerere.rikkahub.voiceagent.gemini.GeminiContentTurn
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
@@ -24,6 +29,7 @@ import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
+import org.koin.core.context.GlobalContext
 import java.util.Base64
 
 class VoiceAgentCallSession internal constructor(
@@ -44,6 +50,8 @@ class VoiceAgentCallSession internal constructor(
     private val metadataEpochNowMs: () -> Long = System::currentTimeMillis,
     hermesAnnouncementNowMs: () -> Long = System::currentTimeMillis,
     private val scope: CoroutineScope,
+    private val automationRuntimeProvider: () -> VoiceAutomationRuntime? = ::directAutomationRuntimeOrNull,
+    private val directConfigurationBinding: VoiceDirectConfigurationBinding? = null,
 ) : ManagedVoiceCallSession {
     constructor(
         modelId: String,
@@ -102,8 +110,13 @@ class VoiceAgentCallSession internal constructor(
     private var sessionEndedRecorded = false
     private var sessionFailedRecordedSessionId: Long? = null
     private var runtimeFailureTelemetrySessionId: Long? = null
+    private var automationRuntimeOwner: VoiceAutomationRuntime? = null
+    private var automationRunHash: String? = null
+    private var automationCallBecameActive = false
+    private var automationConfigurationAttested = false
+    private var automationCallStoppedRecorded = false
     private var hermesBridge: HermesSessionBridge? = null
-    private var debugInjectionCaptureRestartSessionId: Long? = null
+    private var completedCaptureSourceRestartSessionId: Long? = null
     private val reconnectController = VoiceReconnectController(
         policy = reconnectPolicy,
         nowMs = nowMs,
@@ -138,6 +151,7 @@ class VoiceAgentCallSession internal constructor(
 
     override fun start() {
         if (ended || startJob?.isActive == true) return
+        captureDirectAutomationCallOwner()
         val currentSessionId = coordinator.nextSessionId()
         sessionId = currentSessionId
         VoiceAgentLog.d(TAG, "start sessionId=$currentSessionId modelId=$modelId")
@@ -227,6 +241,7 @@ class VoiceAgentCallSession internal constructor(
         resourceCleaner.cleanupForEnd(closeGemini = false)
         coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
         coordinator.close(waitForStartedSends = false)
+        recordDirectAutomationCallStopped()
         recordSessionEndedSafely(endReason = "close_now")
         coordinator.launchPersistenceDrain()
     }
@@ -268,6 +283,7 @@ class VoiceAgentCallSession internal constructor(
             ) {
                 return
             }
+            recordDirectAutomationConfiguration(session, voiceContext)
             if (!prepareConnectedResourceActivation(
                     currentSessionId = currentSessionId,
                     automaticReconnectJob = automaticReconnectJob,
@@ -523,6 +539,10 @@ class VoiceAgentCallSession internal constructor(
             restoreReconnectingStatusIfAutomaticReconnectPending()
             return false
         }
+        if (completedReconnectAttempt != null) {
+            markDirectAutomationReconnectTransportRestored()
+        }
+        recordDirectAutomationCallActive()
         completedReconnectAttempt?.let { attempt ->
             coordinator.recordDiagnostic(
                 name = "session_reconnect_connected",
@@ -540,6 +560,131 @@ class VoiceAgentCallSession internal constructor(
             ),
         )
         return true
+    }
+
+    private fun recordDirectAutomationCallActive() {
+        val runtime = synchronized(sessionLock) { automationRuntimeOwner } ?: return
+        val appHash = synchronized(sessionLock) { automationRunHash } ?: return
+        runCatching {
+            val recorded = runtime.recordIfActiveRun(
+                runHash = appHash,
+                event = VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_ACTIVE,
+                    observedTransport = VoiceAgentTransport.DirectGemini,
+                    correlationKind = VoiceAutomationCorrelationKind.APP,
+                    correlationHash = appHash,
+                ),
+            )
+            if (recorded) {
+                synchronized(sessionLock) { automationCallBecameActive = true }
+            }
+        }
+    }
+
+    private fun markDirectAutomationReconnectTransportRestored() {
+        val runtime = synchronized(sessionLock) { automationRuntimeOwner } ?: return
+        val runHash = synchronized(sessionLock) { automationRunHash } ?: return
+        runCatching { runtime.markReconnectTransportRestored(runHash) }
+    }
+
+    private fun recordDirectAutomationReconnectStarted() {
+        val runtime = synchronized(sessionLock) { automationRuntimeOwner } ?: return
+        val runHash = synchronized(sessionLock) { automationRunHash } ?: return
+        runCatching {
+            runtime.recordIfActiveRun(
+                runHash,
+                VoiceAutomationEventInput(VoiceAutomationEventName.RECONNECT_STARTED),
+            )
+        }
+    }
+
+    private fun recordDirectAutomationConfiguration(
+        session: MobileVoiceSessionResponse,
+        voiceContext: VoiceContext,
+    ) {
+        val binding = directConfigurationBinding ?: return
+        val voiceName = runCatching {
+            session.liveConnectConfig.directVoiceNameOrNull()
+        }.getOrNull() ?: return
+        val owner = synchronized(sessionLock) {
+            if (automationConfigurationAttested) {
+                null
+            } else {
+                automationRuntimeOwner?.let { runtime ->
+                    automationRunHash?.let { runHash -> runtime to runHash }
+                }
+            }
+        } ?: return
+        val recorded = runCatching {
+            owner.first.recordIfActiveRun(
+                runHash = owner.second,
+                event = VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.DIRECT_CONFIG_ATTESTED,
+                    requestedModelHash = voiceConfigurationIdentity(modelId),
+                    observedModelHash = voiceConfigurationIdentity(session.providerModel),
+                    voiceHash = voiceConfigurationIdentity(voiceName),
+                    instructionHash = voiceConfigurationIdentity(voiceContext.systemInstruction),
+                    directAccountConfigurationHash = binding.directAccountConfigurationHash,
+                    conversationHash = binding.conversationHash,
+                ),
+            )
+        }.getOrDefault(false)
+        if (recorded) {
+            synchronized(sessionLock) {
+                if (automationRuntimeOwner === owner.first && automationRunHash == owner.second) {
+                    automationConfigurationAttested = true
+                }
+            }
+        }
+    }
+
+    private fun captureDirectAutomationCallOwner() {
+        val runtime = automationRuntimeProvider() ?: return
+        val status = runCatching(runtime::status).getOrNull() ?: return
+        if (
+            status.state != VoiceAutomationRunState.Active ||
+            status.requestedTransport != VoiceAgentTransport.DirectGemini
+        ) {
+            return
+        }
+        val runHash = status.runHash ?: return
+        val recorded = runCatching {
+            runtime.recordIfActiveRun(
+                runHash = runHash,
+                event = VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_START_REQUESTED,
+                    observedTransport = VoiceAgentTransport.DirectGemini,
+                ),
+            )
+        }.getOrDefault(false)
+        if (recorded) {
+            synchronized(sessionLock) {
+                automationRuntimeOwner = runtime
+                automationRunHash = runHash
+            }
+        }
+    }
+
+    private fun recordDirectAutomationCallStopped() {
+        val owner = synchronized(sessionLock) {
+            if (!automationCallBecameActive || automationCallStoppedRecorded) {
+                null
+            } else {
+                automationCallStoppedRecorded = true
+                automationRuntimeOwner?.let { runtime ->
+                    automationRunHash?.let { runHash -> runtime to runHash }
+                }
+            }
+        } ?: return
+        runCatching {
+            owner.first.recordIfActiveRun(
+                runHash = owner.second,
+                event = VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_STOPPED,
+                    succeeded = true,
+                ),
+            )
+        }
     }
 
     private fun reserveConnectedResourceActivation(sessionId: Long): Boolean = synchronized(sessionLock) {
@@ -580,7 +725,7 @@ class VoiceAgentCallSession internal constructor(
             return
         }
         coordinator.onGeminiEvent(sessionId, coordinatorEvent)
-        restartDebugInjectionCaptureAfterGeneration(sessionId, coordinatorEvent)
+        restartCompletedCaptureSourceAfterGeneration(sessionId, coordinatorEvent)
         if (stopReason != null) {
             if (coordinator.isActiveSession(sessionId)) {
                 val runtimeFailure = isRuntimeFailureTelemetryEligible(sessionId) || automaticReconnectAttemptFailure
@@ -674,6 +819,7 @@ class VoiceAgentCallSession internal constructor(
                 name = "session_reconnect_attempting",
                 detail = "attempt=${plan.attempt}",
             )
+            recordDirectAutomationReconnectStarted()
             currentCoroutineContext().ensureActive()
             runSession(currentSessionId, automaticReconnectJob = job)
         }
@@ -932,6 +1078,7 @@ class VoiceAgentCallSession internal constructor(
             coordinator.updateSessionStatus(VoiceSessionStatus.Ending)
             coordinator.close()
         } finally {
+            recordDirectAutomationCallStopped()
             terminalSessionMetadataWrite = recordSessionEndedSafely(endReason = visibleReason ?: "user_end")
         }
         visibleReason?.let(coordinator::setVisibleError)
@@ -964,10 +1111,10 @@ class VoiceAgentCallSession internal constructor(
         }
     }
 
-    private fun restartDebugInjectionCaptureAfterGeneration(sessionId: Long, event: GeminiLiveEvent) {
+    private fun restartCompletedCaptureSourceAfterGeneration(sessionId: Long, event: GeminiLiveEvent) {
         if (event != GeminiLiveEvent.GenerationComplete) return
-        if (debugInjectionCaptureRestartSessionId != sessionId) return
-        debugInjectionCaptureRestartSessionId = null
+        if (completedCaptureSourceRestartSessionId != sessionId) return
+        completedCaptureSourceRestartSessionId = null
         if (isSessionOpenAndActive(sessionId)) {
             captureStartController.launch(sessionId)
         }
@@ -1027,16 +1174,16 @@ class VoiceAgentCallSession internal constructor(
                         }
                     }
                 },
-                onDebugInjectionComplete = {
+                onCaptureSourceComplete = {
                     val admission = synchronized(sessionLock) {
-                        captureEpochOwner.claimDebugCompletion(token)?.also {
-                            debugInjectionCaptureRestartSessionId = currentSessionId
+                        captureEpochOwner.claimSourceCompletion(token)?.also {
+                            completedCaptureSourceRestartSessionId = currentSessionId
                         }
                     } ?: return@startCapture
                     admission.use {
                         VoiceAgentLog.d(
                             TAG,
-                            "debug injection complete; stopping capture and sending audio stream end " +
+                            "capture source complete; stopping capture and sending audio stream end " +
                                 "sessionId=$currentSessionId",
                         )
                         audio.stopCapture()
@@ -1188,6 +1335,11 @@ class VoiceAgentCallSession internal constructor(
         const val TAG = "VoiceAgentCallSession"
     }
 }
+
+private fun directAutomationRuntimeOrNull(): VoiceAutomationRuntime? =
+    runCatching {
+        GlobalContext.get().get<VoiceAutomationRuntime>()
+    }.getOrNull()
 
 private fun completedSessionMetadataWrite(): Deferred<Unit> =
     CompletableDeferred(Unit)

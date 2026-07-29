@@ -32,13 +32,11 @@ import org.junit.Test
 class VoiceAudioRouteControllerTest {
     @Test
     fun `cancellation after active publication retires exact capture before dispatcher return`() {
-        VoiceAudioDebugInjector.clearForTest()
         val cancellation = CancellationException("capture dispatcher return cancelled")
         val taskCancellationFailure = IllegalArgumentException("task cancellation failed")
         val recorderStopFailure = UnsupportedOperationException("recorder stop failed")
         val recorderReleaseFailure = AssertionError("recorder release failed")
         val routeFailure = IllegalStateException("route retirement failed")
-        val registrationCloseFailure = IllegalStateException("debug registration close failed")
         val events = CopyOnWriteArrayList<String>()
         val ownership = VoiceAudioCaptureOwnership<Any, Job>(
             startRecorder = {},
@@ -73,13 +71,6 @@ class VoiceAudioRouteControllerTest {
         val callerOwner = SupervisorJob()
         val captureTaskOwner = SupervisorJob()
         val captureTaskBodyEntered = AtomicBoolean(false)
-        val debugCaptureRegistrations =
-            VoiceAudioDebugCaptureRegistrationOwner<
-                VoiceAudioCaptureToken,
-                Any,
-                FailingDebugRegistration,
-            >(FailingDebugRegistration::close)
-        lateinit var staleRegistration: FailingDebugRegistration
         val observedFailure = AtomicReference<Throwable?>()
         val callerCompleted = CountDownLatch(1)
         val caller = CoroutineScope(callerOwner + callerDispatcher).launch {
@@ -91,11 +82,7 @@ class VoiceAudioRouteControllerTest {
                             start = CoroutineStart.LAZY,
                         ) {
                             captureTaskBodyEntered.set(true)
-                            try {
-                                CompletableDeferred<Unit>().await()
-                            } finally {
-                                debugCaptureRegistrations.unregister(token, setup.recorder)
-                            }
+                            CompletableDeferred<Unit>().await()
                         }
                         assertEquals(
                             VoiceAudioCaptureStartOutcome.Started,
@@ -108,30 +95,8 @@ class VoiceAudioRouteControllerTest {
                             ),
                         )
                         onStarted(VoiceAudioCaptureAdmission(token, setup.recorder))
-                        val injectorRegistration = requireNotNull(
-                            VoiceAudioDebugInjector.registerCaptureIfCurrent(
-                                onPcm16 = {},
-                                onInjectionComplete = {},
-                                isCurrent = { ownership.isCurrent(token, setup.recorder) },
-                            ),
-                        )
-                        staleRegistration = FailingDebugRegistration(
-                            delegate = injectorRegistration,
-                            onClose = {
-                                events += "close-debug-registration"
-                                throw registrationCloseFailure
-                            },
-                        )
-                        assertTrue(
-                            debugCaptureRegistrations.publish(token, setup.recorder, staleRegistration) {
-                                ownership.isCurrent(token, setup.recorder)
-                            },
-                        )
                     },
                     retireCapture = { admission -> ownership.abort(admission.token) },
-                    unregisterDebugCapture = { admission ->
-                        debugCaptureRegistrations.unregister(admission.token, admission.recorder)
-                    },
                 )
             } catch (failure: Throwable) {
                 observedFailure.set(failure)
@@ -150,23 +115,15 @@ class VoiceAudioRouteControllerTest {
             assertTrue(callerCompleted.await(5, TimeUnit.SECONDS))
 
             assertFalse(captureTaskBodyEntered.get())
-            val staleInjection = VoiceAudioDebugInjector.injectPcm16(
-                pcm16 = byteArrayOf(1, 2),
-                chunkBytes = 2,
-                chunkDelayMs = 0L,
-            )
-            assertFalse("stale debug injection was reported delivered", staleInjection.delivered)
             assertEquals(
                 listOf(
                     "cancel-task",
                     "stop-recorder",
                     "release-recorder",
                     "retire-route",
-                    "close-debug-registration",
                 ),
                 events,
             )
-            assertEquals(1, staleRegistration.closeCalls)
             assertFalse(ownership.isCurrent(token, setup.recorder))
             assertSame(cancellation, observedFailure.get())
             assertEquals(
@@ -175,7 +132,6 @@ class VoiceAudioRouteControllerTest {
                     recorderStopFailure,
                     recorderReleaseFailure,
                     routeFailure,
-                    registrationCloseFailure,
                 ),
                 cancellation.suppressed.toList(),
             )
@@ -183,7 +139,6 @@ class VoiceAudioRouteControllerTest {
             callerOwner.cancel()
             captureTaskOwner.cancel()
             workerDispatcher.close()
-            VoiceAudioDebugInjector.clearForTest()
         }
     }
 
@@ -838,20 +793,6 @@ class VoiceAudioRouteControllerTest {
         const val TEST_TIMEOUT_MS = 500L
     }
 
-}
-
-private class FailingDebugRegistration(
-    private val delegate: VoiceAudioDebugInjector.Registration,
-    private val onClose: () -> Unit,
-) {
-    var closeCalls = 0
-        private set
-
-    fun close() {
-        closeCalls += 1
-        delegate.close()
-        onClose()
-    }
 }
 
 private class QueuedCoroutineDispatcher : CoroutineDispatcher() {

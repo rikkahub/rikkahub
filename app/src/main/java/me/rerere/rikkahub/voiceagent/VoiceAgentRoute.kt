@@ -64,7 +64,10 @@ import org.koin.compose.koinInject
 import kotlin.uuid.Uuid
 
 @Composable
-fun VoiceAgentRoute(conversationId: Uuid) {
+fun VoiceAgentRoute(
+    conversationId: Uuid,
+    transport: VoiceAgentTransport,
+) {
     val navController = LocalNavController.current
     val settingsStore = koinInject<SettingsStore>()
     val chatService = koinInject<ChatService>()
@@ -79,20 +82,24 @@ fun VoiceAgentRoute(conversationId: Uuid) {
     when (val result = configResult) {
         is VoiceAgentConfigResult.Available -> {
             val context = LocalContext.current
-            val callManager = koinInject<VoiceAgentCallManager>()
+            val callOrchestrator = koinInject<VoiceAgentCallOrchestrator>()
             VoiceAgentScreen(
-                stateProvider = { callManager.state },
+                stateProvider = { callOrchestrator.state },
                 title = result.config.assistantName,
                 onStart = {
                     ContextCompat.startForegroundService(
                         context,
-                        voiceAgentCallStartIntent(context, conversationId.toString()),
+                        voiceAgentCallStartIntent(
+                            context,
+                            conversationId.toString(),
+                            transport,
+                        ),
                     )
                 },
                 onBack = { navController.popBackStack() },
-                onMuteToggle = { muted -> callManager.setMuted(!muted) },
-                onInterrupt = callManager::interrupt,
-                onReconnect = callManager::reconnect,
+                onMuteToggle = { muted -> callOrchestrator.setMuted(!muted) },
+                onInterrupt = callOrchestrator::interrupt,
+                onReconnect = callOrchestrator::reconnect,
                 onEnd = {
                     context.startService(voiceAgentCallEndIntent(context))
                     navController.popBackStack()

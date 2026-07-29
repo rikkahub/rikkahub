@@ -130,6 +130,9 @@ import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.openUsageAccessSettings
 import me.rerere.rikkahub.voiceagent.VoiceAgentRoute
+import me.rerere.rikkahub.voiceagent.VoiceAgentCallContract
+import me.rerere.rikkahub.voiceagent.VoiceAgentTransport
+import me.rerere.rikkahub.voiceagent.decodeVoiceAgentNotificationRouteFields
 import okhttp3.OkHttpClient
 import org.koin.android.ext.android.inject
 import org.koin.compose.koinInject
@@ -137,7 +140,6 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "RouteActivity"
 private const val EXTRA_CONVERSATION_ID = "conversationId"
-private const val EXTRA_VOICE_AGENT_CONVERSATION_ID = "voiceAgentConversationId"
 
 internal fun conversationIntentScreen(conversationId: String?): Screen.Chat? {
     return conversationId?.trim()
@@ -146,12 +148,23 @@ internal fun conversationIntentScreen(conversationId: String?): Screen.Chat? {
         ?.let { id -> Screen.Chat(id = id) }
 }
 
-internal fun voiceAgentIntentScreen(conversationId: String?): Screen.VoiceAgent? {
-    return conversationId?.trim()
-        ?.takeIf { it.isNotEmpty() }
-        ?.let { id -> runCatching { Uuid.parse(id).toString() }.getOrNull() }
-        ?.let { id -> Screen.VoiceAgent(conversationId = id) }
+internal fun voiceAgentIntentScreen(
+    conversationId: String?,
+    transportWireName: String? = null,
+): Screen.VoiceAgent? = decodeVoiceAgentNotificationRouteFields(
+    conversationId = conversationId,
+    transportWireName = transportWireName,
+)?.let { fields ->
+    Screen.VoiceAgent(
+        conversationId = fields.conversationId.toString(),
+        transportWireName = fields.transport.wireName,
+    )
 }
+
+internal fun decodeVoiceAgentTransport(transportWireName: String?): VoiceAgentTransport =
+    requireNotNull(VoiceAgentTransport.fromWireName(transportWireName)) {
+        "Voice Agent navigation transport is missing or unknown"
+    }
 
 internal fun MutableList<NavKey>.openConversationIntent(conversationId: String?): Boolean {
     val screen = conversationIntentScreen(conversationId) ?: return false
@@ -160,8 +173,11 @@ internal fun MutableList<NavKey>.openConversationIntent(conversationId: String?)
     return true
 }
 
-internal fun MutableList<NavKey>.openVoiceAgentIntent(conversationId: String?): Boolean {
-    val screen = voiceAgentIntentScreen(conversationId) ?: return false
+internal fun MutableList<NavKey>.openVoiceAgentIntent(
+    conversationId: String?,
+    transportWireName: String? = null,
+): Boolean {
+    val screen = voiceAgentIntentScreen(conversationId, transportWireName) ?: return false
     clear()
     add(screen)
     return true
@@ -169,8 +185,10 @@ internal fun MutableList<NavKey>.openVoiceAgentIntent(conversationId: String?): 
 
 internal fun MutableList<NavKey>.openIncomingIntent(
     voiceConversationId: String?,
+    voiceTransportWireName: String? = null,
     conversationId: String?,
-): Boolean = openVoiceAgentIntent(voiceConversationId) || openConversationIntent(conversationId)
+): Boolean = openVoiceAgentIntent(voiceConversationId, voiceTransportWireName) ||
+    openConversationIntent(conversationId)
 
 class RouteActivity : ComponentActivity() {
     private val highlighter by inject<Highlighter>()
@@ -266,7 +284,12 @@ class RouteActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         navStack?.openIncomingIntent(
-            voiceConversationId = intent.getStringExtra(EXTRA_VOICE_AGENT_CONVERSATION_ID),
+            voiceConversationId = intent.getStringExtra(
+                VoiceAgentCallContract.EXTRA_ROUTE_VOICE_AGENT_CONVERSATION_ID,
+            ),
+            voiceTransportWireName = intent.getStringExtra(
+                VoiceAgentCallContract.EXTRA_ROUTE_VOICE_AGENT_TRANSPORT,
+            ),
             conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID),
         )
     }
@@ -292,7 +315,14 @@ class RouteActivity : ComponentActivity() {
         }
         val migrationState by DatabaseMigrationTracker.state.collectAsStateWithLifecycle()
 
-        val startScreen = voiceAgentIntentScreen(intent?.getStringExtra(EXTRA_VOICE_AGENT_CONVERSATION_ID))
+        val startScreen = voiceAgentIntentScreen(
+            conversationId = intent?.getStringExtra(
+                VoiceAgentCallContract.EXTRA_ROUTE_VOICE_AGENT_CONVERSATION_ID,
+            ),
+            transportWireName = intent?.getStringExtra(
+                VoiceAgentCallContract.EXTRA_ROUTE_VOICE_AGENT_TRANSPORT,
+            ),
+        )
             ?: conversationIntentScreen(intent?.getStringExtra(EXTRA_CONVERSATION_ID))
             ?: Screen.Chat(
                 id = if (readBooleanPreference("create_new_conversation_on_start", true)) {
@@ -371,7 +401,10 @@ class RouteActivity : ComponentActivity() {
                             }
 
                             entry<Screen.VoiceAgent> { key ->
-                                VoiceAgentRoute(conversationId = Uuid.parse(key.conversationId))
+                                VoiceAgentRoute(
+                                    conversationId = Uuid.parse(key.conversationId),
+                                    transport = decodeVoiceAgentTransport(key.transportWireName),
+                                )
                             }
 
                             entry<Screen.ShareHandler> { key ->
@@ -622,7 +655,10 @@ sealed interface Screen : NavKey {
     ) : Screen
 
     @Serializable
-    data class VoiceAgent(val conversationId: String) : Screen
+    data class VoiceAgent(
+        val conversationId: String,
+        val transportWireName: String = VoiceAgentTransport.DirectGemini.wireName,
+    ) : Screen
 
     @Serializable
     data class ShareHandler(val text: String, val streamUri: String? = null) : Screen

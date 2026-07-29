@@ -5,6 +5,7 @@ import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.web.routes.requireCurrentAssistant
+import me.rerere.rikkahub.voiceagent.VoiceAgentTransport
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -16,7 +17,7 @@ class RouteActivityIntentTest {
     @Test
     fun `conversation intent replaces current route with chat route`() {
         val conversationId = "0e822879-5558-45c9-b3dd-8637db28ce17"
-        val backStack = mutableListOf<NavKey>(Screen.VoiceAgent(conversationId))
+        val backStack = mutableListOf<NavKey>(directVoiceAgentScreen(conversationId))
 
         val handled = backStack.openConversationIntent(conversationId)
 
@@ -42,13 +43,31 @@ class RouteActivityIntentTest {
         val handled = backStack.openVoiceAgentIntent(conversationId)
 
         assertTrue(handled)
-        assertEquals(listOf(Screen.VoiceAgent(conversationId = conversationId)), backStack)
+        assertEquals(listOf(directVoiceAgentScreen(conversationId)), backStack)
+    }
+
+    @Test
+    fun `voice agent notification route preserves LiveKit transport`() {
+        val conversationId = "0e822879-5558-45c9-b3dd-8637db28ce17"
+
+        val screen = voiceAgentIntentScreen(
+            conversationId = conversationId,
+            transportWireName = VoiceAgentTransport.LiveKitExperimental.wireName,
+        )
+
+        assertEquals(
+            Screen.VoiceAgent(
+                conversationId = conversationId,
+                transportWireName = VoiceAgentTransport.LiveKitExperimental.wireName,
+            ),
+            screen,
+        )
     }
 
     @Test
     fun `incoming intent falls back to chat when only conversation id is present`() {
         val conversationId = "0e822879-5558-45c9-b3dd-8637db28ce17"
-        val backStack = mutableListOf<NavKey>(Screen.VoiceAgent(conversationId))
+        val backStack = mutableListOf<NavKey>(directVoiceAgentScreen(conversationId))
 
         val handled = backStack.openIncomingIntent(
             voiceConversationId = null,
@@ -70,7 +89,7 @@ class RouteActivityIntentTest {
         )
 
         assertTrue(handled)
-        assertEquals(listOf(Screen.VoiceAgent(conversationId = voiceConversationId)), backStack)
+        assertEquals(listOf(directVoiceAgentScreen(voiceConversationId)), backStack)
     }
 
     @Test
@@ -85,8 +104,13 @@ class RouteActivityIntentTest {
         )
 
         assertTrue(handled)
-        assertEquals(listOf(Screen.VoiceAgent(conversationId = voiceConversationId)), backStack)
+        assertEquals(listOf(directVoiceAgentScreen(voiceConversationId)), backStack)
     }
+
+    private fun directVoiceAgentScreen(conversationId: String) = Screen.VoiceAgent(
+        conversationId = conversationId,
+        transportWireName = VoiceAgentTransport.DirectGemini.wireName,
+    )
 }
 
 class FolderRouteScopeTest {

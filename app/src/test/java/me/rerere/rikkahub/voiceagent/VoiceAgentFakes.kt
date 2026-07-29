@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
@@ -788,7 +789,17 @@ class FakeVoiceSessionApi : VoiceSessionApi {
             websocketUrl = "wss://voice.test/live",
             inputSampleRate = 16000,
             outputSampleRate = 24000,
-            liveConnectConfig = buildJsonObject {},
+            liveConnectConfig = buildJsonObject {
+                put("generationConfig", buildJsonObject {
+                    put("speechConfig", buildJsonObject {
+                        put("voiceConfig", buildJsonObject {
+                            put("prebuiltVoiceConfig", buildJsonObject {
+                                put("voiceName", JsonPrimitive("Puck"))
+                            })
+                        })
+                    })
+                })
+            },
         )
     }
 

@@ -91,7 +91,7 @@ class CaptureStartVoiceAgentCallSessionTest {
         val fixture = connectedSession(initiallyMuted = false)
         val blockedEnd = fixture.gemini.blockNextAudioStreamEnd()
         val debug = launch(Dispatchers.Default) {
-            fixture.audio.completeDebugInjection()
+            fixture.audio.completeCaptureSource()
         }
         assertTrue(blockedEnd.started.await(TEST_TIMEOUT_MS, TimeUnit.MILLISECONDS))
         val muteReturned = CountDownLatch(1)
@@ -235,7 +235,7 @@ class CaptureStartVoiceAgentCallSessionTest {
         suspended.release.complete(Unit)
         awaitCaptureSignal(suspended.installed)
         audio.emitCapture(byteArrayOf(1, 2, 3))
-        audio.completeDebugInjection()
+        audio.completeCaptureSource()
         yield()
 
         assertTrue(gemini.audioMessages.isEmpty())

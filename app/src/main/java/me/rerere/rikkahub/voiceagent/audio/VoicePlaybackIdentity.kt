@@ -10,3 +10,11 @@ internal value class WriterGeneration(val value: Long) : Comparable<WriterGenera
     override fun compareTo(other: WriterGeneration): Int = value.compareTo(other.value)
     fun next(): WriterGeneration = WriterGeneration(value + 1L)
 }
+
+@JvmInline
+internal value class PlaybackCommandId(val value: Long)
+
+internal data class PlaybackCommandReservation(
+    val commandId: PlaybackCommandId,
+    val writerGeneration: WriterGeneration,
+)

@@ -10,24 +10,70 @@ import android.telecom.CallEndpointException
 import android.telecom.Connection
 import android.telecom.DisconnectCause
 import androidx.annotation.RequiresApi
+import java.util.concurrent.Executor
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventInput
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventName
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRuntime
+import org.koin.core.context.GlobalContext
 
-class VoiceAgentTelecomConnection(
-    private val context: Context,
+internal class VoiceAgentTelecomConnection private constructor(
+    private val onCallEndRequested: () -> Unit,
+    private val endpointRequestExecutor: Executor,
+    private val automationRuntimeProvider: () -> VoiceAutomationRuntime?,
     onRetiring: (VoiceAgentTelecomConnection) -> Unit,
-    onRetired: (VoiceAgentTelecomConnection) -> Unit,
-) : Connection(), VoiceAgentTelecomCall {
+    private val retirementSetDisconnected: ((DisconnectCause) -> Unit)?,
+    private val retirementDestroy: (() -> Unit)?,
+    onRetired: (VoiceAgentTelecomConnection, Result<Unit>) -> Unit,
+) : Connection(), VoiceAgentTelecomCall, VoiceAgentAutomationRoutableCall {
+    constructor(
+        context: Context,
+        onRetiring: (VoiceAgentTelecomConnection) -> Unit,
+        onRetired: (VoiceAgentTelecomConnection, Result<Unit>) -> Unit,
+    ) : this(
+        onCallEndRequested = { context.startService(voiceAgentCallEndIntent(context)) },
+        endpointRequestExecutor = context.mainExecutor,
+        automationRuntimeProvider = {
+            runCatching { GlobalContext.get().get<VoiceAutomationRuntime>() }.getOrNull()
+        },
+        onRetiring = onRetiring,
+        retirementSetDisconnected = null,
+        retirementDestroy = null,
+        onRetired = onRetired,
+    )
+
+    internal constructor(
+        onCallEndRequested: () -> Unit,
+        onRetiring: () -> Unit,
+        setDisconnected: (DisconnectCause) -> Unit,
+        destroy: () -> Unit,
+        onRetired: (Result<Unit>) -> Unit,
+    ) : this(
+        onCallEndRequested = onCallEndRequested,
+        endpointRequestExecutor = Executor(Runnable::run),
+        automationRuntimeProvider = { null },
+        onRetiring = { onRetiring() },
+        retirementSetDisconnected = setDisconnected,
+        retirementDestroy = destroy,
+        onRetired = { _, result -> onRetired(result) },
+    )
+
     private var requestedBluetoothEndpointId: ParcelUuid? = null
     private var requestedLegacyBluetoothRoute = false
-    private val retirement = VoiceAgentTelecomRetirement(
+    private var availableAutomationEndpoints: List<CallEndpoint> = emptyList()
+    private val retirement = VoiceAgentTelecomRetirement<DisconnectCause>(
         onRetiring = { onRetiring(this) },
-        setDisconnected = ::setDisconnected,
-        destroy = ::destroy,
-        onRetired = { onRetired(this) },
+        setDisconnected = { cause ->
+            retirementSetDisconnected?.invoke(cause) ?: setDisconnected(cause)
+        },
+        destroy = {
+            retirementDestroy?.invoke() ?: destroy()
+        },
+        onRetired = { result -> onRetired(this, result) },
     )
 
     override fun onDisconnect() {
-        context.startService(voiceAgentCallEndIntent(context))
-        disconnect(cause = DisconnectCause(DisconnectCause.LOCAL))
+        onCallEndRequested()
+        retirement.retire(cause = DisconnectCause(DisconnectCause.LOCAL))
     }
 
     override fun onAvailableCallEndpointsChanged(availableEndpoints: List<CallEndpoint>) {
@@ -35,6 +81,7 @@ class VoiceAgentTelecomConnection(
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             return
         }
+        availableAutomationEndpoints = availableEndpoints
 
         val candidates = availableEndpoints.map { it.toCandidate() }
         VoiceAgentLog.d(
@@ -57,7 +104,7 @@ class VoiceAgentTelecomConnection(
         requestedBluetoothEndpointId = endpoint.identifier
         requestCallEndpointChange(
             endpoint,
-            context.mainExecutor,
+            endpointRequestExecutor,
             object : OutcomeReceiver<Void?, CallEndpointException> {
                 override fun onResult(result: Void?) {
                     VoiceAgentLog.d(TAG, "Bluetooth call endpoint request accepted endpoint=${endpoint.safeLabel()}")
@@ -78,6 +125,7 @@ class VoiceAgentTelecomConnection(
         super.onCallEndpointChanged(callEndpoint)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             VoiceAgentLog.d(TAG, "call endpoint changed endpoint=${callEndpoint.safeLabel()}")
+            recordObservedAutomationRoute(callEndpoint.toCurrentEndpoint().type)
             if (callEndpoint.endpointType == CallEndpoint.TYPE_BLUETOOTH) {
                 requestedBluetoothEndpointId = null
             }
@@ -88,17 +136,78 @@ class VoiceAgentTelecomConnection(
     override fun onCallAudioStateChanged(state: CallAudioState) {
         super.onCallAudioStateChanged(state)
         VoiceAgentLog.d(TAG, "call audio state changed route=${state.route} supported=${state.supportedRouteMask}")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            recordObservedAutomationRoute(
+                when (state.route) {
+                    CallAudioState.ROUTE_EARPIECE -> VoiceAgentCallEndpointType.Earpiece
+                    CallAudioState.ROUTE_SPEAKER -> VoiceAgentCallEndpointType.Speaker
+                    else -> null
+                },
+            )
+        }
         if (state.route == CallAudioState.ROUTE_BLUETOOTH) {
             requestedLegacyBluetoothRoute = false
         }
     }
 
     override fun disconnectFromApp() {
-        disconnect(cause = DisconnectCause(DisconnectCause.LOCAL))
+        retirement.retryFromRoute(cause = DisconnectCause(DisconnectCause.LOCAL))
     }
 
-    private fun disconnect(cause: DisconnectCause) {
-        retirement.retire(cause)
+    override fun requestAutomationRoute(type: VoiceAgentCallEndpointType): Boolean {
+        val legacyRoute = when (type) {
+            VoiceAgentCallEndpointType.Speaker -> CallAudioState.ROUTE_SPEAKER
+            VoiceAgentCallEndpointType.Earpiece -> CallAudioState.ROUTE_EARPIECE
+            else -> return false
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            return runCatching {
+                @Suppress("DEPRECATION")
+                setAudioRoute(legacyRoute)
+            }.isSuccess
+        }
+
+        val endpoint = availableAutomationEndpoints.firstOrNull {
+            it.toCandidate().type == type
+        } ?: return false
+        return runCatching {
+            requestCallEndpointChange(
+                endpoint,
+                endpointRequestExecutor,
+                object : OutcomeReceiver<Void?, CallEndpointException> {
+                    override fun onResult(result: Void?) {
+                        VoiceAgentLog.d(
+                            TAG,
+                            "automation call endpoint request accepted endpoint=${endpoint.safeLabel()}",
+                        )
+                    }
+
+                    override fun onError(error: CallEndpointException) {
+                        VoiceAgentLog.w(
+                            TAG,
+                            "automation call endpoint request failed " +
+                                "endpoint=${endpoint.safeLabel()} code=${error.code}",
+                        )
+                    }
+                },
+            )
+        }.isSuccess
+    }
+
+    private fun recordObservedAutomationRoute(type: VoiceAgentCallEndpointType?) {
+        if (type !in setOf(VoiceAgentCallEndpointType.Speaker, VoiceAgentCallEndpointType.Earpiece)) {
+            return
+        }
+        val runtime = automationRuntimeProvider() ?: return
+        if (runtime.status().state != me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRunState.Active) {
+            return
+        }
+        runtime.record(
+            VoiceAutomationEventInput(
+                name = VoiceAutomationEventName.ROUTE_OBSERVED,
+                route = type,
+            ),
+        )
     }
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -168,18 +277,74 @@ internal class VoiceAgentTelecomRetirement<Cause>(
     private val onRetiring: () -> Unit,
     private val setDisconnected: (Cause) -> Unit,
     private val destroy: () -> Unit,
-    private val onRetired: () -> Unit,
+    private val onRetired: (Result<Unit>) -> Unit,
 ) {
-    private val retirement = RetirementBarrier()
+    private val lock = Any()
+    private var activeAttempt: Attempt? = null
+    private var terminalResult: Result<Unit>? = null
 
     fun retire(cause: Cause) {
-        retirement.retire {
+        retire(cause, retryAfterFailure = false)
+    }
+
+    fun retryFromRoute(cause: Cause) {
+        retire(cause, retryAfterFailure = true)
+    }
+
+    private fun retire(cause: Cause, retryAfterFailure: Boolean) {
+        val currentThread = Thread.currentThread()
+        val attempt = synchronized(lock) {
+            activeAttempt?.also { currentAttempt ->
+                if (currentAttempt.ownerThread === currentThread) return
+            } ?: run {
+                terminalResult?.let { result ->
+                    if (result.isSuccess || !retryAfterFailure) {
+                        result.getOrThrow()
+                        return
+                    }
+                }
+                Attempt().also { newAttempt ->
+                    activeAttempt = newAttempt
+                }
+            }
+        }
+
+        val result = runCatching {
+            attempt.retirement.retire {
+                attempt.ownerThread = currentThread
+                try {
+                    runCleanup(cause)
+                } finally {
+                    attempt.ownerThread = null
+                }
+            }
+        }
+        synchronized(lock) {
+            if (activeAttempt === attempt) {
+                terminalResult = result
+                activeAttempt = null
+            }
+        }
+        result.getOrThrow()
+    }
+
+    private fun runCleanup(cause: Cause) {
+        val cleanupResult = runCatching {
             runVoiceAgentCleanupStages(
                 onRetiring,
                 { setDisconnected(cause) },
                 destroy,
-                onRetired,
             )
         }
+        runVoiceAgentCleanupStages(
+            { cleanupResult.getOrThrow() },
+            { onRetired(cleanupResult) },
+        )
+    }
+
+    private class Attempt {
+        @Volatile
+        var ownerThread: Thread? = null
+        val retirement = RetirementBarrier()
     }
 }

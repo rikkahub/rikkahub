@@ -4,8 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE="${VOICE_AGENT_E2E_PACKAGE:-me.rerere.rikkahub.debug}"
 SERVICE_COMPONENT="$PACKAGE/me.rerere.rikkahub.voiceagent.VoiceAgentCallService"
-INJECT_COMPONENT="$PACKAGE/me.rerere.rikkahub.voiceagent.debug.VoiceAudioDebugInjectionReceiver"
-INJECT_ACTION="me.rerere.rikkahub.debug.voiceagent.INJECT_PCM"
+INJECT_COMPONENT="$PACKAGE/me.rerere.rikkahub.voiceagent.debug.VoiceCaptureFixtureDebugReceiver"
+FIXTURE_ARM_ACTION="me.rerere.rikkahub.debug.voiceagent.ARM_CAPTURE_FIXTURE"
+FIXTURE_TRIGGER_ACTION="me.rerere.rikkahub.debug.voiceagent.TRIGGER_CAPTURE_FIXTURE"
 CALL_START_ACTION="me.rerere.rikkahub.voiceagent.action.START"
 CALL_END_ACTION="me.rerere.rikkahub.voiceagent.action.END"
 APP_PCM_PATH_PREFIX="voice-e2e/queue-prompt"
@@ -49,6 +50,7 @@ CLEANUP_STATUS="not_started"
 CLEANUP_DETAIL=""
 DEVICE_TMP_PCM_CLEANUP_NEEDED=0
 APP_PCM_CLEANUP_NEEDED=0
+FIXTURE_TOKEN=""
 APP_PCM_CLEANUP_PATHS=()
 ADB_APP_CLEANUP_ENABLED=0
 GENERATED_PCM_FROM_PROMPT=0
@@ -705,36 +707,67 @@ adb_logcat logcat -v time \
   VoiceAgentCallSession:D \
   VoiceAgentGemini:D \
   VoiceAgentE2E:D \
-  VoiceAudioDebugInjection:I \
   AndroidVoiceAudioEngine:D \
   AndroidRuntime:E \
   '*:S' > "$LOG_FILE" &
 LOGCAT_PID=$!
 
+for index in "${!QUEUE_PCM_PATHS[@]}"; do
+  copy_private_pcm_prompt "${QUEUE_PCM_PATHS[$index]}" "${QUEUE_APP_PCM_PATHS[$index]}"
+done
+
+printf 'Arming private PCM capture fixtures...\n'
+fixture_arm_args=(
+  --es initial_path "${QUEUE_APP_PCM_PATHS[0]}"
+  --ei chunk_bytes "${VOICE_AGENT_QUEUE_E2E_CHUNK_BYTES:-3200}"
+  --el chunk_delay_ms "${VOICE_AGENT_QUEUE_E2E_CHUNK_DELAY_MS:-20}"
+)
+if (( ${#QUEUE_APP_PCM_PATHS[@]} > 1 )); then
+  fixture_arm_args+=(--es staged_path "${QUEUE_APP_PCM_PATHS[1]}")
+fi
+arm_output="$(adb_cmd shell am broadcast \
+  -n "$INJECT_COMPONENT" \
+  -a "$FIXTURE_ARM_ACTION" \
+  "${fixture_arm_args[@]}")"
+[[ "$arm_output" == *"result=0"* ]] || {
+  printf 'Capture fixture arm was rejected.\n' >&2
+  exit 1
+}
+FIXTURE_TOKEN="$(printf '%s\n' "$arm_output" | sed -n 's/.*token=\(fixture-[1-9][0-9]*\).*/\1/p' | tail -n 1)"
+[[ -n "$FIXTURE_TOKEN" ]] || {
+  printf 'Capture fixture arm returned no token.\n' >&2
+  exit 1
+}
+
 printf 'Starting Voice Agent foreground service...\n'
 adb_cmd shell am start-foreground-service \
   -n "$SERVICE_COMPONENT" \
   -a "$CALL_START_ACTION" \
-  --es conversationId "$VOICE_AGENT_E2E_CONVERSATION_ID" >/dev/null
+  --es conversationId "$VOICE_AGENT_E2E_CONVERSATION_ID" \
+  --es transport direct_gemini \
+  --es captureFixtureToken "$FIXTURE_TOKEN" >/dev/null
 CALL_STARTED=1
 
 wait_for_log "Gemini setup complete" 'VoiceAgentGemini.*event kind=SetupComplete' 120
 
 for index in "${!QUEUE_PCM_PATHS[@]}"; do
   turn=$((index + 1))
-  copy_private_pcm_prompt "${QUEUE_PCM_PATHS[$index]}" "${QUEUE_APP_PCM_PATHS[$index]}"
 
-  printf 'Injecting private PCM prompt turn %s...\n' "$turn"
-  adb_cmd shell am broadcast \
-    -n "$INJECT_COMPONENT" \
-    -a "$INJECT_ACTION" \
-    --es path "${QUEUE_APP_PCM_PATHS[$index]}" \
-    --ei chunk_bytes "${VOICE_AGENT_QUEUE_E2E_CHUNK_BYTES:-3200}" \
-    --el chunk_delay_ms "${VOICE_AGENT_QUEUE_E2E_CHUNK_DELAY_MS:-20}" \
-    --el leading_silence_ms "${VOICE_AGENT_QUEUE_E2E_LEADING_SILENCE_MS:-100}" \
-    --el trailing_silence_ms "${VOICE_AGENT_QUEUE_E2E_TRAILING_SILENCE_MS:-200}" >/dev/null
+  if (( index > 0 )); then
+    printf 'Triggering private PCM prompt turn %s...\n' "$turn"
+    trigger_output="$(adb_cmd shell am broadcast \
+      -n "$INJECT_COMPONENT" \
+      -a "$FIXTURE_TRIGGER_ACTION" \
+      --es token "$FIXTURE_TOKEN" \
+      --es path "${QUEUE_APP_PCM_PATHS[$index]}")"
+    [[ "$trigger_output" == *"result=0"* ]] || {
+      printf 'Capture fixture trigger was rejected for turn %s.\n' "$turn" >&2
+      exit 1
+    }
+  fi
 
-  wait_for_log "debug PCM delivered for turn $turn" 'VoiceAudioDebugInjection.*debug_audio_injection result delivered=true' 30
+  wait_for_log "capture fixture delivered for turn $turn" \
+    'VoiceAgentCallSession.*capture source complete' 30
   if ! wait_for_log_count "at least $turn ask_hermes tool calls" \
     'VoiceAgentE2E.*hermes_tool_call_received' \
     "$turn" \

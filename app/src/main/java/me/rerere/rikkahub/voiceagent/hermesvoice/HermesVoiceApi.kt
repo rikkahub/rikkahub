@@ -12,6 +12,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.voiceagent.livekit.LiveKitSessionDetails
+import me.rerere.rikkahub.voiceagent.livekit.LiveKitSessionRequest
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import okhttp3.Call
 import okhttp3.Callback
@@ -47,6 +49,8 @@ private val ERROR_SENSITIVE_KEYS = setOf(
     "token",
     "secret",
     "password",
+    "livekiturl",
+    "participanttoken",
     "websocketurl",
     "liveconnectconfig",
     "connectconfig",
@@ -61,15 +65,15 @@ private val ERROR_SECRET_PATTERNS = listOf(
         option = RegexOption.IGNORE_CASE,
     ),
     Regex(
-        pattern = """("?(?:authorization|api[_-]?key|key|device[_-]?api[_-]?key|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)"?\s*[:=]\s*")([^"]*)("?|$)""",
+        pattern = """("?(?:authorization|api[_-]?key|key|device[_-]?api[_-]?key|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|participant[_-]?token|token|secret|password|websocket[_-]?url|livekit[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)"?\s*[:=]\s*")([^"]*)("?|$)""",
         option = RegexOption.IGNORE_CASE,
     ),
     Regex(
-        pattern = """('?(?:authorization|api[_-]?key|key|device[_-]?api[_-]?key|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)'?\s*[:=]\s*')([^']*)('?|$)""",
+        pattern = """('?(?:authorization|api[_-]?key|key|device[_-]?api[_-]?key|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|participant[_-]?token|token|secret|password|websocket[_-]?url|livekit[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)'?\s*[:=]\s*')([^']*)('?|$)""",
         option = RegexOption.IGNORE_CASE,
     ),
     Regex(
-        pattern = """\b((?:authorization|api[_-]?key|key|device[_-]?api[_-]?key|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|token|secret|password|websocket[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)\s*[:=]\s*)([^\r\n,;}\]]+)""",
+        pattern = """\b((?:authorization|api[_-]?key|key|device[_-]?api[_-]?key|client[_-]?id|client[_-]?secret|access[_-]?token|refresh[_-]?token|participant[_-]?token|token|secret|password|websocket[_-]?url|livekit[_-]?url|live[_-]?connect[_-]?config|connect[_-]?config|provider[_-]?config|session[_-]?url|prompt|answer)\s*[:=]\s*)([^\r\n,;}\]]+)""",
         option = RegexOption.IGNORE_CASE,
     ),
 )
@@ -216,6 +220,15 @@ class HermesVoiceApi internal constructor(
         postJson(
             path = "/api/mobile/voice/session",
             body = MobileVoiceSessionRequest(modelId = modelId),
+        )
+
+    suspend fun createLiveKitSession(
+        conversationId: String,
+        traceId: String,
+    ): LiveKitSessionDetails =
+        postJson(
+            path = "/api/mobile/livekit/session",
+            body = LiveKitSessionRequest(conversationId = conversationId, traceId = traceId),
         )
 
     suspend fun askHermes(

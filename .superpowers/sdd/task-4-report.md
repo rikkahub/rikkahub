@@ -1,61 +1,97 @@
 ## Current Result
 
 - Status: DONE
-- Commit: `22623daf5cf6e49d76c724591af52b1cd0633886` (`fix(voice): prove direct capture adapter contracts`)
-- Summary: Restored executable proof for the Android capture-device boundary without restoring a platform handle or domain operations abstraction. `AndroidDirectCaptureDeviceAdapter` now owns a candidate-local action seam whose production closures retain each private `AudioDeviceInfo`; focused tests execute the adapter and prove permission short-circuiting, exact selected-candidate actions, accepted-only cleanup ownership, exactly-once clearing, and best-effort platform failures.
+- Code commit: `80aca989e73db6c85c768ea79f16810710c8acc7`
+  (`refactor(voice): rename startup cleanup decision`)
+- Summary: Startup failure cleanup now makes one atomic local-versus-external ownership claim. An external winner
+  excludes local delegate work; a local winner publishes one in-flight attempt that a later caller-cancellation transfer
+  joins before finishing only worker/call-job stages. The losing path never independently invokes the delegate. The
+  first failed result therefore remains retryable only from a later `CleanupFailed` start and is supplied unchanged for
+  suppression onto the caller's canonical cancellation. The private arbitration type is named
+  `StartupLocalCleanupDecision`, avoiding the binding scan's deleted-ownership token. The Task 4 typed factory boundary
+  and temporary interface-level legacy bridge are unchanged.
 
 ## Tests
 
-- RED: The exact focused command failed in `:app:compileDebugUnitTestKotlin` after the focused adapter tests were added. After correcting a test-only `AudioRecord` allocator reference, the expected RED was solely the missing adapter seam: `No parameter with name 'hasConnectPermission'`, `No parameter with name 'captureDevices'`, `No parameter with name 'clearCommunicationDevice'`, and unresolved `AndroidDirectCaptureDeviceCandidate`.
-- Focused GREEN: The exact Task 4 command passed with `BUILD SUCCESSFUL in 10s`. The generated XML reports 50 selected tests, 0 skipped, 0 failures, and 0 errors: 29 `DirectAudioRouteCapabilitiesTest`, 19 `AndroidDirectAudioRouteControllerTest`, and 2 `VoiceAudioRouteSelectorTest`.
+- Focused verification: the exact Task 4 startup-plus-reducer command passed with `BUILD SUCCESSFUL in 10s`. Generated
+  XML reports 38 selected tests, 0 skipped, 0 failures, and 0 errors: 18
+  `VoiceAgentCallOrchestratorStartupTest` and 20 `VoiceAgentCallStateMachineTest`.
 
   ```text
   ./gradlew :app:testDebugUnitTest \
-    --tests '*DirectAudioRouteCapabilitiesTest' \
-    --tests '*AndroidDirectAudioRouteControllerTest' \
-    --tests '*VoiceAudioRouteSelectorTest'
+    --tests '*VoiceAgentCallStateMachineTest' \
+    --tests '*VoiceAgentCallOrchestratorStartupTest'
   ```
 
-- Prohibited-boundary scans: Both exact Task 4 Step 5 scans exited `0` with no matches. No prohibited sleeps, lifecycle/recorder markers, Bluetooth marker types, capture-device handles/operations, or recovery casts exist in the scanned production and audio-test paths.
-- Boundary review: `AudioDeviceInfo` appears only in `AndroidDirectCaptureDeviceAdapter.kt`. `AndroidDirectAudioRouteController.kt`, `VoiceAudioRouteSelector.kt`, `VoiceAudioRouteSelectorTest.kt`, `DirectAudioRouteCapabilities.kt`, and `AndroidDirectAudioRouteControllerTest.kt` are unchanged from the task head.
-- Diff hygiene: `git diff --check` exited `0`.
-- Full fix evidence: `.superpowers/ce1/voice-concurrency-ce1-20260717/task-8-wave-1-fix-report.md`.
+- Targeted deleted-name verification returned exit status 1 with no matches:
+
+  ```text
+  rg --hidden -n "StartupLocalCleanup[C]laim" -g '!.git' .
+  rg -n "Cleanup[C]laim" \
+    app/src/main/java/me/rerere/rikkahub/voiceagent/VoiceAgentStartOperation.kt
+  ```
+
+- The deterministic race regression blocks local resource cleanup, cancels the caller, and releases one failed result.
+  It proves exactly one delegate invocation, `CleanupFailed` with that first error, identity-preserved caller
+  cancellation with the same error suppressed, and no remaining app-scope child job.
+- Self-review: `git diff --cached --check` passed before the code commit. The completion review checked the Task 4
+  requirements, both atomic-claim directions, exact-attempt result identity, clean/dirty retry admission, interface
+  compatibility, and the focused test XML. Project instructions keep review work in the main thread, so the review
+  checklist was applied directly rather than dispatched.
 
 ## Files Changed
 
-- `app/src/main/java/me/rerere/rikkahub/voiceagent/audio/AndroidDirectCaptureDeviceAdapter.kt` — adds the candidate-local action seam while retaining every `AudioDeviceInfo` inside production closures owned by the Android adapter.
-- `app/src/test/java/me/rerere/rikkahub/voiceagent/audio/DirectAudioRouteCapabilitiesTest.kt` — adds focused adapter behavioral coverage for permission denial/failure, enumeration failure, exact selected-candidate configuration, preferred/communication failure containment, accepted-only lease ownership, and exactly-once cleanup.
-- `.superpowers/sdd/task-4-report.md` — records the CE1 fix result and archives the superseded original result below.
-- `.superpowers/ce1/voice-concurrency-ce1-20260717/task-8-wave-1-fix-report.md` — records complete CE1-T8-001 fix evidence.
+- `app/src/main/java/me/rerere/rikkahub/voiceagent/VoiceAgentStartOperation.kt` — atomically arbitrates local and external
+  startup cleanup, publishes local attempts for exact joining, prevents duplicate delegate invocation, preserves
+  later-start-only retry admission, and uses a binding-scan-safe private decision name.
+- `app/src/main/java/me/rerere/rikkahub/voiceagent/VoiceAgentCallOrchestrator.kt` — uses the shared cancellation helpers
+  for caller-cancellation handoff.
+- `app/src/main/java/me/rerere/rikkahub/voiceagent/VoiceAgentCancellation.kt` — narrowly owns canonical
+  `CancellationException` unwrapping and identity-distinct suppressed-error attachment shared by startup and the
+  orchestrator.
+- `app/src/main/java/me/rerere/rikkahub/voiceagent/VoiceAgentCallFactory.kt` — retains interface-default compatibility
+  for both typed Task 4 factories and unrelated legacy `create(...)` implementations through Task 6.
+- `app/src/test/java/me/rerere/rikkahub/voiceagent/VoiceAgentCallOrchestratorTestFixtures.kt` — makes the Task 4 factory
+  typed-only and adds an injectable final route-metadata read boundary.
+- `app/src/test/java/me/rerere/rikkahub/voiceagent/VoiceAgentCallOrchestratorStartupTest.kt` — adds the blocked local
+  cleanup versus caller-cancellation race regression.
+- `.superpowers/sdd/task-4-report.md` — records the final Task 4 review-fix evidence.
 
 ## Concerns
 
-- None. The focused build retained the repository's pre-existing unresolved `ExperimentalNavigation3Api` opt-in warning; it did not affect compilation or tests.
+- The focused build retains the repository's existing unresolved `ExperimentalNavigation3Api` opt-in warning. It does
+  not affect compilation or the selected tests.
 
 ## Attempt Appendix
 
-### Attempt 1 — Original Task 4 implementation (superseded by CE1-T8-001 fix)
-
-#### Prior Current Result
-
-- Status: DONE
-- Commit: `36bc327e` (`refactor(voice): type direct capture adapters`)
-- Summary: Added `AndroidDirectCaptureDeviceAdapter` as the complete Android capture-device boundary. Android `AudioDeviceInfo` values remain private to the adapter; the shared capability file now exposes only `DirectCaptureDeviceCapability`. Controller tests fake that capability directly, while route-selection policy remains in the pure selector tests.
-
-#### Prior Tests
-
-- RED: After removing the obsolete operation/handle fake and its contract-only tests, the exact focused command failed in `:app:compileDebugUnitTestKotlin` because `AndroidDirectAudioRouteControllerTest` still referenced the removed `FakeCaptureDeviceOperations`. The compiler reported `Unresolved reference 'FakeCaptureDeviceOperations'` plus the dependent obsolete fake fields. This was the expected old-contract compile shape before production changed.
-- Focused GREEN: The exact Task 4 command passed with `BUILD SUCCESSFUL in 11s`; `:app:testDebugUnitTest` executed and all selected tests passed.
-- Prohibited-boundary scans: Both exact Step 5 scans exited `0` with no matches.
-- Diff hygiene: `git diff --check` exited `0` before commit.
-
-#### Prior Files Changed
-
-- `app/src/main/java/me/rerere/rikkahub/voiceagent/audio/AndroidDirectCaptureDeviceAdapter.kt` — owned permission gating, Android input enumeration, domain mapping and selection, recorder preference, communication-device selection, and idempotent cleanup.
-- `app/src/main/java/me/rerere/rikkahub/voiceagent/audio/DirectAudioRouteCapabilities.kt` — wired the Android adapter and removed opaque capture-device operations, handles, and recovery casts.
-- `app/src/test/java/me/rerere/rikkahub/voiceagent/audio/DirectAudioRouteCapabilitiesTest.kt` — removed contract-only capture-device operation/handle tests and fakes.
-- `app/src/test/java/me/rerere/rikkahub/voiceagent/audio/AndroidDirectAudioRouteControllerTest.kt` — tested capture-device best-effort failure through a direct `DirectCaptureDeviceCapability` fake.
-
-#### Prior Concerns
-
-- None recorded. The later stable review identified the residual executable coverage gap now fixed by CE1-T8-001.
+- Mechanical scan RED/GREEN: before the private-type rename, the targeted scan reported 13 occurrences of the prohibited
+  helper-name token in `VoiceAgentStartOperation.kt`. After the code-only rename, the same scan returned exit status 1
+  with no matches. No later-task legacy API was migrated.
+- Superseded verification: the prior concurrency-fix focused run passed the same 38 tests in 9s; the final 10s run above
+  verifies the binding-scan-safe rename.
+- Re-review RED: With the deterministic blocked-cleanup race added before production changes, the exact focused command
+  ran 38 tests and failed one assertion: the caller's canonical cancellation had no suppressed first cleanup failure.
+  The local attempt had been invoked a second time and succeeded, demonstrating the check-then-act ownership race.
+- Superseded verification: before this re-review fix, the prior final focused run passed 37 tests in 6s. Intermediate
+  GREEN runs for the atomic-claim implementation were superseded by the final 38-test verification recorded above.
+- Review-fix RED 1: With the two resource-cancellation regressions added before production changes, the exact focused
+  command reported `ClassCastException` because the dirty resource cancellation returned `Superseded` instead of
+  `Failed`; the pre-collector case also left the run waiting on the leaked call job, so the RED run was interrupted after
+  the defect was established. Mapping locally owned cancellation to clean/dirty failure and moving the last resource
+  read before collector creation made the focused command pass.
+- Review-fix RED 2: After removing the legacy `create(...)` override from `OrchestratorFakeFactory`, the exact focused
+  command failed in `:app:compileDebugUnitTestKotlin`: the fake did not implement the abstract legacy method. Giving that
+  method an interface default preserved the temporary bridge without adding legacy behavior back to the Task 4 fake;
+  the exact focused command then passed.
+- Original Task 4 RED: After adding the happy-path and matching-start tests, the startup command failed in
+  `:app:compileDebugUnitTestKotlin` because `VoiceAgentCallOrchestrator` did not exist. The compiler reported
+  `Unresolved reference 'VoiceAgentCallOrchestrator'`; the dependent state-flow and inference diagnostics were cascades
+  from that missing API.
+- Original self-review RED/GREEN 1: A last-waiter cancellation test showed that the worker could run the first failed
+  cleanup and the external cleanup effect could retry it immediately, losing `CleanupFailed`. The startup cleanup handle
+  now marks cleanup transfer before canceling the worker; one external attempt publishes the first failure and suppresses
+  it onto the caller's canonical cancellation.
+- Original self-review RED/GREEN 2: Post-route and post-factory cancellation tests showed that synchronous transfer
+  could enter the next external phase before the canceled caller dispatched `StartCancelled`. Cleanup ownership is now
+  installed before an explicit cancellation yield at each transfer boundary, so the exact returned lease/session is
+  cleaned and the factory/session start is not entered after cancellation.

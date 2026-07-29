@@ -12,12 +12,16 @@ import me.rerere.rikkahub.VOICE_AGENT_NOTIFICATION_CHANNEL_ID
 class VoiceAgentNotificationFactory(
     private val context: Context,
 ) {
-    fun activeNotification(conversationId: String, state: VoiceAgentUiState): Notification {
+    fun activeNotification(
+        conversationId: String,
+        transport: VoiceAgentTransport,
+        state: VoiceAgentUiState,
+    ): Notification {
         return NotificationCompat.Builder(context, VOICE_AGENT_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.small_icon)
             .setContentTitle("RikkaHub Voice Agent")
             .setContentText(state.notificationText())
-            .setContentIntent(openVoiceAgentPendingIntent(conversationId))
+            .setContentIntent(openVoiceAgentPendingIntent(conversationId, transport))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_CALL)
@@ -26,10 +30,21 @@ class VoiceAgentNotificationFactory(
             .build()
     }
 
-    private fun openVoiceAgentPendingIntent(conversationId: String): PendingIntent {
+    private fun openVoiceAgentPendingIntent(
+        conversationId: String,
+        transport: VoiceAgentTransport,
+    ): PendingIntent {
+        val fields = encodeVoiceAgentNotificationRouteFields(conversationId, transport)
         val intent = Intent(context, RouteActivity::class.java)
             .setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            .putExtra(VoiceAgentCallContract.EXTRA_ROUTE_VOICE_AGENT_CONVERSATION_ID, conversationId)
+            .putExtra(
+                VoiceAgentCallContract.EXTRA_ROUTE_VOICE_AGENT_CONVERSATION_ID,
+                fields.conversationId,
+            )
+            .putExtra(
+                VoiceAgentCallContract.EXTRA_ROUTE_VOICE_AGENT_TRANSPORT,
+                fields.transportWireName,
+            )
         return PendingIntent.getActivity(
             context,
             conversationId.hashCode(),

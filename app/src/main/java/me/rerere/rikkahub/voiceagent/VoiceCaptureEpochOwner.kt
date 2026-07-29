@@ -50,7 +50,7 @@ internal class VoiceCaptureEpochOwner(
             admitLocked(token.epoch)
         }
 
-    fun claimDebugCompletion(token: VoiceCaptureEpochToken): VoiceCaptureEffectAdmission? =
+    fun claimSourceCompletion(token: VoiceCaptureEpochToken): VoiceCaptureEffectAdmission? =
         synchronized(lock) {
             val epoch = token.epoch
             val admission = admitLocked(epoch) ?: return@synchronized null

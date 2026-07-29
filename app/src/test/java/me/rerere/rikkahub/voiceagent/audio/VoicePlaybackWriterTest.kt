@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationAudioProbe
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -16,6 +17,119 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
 class VoicePlaybackWriterTest {
+    @Test
+    fun `delayed suppression preserves replacement registered before its queued diagnostic`() {
+        val callbacks = mutableListOf<String>()
+        val tracker = VoiceAutomationOutputTracker()
+        val probe = recordingAutomationProbe(callbacks)
+        val replacementCommandId = PlaybackCommandId(2L)
+
+        tracker.register(
+            commandId = replacementCommandId,
+            writerGeneration = WriterGeneration(2L),
+            byteCount = 2,
+            nonSilent = true,
+            probe = probe,
+        )
+        tracker.onDiagnostic(
+            VoicePlaybackDiagnostic.PlaybackSuppressed(
+                writerGeneration = WriterGeneration(2L),
+            ),
+        )
+        tracker.onDiagnostic(
+            VoicePlaybackDiagnostic.ChunkQueued(
+                commandId = replacementCommandId,
+                bytes = 2,
+                writerGeneration = WriterGeneration(2L),
+            ),
+        )
+        tracker.onDiagnostic(
+            VoicePlaybackDiagnostic.ChunkWritten(
+                commandId = replacementCommandId,
+                bytes = 2,
+                writerGeneration = WriterGeneration(2L),
+            ),
+        )
+
+        assertEquals(listOf("queued:2", "written:2:true"), callbacks)
+    }
+
+    @Test
+    fun `stale old command cannot consume equal sized replacement automation metadata`() {
+        val scope = testScope()
+        val diagnostics = CopyOnWriteArrayList<VoicePlaybackDiagnostic>()
+        val callbacks = CopyOnWriteArrayList<String>()
+        val oldSink = FakeVoicePcm16Sink(blockFirstWrite = true)
+        val replacementSink = FakeVoicePcm16Sink(expectedWrites = 1)
+        val sinkIndex = AtomicInteger()
+        val tracker = VoiceAutomationOutputTracker()
+        val probe = recordingAutomationProbe(callbacks)
+        val writer = VoicePlaybackWriter(
+            scope = scope,
+            createSink = {
+                if (sinkIndex.getAndIncrement() == 0) oldSink else replacementSink
+            },
+            onDiagnostic = { diagnostic ->
+                tracker.onDiagnostic(diagnostic)
+                diagnostics += diagnostic
+            },
+        )
+        writer.activateSession(100L)
+        val oldCommandReservation = writer.reserveCommand()
+        val oldCommandId = oldCommandReservation.commandId
+        tracker.register(
+            commandId = oldCommandId,
+            writerGeneration = oldCommandReservation.writerGeneration,
+            byteCount = 2,
+            nonSilent = true,
+            probe = probe,
+        )
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "AQE=",
+                sessionId = 100L,
+                commandReservation = oldCommandReservation,
+            ),
+        )
+        assertTrue(oldSink.awaitWriteStarted())
+
+        writer.suppress()
+        callbacks.clear()
+        val replacementCommandReservation = writer.reserveCommand()
+        val replacementCommandId = replacementCommandReservation.commandId
+        tracker.register(
+            commandId = replacementCommandId,
+            writerGeneration = replacementCommandReservation.writerGeneration,
+            byteCount = 2,
+            nonSilent = true,
+            probe = probe,
+        )
+        assertTrue(
+            writer.playBase64(
+                base64Pcm16 = "AgI=",
+                sessionId = 100L,
+                commandReservation = replacementCommandReservation,
+            ),
+        )
+
+        oldSink.releaseBlockedWrite()
+        assertTrue(replacementSink.awaitWrites(2))
+        assertTrue(waitUntil {
+            diagnostics.any {
+                it is VoicePlaybackDiagnostic.StaleChunkRejected &&
+                    it.commandId == oldCommandId
+            } &&
+                diagnostics.any {
+                    it is VoicePlaybackDiagnostic.ChunkWritten &&
+                        it.commandId == replacementCommandId
+                }
+        })
+        assertEquals(listOf("queued:2", "written:2:true"), callbacks)
+
+        writer.release()
+        scope.cancel()
+    }
+
     @Test
     fun `play enqueues decoded chunks and writes them fully in order`() {
         val scope = testScope()
@@ -867,6 +981,25 @@ class VoicePlaybackWriterTest {
             Thread.yield()
         }
         return predicate()
+    }
+
+    private fun recordingAutomationProbe(
+        callbacks: MutableList<String>,
+    ) = object : VoiceAutomationAudioProbe {
+        override fun onInjectionStarted(totalBytes: Long) = Unit
+        override fun onInjectionChunk(byteCount: Int) = Unit
+        override fun onInjectionCompleted() = Unit
+        override fun onOutputQueued(byteCount: Int) {
+            callbacks += "queued:$byteCount"
+        }
+
+        override fun onOutputWritten(byteCount: Int, nonSilent: Boolean) {
+            callbacks += "written:$byteCount:$nonSilent"
+        }
+
+        override fun onOutputDrained() = Unit
+        override fun onInterruptionStarted() = Unit
+        override fun onOutputSilenceConfirmed() = Unit
     }
 
     private class FakeVoicePcm16Sink(

@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +17,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
@@ -75,6 +78,7 @@ import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.hugeicons.stroke.Voice
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -103,7 +107,6 @@ import me.rerere.rikkahub.utils.base64Decode
 import me.rerere.rikkahub.utils.isAllowedFileType
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.voiceagent.VoiceSessionDebugDisplay
-import me.rerere.rikkahub.voiceagent.voiceAgentLaunchLabel
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -348,8 +351,8 @@ private fun ChatPageContent(
                     onClickMenu = {
                         previewMode = !previewMode
                     },
-                    onVoiceAgent = {
-                        navController.navigate(Screen.VoiceAgent(conversation.id.toString()))
+                    onVoiceAgent = { action ->
+                        navController.navigate(voiceAgentScreen(conversation.id.toString(), action))
                     },
                     onUpdateTitle = {
                         vm.updateTitle(it)
@@ -798,12 +801,16 @@ private fun TopBar(
     bigScreen: Boolean,
     previewMode: Boolean,
     onClickMenu: () -> Unit,
-    onVoiceAgent: () -> Unit,
+    onVoiceAgent: (VoiceAgentLaunchAction) -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val voiceAgentActions = launchActions(BuildConfig.VOICE_AGENT_LIVEKIT_EXPERIMENT_ENABLED)
+    val directVoiceAgentAction = voiceAgentActions.single { !it.inOptions }
+    val liveKitVoiceAgentAction = voiceAgentActions.singleOrNull { it.inOptions }
+    var optionsMenuExpanded by remember { mutableStateOf(false) }
     val titleState = useEditState<String> {
         onUpdateTitle(it)
     }
@@ -858,19 +865,39 @@ private fun TopBar(
             }
         },
         actions = {
-            TextButton(onClick = onVoiceAgent) {
-                val label = voiceAgentLaunchLabel()
+            TextButton(onClick = { onVoiceAgent(directVoiceAgentAction) }) {
+                val label = directVoiceAgentAction.label
                 Icon(HugeIcons.Voice, label)
                 Spacer(Modifier.width(8.dp))
                 Text(label, maxLines = 1)
             }
 
-            IconButton(
-                onClick = {
-                    onClickMenu()
+            Box {
+                IconButton(onClick = { optionsMenuExpanded = true }) {
+                    Icon(if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet, "Chat Options")
                 }
-            ) {
-                Icon(if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet, "Chat Options")
+                DropdownMenu(
+                    expanded = optionsMenuExpanded,
+                    onDismissRequest = { optionsMenuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Chat Options") },
+                        onClick = {
+                            optionsMenuExpanded = false
+                            onClickMenu()
+                        },
+                    )
+                    liveKitVoiceAgentAction?.let { action ->
+                        DropdownMenuItem(
+                            text = { Text(action.label) },
+                            onClick = {
+                                optionsMenuExpanded = false
+                                onVoiceAgent(action)
+                            },
+                            leadingIcon = { Icon(HugeIcons.Voice, action.label) },
+                        )
+                    }
+                }
             }
 
             IconButton(

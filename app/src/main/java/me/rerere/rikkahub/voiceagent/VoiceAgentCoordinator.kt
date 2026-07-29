@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +19,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.audio.VoiceAudioEngine
 import me.rerere.rikkahub.voiceagent.audio.PlaybackEpoch
 import me.rerere.rikkahub.voiceagent.audio.VoicePlaybackEvent
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationAudioProbes
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveEvent
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.hermes.HermesAnnouncer
@@ -38,6 +40,7 @@ import kotlin.uuid.Uuid
 const val HERMES_JOB_POLL_INTERVAL_MS = 10_000L
 private const val HERMES_JOB_MAX_ELAPSED_MS = 24L * 60 * 60 * 1000L
 private const val HERMES_JOB_POLL_RETRY_DELAY_MS = 2_000L
+private const val AUTOMATION_OUTPUT_SILENCE_CONFIRMATION_MS = 100L
 private const val UNBOUND_HERMES_BRIDGE_SESSION_ID = HermesJobManager.UNBOUND_BRIDGE_SESSION_ID
 
 enum class SessionTransition { Reconnect, AutomaticReconnect, SessionEnd }
@@ -289,11 +292,17 @@ class VoiceAgentCoordinator(
     }
 
     fun suppressPlayback() {
+        val automationAudioProbe = VoiceAutomationAudioProbes.activeSharedOrNull()
+        automationAudioProbe?.onInterruptionStarted()
         suppressionController.suppress()
         turnTracker.interruptAssistantTurn(suppressed = true)
         _state.update { it.reduce(VoiceAgentEvent.UserInterrupted) }
         sessionScope.launch(toolLaunchContext) {
             audio.suppressPlayback()
+            if (automationAudioProbe != null) {
+                delay(AUTOMATION_OUTPUT_SILENCE_CONFIRMATION_MS)
+                automationAudioProbe.onOutputSilenceConfirmed()
+            }
         }
     }
 

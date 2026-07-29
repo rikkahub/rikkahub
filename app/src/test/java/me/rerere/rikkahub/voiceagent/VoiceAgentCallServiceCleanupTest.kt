@@ -7,8 +7,10 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VoiceAgentCallServiceCleanupTest {
@@ -26,7 +28,7 @@ class VoiceAgentCallServiceCleanupTest {
     }
 
     @Test
-    fun `scope cancellation cannot abandon an entered tracked operation`() = runBlocking {
+    fun `scope cancellation completes blocked tracked waiter`() = runBlocking {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         val tracker = VoiceAgentEndJobTracker()
         val operationStarted = CompletableDeferred<Unit>()
@@ -42,10 +44,11 @@ class VoiceAgentCallServiceCleanupTest {
             val launchedJob = checkNotNull(tracker.job)
 
             scope.cancel()
-            releaseOperation.complete(Unit)
-
-            withTimeout(TEST_TIMEOUT_MS) { operationFinished.await() }
             withTimeout(TEST_TIMEOUT_MS) { launchedJob.join() }
+
+            assertTrue(launchedJob.isCompleted)
+            assertTrue(launchedJob.isCancelled)
+            assertFalse(operationFinished.isCompleted)
             assertEquals(null, tracker.job)
         } finally {
             releaseOperation.complete(Unit)

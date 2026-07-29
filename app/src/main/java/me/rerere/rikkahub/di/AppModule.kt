@@ -4,6 +4,10 @@ import com.google.firebase.Firebase
 import com.google.firebase.analytics.analytics
 import com.google.firebase.crashlytics.crashlytics
 import com.google.firebase.remoteconfig.remoteConfig
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ProcessLifecycleOwner
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import me.rerere.highlight.Highlighter
 import me.rerere.rikkahub.AppScope
@@ -18,15 +22,24 @@ import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.SoundEffectPlayer
 import me.rerere.rikkahub.utils.UpdateChecker
 import me.rerere.rikkahub.voiceagent.DefaultVoiceAgentCallFactory
+import me.rerere.rikkahub.voiceagent.TransportSelectingVoiceAgentCallFactory
 import me.rerere.rikkahub.voiceagent.VoiceAgentAudioRouteResolver
 import me.rerere.rikkahub.voiceagent.VoiceAgentCallFactory
-import me.rerere.rikkahub.voiceagent.VoiceAgentCallManager
-import me.rerere.rikkahub.voiceagent.VoiceAgentCallStartup
+import me.rerere.rikkahub.voiceagent.VoiceAgentCallOrchestrator
+import me.rerere.rikkahub.voiceagent.VoiceAgentCallServiceController
+import me.rerere.rikkahub.voiceagent.VoiceAgentRouteResolution
 import me.rerere.rikkahub.voiceagent.VoiceAgentNotificationFactory
 import me.rerere.rikkahub.voiceagent.VoiceSessionMetadataStore
 import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomAdapter
 import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomCallRegistry
 import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomGateway
+import me.rerere.rikkahub.voiceagent.livekit.LiveKitVoiceCallFactory
+import me.rerere.rikkahub.voiceagent.automation.DefaultVoiceAutomationRuntime
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventInput
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventName
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationLifecycle
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRunState
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRuntime
 import me.rerere.rikkahub.voiceagent.telemetry.SentryVoiceObservabilityConfig
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.createSentryVoiceObservability
@@ -112,13 +125,25 @@ val appModule = module {
         )
     }
 
-    single<VoiceAgentCallFactory> {
+    single {
         DefaultVoiceAgentCallFactory(
             context = get(),
             chatService = get(),
             settingsStore = get(),
             okHttpClient = get(),
             observability = get(),
+        )
+    }
+
+    single {
+        LiveKitVoiceCallFactory(context = get())
+    }
+
+    single<VoiceAgentCallFactory> {
+        TransportSelectingVoiceAgentCallFactory(
+            directFactoryProvider = { get<DefaultVoiceAgentCallFactory>() },
+            liveKitFactoryProvider = { get<LiveKitVoiceCallFactory>() },
+            liveKitEnabled = BuildConfig.VOICE_AGENT_LIVEKIT_EXPERIMENT_ENABLED,
         )
     }
 
@@ -135,10 +160,6 @@ val appModule = module {
             ),
             diagnosticRootDirectory = get<android.content.Context>().noBackupFilesDir,
         )
-    }
-
-    single {
-        VoiceAgentCallManager(factory = get())
     }
 
     single {
@@ -161,12 +182,48 @@ val appModule = module {
         VoiceAgentTelecomCallRegistry()
     }
 
-    single {
-        VoiceAgentAudioRouteResolver(gateway = get(), registry = get())
+    single<VoiceAutomationRuntime> {
+        DefaultVoiceAutomationRuntime(
+            noBackupFilesDir = get<android.content.Context>().noBackupFilesDir,
+        )
+    }
+
+    if (BuildConfig.DEBUG) {
+        single(createdAtStart = true) {
+            VoiceAutomationLifecycleRecorder(
+                appScope = get(),
+                runtime = get(),
+            )
+        }
     }
 
     single {
-        VoiceAgentCallStartup(manager = get(), routeResolver = get())
+        VoiceAgentAudioRouteResolver(
+            gateway = get(),
+            registry = get(),
+            cleanupScope = get<AppScope>(),
+        )
+    }
+
+    single {
+        val routeResolver = get<VoiceAgentAudioRouteResolver>()
+        VoiceAgentCallOrchestrator(
+            factory = get(),
+            resolveRoute = {
+                when (val resolution = routeResolver.resolve()) {
+                    is VoiceAgentRouteResolution.Resolved -> resolution.lease
+                    is VoiceAgentRouteResolution.CleanupFailed -> throw resolution.error
+                    is VoiceAgentRouteResolution.Superseded -> error(
+                        "Voice route resolution was superseded by another Telecom attempt",
+                    )
+                }
+            },
+            appScope = get<AppScope>(),
+        )
+    }
+
+    single<VoiceAgentCallServiceController> {
+        get<VoiceAgentCallOrchestrator>()
     }
 
     single {
@@ -179,5 +236,32 @@ val appModule = module {
             settingsStore = get(),
             filesManager = get()
         )
+    }
+}
+
+private class VoiceAutomationLifecycleRecorder(
+    appScope: AppScope,
+    private val runtime: VoiceAutomationRuntime,
+) {
+    init {
+        appScope.launch {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(
+                LifecycleEventObserver { _, event ->
+                    val lifecycle = when (event) {
+                        Lifecycle.Event.ON_START -> VoiceAutomationLifecycle.FOREGROUND
+                        Lifecycle.Event.ON_STOP -> VoiceAutomationLifecycle.BACKGROUND
+                        else -> null
+                    }
+                    if (lifecycle != null && runtime.status().state == VoiceAutomationRunState.Active) {
+                        runtime.record(
+                            VoiceAutomationEventInput(
+                                name = VoiceAutomationEventName.LIFECYCLE_OBSERVED,
+                                lifecycle = lifecycle,
+                            ),
+                        )
+                    }
+                },
+            )
+        }
     }
 }

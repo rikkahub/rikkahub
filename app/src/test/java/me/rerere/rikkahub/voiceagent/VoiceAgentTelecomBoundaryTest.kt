@@ -72,8 +72,8 @@ class VoiceAgentTelecomBoundaryTest {
     @Test
     fun `outgoing failure boundary completes only matching attempt`() = kotlinx.coroutines.runBlocking {
         val registry = VoiceAgentTelecomCallRegistry()
-        val stale = registry.beginAttempt()
-        val current = registry.beginAttempt()
+        val stale = registry.beginAttempt().requireAllocatedAttemptId()
+        val current = registry.beginAttempt().requireAllocatedAttemptId()
         val staleFailure = VoiceAgentTelecomFailure("stale", "ignored")
         val currentFailure = VoiceAgentTelecomFailure("telecom_outgoing_failed", "rejected")
 

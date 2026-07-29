@@ -5,6 +5,8 @@ cameraCore = "1.6.1"
 dom4j = "2.2.0"
 jlatexmath = "1.5"
 kotlin = "2.4.0"
+livekit-android = "2.27.0"
+mockk = "1.14.11"
 coreKtx = "1.19.0"
 junit = "4.13.2"
 junitVersion = "1.3.0"
@@ -133,6 +135,8 @@ sentry-android = { group = "io.sentry", name = "sentry-android", version.ref = "
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlin-coroutines-core" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlin-coroutines-test" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
+livekit-android = { module = "io.livekit:livekit-android", version.ref = "livekit-android" }
+mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 lucide-icons = { group = "com.composables", name = "icons-lucide", version.ref = "lucide-icons" }
 huge-icons = { group = "com.github.rikkahub", name = "hugeicons-compose", version.ref = "huge-icons" }
 image-viewer = { group = "com.jvziyaoyao.scale", name = "image-viewer", version.ref = "image-viewer" }

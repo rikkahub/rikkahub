@@ -34,7 +34,7 @@ internal class FakeVoiceAudioEngine : VoiceAudioEngine {
     var markPlaybackTurnCompleteCalls = 0
         private set
     private var captureCallback: ((ByteArray) -> Unit)? = null
-    private var debugInjectionCompleteCallback: (() -> Unit)? = null
+    private var captureSourceCompleteCallback: (() -> Unit)? = null
     private val suspendedStartCaptures = mutableListOf<SuspendedCaptureStart>()
     private val blockedStartCaptures = mutableListOf<BlockedPlayback>()
     private val blockedStopCaptures = mutableListOf<BlockedPlayback>()
@@ -52,7 +52,7 @@ internal class FakeVoiceAudioEngine : VoiceAudioEngine {
         playbackEventHandler = onEvent
     }
 
-    override suspend fun startCapture(onPcm16: (ByteArray) -> Unit, onDebugInjectionComplete: () -> Unit) {
+    override suspend fun startCapture(onPcm16: (ByteArray) -> Unit, onCaptureSourceComplete: () -> Unit) {
         startCaptureCalls += 1
         startCaptureError?.let { throw it }
         val suspended = synchronized(suspendedStartCaptures) {
@@ -77,7 +77,7 @@ internal class FakeVoiceAudioEngine : VoiceAudioEngine {
             blocked.release.await(500, TimeUnit.MILLISECONDS)
         }
         captureCallback = onPcm16
-        debugInjectionCompleteCallback = onDebugInjectionComplete
+        captureSourceCompleteCallback = onCaptureSourceComplete
         suspended?.installed?.complete(Unit)
     }
 
@@ -90,7 +90,7 @@ internal class FakeVoiceAudioEngine : VoiceAudioEngine {
         stopCaptureCalls += 1
         onStopCapture?.invoke()
         captureCallback = null
-        debugInjectionCompleteCallback = null
+        captureSourceCompleteCallback = null
         stopCaptureError?.let { throw it }
     }
 
@@ -274,8 +274,8 @@ internal class FakeVoiceAudioEngine : VoiceAudioEngine {
         captureCallback?.invoke(pcm16)
     }
 
-    fun completeDebugInjection() {
-        debugInjectionCompleteCallback?.invoke()
+    fun completeCaptureSource() {
+        captureSourceCompleteCallback?.invoke()
     }
 
     fun emitError(message: String) {
