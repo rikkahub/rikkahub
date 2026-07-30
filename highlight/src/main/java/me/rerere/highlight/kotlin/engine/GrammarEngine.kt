@@ -5,6 +5,10 @@ import me.rerere.highlight.HighlightToken
 internal class GrammarEngine(
     languages: List<LanguageDefinition>,
 ) {
+    private companion object {
+        const val MAX_EMBEDDING_DEPTH = 16
+    }
+
     private val languagesByAlias = buildMap {
         languages.forEach { language ->
             language.aliases.forEach { alias ->
@@ -26,6 +30,7 @@ internal class GrammarEngine(
             startIndex = 0,
             endIndex = code.length,
             language = definition,
+            embeddingDepth = 0,
         ).tokens
     }
 
@@ -34,6 +39,7 @@ internal class GrammarEngine(
         startIndex: Int,
         endIndex: Int,
         language: LanguageDefinition,
+        embeddingDepth: Int,
     ): ScanResult {
         return scan(
             source = source,
@@ -41,6 +47,7 @@ internal class GrammarEngine(
             endIndex = endIndex,
             language = language,
             stopAtClosingBrace = true,
+            embeddingDepth = embeddingDepth,
         )
     }
 
@@ -49,12 +56,35 @@ internal class GrammarEngine(
         startIndex: Int,
         endIndex: Int,
         language: LanguageDefinition,
+        embeddingDepth: Int,
     ): ScanResult {
         return scan(
             source = source,
             startIndex = startIndex,
             endIndex = endIndex,
             language = language,
+            embeddingDepth = embeddingDepth,
+        )
+    }
+
+    internal fun highlightEmbeddedRange(
+        source: String,
+        startIndex: Int,
+        endIndex: Int,
+        language: String,
+        embeddingDepth: Int,
+    ): ScanResult {
+        val definition = languagesByAlias[language.trim().lowercase()]
+        if (definition == null || embeddingDepth >= MAX_EMBEDDING_DEPTH) {
+            return plainResult(source, startIndex, endIndex)
+        }
+
+        return scan(
+            source = source,
+            startIndex = startIndex,
+            endIndex = endIndex,
+            language = definition,
+            embeddingDepth = embeddingDepth + 1,
         )
     }
 
@@ -64,6 +94,7 @@ internal class GrammarEngine(
         endIndex: Int,
         language: LanguageDefinition,
         stopAtClosingBrace: Boolean = false,
+        embeddingDepth: Int,
     ): ScanResult {
         val emitter = TokenEmitter()
         var index = startIndex
@@ -82,6 +113,7 @@ internal class GrammarEngine(
                 previousKind = previousKind,
                 language = language,
                 engine = this,
+                embeddingDepth = embeddingDepth,
             )
             val match = language.rules.firstNotNullOfOrNull { it.match(context) }
 
@@ -110,6 +142,18 @@ internal class GrammarEngine(
         return ScanResult(
             tokens = emitter.build(),
             endIndex = index,
+        )
+    }
+
+    private fun plainResult(
+        source: String,
+        startIndex: Int,
+        endIndex: Int,
+    ): ScanResult {
+        val content = source.substring(startIndex, endIndex)
+        return ScanResult(
+            tokens = if (content.isEmpty()) emptyList() else listOf(HighlightToken.Plain(content)),
+            endIndex = endIndex,
         )
     }
 }

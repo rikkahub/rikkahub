@@ -29,6 +29,7 @@ import me.rerere.highlight.kotlin.languages.c.CLanguage
 import me.rerere.highlight.kotlin.languages.cmake.CMakeLanguage
 import me.rerere.highlight.kotlin.languages.css.CssLanguage
 import me.rerere.highlight.kotlin.languages.cpp.CppLanguage
+import me.rerere.highlight.kotlin.languages.dockerfile.DockerfileLanguage
 import me.rerere.highlight.kotlin.languages.go.GoLanguage
 import me.rerere.highlight.kotlin.languages.java.JavaLanguage
 import me.rerere.highlight.kotlin.languages.javascript.JavaScriptLanguage
@@ -39,6 +40,7 @@ import me.rerere.highlight.kotlin.languages.python.PythonLanguage
 import me.rerere.highlight.kotlin.languages.rust.RustLanguage
 import me.rerere.highlight.kotlin.languages.sql.SqlLanguage
 import me.rerere.highlight.kotlin.languages.toml.TomlLanguage
+import me.rerere.highlight.kotlin.languages.yaml.YamlLanguage
 
 private const val MAX_CODE_LENGTH = 4096
 
@@ -67,6 +69,8 @@ class KotlinHighlighter {
             CppLanguage.definition,
             CMakeLanguage.definition,
             RustLanguage.definition,
+            YamlLanguage.definition,
+            DockerfileLanguage.definition,
         ),
     )
 

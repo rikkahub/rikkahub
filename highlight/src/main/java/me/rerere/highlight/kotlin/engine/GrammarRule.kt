@@ -29,6 +29,7 @@ internal class MatchContext(
     val previousKind: LexemeKind,
     val language: LanguageDefinition,
     private val engine: GrammarEngine,
+    private val embeddingDepth: Int,
 ) {
     fun tokenMatch(
         matchEndIndex: Int,
@@ -57,6 +58,7 @@ internal class MatchContext(
             startIndex = startIndex,
             endIndex = endIndex,
             language = language,
+            embeddingDepth = embeddingDepth,
         )
     }
 
@@ -67,6 +69,22 @@ internal class MatchContext(
             startIndex = startIndex,
             endIndex = endIndex,
             language = language,
+            embeddingDepth = embeddingDepth,
+        )
+    }
+
+    fun highlightEmbeddedRange(
+        startIndex: Int,
+        endIndex: Int,
+        language: String,
+    ): ScanResult {
+        require(startIndex in index..endIndex && endIndex <= this.endIndex)
+        return engine.highlightEmbeddedRange(
+            source = source,
+            startIndex = startIndex,
+            endIndex = endIndex,
+            language = language,
+            embeddingDepth = embeddingDepth,
         )
     }
 }
