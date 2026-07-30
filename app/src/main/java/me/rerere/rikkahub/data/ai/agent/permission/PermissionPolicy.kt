@@ -3,7 +3,7 @@ package me.rerere.rikkahub.data.ai.agent.permission
 import kotlinx.serialization.json.JsonElement
 import me.rerere.ai.core.Tool
 import me.rerere.rikkahub.data.ai.agent.AgentMode
-import me.rerere.rikkahub.data.ai.agent.PlanModeBlockedTools
+import me.rerere.rikkahub.data.ai.agent.isPlanModeBlockedTool
 
 enum class ApprovalAction {
     /** 自动执行（仍尊重 Tool.needsApproval） */
@@ -31,12 +31,12 @@ data class PermissionPolicy(
 
     /**
      * 是否需要用户审批。
-     * - Plan 模式拦截写/shell（若仍被调用）
+     * - Plan 模式拦截不在固定只读名单中的工具（若仍被调用）
      * - 策略 ASK 强制审批
      * - 否则回落到 tool.needsApproval
      */
     fun requiresApproval(tool: Tool, args: JsonElement, mode: AgentMode): Boolean {
-        if (mode == AgentMode.PLAN && tool.name in PlanModeBlockedTools) {
+        if (mode == AgentMode.PLAN && isPlanModeBlockedTool(tool.name)) {
             return true
         }
         if (actionForTool(tool.name) == ApprovalAction.ASK) {
@@ -53,7 +53,7 @@ data class PermissionPolicy(
             when (mode) {
                 AgentMode.PLAN -> {
                     appendLine("PLAN mode is active: you may explore with read-only tools.")
-                    appendLine("Do NOT attempt workspace_write_file, workspace_edit_file, or workspace_shell.")
+                    appendLine("Only explicitly registered read-only tools are available; all other tools are blocked.")
                     appendLine("Produce a clear plan for the user; they can switch to AGENT mode to execute.")
                 }
                 AgentMode.AGENT -> {

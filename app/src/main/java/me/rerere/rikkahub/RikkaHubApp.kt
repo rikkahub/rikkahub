@@ -11,6 +11,9 @@ import androidx.compose.runtime.tooling.ComposeStackTraceMode
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -34,11 +37,15 @@ import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.repository.AgentRunRepository
+import me.rerere.rikkahub.data.artifacts.ToolArtifactStore
+import me.rerere.rikkahub.data.artifacts.ToolArtifactCleanupWorker
 import me.rerere.workspace.WorkspaceManager
 import org.koin.android.ext.android.get
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.androidx.workmanager.koin.workManagerFactory
+import java.util.concurrent.TimeUnit
 import org.koin.core.context.startKoin
 
 private const val TAG = "RikkaHubApp"
@@ -72,6 +79,10 @@ class RikkaHubApp : Application() {
 
         // cleanup stale tool output files
         cleanupToolOutputs()
+        cleanupToolArtifacts()
+        scheduleToolArtifactCleanup()
+
+        interruptActiveAgentRuns()
 
         // cleanup workspace temp dirs (proot + rootfs /tmp)
         cleanupWorkspaceTempDirs()
@@ -141,6 +152,32 @@ class RikkaHubApp : Application() {
                     dir.deleteRecursively()
                 }
             }
+        }
+    }
+
+    private fun cleanupToolArtifacts() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching { get<ToolArtifactStore>().cleanup() }
+                .onFailure { Log.e(TAG, "cleanupToolArtifacts failed", it) }
+        }
+    }
+
+    private fun scheduleToolArtifactCleanup() {
+        runCatching {
+            val request = PeriodicWorkRequestBuilder<ToolArtifactCleanupWorker>(1, TimeUnit.DAYS).build()
+            WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                ToolArtifactCleanupWorker.UNIQUE_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                request,
+            )
+        }.onFailure { Log.e(TAG, "scheduleToolArtifactCleanup failed", it) }
+    }
+
+    private fun interruptActiveAgentRuns() {
+        get<AgentRunRepository>().beginStartupRecovery()
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching { get<AgentRunRepository>().interruptActiveRunsOnStartup() }
+                .onFailure { Log.e(TAG, "interruptActiveAgentRuns failed", it) }
         }
     }
 

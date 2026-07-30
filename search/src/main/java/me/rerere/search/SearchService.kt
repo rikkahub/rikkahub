@@ -62,7 +62,9 @@ interface SearchService<T : SearchServiceOptions> {
                 is SearchServiceOptions.GrokOptions -> GrokSearchService
                 is SearchServiceOptions.TinyfishOptions -> TinyfishSearchService
                 is SearchServiceOptions.SerperOptions -> SerperSearchService
-                is SearchServiceOptions.CustomJsOptions -> CustomJsSearchService
+                is SearchServiceOptions.CustomJsOptions -> error(
+                    "Custom JavaScript search has been removed because QuickJS execution cannot be interrupted safely."
+                )
             } as SearchService<T>
         }
 
@@ -157,8 +159,23 @@ sealed class SearchServiceOptions {
             GrokOptions::class to "Grok",
             TinyfishOptions::class to "Tinyfish",
             SerperOptions::class to "Serper",
-            CustomJsOptions::class to "Custom JS",
         )
+
+        /**
+         * Removes the retired Custom JS provider and preserves the selected provider when possible.
+         * A configuration containing only Custom JS falls back to the built-in Bing provider.
+         */
+        fun migrateDisabledCustomJs(
+            services: List<SearchServiceOptions>,
+            selectedIndex: Int,
+        ): Pair<List<SearchServiceOptions>, Int> {
+            val selectedId = services.getOrNull(selectedIndex)?.id
+            val migrated = services.filterNot { it is CustomJsOptions }.ifEmpty { listOf(DEFAULT) }
+            val migratedSelectedIndex = migrated.indexOfFirst { it.id == selectedId }
+                .takeIf { it >= 0 }
+                ?: 0
+            return migrated to migratedSelectedIndex
+        }
     }
 
     @Serializable
@@ -294,50 +311,16 @@ sealed class SearchServiceOptions {
         val apiKey: String = "",
     ) : SearchServiceOptions()
 
+    /** Retained only to decode and migrate persisted `custom_js` configurations. */
     @Serializable
     @SerialName("custom_js")
     data class CustomJsOptions(
         override val id: Uuid = Uuid.random(),
-        val name: String = "",
-        val searchScript: String = DEFAULT_SEARCH_SCRIPT,
-        val scrapeScript: String = "",
     ) : SearchServiceOptions() {
         override val displayName: String
-            get() = name.ifBlank { "Custom JS" }
-        companion object {
-            const val DEFAULT_SCRAPE_SCRIPT = """// Implement scrape(urls) function
-// urls is an array of URL strings
-// Use fetch(url, options?) for HTTP requests
-// fetch() returns { status, ok, text(), json() }
-// Return { urls: [{ url, content, metadata?: { title?, description?, language? } }] }
-
-function scrape(urls) {
-  return {
-    urls: urls.map(function(url) {
-      const res = fetch(url);
-      const body = res.text();
-      return { url: url, content: body };
-    })
-  };
-}"""
-
-            const val DEFAULT_SEARCH_SCRIPT = """// Implement search(query, resultSize) function
-// Use fetch(url, options?) for HTTP requests
-// fetch() returns { status, ok, text(), json() }
-// Return { items: [{ title, url, text }], answer?: string }
-
-function search(query, resultSize) {
-  const encoded = encodeURIComponent(query);
-  const res = fetch("https://example.com/search?q=" + encoded + "&limit=" + resultSize);
-  const data = res.json();
-  return {
-    items: data.results.map(function(r) {
-      return { title: r.title, url: r.url, text: r.snippet };
-    })
-  };
-}"""
-        }
+            get() = "Custom JS (disabled)"
     }
+
 }
 
 internal suspend fun Call.await(): Response {

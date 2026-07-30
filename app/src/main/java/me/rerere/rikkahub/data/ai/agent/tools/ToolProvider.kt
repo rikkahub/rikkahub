@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.ai.agent.tools
 
 import me.rerere.ai.core.Tool
+import me.rerere.rikkahub.data.ai.agent.permission.DescribedTool
+import me.rerere.rikkahub.data.ai.agent.permission.ToolDescriptorRegistry
 
 /**
  * 工具来源扩展点。各 Provider 对应原 ChatService 工具组装中的一段逻辑。
@@ -12,6 +14,13 @@ interface ToolProvider {
     fun isEnabled(ctx: ToolResolveContext): Boolean
 
     suspend fun provide(ctx: ToolResolveContext): List<Tool>
+
+    /**
+     * Compatibility adapter for the legacy [Tool] provider contract. Implementations may override
+     * this later for context-specific metadata; the default guarantees a conservative descriptor.
+     */
+    suspend fun provideWithDescriptors(ctx: ToolResolveContext): List<DescribedTool> =
+        provide(ctx).map { tool -> DescribedTool(tool, ToolDescriptorRegistry.descriptorFor(tool)) }
 }
 
 /**
@@ -25,6 +34,7 @@ object ToolProviderOrder {
     const val LOCAL = 20
     const val CONVERSATION = 30
     const val WORKSPACE = 40
+    const val ARTIFACT = 42
     /** Explore subagent 入口（仅父会话） */
     const val SUBAGENT = 45
     const val SKILL = 50

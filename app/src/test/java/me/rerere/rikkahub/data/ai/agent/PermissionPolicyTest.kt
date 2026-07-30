@@ -42,7 +42,7 @@ class PermissionPolicyTest {
     }
 
     @Test
-    fun `plan mode forces approval for blocked tools`() {
+    fun `plan mode blocks tools outside its read-only allowlist`() {
         val policy = PermissionPolicy.compatibleDefault()
         val shell = Tool(
             name = "workspace_shell",
@@ -52,10 +52,21 @@ class PermissionPolicyTest {
         )
         assertTrue(policy.requiresApproval(shell, buildJsonObject { }, AgentMode.PLAN))
         assertFalse(policy.requiresApproval(shell, buildJsonObject { }, AgentMode.AGENT))
+        assertTrue(isPlanModeBlockedTool("clipboard_tool"))
+        assertTrue(isPlanModeBlockedTool("calendar_create"))
+        assertTrue(isPlanModeBlockedTool("memory_tool"))
+        assertTrue(isPlanModeBlockedTool("eval_javascript"))
+        assertTrue(isPlanModeBlockedTool("get_screen_time"))
+        assertFalse(isPlanModeBlockedTool("calendar_query"))
+        assertTrue(isPlanModeBlockedTool("unknown_future_tool"))
     }
 
     @Test
     fun `tool category mapping covers workspace tools`() {
+        assertEquals(ToolCategory.LOCAL_SENSITIVE, ToolCategory.ofToolName("clipboard_tool"))
+        assertEquals(ToolCategory.LOCAL_SENSITIVE, ToolCategory.ofToolName("calendar_query"))
+        assertEquals(ToolCategory.LOCAL_SENSITIVE, ToolCategory.ofToolName("calendar_create"))
+        assertEquals(ToolCategory.LOCAL_SENSITIVE, ToolCategory.ofToolName("get_screen_time"))
         assertEquals(ToolCategory.WORKSPACE_READ, ToolCategory.ofToolName("workspace_read_file"))
         assertEquals(ToolCategory.WORKSPACE_WRITE, ToolCategory.ofToolName("workspace_edit_file"))
         assertEquals(ToolCategory.WORKSPACE_SHELL, ToolCategory.ofToolName("workspace_shell"))

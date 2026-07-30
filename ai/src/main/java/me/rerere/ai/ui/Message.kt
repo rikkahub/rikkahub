@@ -233,6 +233,24 @@ fun List<UIMessage>.handleMessageChunk(chunk: MessageChunk, model: Model? = null
 }
 
 /**
+ * Providers that expose a single system-instruction field must receive every system contribution.
+ * Keep the original system-message order and retain the first system message's position and id.
+ */
+fun List<UIMessage>.mergeSystemMessages(): List<UIMessage> {
+    val systemMessages = filter { it.role == MessageRole.SYSTEM }
+    if (systemMessages.size <= 1) return this
+    val merged = systemMessages.first().copy(parts = systemMessages.flatMap(UIMessage::parts))
+    var inserted = false
+    return mapNotNull { message ->
+        when {
+            message.role != MessageRole.SYSTEM -> message
+            !inserted -> merged.also { inserted = true }
+            else -> null
+        }
+    }
+}
+
+/**
  * 判断这个消息是否有有任何用户**可输入内容**
  *
  * 例如: 文本，图片, 文档
@@ -400,6 +418,12 @@ sealed class UIMessagePart {
         val input: String,
         val output: List<UIMessagePart> = emptyList(),
         val approvalState: ToolApprovalState = ToolApprovalState.Auto,
+        /** Persisted agent telemetry identity. Null keeps messages created before run telemetry compatible. */
+        val toolExecutionId: String? = null,
+        /** Persisted pending approval identity for this exact tool execution. */
+        val approvalId: String? = null,
+        /** Short status displayed while a persisted approval is renewed. */
+        val approvalStatusMessage: String? = null,
         override var metadata: JsonObject? = null
     ) : UIMessagePart() {
         /** Whether the tool has been executed (has output) */
@@ -423,6 +447,9 @@ sealed class UIMessagePart {
                 input = input + other.input,
                 output = output + other.output,
                 approvalState = approvalState,
+                toolExecutionId = other.toolExecutionId ?: toolExecutionId,
+                approvalId = other.approvalId ?: approvalId,
+                approvalStatusMessage = other.approvalStatusMessage ?: approvalStatusMessage,
                 metadata = if (other.metadata != null) other.metadata else metadata,
             )
         }

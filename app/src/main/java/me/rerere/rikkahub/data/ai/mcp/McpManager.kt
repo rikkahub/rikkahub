@@ -25,6 +25,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.saveUploadFromBytes
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.utils.JsonInstant
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
@@ -42,7 +43,7 @@ class McpManager(
     private val appScope: AppScope,
     private val filesManager: FilesManager,
     appEventBus: AppEventBus,
-) {
+) : McpToolExecutor {
     private val okHttpClient = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.MINUTES)
@@ -98,7 +99,11 @@ class McpManager(
 
     fun getAllAvailableTools(): List<Triple<Uuid, String, McpTool>> {
         val settings = settingsStore.settingsFlow.value
-        val assistant = settings.getCurrentAssistant()
+        return getAllAvailableTools(settings.getCurrentAssistant())
+    }
+
+    override fun getAllAvailableTools(assistant: Assistant): List<Triple<Uuid, String, McpTool>> {
+        val settings = settingsStore.settingsFlow.value
         return settings.mcpServers
             .filter { it.commonOptions.enable && it.id in assistant.mcpServers }
             .flatMap { server ->
@@ -106,6 +111,24 @@ class McpManager(
                     .filter { tool -> tool.enable }
                     .map { tool -> Triple(server.id, server.commonOptions.name, tool) }
             }
+    }
+
+    override suspend fun callTool(
+        assistant: Assistant,
+        serverId: Uuid,
+        toolName: String,
+        args: JsonObject,
+    ): List<UIMessagePart> {
+        val server = settingsStore.settingsFlow.value.mcpServers.find { it.id == serverId }
+        if (
+            server == null ||
+            serverId !in assistant.mcpServers ||
+            !server.commonOptions.enable ||
+            server.commonOptions.tools.none { it.enable && it.name == toolName }
+        ) {
+            return listOf(UIMessagePart.Text("MCP tool is not enabled for this conversation's assistant."))
+        }
+        return callTool(serverId, toolName, args)
     }
 
     suspend fun callTool(serverId: Uuid, toolName: String, args: JsonObject): List<UIMessagePart> {

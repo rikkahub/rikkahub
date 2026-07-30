@@ -5,9 +5,15 @@ import java.io.File
 data class WorkspaceBindMount(
     val source: File,
     val target: String,
+    /** A mount such as legacy tool outputs must not be shared by unrelated workspace roots. */
+    val isolateByWorkspace: Boolean = false,
 ) {
+    val normalizedTarget: String = RootfsPath.normalize(target)
+
     init {
-        require(target.startsWith("/")) { "Bind mount target must be absolute: $target" }
+        require(normalizedTarget != "/") {
+            "Binding a host directory to the Rootfs root is not supported"
+        }
     }
 }
 
@@ -76,7 +82,7 @@ class ProotShellRunner(
         context.bindMounts.forEach { mount ->
             if (mount.source.exists()) {
                 command += "-b"
-                command += "${mount.source.absolutePath}:${mount.target.trimEnd('/')}"
+                command += "${mount.source.absolutePath}:${mount.normalizedTarget}"
             }
         }
 

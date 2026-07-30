@@ -1,9 +1,11 @@
 package me.rerere.ai.provider.providers
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -413,6 +415,22 @@ class GoogleProviderMessageTest {
             response?.containsKey("result") == true)
         assertTrue("Result should contain expected output",
             response?.get("result")?.jsonPrimitive?.content?.contains("Expected output value") == true)
+    }
+
+    @Test
+    fun `google function calls use a deterministic client execution identity`() {
+        val functionCall = buildJsonObject {
+            put("name", "weather")
+            put("args", buildJsonObject { put("city", "Shanghai") })
+        }
+
+        val first = provider.clientToolCallId(0, functionCall)
+        val repeated = provider.clientToolCallId(0, functionCall)
+        val nextPart = provider.clientToolCallId(1, functionCall)
+
+        assertEquals(first, repeated)
+        assertTrue(first.startsWith("google-client-"))
+        assertTrue(first != nextPart)
     }
 
     // ==================== Helper Functions ====================

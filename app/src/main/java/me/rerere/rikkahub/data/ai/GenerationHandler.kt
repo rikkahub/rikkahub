@@ -21,7 +21,11 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.rikkahub.data.ai.agent.AgentLoop
 import me.rerere.rikkahub.data.ai.agent.AgentMode
+import me.rerere.rikkahub.data.ai.agent.AgentRunRuntime
+import me.rerere.rikkahub.data.ai.agent.NoOpAgentRunRuntime
+import me.rerere.rikkahub.data.ai.agent.permission.DescribedTool
 import me.rerere.rikkahub.data.ai.agent.permission.PermissionPolicy
+import me.rerere.rikkahub.data.artifacts.ToolArtifactRunScope
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.datastore.Settings
@@ -32,6 +36,7 @@ import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.utils.applyPlaceholders
 import java.util.Locale
 import kotlin.uuid.Uuid
+import me.rerere.workspace.Workspace
 
 @kotlinx.serialization.Serializable
 sealed interface GenerationChunk {
@@ -58,6 +63,10 @@ class GenerationHandler(
         assistant: Assistant,
         memories: List<AssistantMemory>? = null,
         tools: List<Tool> = emptyList(),
+        describedTools: List<DescribedTool> = tools.map { DescribedTool(it, me.rerere.rikkahub.data.ai.agent.permission.ToolDescriptorRegistry.descriptorFor(it)) },
+        workspace: Workspace? = null,
+        runRuntime: AgentRunRuntime = NoOpAgentRunRuntime,
+        artifactRunScope: ToolArtifactRunScope? = null,
         maxSteps: Int = 256,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
         conversationSystemPrompt: String? = null,
@@ -66,6 +75,9 @@ class GenerationHandler(
         workspaceCwd: String? = null,
         mode: AgentMode = AgentMode.CHAT,
         permissionPolicy: PermissionPolicy = PermissionPolicy.compatibleDefault(),
+        isSubagentRun: Boolean = false,
+        allowParallelToolCalls: Boolean = true,
+        useClientGeneratedToolExecutionIdentity: Boolean = false,
     ): Flow<GenerationChunk> = agentLoop.run(
         settings = settings,
         model = model,
@@ -75,6 +87,10 @@ class GenerationHandler(
         assistant = assistant,
         memories = memories,
         tools = tools,
+        describedTools = describedTools,
+        workspace = workspace,
+        runRuntime = runRuntime,
+        artifactRunScope = artifactRunScope,
         maxSteps = maxSteps,
         processingStatus = processingStatus,
         conversationSystemPrompt = conversationSystemPrompt,
@@ -83,6 +99,9 @@ class GenerationHandler(
         workspaceCwd = workspaceCwd,
         mode = mode,
         permissionPolicy = permissionPolicy,
+        isSubagentRun = isSubagentRun,
+        allowParallelToolCalls = allowParallelToolCalls,
+        useClientGeneratedToolExecutionIdentity = useClientGeneratedToolExecutionIdentity,
     )
 
     fun translateText(

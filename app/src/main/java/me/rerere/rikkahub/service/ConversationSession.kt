@@ -33,6 +33,7 @@ class ConversationSession(
     // 生成任务（内聚在 session 中）
     private val _generationJob = MutableStateFlow<Job?>(null)
     val generationJob: StateFlow<Job?> = _generationJob.asStateFlow()
+    private var generationRunId: String? = null
     val isGenerating: Boolean get() = _generationJob.value?.isActive == true
     val isInUse: Boolean get() = refCount.get() > 0 || isGenerating
 
@@ -71,9 +72,13 @@ class ConversationSession(
 
     fun setJob(job: Job?) {
         _generationJob.value?.cancel()
+        generationRunId = null
         _generationJob.value = job
         job?.invokeOnCompletion {
-            _generationJob.value = null
+            if (_generationJob.value === job) {
+                _generationJob.value = null
+                generationRunId = null
+            }
             if (refCount.get() <= 0) {
                 scheduleIdleCheck()
             }
@@ -81,6 +86,16 @@ class ConversationSession(
     }
 
     fun getJob(): Job? = _generationJob.value
+
+    fun bindRun(runId: String, job: Job): Boolean {
+        if (_generationJob.value !== job || !job.isActive) return false
+        generationRunId = runId
+        return true
+    }
+
+    fun getJobForRun(runId: String): Job? = _generationJob.value?.takeIf {
+        generationRunId == runId
+    }
 
     private fun scheduleIdleCheck() {
         idleCheckJob?.cancel()
@@ -100,6 +115,7 @@ class ConversationSession(
     fun cleanup() {
         _generationJob.value?.cancel()
         _generationJob.value = null
+        generationRunId = null
         idleCheckJob?.cancel()
         idleCheckJob = null
     }

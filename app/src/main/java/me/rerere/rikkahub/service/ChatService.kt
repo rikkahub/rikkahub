@@ -10,6 +10,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,23 +31,26 @@ import kotlinx.coroutines.launch
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
-import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.effectiveCapabilityProfile
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.canResumeToolExecution
-import me.rerere.ai.ui.finishPendingTools
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.ai.ui.isEmptyInputMessage
-import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.agent.AgentMode
+import me.rerere.rikkahub.data.ai.agent.PersistedAgentRunRuntime
+import me.rerere.rikkahub.data.ai.agent.canonicalJson
+import me.rerere.rikkahub.data.ai.agent.digest
 import me.rerere.rikkahub.data.ai.agent.compact.CompactPolicy
+import me.rerere.rikkahub.data.ai.agent.preflight.ProviderPreflight
+import me.rerere.rikkahub.data.ai.agent.preflight.ProviderPreflightAction
+import me.rerere.rikkahub.data.ai.agent.preflight.ProviderPreflightRequest
 import me.rerere.rikkahub.data.ai.agent.permission.PermissionPolicy
 import me.rerere.rikkahub.data.ai.agent.prompt.ProjectDocsTransformer
 import me.rerere.rikkahub.data.ai.agent.tools.ToolRegistry
@@ -73,9 +79,16 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.Folder
+import me.rerere.rikkahub.data.model.AgentRunConfigSnapshot
+import me.rerere.rikkahub.data.model.AgentStepStatus
+import me.rerere.rikkahub.data.model.AgentStepSummary
+import me.rerere.rikkahub.data.model.AgentRunStatus
 import me.rerere.rikkahub.data.model.replaceRegexes
+import me.rerere.rikkahub.data.model.toSnapshotSummary
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.repository.AgentRunRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -88,6 +101,7 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
+private const val DEFAULT_OUTPUT_RESERVE_TOKENS = 4_096
 
 internal fun backgroundTextGenerationParams(
     model: Model,
@@ -147,12 +161,14 @@ class ChatService(
     private val toolRegistry: ToolRegistry,
     private val projectDocsTransformer: ProjectDocsTransformer,
     private val compactPolicy: CompactPolicy,
+    private val agentRunRepository: AgentRunRepository,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
 
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
+    private val generationLocks = ConcurrentHashMap<Uuid, Mutex>()
     private val _sessionsVersion = MutableStateFlow(0L)
 
     // 错误状态
@@ -301,37 +317,40 @@ class ChatService(
         if (content.isEmptyInputMessage()) return
 
         val session = getOrCreateSession(conversationId)
-        val previousJob = session.getJob()
-        previousJob?.cancel()
-
         val job = appScope.launch {
             try {
-                runCatching { previousJob?.join() }
-                finishInterruptedPendingTools(conversationId)
+                agentRunRepository.awaitStartupRecovery()
+                generationLocks.computeIfAbsent(conversationId) { Mutex() }.withLock {
+                    val previousJob = session.getJob()?.takeIf { it != currentCoroutineContext()[Job] }
+                    previousJob?.cancel()
+                    runCatching { previousJob?.join() }
+                    agentRunRepository.getActiveRun(conversationId.toString())?.id?.let { activeRunId ->
+                        agentRunRepository.cancelRun(activeRunId)
+                        finishInterruptedPendingTools(conversationId, activeRunId)
+                    }
 
-                val currentConversation = session.state.value
-                val settings = settingsStore.settingsFlow.first()
-                val assistant = settings.getAssistantById(currentConversation.assistantId)
-                    ?: settings.getCurrentAssistant()
-                val processedContent = preprocessUserInputParts(content, assistant)
+                    val currentConversation = session.state.value
+                    val settings = settingsStore.settingsFlow.first()
+                    val assistant = settings.getAssistantById(currentConversation.assistantId)
+                        ?: settings.getCurrentAssistant()
+                    val processedContent = preprocessUserInputParts(content, assistant)
 
                 // 添加消息到列表
-                val newConversation = currentConversation.copy(
-                    messageNodes = currentConversation.messageNodes + UIMessage(
-                        role = MessageRole.USER,
-                        parts = processedContent,
-                    ).toMessageNode(),
-                )
-                saveConversation(conversationId, newConversation)
+                    val newConversation = currentConversation.copy(
+                        messageNodes = currentConversation.messageNodes + UIMessage(
+                            role = MessageRole.USER,
+                            parts = processedContent,
+                        ).toMessageNode(),
+                    )
+                    saveConversation(conversationId, newConversation)
 
                 // 开始补全
-                if (answer) {
-                    handleMessageComplete(conversationId)
-                }
+                    if (answer) handleMessageComplete(conversationId)
 
-                _generationDoneFlow.emit(conversationId)
+                    _generationDoneFlow.emit(conversationId)
+                }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.w(TAG, "sendMessage failed errorType=${e.javaClass.simpleName}")
                 addError(e, conversationId, title = context.getString(R.string.error_title_send_message))
             }
         }
@@ -364,11 +383,19 @@ class ChatService(
         regenerateAssistantMsg: Boolean = true
     ) {
         val session = getOrCreateSession(conversationId)
-        session.getJob()?.cancel()
 
         val job = appScope.launch {
             try {
-                val conversation = session.state.value
+                agentRunRepository.awaitStartupRecovery()
+                generationLocks.computeIfAbsent(conversationId) { Mutex() }.withLock {
+                    val previousJob = session.getJob()?.takeIf { it != currentCoroutineContext()[Job] }
+                    previousJob?.cancel()
+                    runCatching { previousJob?.join() }
+                    agentRunRepository.getActiveRun(conversationId.toString())?.id?.let { activeRunId ->
+                        agentRunRepository.cancelRun(activeRunId)
+                        finishInterruptedPendingTools(conversationId, activeRunId)
+                    }
+                    val conversation = session.state.value
 
                 if (message.role == MessageRole.USER) {
                     // 如果是用户消息，则截止到当前消息
@@ -389,7 +416,8 @@ class ChatService(
                     }
                 }
 
-                _generationDoneFlow.emit(conversationId)
+                    _generationDoneFlow.emit(conversationId)
+                }
             } catch (e: Exception) {
                 addError(e, conversationId, title = context.getString(R.string.error_title_regenerate_message))
             }
@@ -402,57 +430,78 @@ class ChatService(
 
     fun handleToolApproval(
         conversationId: Uuid,
-        toolCallId: String,
+        tool: UIMessagePart.Tool,
         approved: Boolean,
         reason: String = "",
         answer: String? = null,
     ) {
         val session = getOrCreateSession(conversationId)
-        session.getJob()?.cancel()
 
         val job = appScope.launch {
             try {
-                val conversation = session.state.value
-                val newApprovalState = when {
-                    answer != null -> ToolApprovalState.Answered(answer)
-                    approved -> ToolApprovalState.Approved
-                    else -> ToolApprovalState.Denied(reason)
-                }
-
-                // Update the tool approval state
-                val updatedNodes = conversation.messageNodes.map { node ->
-                    node.copy(
-                        messages = node.messages.map { msg ->
-                            msg.copy(
-                                parts = msg.parts.map { part ->
-                                    when {
-                                        part is UIMessagePart.Tool && part.toolCallId == toolCallId -> {
-                                            part.copy(approvalState = newApprovalState)
-                                        }
-
-                                        else -> part
-                                    }
-                                }
-                            )
+                agentRunRepository.awaitStartupRecovery()
+                generationLocks.computeIfAbsent(conversationId) { Mutex() }.withLock {
+                    val conversation = session.state.value
+                    val activeRun = agentRunRepository.getActiveRun(conversationId.toString())
+                    val target = activeRun?.takeIf { it.status == AgentRunStatus.WAITING_APPROVAL.name }
+                        ?.let { resolveApprovalTarget(conversation, it.id, tool) }
+                        ?: return@withLock
+                    val hasTargetCard = conversation.messageNodes.any { node ->
+                        node.messages.any { message ->
+                            message.parts.any { part -> part is UIMessagePart.Tool && target.matches(part) }
                         }
-                    )
-                }
-                val updatedConversation = conversation.copy(messageNodes = updatedNodes)
-                saveConversation(conversationId, updatedConversation)
-
-                // Check if there are still pending tools
-                val hasPendingTools = updatedNodes.any { node ->
-                    node.currentMessage.parts.any { part ->
-                        part is UIMessagePart.Tool && part.isPending
                     }
-                }
+                    if (!hasTargetCard) return@withLock
+                    val resolution = PersistedAgentRunRuntime(agentRunRepository, target.runId)
+                        .approvalResolution(target.approvalId, target.executionId, approved || answer != null)
+                    if (!resolution.resolved && resolution.replacementApprovalId == null) return@withLock
+                    if (resolution.replacementApprovalId != null) {
+                        val updatedConversation = rebindExpiredApprovalCard(
+                            conversation = conversation,
+                            executionId = target.executionId,
+                            expiredApprovalId = target.approvalId,
+                            replacementApprovalId = resolution.replacementApprovalId,
+                        ) ?: return@withLock
+                        saveConversation(conversationId, updatedConversation)
+                        _generationDoneFlow.emit(conversationId)
+                        return@withLock
+                    }
+                    val newApprovalState = when {
+                        answer != null -> ToolApprovalState.Answered(answer)
+                        approved -> ToolApprovalState.Approved
+                        else -> ToolApprovalState.Denied(reason)
+                    }
 
-                // Only continue generation when all pending tools are handled
-                if (!hasPendingTools) {
-                    handleMessageComplete(conversationId)
-                }
+                    // A card is updated once only. A stale UI event must never alter another turn's same call id.
+                    var updatedCard = false
+                    val updatedNodes = conversation.messageNodes.map { node ->
+                        node.copy(
+                            messages = node.messages.map { msg ->
+                                msg.copy(
+                                    parts = msg.parts.map { part ->
+                                        if (part is UIMessagePart.Tool && !updatedCard && target.matches(part)) {
+                                            updatedCard = true
+                                            part.copy(approvalState = newApprovalState)
+                                        } else part
+                                    }
+                                )
+                            }
+                        )
+                    }
+                    if (!updatedCard) return@withLock
+                    val updatedConversation = conversation.copy(messageNodes = updatedNodes)
+                    saveConversation(conversationId, updatedConversation)
 
-                _generationDoneFlow.emit(conversationId)
+                    // Check if there are still pending tools
+                    val hasPendingTools = agentRunRepository.getApprovals(target.runId).any { it.status == "PENDING" }
+
+                    // Only continue generation when all pending tools are handled
+                    if (!hasPendingTools) {
+                        agentRunRepository.resumeRunAfterApproval(target.runId)
+                        handleMessageComplete(conversationId, continuationRunId = target.runId)
+                    }
+                    _generationDoneFlow.emit(conversationId)
+                }
             } catch (e: Exception) {
                 addError(e, conversationId, title = context.getString(R.string.error_title_tool_approval))
             }
@@ -461,17 +510,94 @@ class ChatService(
         session.setJob(job)
     }
 
+    private data class ApprovalTarget(
+        val runId: String,
+        val executionId: String,
+        val approvalId: String,
+        val legacyTool: UIMessagePart.Tool? = null,
+    ) {
+        fun matches(tool: UIMessagePart.Tool): Boolean = if (legacyTool == null) {
+            tool.toolExecutionId == executionId && tool.approvalId == approvalId
+        } else {
+            tool.toolExecutionId == null && tool.approvalId == null && tool == legacyTool
+        }
+    }
+
+    /** Legacy cards lack persisted IDs, so ambiguity is rejected rather than approving a different turn. */
+    private suspend fun resolveApprovalTarget(
+        conversation: Conversation,
+        runId: String,
+        requestedTool: UIMessagePart.Tool,
+    ): ApprovalTarget? {
+        val executionId = requestedTool.toolExecutionId
+        val approvalId = requestedTool.approvalId
+        if (executionId != null && approvalId != null) {
+            val approval = agentRunRepository.getApproval(approvalId) ?: return null
+            val execution = agentRunRepository.getToolExecution(executionId) ?: return null
+            if (
+                approval.runId != runId || approval.toolExecutionId != executionId || approval.status != "PENDING" ||
+                execution.runId != runId || execution.status != "WAITING_APPROVAL" ||
+                execution.toolName != requestedTool.toolName ||
+                execution.inputSha256 != requestedTool.input.canonicalJson().digest()
+            ) return null
+            return ApprovalTarget(runId, executionId, approvalId)
+        }
+        if (executionId != null || approvalId != null) return null
+
+        val canonicalInput = requestedTool.input.canonicalJson().digest()
+        val matchingCards = conversation.messageNodes.asSequence()
+            .flatMap { it.messages.asSequence() }
+            .flatMap { it.parts.asSequence() }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .toList()
+        val approvals = agentRunRepository.getPendingApprovalsByToolIdentity(runId, requestedTool.toolName, canonicalInput)
+        val matchingCard = selectLegacyApprovalCard(requestedTool, matchingCards, approvals.size) ?: return null
+        return ApprovalTarget(runId, approvals.single().toolExecutionId, approvals.single().id, matchingCard)
+    }
+
     // ---- 处理消息补全 ----
 
     private suspend fun handleMessageComplete(
         conversationId: Uuid,
-        messageRange: ClosedRange<Int>? = null
+        messageRange: ClosedRange<Int>? = null,
+        continuationRunId: String? = null,
     ) {
         val settings = settingsStore.settingsFlow.first()
         val initialConversation = getConversationFlow(conversationId).value
         val assistant = settings.getAssistantById(initialConversation.assistantId)
             ?: settings.getCurrentAssistant()
-        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return
+        val agentMode = initialConversation.agentMode
+        val selectedModel = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
+        val run = if (continuationRunId != null) {
+            agentRunRepository.getRun(continuationRunId)?.takeIf {
+                it.conversationId == conversationId.toString() && it.status == AgentRunStatus.RUNNING.name
+            } ?: return
+        } else {
+            agentRunRepository.replaceActiveRun(
+                id = Uuid.random().toString(),
+                conversationId = conversationId.toString(),
+                assistantId = assistant.id.toString(),
+                configSnapshot = AgentRunConfigSnapshot(
+                    runtimeVersion = "agent-loop-v2",
+                    conversationId = conversationId.toString(),
+                    assistantId = assistant.id.toString(),
+                    modelId = (assistant.chatModelId ?: settings.chatModelId).toString(),
+                    agentMode = agentMode.name,
+                    maxSteps = 256,
+                    toolPolicyVersion = "capability-policy-v2",
+                    capabilitySummary = selectedModel?.effectiveCapabilityProfile()?.toSnapshotSummary(),
+                ),
+            ).also {
+                agentRunRepository.transitionRun(it.id, setOf(AgentRunStatus.QUEUED), AgentRunStatus.PREFLIGHT)
+            }
+        }
+        val session = getOrCreateSession(conversationId)
+        val generationJob = currentCoroutineContext()[Job] ?: return
+        if (!session.bindRun(run.id, generationJob)) return
+        val model = selectedModel ?: run {
+            agentRunRepository.failRun(run.id, "MODEL_NOT_FOUND")
+            return
+        }
 
         val senderName = if (assistant.useAssistantAvatar) {
             assistant.name.ifEmpty { context.getString(R.string.assistant_page_default_assistant) }
@@ -484,40 +610,30 @@ class ChatService(
             // reset suggestions
             updateConversation(conversationId, initialConversation.copy(chatSuggestions = emptyList()))
 
-            // memory tool
-            if (!model.abilities.contains(ModelAbility.TOOL)) {
-                if (assistant.enableWebSearch || mcpManager.getAllAvailableTools().isNotEmpty()) {
-                    addError(
-                        IllegalStateException(context.getString(R.string.tools_warning)),
-                        conversationId,
-                        title = context.getString(R.string.error_title_tool_unavailable)
-                    )
-                }
-            }
-
             // check invalid messages
             checkInvalidMessages(conversationId)
             val conversation = getConversationFlow(conversationId).value
 
             // start generating
-            val session = getOrCreateSession(conversationId)
             val agentMode = conversation.agentMode
             // Plan/Agent 始终注入权限说明（学 Codex developer permission）；CHAT 默认不注入
             val permissionPolicy = PermissionPolicy.compatibleDefault(
                 injectPromptForWorkspace = agentMode != AgentMode.CHAT
             )
             val tools = try {
-                toolRegistry.resolve(
+                toolRegistry.resolveWithDescriptors(
                     ToolResolveContext(
                         settings = settings,
                         assistant = assistant,
                         conversation = conversation,
                         mode = agentMode,
                         permissionPolicy = permissionPolicy,
+                        agentRunId = run.id,
                         processingStatus = session.processingStatus,
                     )
                 )
             } catch (e: McpInvalidServerNameException) {
+                agentRunRepository.failRun(run.id, "MCP_INVALID_SERVER_NAME")
                 addError(
                     error = IllegalStateException(
                         context.getString(
@@ -527,21 +643,85 @@ class ChatService(
                     ),
                     conversationId = conversationId,
                 )
-                return
+                return@runCatching
             }
+
+            val workspace = assistant.workspaceId?.let { workspaceRepository.getById(it.toString())?.toWorkspace() }
+            val provider = model.findProvider(settings.providers) ?: run {
+                agentRunRepository.failRun(run.id, "PROVIDER_NOT_FOUND")
+                return@runCatching
+            }
+            val generationMessages = conversation.currentMessages.let {
+                if (messageRange != null) {
+                    it.subList(messageRange.start, messageRange.endInclusive + 1)
+                } else {
+                    it
+                }
+            }
+            val preflight = ProviderPreflight.evaluate(
+                ProviderPreflightRequest(
+                    mode = agentMode,
+                    capabilities = model.effectiveCapabilityProfile(),
+                    resolvedFunctionToolCount = tools.size,
+                    configuredNativeToolCount = model.tools.size,
+                    requestedOutputTokens = assistant.maxTokens,
+                    outputReserveTokens = assistant.maxTokens ?: DEFAULT_OUTPUT_RESERVE_TOKENS,
+                    streamingRequested = assistant.streamOutput,
+                    reasoningRequested = assistant.reasoningLevel.isEnabled,
+                    multimodalInputRequested = generationMessages.any { message ->
+                        message.parts.any { part ->
+                            part is UIMessagePart.Image || part is UIMessagePart.Video ||
+                                part is UIMessagePart.Audio || part is UIMessagePart.Document
+                        }
+                    },
+                )
+            )
+            if (preflight.codes.isNotEmpty()) {
+                agentRunRepository.recordStep(
+                    id = Uuid.random().toString(),
+                    runId = run.id,
+                    kind = "provider_preflight",
+                    status = if (preflight.action == ProviderPreflightAction.BLOCK) {
+                        AgentStepStatus.FAILED
+                    } else {
+                        AgentStepStatus.SUCCEEDED
+                    },
+                    summary = AgentStepSummary(
+                        kind = "provider_preflight",
+                        detail = preflight.codes.joinToString(",") { it.name },
+                    ),
+                )
+            }
+            if (preflight.action == ProviderPreflightAction.BLOCK) {
+                agentRunRepository.blockRun(
+                    run.id,
+                    preflight.codes.joinToString("_") { it.name },
+                    category = "provider_capability",
+                )
+                addError(
+                    IllegalStateException(preflight.userMessage),
+                    conversationId,
+                    title = context.getString(R.string.error_title_tool_unavailable),
+                )
+                return@runCatching
+            }
+            val modelForRequest = if (preflight.allowNativeTools) model else model.copy(tools = emptySet())
+            val assistantForRequest = assistant.copy(
+                maxTokens = preflight.outputTokens,
+                streamOutput = preflight.streaming,
+                reasoningLevel = if (preflight.reasoning) assistant.reasoningLevel else ReasoningLevel.OFF,
+            )
+            if (continuationRunId == null) {
+                agentRunRepository.transitionRun(run.id, setOf(AgentRunStatus.PREFLIGHT), AgentRunStatus.RUNNING)
+            }
+            val runRuntime = PersistedAgentRunRuntime(agentRunRepository, run.id)
 
             generationHandler.generateText(
                 settings = settings,
-                model = model,
+                model = modelForRequest,
                 processingStatus = session.processingStatus,
-                messages = conversation.currentMessages.let {
-                    if (messageRange != null) {
-                        it.subList(messageRange.start, messageRange.endInclusive + 1)
-                    } else {
-                        it
-                    }
-                },
-                assistant = assistant,
+                messages = generationMessages,
+                assistant = assistantForRequest,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
@@ -560,7 +740,17 @@ class ChatService(
                     add(projectDocsTransformer)
                 },
                 outputTransformers = outputTransformers,
-                tools = tools,
+                tools = if (preflight.allowFunctionTools) tools.map { it.tool } else emptyList(),
+                describedTools = if (preflight.allowFunctionTools) tools else emptyList(),
+                workspace = workspace,
+                runRuntime = runRuntime,
+                artifactRunScope = me.rerere.rikkahub.data.artifacts.ToolArtifactRunScope(
+                    assistantId = assistant.id.toString(),
+                    conversationId = conversation.id.toString(),
+                    runId = run.id,
+                ),
+                allowParallelToolCalls = preflight.allowParallelToolCalls,
+                useClientGeneratedToolExecutionIdentity = preflight.useClientGeneratedToolExecutionIdentity,
             ).onCompletion {
                 // 可能被取消了，或者意外结束，兜底更新
                 val updatedConversation = getConversationFlow(conversationId).value.copy(
@@ -598,16 +788,19 @@ class ChatService(
                 }
             }
         }.onFailure {
+            agentRunRepository.failRun(run.id, it.javaClass.simpleName, "preflight_or_generation")
             // 兜底取消 Live Update 通知（生成开始前失败时 onCompletion 不会执行）
             appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
 
-            it.printStackTrace()
             addError(it, conversationId, title = context.getString(R.string.error_title_generation))
-            Logging.log(TAG, "handleMessageComplete: $it")
-            Logging.log(TAG, it.stackTraceToString())
+            Log.w(TAG, "generationFailed runId=${run.id} errorType=${it.javaClass.simpleName}")
         }.onSuccess {
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
+
+            if (agentRunRepository.getActiveRun(conversationId.toString())?.status == AgentRunStatus.WAITING_APPROVAL.name) {
+                return@onSuccess
+            }
 
             launchWithConversationReference(conversationId) {
                 generateTitle(conversationId, finalConversation)
@@ -622,39 +815,8 @@ class ChatService(
 
     private fun checkInvalidMessages(conversationId: Uuid) {
         val conversation = getConversationFlow(conversationId).value
-        var messagesNodes = conversation.messageNodes
-
-        // 移除无效 tool (未执行的 Tool)
-        messagesNodes = messagesNodes.mapIndexed { _, node ->
-            // Check for Tool type with non-executed tools
-            val hasPendingTools = node.currentMessage.getTools().any { !it.isExecuted }
-
-            if (hasPendingTools) {
-                // Keep messages that are ready to resume, such as approved/denied/answered tools.
-                val hasResumableTool = node.currentMessage.getTools().any {
-                    !it.isExecuted && it.approvalState.canResumeToolExecution()
-                }
-                if (hasResumableTool) {
-                    return@mapIndexed node
-                }
-
-                // If all tools are executed, it's valid
-                val allToolsExecuted = node.currentMessage.getTools().all { it.isExecuted }
-                if (allToolsExecuted && node.currentMessage.getTools().isNotEmpty()) {
-                    return@mapIndexed node
-                }
-
-                // Remove messages that still have unresolved tool approvals.
-                return@mapIndexed node.copy(
-                    messages = node.messages.filter { it.id != node.currentMessage.id },
-                    selectIndex = node.selectIndex - 1
-                )
-            }
-            node
-        }
-
-        // 更新index
-        messagesNodes = messagesNodes.map { node ->
+        // Tool calls are conversation history. Never delete their input or output while preparing a request.
+        val messageNodes = conversation.messageNodes.map { node ->
             if (node.messages.isNotEmpty() && node.selectIndex !in node.messages.indices) {
                 node.copy(selectIndex = 0)
             } else {
@@ -662,10 +824,9 @@ class ChatService(
             }
         }
 
-        // 移除无效消息
-        messagesNodes = messagesNodes.filter { it.messages.isNotEmpty() }
-
-        updateConversation(conversationId, conversation.copy(messageNodes = messagesNodes))
+        if (messageNodes != conversation.messageNodes) {
+            updateConversation(conversationId, conversation.copy(messageNodes = messageNodes))
+        }
     }
 
     private fun cancelToolByUser(tool: UIMessagePart.Tool): UIMessagePart.Tool {
@@ -679,22 +840,24 @@ class ChatService(
         )
     }
 
-    private suspend fun finishInterruptedPendingTools(conversationId: Uuid) {
+    private suspend fun finishInterruptedPendingTools(conversationId: Uuid, runId: String? = null) {
         val currentConversation = getConversationFlow(conversationId).value
-        val lastNode = currentConversation.messageNodes.lastOrNull() ?: return
-        val lastMessage = lastNode.currentMessage
-        val updatedMessage = lastMessage.finishPendingTools(::cancelToolByUser)
-        if (updatedMessage == lastMessage) {
-            return
-        }
-
-        val updatedConversation = currentConversation.copy(
-            messageNodes = currentConversation.messageNodes.dropLast(1) + lastNode.copy(
-                messages = lastNode.messages.map { message ->
-                    if (message.id == lastMessage.id) updatedMessage else message
-                }
-            )
-        )
+        val executionIds = runId?.let { agentRunRepository.getToolExecutions(it).mapTo(hashSetOf()) { execution -> execution.id } }
+        var changed = false
+        val updatedConversation = currentConversation.copy(messageNodes = currentConversation.messageNodes.map { node ->
+            node.copy(messages = node.messages.map { message ->
+                message.copy(parts = message.parts.map { part ->
+                    if (
+                        part is UIMessagePart.Tool && !part.isExecuted &&
+                        (executionIds == null || part.toolExecutionId in executionIds)
+                    ) {
+                        changed = true
+                        cancelToolByUser(part)
+                    } else part
+                })
+            })
+        })
+        if (!changed) return
         saveConversation(conversationId, updatedConversation)
     }
 
@@ -739,7 +902,7 @@ class ChatService(
                 )
             }
         }.onFailure {
-            it.printStackTrace()
+            Log.w(TAG, "generateTitle failed errorType=${it.javaClass.simpleName}")
             addError(
                 error = it,
                 conversationId = conversationId,
@@ -794,7 +957,7 @@ class ChatService(
                 )
             )
         }.onFailure {
-            it.printStackTrace()
+            Log.w(TAG, "generateSuggestion failed errorType=${it.javaClass.simpleName}")
         }
     }
 
@@ -933,11 +1096,13 @@ class ChatService(
      * 否则 clearFolder 只改了数据库，而活跃 session 内存态仍指向该文件夹，
      * 后续整对象保存会写回一个已被删除的 folder_id，导致会话在列表中悬空。
      */
-    suspend fun deleteFolder(folderId: Uuid) {
+    suspend fun deleteFolder(folder: Folder) {
         sessions.values
-            .filter { it.state.value.folderId == folderId }
+            .filter { session ->
+                session.state.value.folderId == folder.id && session.state.value.assistantId == folder.assistantId
+            }
             .forEach { updateConversationState(it.id) { c -> c.copy(folderId = null) } }
-        folderRepository.deleteFolder(folderId)
+        folderRepository.deleteFolder(folder)
     }
 
     private fun checkFilesDelete(newConversation: Conversation, oldConversation: Conversation) {
@@ -1229,10 +1394,66 @@ class ChatService(
     }
 
     // 停止当前会话生成任务（不清理会话缓存）
-    suspend fun stopGeneration(conversationId: Uuid) {
-        val job = sessions[conversationId]?.getJob() ?: return
-        job.cancel()
-        runCatching { job.join() }
-        finishInterruptedPendingTools(conversationId)
+    suspend fun stopGeneration(conversationId: Uuid, runId: String) {
+        agentRunRepository.awaitStartupRecovery()
+        // Cancel the job bound to this run before waiting for the generation lock. Generation itself
+        // holds that lock while collecting, so waiting first would make Stop ineffective.
+        val targetJob = sessions[conversationId]?.getJobForRun(runId)
+        targetJob?.cancel()
+        generationLocks.computeIfAbsent(conversationId) { Mutex() }.withLock {
+            val run = agentRunRepository.getRun(runId) ?: return@withLock
+            if (run.conversationId != conversationId.toString() || run.status !in AgentRunStatus.ACTIVE.map(AgentRunStatus::name)) {
+                return@withLock
+            }
+            // A replacement may have started while this request was queued. Never touch its job.
+            sessions[conversationId]?.getJobForRun(runId)?.takeIf { it === targetJob }?.cancel()
+            if (agentRunRepository.cancelRun(runId)) {
+                finishInterruptedPendingTools(conversationId, runId)
+            }
+        }
     }
+}
+
+/** Old cards have no persisted identity; more than one compatible card is never safe to approve. */
+internal fun selectLegacyApprovalCard(
+    requestedTool: UIMessagePart.Tool,
+    cards: List<UIMessagePart.Tool>,
+    pendingApprovalCount: Int,
+): UIMessagePart.Tool? {
+    if (pendingApprovalCount != 1) return null
+    val canonicalInput = requestedTool.input.canonicalJson().digest()
+    return cards.singleOrNull {
+        it.toolExecutionId == null && it.approvalId == null && it.isPending &&
+            it.toolName == requestedTool.toolName && it.input.canonicalJson().digest() == canonicalInput
+    }
+}
+
+/** Rebind exactly one persisted card when an expired approval is renewed in place. */
+internal fun rebindExpiredApprovalCard(
+    conversation: Conversation,
+    executionId: String,
+    expiredApprovalId: String,
+    replacementApprovalId: String,
+): Conversation? {
+    var updated = false
+    val nodes = conversation.messageNodes.map { node ->
+        node.copy(messages = node.messages.map { message ->
+            message.copy(parts = message.parts.map { part ->
+                if (
+                    part is UIMessagePart.Tool && !updated &&
+                    part.toolExecutionId == executionId && part.approvalId == expiredApprovalId
+                ) {
+                    updated = true
+                    part.copy(
+                        approvalState = ToolApprovalState.Pending,
+                        approvalId = replacementApprovalId,
+                        approvalStatusMessage = "授权已过期，请重新确认",
+                    )
+                } else {
+                    part
+                }
+            })
+        })
+    }
+    return conversation.copy(messageNodes = nodes).takeIf { updated }
 }

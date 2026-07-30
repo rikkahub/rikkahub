@@ -5,6 +5,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 
 class WorkspaceManager(
     private val baseDir: File,
@@ -13,9 +14,6 @@ class WorkspaceManager(
     private val bindMounts: List<WorkspaceBindMount> = emptyList(),
 ) {
     private val fileSystem = WorkspaceFileSystem(config)
-
-    // 按 target 长度降序, 保证 /a/b 优先于 /a 匹配
-    private val sortedBindMounts = bindMounts.sortedByDescending { it.target.trimEnd('/').length }
 
     init {
         baseDir.mkdirs()
@@ -108,30 +106,44 @@ class WorkspaceManager(
      * 按 [WorkspaceStorageArea.LINUX] 解析必然落空。
      */
     fun resolveRootfsPath(root: String, path: String): RootfsLocation {
-        val trimmed = path.trim().trimEnd('/').ifBlank { "/" }
-        require(trimmed.startsWith("/")) { "Rootfs path must be absolute: $path" }
+        val normalizedPath = RootfsPath.normalize(path)
 
-        sortedBindMounts.forEach { mount ->
-            val target = mount.target.trimEnd('/')
-            if (trimmed == target) return RootfsLocation(mount.source, "")
-            if (trimmed.startsWith("$target/")) {
-                return RootfsLocation(mount.source, trimmed.removePrefix("$target/"))
+        bindMountsFor(root).sortedByDescending { it.normalizedTarget.length }.forEach { mount ->
+            val target = mount.normalizedTarget
+            if (normalizedPath == target) return RootfsLocation(mount.source, "")
+            if (normalizedPath.startsWith("$target/")) {
+                return RootfsLocation(mount.source, normalizedPath.removePrefix("$target/"))
             }
         }
 
-        if (trimmed == ROOTFS_WORKSPACE_DIR || trimmed.startsWith("$ROOTFS_WORKSPACE_DIR/")) {
+        if (normalizedPath == ROOTFS_WORKSPACE_DIR || normalizedPath.startsWith("$ROOTFS_WORKSPACE_DIR/")) {
             return RootfsLocation(
                 rootDir = filesDir(root),
-                relativePath = trimmed.removePrefix(ROOTFS_WORKSPACE_DIR).trimStart('/'),
+                relativePath = normalizedPath.removePrefix(ROOTFS_WORKSPACE_DIR).trimStart('/'),
             )
         }
 
         // 内核伪文件系统: 显式拒绝, 而不是回落到一个必然读不到的物理路径
-        KERNEL_FS_MOUNTS.firstOrNull { trimmed == it || trimmed.startsWith("$it/") }?.let {
+        KERNEL_FS_MOUNTS.firstOrNull { normalizedPath == it || normalizedPath.startsWith("$it/") }?.let {
             error("$it is a kernel filesystem and cannot be read as a file, use workspace_shell instead")
         }
 
-        return RootfsLocation(linuxDir(root), trimmed.trimStart('/'))
+        return RootfsLocation(linuxDir(root), normalizedPath.trimStart('/'))
+    }
+
+    /** Writes through the resolved host root so guest-path policy cannot diverge from shell semantics. */
+    fun writeRootfsText(
+        root: String,
+        path: String,
+        text: String,
+        overwrite: Boolean = true,
+        charset: Charset = StandardCharsets.UTF_8,
+    ): WorkspaceFileEntry {
+        val normalizedPath = RootfsPath.normalize(path)
+        val location = resolveRootfsPath(root, normalizedPath)
+        location.requireNoSymbolicLinks(normalizedPath)
+        return fileSystem.writeText(location.rootDir, location.relativePath, text, overwrite, charset)
+            .copy(path = normalizedPath)
     }
 
     fun rootfsFileSize(root: String, path: String): Long =
@@ -145,7 +157,22 @@ class WorkspaceManager(
 
     private fun resolveRootfsFile(root: String, path: String): File {
         val location = resolveRootfsPath(root, path)
+        location.requireNoSymbolicLinks(RootfsPath.normalize(path))
         return fileSystem.resolve(location.rootDir, location.relativePath)
+    }
+
+    /**
+     * Host File I/O cannot reproduce PRoot's guest-absolute symlink semantics safely.
+     * Reject links instead of resolving a guest path against the host filesystem.
+     */
+    private fun RootfsLocation.requireNoSymbolicLinks(guestPath: String) {
+        var current = rootDir.toPath()
+        relativePath.split('/').filter { it.isNotEmpty() }.forEach { segment ->
+            current = current.resolve(segment)
+            if (Files.isSymbolicLink(current)) {
+                error("Symbolic links are not supported for direct Rootfs file access: $guestPath. Use workspace_shell instead")
+            }
+        }
     }
 
     private fun File.requireReadableFile(path: String) {
@@ -185,22 +212,28 @@ class WorkspaceManager(
         stdin: ByteArray? = null,
     ): WorkspaceCommandResult {
         require(command.isNotBlank()) { "Command is required" }
-        val workingDir = fileSystem.resolve(filesDir(root), cwd)
+        val workspaceFilesDir = filesDir(root)
+        val workingDir = fileSystem.resolve(workspaceFilesDir, cwd)
         require(workingDir.exists()) { "Working directory does not exist: $cwd" }
         require(workingDir.isDirectory) { "Working path is not a directory: $cwd" }
+        val normalizedCwd = workingDir.relativeTo(workspaceFilesDir.canonicalFile)
+            .path
+            .replace(File.separatorChar, '/')
+            .takeUnless { it == "." }
+            .orEmpty()
 
         return shellRunner.execute(
             WorkspaceShellContext(
                 root = root,
                 command = command,
-                cwd = cwd,
-                filesDir = filesDir(root),
+                cwd = normalizedCwd,
+                filesDir = workspaceFilesDir,
                 linuxDir = linuxDir(root),
                 tempDir = tempDir(root),
                 workingDir = workingDir,
                 timeoutMillis = timeoutMillis,
                 stdin = stdin,
-                bindMounts = bindMounts,
+                bindMounts = bindMountsFor(root),
             )
         )
     }
@@ -208,6 +241,17 @@ class WorkspaceManager(
     private fun requireValidRoot(root: String) {
         require(root.matches(ROOT_NAME_REGEX)) {
             "Invalid workspace root name: $root"
+        }
+    }
+
+    private fun bindMountsFor(root: String): List<WorkspaceBindMount> {
+        requireValidRoot(root)
+        return bindMounts.map { mount ->
+            if (mount.isolateByWorkspace) {
+                mount.copy(source = File(mount.source, root).apply { mkdirs() })
+            } else {
+                mount
+            }
         }
     }
 

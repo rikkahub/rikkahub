@@ -1,12 +1,6 @@
 package me.rerere.ai.provider.providers.openai
 
-import android.util.Log
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
@@ -27,7 +21,7 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
-import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.effectiveCapabilityProfile
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
@@ -41,6 +35,11 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.BoundedStreamBridge
+import me.rerere.ai.util.ProviderStreamErrorCode
+import me.rerere.ai.util.ProviderStreamException
+import me.rerere.ai.util.ProviderStreamTerminationReason
+import me.rerere.ai.util.boundedStreamFlow
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -62,11 +61,10 @@ import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import kotlin.time.Clock
 
-private const val TAG = "ResponseAPI"
-
 class ResponseAPI(
     private val client: OkHttpClient,
-    private val keyRoulette: KeyRoulette = KeyRoulette.default()
+    private val keyRoulette: KeyRoulette = KeyRoulette.default(),
+    private val streamQueueCapacity: Int = BoundedStreamBridge.DEFAULT_CAPACITY,
 ) : OpenAIImpl {
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
@@ -91,15 +89,12 @@ class ResponseAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
-
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body.string()}")
+            throw Exception("Failed to get response: status=${response.code}")
         }
 
         val bodyStr = response.body?.string() ?: ""
-        Log.i(TAG, "generateText: $bodyStr")
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
         val output = parseResponseOutput(bodyJson)
 
@@ -110,7 +105,10 @@ class ResponseAPI(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): Flow<MessageChunk> = callbackFlow {
+    ): Flow<MessageChunk> = boundedStreamFlow(
+        capacity = streamQueueCapacity,
+    ) { bridge ->
+        var completed = false
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -128,8 +126,6 @@ class ResponseAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
-
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -138,58 +134,85 @@ class ResponseAPI(
                 data: String
             ) {
                 if (data == "[DONE]") {
-                    close()
+                    bridge.complete()
                     return
                 }
-                Log.d(TAG, "onEvent: $id/$type $data")
-                val json = json.parseToJsonElement(data).jsonObject
-                val chunk = parseResponseDelta(json)
-                if (chunk != null) {
-                    trySend(chunk).onFailure { e ->
-                        Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                try {
+                    val event = json.parseToJsonElement(data).jsonObject
+                    val eventType = event["type"]?.jsonPrimitive?.contentOrNull
+                    if (eventType == "response.incomplete") {
+                        bridge.fail(
+                            ProviderStreamException(
+                                ProviderStreamErrorCode.STREAM_INCOMPLETE,
+                                "Provider returned an incomplete response",
+                            ),
+                            ProviderStreamTerminationReason.INCOMPLETE,
+                        )
+                        return
                     }
-                }
-                if (type == "response.completed") {
-                    close()
+                    if (type == "error" || type == "response.failed" || eventType == "response.failed" ||
+                        event["error"] != null
+                    ) {
+                        val providerError = event["error"]?.parseErrorDetail()
+                            ?: RuntimeException("Provider returned a stream error")
+                        bridge.fail(
+                            ProviderStreamException(
+                                ProviderStreamErrorCode.STREAM_UPSTREAM_FAILURE,
+                                "Provider returned a stream error",
+                                providerError,
+                            )
+                        )
+                        return
+                    }
+                    val chunk = parseResponseDelta(event)
+                    if (chunk != null && !bridge.emit(chunk)) return
+                    if (type == "response.completed" || eventType == "response.completed") {
+                        completed = true
+                        bridge.complete()
+                    }
+                } catch (error: Throwable) {
+                    bridge.fail(
+                        ProviderStreamException(
+                            ProviderStreamErrorCode.STREAM_MALFORMED_EVENT,
+                            "Malformed provider stream event",
+                            error,
+                        ),
+                        ProviderStreamTerminationReason.MALFORMED_EVENT,
+                    )
                 }
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                var exception = t
-
-                t?.printStackTrace()
-                println("[onFailure] 发生错误: ${t?.javaClass?.name} ${t?.message} / $response")
+                var exception: Throwable = t ?: RuntimeException("Provider stream failed")
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        println(bodyElement)
                         exception = bodyElement.parseErrorDetail()
-                        Log.i(TAG, "onFailure: $exception")
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
-                    e.printStackTrace()
+                    if (t == null) exception = e
                 } finally {
-                    close(exception)
+                    bridge.fail(
+                        ProviderStreamException(
+                            ProviderStreamErrorCode.STREAM_UPSTREAM_FAILURE,
+                            "Provider stream failed",
+                            exception,
+                        )
+                    )
                 }
             }
 
             override fun onClosed(eventSource: EventSource) {
-                close()
+                if (!completed) bridge.failIncomplete()
             }
         }
 
         val eventSource = EventSources.createFactory(client)
             .newEventSource(request, listener)
-
-        awaitClose {
-            println("[awaitClose] 关闭eventSource ")
-            eventSource.cancel()
-        }
-        // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
-    }.buffer(Channel.UNLIMITED)
+        bridge.attachUpstreamCanceller(eventSource::cancel)
+    }
 
     internal fun buildRequestBody(
         providerSetting: ProviderSetting.OpenAI,
@@ -222,7 +245,7 @@ class ResponseAPI(
             put("input", buildMessages(messages))
 
             // reasoning
-            if (params.model.abilities.contains(ModelAbility.REASONING)) {
+            if (params.model.effectiveCapabilityProfile().reasoning) {
                 val level = params.reasoningLevel
                 put("reasoning", buildJsonObject {
                     if (capabilities.supportsReasoningSummary) {
@@ -243,7 +266,7 @@ class ResponseAPI(
             // Response API 的 tools 是扁平数组, 函数工具和内置工具可以共存, 必须写在同一个 key 下,
             // 否则后写入的会覆盖前者
             val useFunctionTools =
-                params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()
+                params.model.effectiveCapabilityProfile().toolCalling && params.tools.isNotEmpty()
             if (useFunctionTools || params.model.tools.isNotEmpty()) {
                 putJsonArray("tools") {
                     if (useFunctionTools) {
@@ -377,7 +400,6 @@ class ResponseAPI(
                                                     put("type", "input_image")
                                                     put("image_url", encoded.base64)
                                                 }.onFailure {
-                                                    it.printStackTrace()
                                                     put("type", "input_text")
                                                     put("text", "Error: Failed to encode image to base64")
                                                 }
@@ -441,7 +463,6 @@ class ResponseAPI(
                                         put("type", "input_image")
                                         put("image_url", encodedImage.base64)
                                     }.onFailure {
-                                        it.printStackTrace()
                                         put("type", "input_text")
                                         put("text", "Error: Failed to encode image to base64")
                                     }
@@ -456,7 +477,7 @@ class ResponseAPI(
         })
     }
 
-    private fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
+    internal fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
         val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
 
         when (chunkType) {
@@ -507,6 +528,7 @@ class ResponseAPI(
                 val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
                 val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
                 if (type == "function_call") {
+                    val callId = item["call_id"]?.jsonPrimitive?.contentOrNull ?: return null
                     return MessageChunk(
                         id = id,
                         model = "",
@@ -518,7 +540,7 @@ class ResponseAPI(
                                     role = MessageRole.ASSISTANT,
                                     parts = listOf(
                                         UIMessagePart.Tool(
-                                            toolCallId = id,
+                                            toolCallId = callId,
                                             toolName = item["name"]?.jsonPrimitive?.content ?: "",
                                             input = item["arguments"]?.jsonPrimitive?.content
                                                 ?: "",
@@ -631,7 +653,7 @@ class ResponseAPI(
 
             "response.function_call_arguments.done" -> {
                 val toolCallId =
-                    jsonObject["item_id"]?.jsonPrimitive?.content ?: error("item_id not found")
+                    jsonObject["call_id"]?.jsonPrimitive?.content ?: return null
                 val arguments =
                     jsonObject["arguments"]?.jsonPrimitive?.content ?: error("arguments not found")
                 return MessageChunk(
@@ -672,7 +694,6 @@ class ResponseAPI(
     }
 
     private fun parseResponseOutput(jsonObject: JsonObject): MessageChunk {
-        println(jsonObject)
         val outputs = jsonObject["output"]?.jsonArray ?: error("output not found")
         val parts = arrayListOf<UIMessagePart>()
 

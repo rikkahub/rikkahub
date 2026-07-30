@@ -118,6 +118,7 @@ class ExploreSubagentToolProvider(
                         assistant = ctx.assistant,
                         conversation = ctx.conversation,
                         task = task,
+                        parentRunId = ctx.agentRunId,
                         spec = SubagentSpec(
                             kind = SubagentKind.EXPLORE,
                             maxSteps = maxSteps,
@@ -128,28 +129,17 @@ class ExploreSubagentToolProvider(
                 )
 
                 val payload = buildJsonObject {
-                    put("success", result.success)
-                    put("summary", result.summary)
-                    if (result.rawNotes.isNotBlank()) put("notes", result.rawNotes.take(6000))
-                    put("steps_used", result.stepsUsed)
-                    put("tools_used", result.toolsUsed.joinToString(", "))
-                    putJsonArray("tools_used_list") {
-                        result.toolsUsed.forEach { add(it) }
+                    result.childRunId?.let { put("child_run_id", it) }
+                    putJsonArray("findings") {
+                        result.report.findings.forEach { add(it) }
                     }
-                    putJsonArray("trace") {
-                        result.trace.forEach { step ->
-                            add(
-                                buildJsonObject {
-                                    put("index", step.index)
-                                    put("tool", step.toolName)
-                                    put("input", step.inputPreview)
-                                    put("output", step.outputPreview)
-                                    put("error", step.isError)
-                                }
-                            )
-                        }
+                    putJsonArray("evidence_paths") {
+                        result.report.evidencePaths.forEach { add(it) }
                     }
-                    result.error?.let { put("error", it) }
+                    put("confidence", result.report.confidence)
+                    putJsonArray("unresolved") {
+                        result.report.unresolved.distinct().forEach { add(it) }
+                    }
                 }
                 listOf(UIMessagePart.Text(json.encodeToString(payload)))
             },

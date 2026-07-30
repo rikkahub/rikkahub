@@ -91,6 +91,7 @@ val appModule = module {
             toolRegistry = get(),
             projectDocsTransformer = get(),
             compactPolicy = get(),
+            agentRunRepository = get(),
         )
     }
 

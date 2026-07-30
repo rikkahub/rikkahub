@@ -3,7 +3,9 @@ package me.rerere.rikkahub.data.datastore.migration
 import android.util.Log
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.utils.JsonInstant
 
 private const val TAG = "SettingsJsonMigrator"
@@ -35,6 +37,16 @@ object SettingsJsonMigrator {
             root["assistants"]?.let { element ->
                 val migrated = migrateAssistantsJson(JsonInstant.encodeToString(element))
                 root["assistants"] = JsonInstant.parseToJsonElement(migrated)
+            }
+
+            // V4: Custom JS search is permanently disabled. Remove it before settings are restored.
+            root["searchServices"]?.let { element ->
+                val migrated = migrateDisabledCustomJsSearchServices(
+                    servicesJson = JsonInstant.encodeToString(element),
+                    selectedIndex = root["searchServiceSelected"]?.jsonPrimitive?.intOrNull ?: 0,
+                )
+                root["searchServices"] = JsonInstant.parseToJsonElement(migrated.servicesJson)
+                root["searchServiceSelected"] = kotlinx.serialization.json.JsonPrimitive(migrated.selectedIndex)
             }
 
             // V3: 将 assistants 中内嵌的 quickMessages 提取为全局 quickMessages

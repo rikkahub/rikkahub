@@ -61,6 +61,22 @@ class AgentHookTest {
     }
 
     @Test
+    fun `logging hook omits tool failure details`() = runBlocking {
+        val lines = mutableListOf<String>()
+        val hook = LoggingAgentHook(log = { _, msg -> lines += msg })
+        val tool = Tool(name = "workspace_write_file", description = "w", execute = { emptyList() })
+
+        hook.afterTool(
+            tool,
+            buildJsonObject { put("path", "/private/file") },
+            Result.failure(IllegalStateException("secret input and output")),
+        )
+
+        assertTrue(lines.single().contains("errorType=IllegalStateException"))
+        assertTrue(lines.none { it.contains("secret input") || it.contains("/private/file") })
+    }
+
+    @Test
     fun `noop hook does nothing`() = runBlocking {
         val tool = Tool(name = "t", description = "d", execute = { emptyList() })
         NoOpAgentHook.beforeTool(tool, buildJsonObject { })

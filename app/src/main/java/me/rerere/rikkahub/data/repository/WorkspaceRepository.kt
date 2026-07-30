@@ -16,6 +16,7 @@ import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
+import me.rerere.workspace.WorkspaceSearchMatch
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import java.io.ByteArrayOutputStream
@@ -55,6 +56,17 @@ class WorkspaceRepository(
     }
 
     suspend fun getById(id: String): WorkspaceEntity? = dao.getById(id)
+
+    /** Bounded filesystem search backed by WorkspaceFileSystem, never by the workspace shell. */
+    suspend fun searchFiles(
+        workspaceId: String,
+        query: String,
+        path: String = "",
+        includeGlob: String? = null,
+    ): List<WorkspaceSearchMatch> = withContext(Dispatchers.IO) {
+        val workspace = requireNotNull(getById(workspaceId)) { "Workspace not found" }
+        manager.grep(workspace.root, query, path, regex = false, includeGlob = includeGlob)
+    }
 
     suspend fun create(name: String): WorkspaceEntity {
         val id = Uuid.random().toString()
@@ -247,6 +259,18 @@ class WorkspaceRepository(
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
         manager.ensureWorkspace(workspace.root)
         manager.exportRootfsFile(workspace.root, path, outputStream)
+    }
+
+    /** Writes a Rootfs guest path through the same normalized mapping used for reads. */
+    suspend fun writeRootfsText(
+        id: String,
+        path: String,
+        text: String,
+        overwrite: Boolean = true,
+    ): WorkspaceFileEntry = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        manager.ensureWorkspace(workspace.root)
+        manager.writeRootfsText(workspace.root, path, text, overwrite)
     }
 
     suspend fun deleteFile(

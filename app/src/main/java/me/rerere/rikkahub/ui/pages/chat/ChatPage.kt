@@ -5,10 +5,13 @@ import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
@@ -43,10 +46,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,6 +67,7 @@ import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
+import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.android.appTempFolder
 import me.rerere.hugeicons.HugeIcons
@@ -77,6 +86,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.hugeicons.stroke.Codesandbox
+import me.rerere.hugeicons.stroke.Cpu
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
@@ -109,6 +119,11 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
             parametersOf(id.toString())
         }
     )
+    val agentRunVm: AgentRunVM = koinViewModel(
+        parameters = {
+            parametersOf(id.toString())
+        }
+    )
     val filesManager: FilesManager = koinInject()
     val navController = LocalNavController.current
     val scope = rememberCoroutineScope()
@@ -120,6 +135,11 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
+    val activeRun by agentRunVm.activeRun.collectAsStateWithLifecycle()
+    val activeRunDetail by agentRunVm.activeDetail.collectAsStateWithLifecycle()
+    val latestRun by agentRunVm.latestRun.collectAsStateWithLifecycle()
+    val selectedRunId by agentRunVm.selectedRun.collectAsStateWithLifecycle()
+    val selectedRunDetail by agentRunVm.detail.collectAsStateWithLifecycle()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
@@ -223,6 +243,14 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
+                    activeRun = activeRun,
+                    activeRunDetail = activeRunDetail,
+                    latestRunId = latestRun?.id,
+                    selectedRunId = selectedRunId,
+                    selectedRunDetail = selectedRunDetail,
+                    onOpenRun = agentRunVm::openRun,
+                    onCloseRun = agentRunVm::closeRun,
+                    onStopRun = vm::stopGeneration,
                 )
             }
         }
@@ -255,6 +283,14 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
+                    activeRun = activeRun,
+                    activeRunDetail = activeRunDetail,
+                    latestRunId = latestRun?.id,
+                    selectedRunId = selectedRunId,
+                    selectedRunDetail = selectedRunDetail,
+                    onOpenRun = agentRunVm::openRun,
+                    onCloseRun = agentRunVm::closeRun,
+                    onStopRun = vm::stopGeneration,
                 )
             }
             BackHandler(drawerState.isOpen) {
@@ -281,6 +317,14 @@ private fun ChatPageContent(
     errors: List<ChatError>,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
+    activeRun: me.rerere.rikkahub.data.db.entity.AgentRunEntity?,
+    activeRunDetail: AgentRunDetail?,
+    latestRunId: String?,
+    selectedRunId: String?,
+    selectedRunDetail: AgentRunDetailState,
+    onOpenRun: (String) -> Unit,
+    onCloseRun: () -> Unit,
+    onStopRun: (String?) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -289,6 +333,13 @@ private fun ChatPageContent(
     val hazeState = rememberHazeState()
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
+    var approvalAnnouncement by remember { mutableStateOf<String?>(null) }
+    val approvalAnnouncementFocusRequester = remember { FocusRequester() }
+    val activeRunPresentation = remember(activeRun, activeRunDetail) {
+        activeRunDetail?.toPresentation() ?: activeRun?.toPresentation()
+    }
+    // Keep the run identity from this composition; an old click must not stop a later run.
+    val stopRunId = activeRun?.id
 
     val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
         assistant.workspaceId?.let { workspaceId ->
@@ -303,6 +354,10 @@ private fun ChatPageContent(
     }
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
+
+    LaunchedEffect(approvalAnnouncement) {
+        if (approvalAnnouncement != null) approvalAnnouncementFocusRequester.requestFocus()
+    }
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -331,6 +386,8 @@ private fun ChatPageContent(
                         vm.updateConversation(conversation.copy(agentMode = next))
                         vm.saveConversationAsync()
                     },
+                    showRunEntry = latestRunId != null,
+                    onOpenLatestRun = { latestRunId?.let(onOpenRun) },
                 )
             },
             bottomBar = {
@@ -341,7 +398,7 @@ private fun ChatPageContent(
                     hazeState = hazeState,
                     completionProviders = completionProviders,
                     onCancelClick = {
-                        vm.stopGeneration()
+                        stopRunId?.let(onStopRun)
                     },
                     enableSearch = enableWebSearch,
                     onToggleSearch = {
@@ -420,80 +477,127 @@ private fun ChatPageContent(
             },
             containerColor = Color.Transparent,
         ) { innerPadding ->
-            ChatList(
-                innerPadding = innerPadding,
-                conversation = conversation,
-                state = chatListState,
-                loading = loadingJob != null,
-                processingStatus = processingStatus,
-                previewMode = previewMode,
-                settings = setting,
-                hazeState = hazeState,
-                errors = errors,
-                onDismissError = onDismissError,
-                onClearAllErrors = onClearAllErrors,
-                onRegenerate = {
-                    vm.regenerateAtMessage(it)
-                },
-                onEdit = {
-                    inputState.editingMessage = it.id
-                    inputState.setContents(it.parts)
-                },
-                onForkMessage = {
-                    scope.launch {
-                        val fork = vm.forkMessage(message = it)
-                        navigateToChatPage(navController, chatId = fork.id)
-                    }
-                },
-                onDelete = {
-                    if (loadingJob != null) {
-                        vm.showDeleteBlockedWhileGeneratingError()
-                    } else {
-                        vm.deleteMessage(it)
-                    }
-                },
-                onUpdateMessage = { newNode ->
-                    vm.updateConversation(
-                        conversation.copy(
-                            messageNodes = conversation.messageNodes.map { node ->
-                                if (node.id == newNode.id) {
-                                    newNode
-                                } else {
-                                    node
+            Box(modifier = Modifier.fillMaxSize()) {
+                ChatList(
+                    innerPadding = innerPadding,
+                    conversation = conversation,
+                    state = chatListState,
+                    loading = loadingJob != null,
+                    processingStatus = processingStatus,
+                    previewMode = previewMode,
+                    settings = setting,
+                    hazeState = hazeState,
+                    errors = errors,
+                    onDismissError = onDismissError,
+                    onClearAllErrors = onClearAllErrors,
+                    onRegenerate = {
+                        vm.regenerateAtMessage(it)
+                    },
+                    onEdit = {
+                        inputState.editingMessage = it.id
+                        inputState.setContents(it.parts)
+                    },
+                    onForkMessage = {
+                        scope.launch {
+                            val fork = vm.forkMessage(message = it)
+                            navigateToChatPage(navController, chatId = fork.id)
+                        }
+                    },
+                    onDelete = {
+                        if (loadingJob != null) {
+                            vm.showDeleteBlockedWhileGeneratingError()
+                        } else {
+                            vm.deleteMessage(it)
+                        }
+                    },
+                    onUpdateMessage = { newNode ->
+                        vm.updateConversation(
+                            conversation.copy(
+                                messageNodes = conversation.messageNodes.map { node ->
+                                    if (node.id == newNode.id) newNode else node
                                 }
-                            }
-                        ))
-                    vm.saveConversationAsync()
-                },
-                onClickSuggestion = { suggestion ->
-                    inputState.editingMessage = null
-                    inputState.setMessageText(suggestion)
-                },
-                onTranslate = { message, locale ->
-                    vm.translateMessage(message, locale)
-                },
-                onClearTranslation = { message ->
-                    vm.clearTranslationField(message.id)
-                },
-                onJumpToMessage = { index ->
+                            ))
+                        vm.saveConversationAsync()
+                    },
+                    onClickSuggestion = { suggestion ->
+                        inputState.editingMessage = null
+                        inputState.setMessageText(suggestion)
+                    },
+                    onTranslate = { message, locale ->
+                        vm.translateMessage(message, locale)
+                    },
+                    onClearTranslation = { message ->
+                        vm.clearTranslationField(message.id)
+                    },
+                    onJumpToMessage = { index ->
+                        previewMode = false
+                        scope.launch {
+                            chatListState.requestScrollToItem(index)
+                        }
+                    },
+                    onToolApproval = { tool, approved, reason ->
+                        vm.handleToolApproval(tool, approved, reason)
+                    },
+                    onToolAnswer = { tool, answer ->
+                        vm.handleToolAnswer(tool, answer)
+                    },
+                    onToggleFavorite = { node ->
+                        vm.toggleMessageFavorite(node)
+                    },
+                    onConversationSystemPromptChange = { newPrompt ->
+                        vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
+                        vm.saveConversationAsync()
+                    },
+                )
+                activeRunPresentation?.let { run ->
+                    AgentRunActiveCard(
+                        run = run,
+                        onOpen = { onOpenRun(run.runId) },
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(start = 16.dp, top = innerPadding.calculateTopPadding() + 8.dp, end = 16.dp),
+                    )
+                }
+                approvalAnnouncement?.let { announcement ->
+                    Text(
+                        text = announcement,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(16.dp)
+                            .focusRequester(approvalAnnouncementFocusRequester)
+                            .focusable()
+                            .semantics { contentDescription = announcement },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+
+        if (selectedRunId != null) {
+            AgentRunDetailSheet(
+                state = selectedRunDetail,
+                onDismiss = onCloseRun,
+                onOpenApproval = { approval ->
+                    onCloseRun()
                     previewMode = false
-                    scope.launch {
-                        chatListState.requestScrollToItem(index)
+                    if (conversation.messageNodes.isNotEmpty()) {
+                        val approvalIndex = conversation.messageNodes.indexOfLast { node ->
+                            node.currentMessage.parts.filterIsInstance<UIMessagePart.Tool>().any {
+                                it.approvalId == approval.id && it.toolExecutionId == approval.toolExecutionId &&
+                                    it.approvalState is ToolApprovalState.Pending
+                            }
+                        }
+                        scope.launch {
+                            if (approvalIndex >= 0) {
+                                chatListState.requestScrollToItem(approvalIndex)
+                                approvalAnnouncement = "已定位待审批工具卡，请在聊天中选择批准或拒绝。"
+                            } else {
+                                approvalAnnouncement = "未找到待审批工具卡，请检查聊天中的审批状态。"
+                            }
+                        }
                     }
                 },
-                onToolApproval = { toolCallId, approved, reason ->
-                    vm.handleToolApproval(toolCallId, approved, reason)
-                },
-                onToolAnswer = { toolCallId, answer ->
-                    vm.handleToolAnswer(toolCallId, answer)
-                },
-                onToggleFavorite = { node ->
-                    vm.toggleMessageFavorite(node)
-                },
-                onConversationSystemPromptChange = { newPrompt ->
-                    vm.updateConversation(conversation.copy(customSystemPrompt = newPrompt))
-                    vm.saveConversationAsync()
-                },
+                onOpenChildRun = onOpenRun,
             )
         }
 
@@ -726,6 +830,8 @@ private fun TopBar(
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit,
     onCycleAgentMode: () -> Unit = {},
+    showRunEntry: Boolean = false,
+    onOpenLatestRun: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -792,6 +898,11 @@ private fun TopBar(
             }
         },
         actions = {
+            if (showRunEntry) {
+                IconButton(onClick = { onOpenLatestRun() }) {
+                    Icon(HugeIcons.Cpu, contentDescription = "运行详情")
+                }
+            }
             if (showAgentModeChip) {
                 val modeLabel = when (conversation.agentMode) {
                     AgentMode.CHAT -> stringResource(R.string.agent_mode_chat)

@@ -4,6 +4,5 @@
   <string name="click_to_get_api_key">Click to get API Key</string>
   <string name="searxng_desc_1">settings.yml needs to enable json format support:</string>
   <string name="searxng_desc_2">search:\n  formats:\n    - html\n    - json</string>
-  <string name="custom_js_desc">Custom search provider powered by QuickJS. Implement search(query, resultSize) and optionally scrape(urls) functions. Use fetch(url, options?) for HTTP requests.</string>
 </resources>
 

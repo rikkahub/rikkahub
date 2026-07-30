@@ -1,14 +1,8 @@
 package me.rerere.ai.provider.providers
 
 import android.content.Context
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -32,11 +26,13 @@ import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
-import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ModelCapabilityProfile
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.ToolCallIdStability
+import me.rerere.ai.provider.effectiveCapabilityProfile
 import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.GoogleThoughtMetadata
@@ -48,10 +44,16 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.BoundedStreamBridge
+import me.rerere.ai.util.ProviderStreamErrorCode
+import me.rerere.ai.util.ProviderStreamException
+import me.rerere.ai.util.ProviderStreamTerminationReason
+import me.rerere.ai.util.boundedStreamFlow
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
+import me.rerere.ai.util.parseErrorDetail
 import me.rerere.ai.util.removeElements
 import me.rerere.ai.util.stringSafe
 import me.rerere.ai.util.toHeaders
@@ -67,13 +69,16 @@ import okhttp3.Response
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
+import java.security.MessageDigest
 import org.apache.commons.text.StringEscapeUtils
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
-private const val TAG = "GoogleProvider"
-
-class GoogleProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Google> {
+class GoogleProvider(
+    private val client: OkHttpClient,
+    context: Context? = null,
+    private val streamQueueCapacity: Int = BoundedStreamBridge.DEFAULT_CAPACITY,
+) : Provider<ProviderSetting.Google> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
     private val serviceAccountTokenProvider by lazy {
         ServiceAccountTokenProvider(client)
@@ -128,7 +133,6 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             val response = client.newCall(request).await()
             if (response.isSuccessful) {
                 val body = response.body?.string() ?: error("empty body")
-                Log.d(TAG, "listModels: $body")
                 val bodyObject = json.parseToJsonElement(body).jsonObject
                 val models = bodyObject["models"]?.jsonArray ?: return@withContext emptyList()
 
@@ -143,10 +147,26 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         return@mapNotNull null
                     }
 
+                    val modelId = modelObject["name"]!!.jsonPrimitive.content.substringAfter("/")
+                    val knownProfile = ModelRegistry.MODEL_CAPABILITY_PROFILE.getData(modelId)
+                    val contextWindowTokens = modelObject["inputTokenLimit"]?.jsonPrimitive?.intOrNull
+                    val maxOutputTokens = modelObject["outputTokenLimit"]?.jsonPrimitive?.intOrNull
                     Model(
-                        modelId = modelObject["name"]!!.jsonPrimitive.content.substringAfter("/"),
+                        modelId = modelId,
                         displayName = modelObject["displayName"]!!.jsonPrimitive.content,
                         type = if ("generateContent" in supportedGenerationMethods) ModelType.CHAT else ModelType.EMBEDDING,
+                        contextWindowTokens = contextWindowTokens,
+                        capabilityProfile = ModelCapabilityProfile(
+                            contextWindowTokens = contextWindowTokens,
+                            maxOutputTokens = maxOutputTokens,
+                            toolCalling = knownProfile.toolCalling,
+                            streaming = "streamGenerateContent" in supportedGenerationMethods,
+                            reasoning = knownProfile.reasoning,
+                            multimodalInput = knownProfile.multimodalInput,
+                            multimodalOutput = knownProfile.multimodalOutput,
+                            // generateContent alone is not evidence of function, parallel, or native tool support.
+                            toolCallIdStability = ToolCallIdStability.UNKNOWN,
+                        ),
                     )
                 }
             } else {
@@ -184,7 +204,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+            throw Exception("Failed to get response: status=${response.code}")
         }
 
         val bodyStr = response.body?.string() ?: ""
@@ -214,7 +234,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         providerSetting: ProviderSetting.Google,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): Flow<MessageChunk> = callbackFlow {
+    ): Flow<MessageChunk> = boundedStreamFlow(
+        capacity = streamQueueCapacity,
+    ) { bridge ->
+        var completed = false
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -238,8 +261,6 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 .build()
         )
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
-
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -247,14 +268,33 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 type: String?,
                 data: String
             ) {
-                Log.i(TAG, "onEvent: $data")
-
+                if (data == "[DONE]") {
+                    completed = true
+                    bridge.complete()
+                    return
+                }
                 try {
                     val jsonData = json.parseToJsonElement(data).jsonObject
+                    if (jsonData["error"] != null) {
+                        bridge.fail(
+                            ProviderStreamException(
+                                ProviderStreamErrorCode.STREAM_UPSTREAM_FAILURE,
+                                "Provider returned a stream error",
+                                jsonData["error"]!!.parseErrorDetail(),
+                            )
+                        )
+                        return
+                    }
                     val reason =
                         jsonData["promptFeedback"]?.jsonObject?.get("blockReason")?.jsonPrimitiveOrNull?.contentOrNull
                     if (reason != null) {
-                        close(RuntimeException("Prompt feedback: $reason"))
+                        bridge.fail(
+                            ProviderStreamException(
+                                ProviderStreamErrorCode.STREAM_UPSTREAM_FAILURE,
+                                "Provider rejected the prompt: $reason",
+                            )
+                        )
+                        return
                     }
                     val candidates = jsonData["candidates"]?.jsonArray ?: return
                     if (candidates.isEmpty()) return
@@ -268,6 +308,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                             val groundingMetadata = candidateObj["groundingMetadata"]?.jsonObject
                             val finishReason =
                                 candidateObj["finishReason"]?.jsonPrimitive?.contentOrNull
+                            if (finishReason != null) completed = true
 
                             val message = content?.let {
                                 parseMessage(buildJsonObject {
@@ -289,12 +330,16 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         usage = usage
                     )
 
-                    trySend(messageChunk).onFailure { e ->
-                        Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    println("[onEvent] 解析错误: $data")
+                    if (!bridge.emit(messageChunk)) return
+                } catch (error: Throwable) {
+                    bridge.fail(
+                        ProviderStreamException(
+                            ProviderStreamErrorCode.STREAM_MALFORMED_EVENT,
+                            "Malformed provider stream event",
+                            error,
+                        ),
+                        ProviderStreamTerminationReason.MALFORMED_EVENT,
+                    )
                 }
             }
 
@@ -303,17 +348,13 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 t: Throwable?,
                 response: Response?
             ) {
-                var exception = t
-
-                t?.printStackTrace()
-                println("[onFailure] 发生错误: ${t?.message}")
+                var exception: Throwable = t ?: RuntimeException("Provider stream failed")
 
                 try {
                     if (t == null && response != null) {
                         val bodyStr = response.body.stringSafe()
                         if (!bodyStr.isNullOrEmpty()) {
                             val bodyElement = json.parseToJsonElement(bodyStr)
-                            println(bodyElement)
                             if (bodyElement is JsonObject) {
                                 exception = Exception(
                                     bodyElement["error"]?.jsonObject?.get("message")?.jsonPrimitive?.content
@@ -325,28 +366,26 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         }
                     }
                 } catch (e: Throwable) {
-                    e.printStackTrace()
-                    exception = e
-                } finally {
-                    close(exception ?: Exception("Stream failed"))
+                    if (t == null) exception = e
                 }
+                bridge.fail(
+                    ProviderStreamException(
+                        ProviderStreamErrorCode.STREAM_UPSTREAM_FAILURE,
+                        "Provider stream failed",
+                        exception,
+                    )
+                )
             }
 
             override fun onClosed(eventSource: EventSource) {
-                println("[onClosed] 连接已关闭")
-                close()
+                if (completed) bridge.complete() else bridge.failIncomplete()
             }
         }
 
         val eventSource = EventSources.createFactory(client)
                 .newEventSource(request, listener)
-
-        awaitClose {
-            println("[awaitClose] 关闭eventSource")
-            eventSource.cancel()
-        }
-        // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
-    }.buffer(Channel.UNLIMITED)
+        bridge.attachUpstreamCanceller(eventSource::cancel)
+    }
 
     private fun buildCompletionRequestBody(
         messages: List<UIMessage>,
@@ -378,7 +417,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     add(JsonPrimitive("IMAGE"))
                 })
             }
-            if (params.model.abilities.contains(ModelAbility.REASONING)) {
+            if (params.model.effectiveCapabilityProfile().reasoning) {
                 put("thinkingConfig", buildJsonObject {
                     put("includeThoughts", true)
 
@@ -420,7 +459,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         )
 
         // Tools
-        if (params.tools.isNotEmpty() && params.model.abilities.contains(ModelAbility.TOOL)) {
+        if (params.tools.isNotEmpty() && params.model.effectiveCapabilityProfile().toolCalling) {
             put("tools", buildJsonArray {
                 add(buildJsonObject {
                     put("functionDeclarations", buildJsonArray {
@@ -520,12 +559,11 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             message["role"]?.jsonPrimitive?.contentOrNull ?: "model"
         )
         val content = message["content"]?.jsonObject ?: error("No content")
-        val parts = content["parts"]?.jsonArray?.map { part ->
-            parseMessagePart(part.jsonObject)
+        val parts = content["parts"]?.jsonArray?.mapIndexed { index, part ->
+            parseMessagePart(part.jsonObject, index)
         } ?: emptyList()
 
         val groundingMetadata = message["groundingMetadata"]?.jsonObject
-        Log.i(TAG, "parseMessage: $groundingMetadata")
         val annotations = parseSearchGroundingMetadata(groundingMetadata)
 
         return UIMessage(
@@ -547,11 +585,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 url = uri
             )
         }
-        Log.i(TAG, "parseSearchGroundingMetadata: $chunks")
         return chunks
     }
 
-    private fun parseMessagePart(jsonObject: JsonObject): UIMessagePart {
+    private fun parseMessagePart(jsonObject: JsonObject, partIndex: Int): UIMessagePart {
         return when {
             jsonObject.containsKey("text") -> {
                 val thought = jsonObject["thought"]?.jsonPrimitive?.booleanOrNull ?: false
@@ -565,7 +602,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
             jsonObject.containsKey("functionCall") -> {
                 UIMessagePart.Tool(
-                    toolCallId = Uuid.random().toString(),
+                    toolCallId = clientToolCallId(
+                        partIndex,
+                        jsonObject["functionCall"]!!.jsonObject,
+                    ),
                     toolName = jsonObject["functionCall"]!!.jsonObject["name"]!!.jsonPrimitive.content,
                     input = json.encodeToString(jsonObject["functionCall"]!!.jsonObject["args"]),
                     output = emptyList(),
@@ -600,6 +640,16 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
             else -> error("unknown message part type: $jsonObject")
         }
+    }
+
+    /** Gemini does not return a function-call ID, so this is a client execution identity only. */
+    internal fun clientToolCallId(partIndex: Int, functionCall: JsonObject): String {
+        val name = functionCall["name"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val args = functionCall["args"]?.toString().orEmpty()
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest("$partIndex\u0000$name\u0000$args".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        return "google-client-$digest"
     }
 
     private fun buildContents(messages: List<UIMessage>): JsonArray {

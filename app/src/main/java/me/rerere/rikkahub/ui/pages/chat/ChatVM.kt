@@ -230,25 +230,26 @@ class ChatVM(
     }
 
     fun handleToolApproval(
-        toolCallId: String,
+        tool: UIMessagePart.Tool,
         approved: Boolean,
         reason: String = ""
     ) {
         analytics.logEvent("ai_tool_approval", null)
-        chatService.handleToolApproval(_conversationId, toolCallId, approved, reason)
+        chatService.handleToolApproval(_conversationId, tool, approved, reason)
     }
 
     fun handleToolAnswer(
-        toolCallId: String,
+        tool: UIMessagePart.Tool,
         answer: String,
     ) {
         analytics.logEvent("ai_tool_answer", null)
-        chatService.handleToolApproval(_conversationId, toolCallId, approved = true, answer = answer)
+        chatService.handleToolApproval(_conversationId, tool, approved = true, answer = answer)
     }
 
-    fun stopGeneration() {
+    fun stopGeneration(runId: String?) {
+        if (runId == null) return
         viewModelScope.launch {
-            chatService.stopGeneration(_conversationId)
+            chatService.stopGeneration(_conversationId, runId)
         }
     }
 

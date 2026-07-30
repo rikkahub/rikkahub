@@ -16,5 +16,9 @@ class ConversationToolProvider(
         ctx.assistant.enableRecentChatsReference
 
     override suspend fun provide(ctx: ToolResolveContext): List<Tool> =
-        createConversationTools(conversationRepo, ctx.assistant.id)
+        createConversationTools(
+            assistantId = ctx.assistant.id,
+            getRecentConversations = conversationRepo::getRecentConversations,
+            searchMessages = conversationRepo::searchMessages,
+        )
 }

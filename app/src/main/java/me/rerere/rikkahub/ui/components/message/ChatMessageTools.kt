@@ -64,8 +64,8 @@ private const val ASK_USER_TOOL_NAME = "ask_user"
 fun ChainOfThoughtScope.ChatMessageToolStep(
     tool: UIMessagePart.Tool,
     loading: Boolean = false,
-    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
-    onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onToolApproval: ((tool: UIMessagePart.Tool, approved: Boolean, reason: String) -> Unit)? = null,
+    onToolAnswer: ((tool: UIMessagePart.Tool, answer: String) -> Unit)? = null,
 ) {
     // ask_user 是交互式问答流程, 不走注册式渲染框架
     if (tool.toolName == ASK_USER_TOOL_NAME) {
@@ -99,7 +99,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     val images = tool.output.filterIsInstance<UIMessagePart.Image>()
 
     // 摘要由注册的渲染器决定; 图片输出与拒绝原因为所有工具通用
-    val hasExtraContent = renderer.hasSummary(context) || isDenied || images.isNotEmpty()
+    val hasExtraContent = renderer.hasSummary(context) || isDenied || images.isNotEmpty() || tool.approvalStatusMessage != null
 
     ControlledChainOfThoughtStep(
         expanded = expanded,
@@ -144,7 +144,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                         )
                     }
                     FilledTonalIconButton(
-                        onClick = { onToolApproval(tool.toolCallId, true, "") },
+                        onClick = { onToolApproval(tool, true, "") },
                         modifier = Modifier.size(28.dp),
                     ) {
                         Icon(
@@ -192,6 +192,13 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
+                    tool.approvalStatusMessage?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                        )
+                    }
                 }
             }
         } else {
@@ -204,7 +211,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             onDismiss = { showDenyDialog = false },
             onConfirm = { reason ->
                 showDenyDialog = false
-                onToolApproval(tool.toolCallId, false, reason)
+                onToolApproval(tool, false, reason)
             }
         )
     }
@@ -231,7 +238,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
 private fun ChainOfThoughtScope.AskUserToolStep(
     tool: UIMessagePart.Tool,
     loading: Boolean,
-    onToolAnswer: ((toolCallId: String, answer: String) -> Unit)?,
+    onToolAnswer: ((tool: UIMessagePart.Tool, answer: String) -> Unit)?,
 ) {
     val isPending = tool.approvalState is ToolApprovalState.Pending
     val isAnswered = tool.approvalState is ToolApprovalState.Answered
@@ -420,7 +427,7 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                                     }
                                 })
                             }
-                            onToolAnswer(tool.toolCallId, answerPayload.toString())
+                            onToolAnswer(tool, answerPayload.toString())
                         },
                         enabled = questions.all { q ->
                             when (q.selectionType) {

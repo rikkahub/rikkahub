@@ -57,7 +57,7 @@ class ToolRegistryTest {
     }
 
     @Test
-    fun `plan mode filters write and shell tools`() = runBlocking {
+    fun `plan mode exposes only the explicit read-only allowlist`() = runBlocking {
         val registry = ToolRegistry(
             listOf(
                 FixedProvider(
@@ -67,16 +67,53 @@ class ToolRegistryTest {
                         "workspace_write_file",
                         "workspace_edit_file",
                         "workspace_shell",
+                        "calendar_query",
+                        "calendar_create",
+                        "clipboard_tool",
+                        "memory_tool",
+                        "eval_javascript",
+                        "text_to_speech",
+                        "ask_user",
+                        "get_screen_time",
+                        "recent_chats",
+                        "conversation_search",
+                        "use_skill",
+                        "mcp__demo__unknown_side_effect",
                     )
                 )
             )
         )
         val planNames = registry.resolve(ctx(AgentMode.PLAN)).map { it.name }
-        assertEquals(listOf("workspace_read_file"), planNames)
-        assertTrue(planNames.none { it in PlanModeBlockedTools })
+        assertEquals(
+            listOf(
+                "workspace_read_file",
+                "calendar_query",
+                "recent_chats",
+                "conversation_search",
+                "use_skill",
+            ),
+            planNames,
+        )
+        assertTrue(planNames.none(::isPlanModeBlockedTool))
 
         val agentNames = registry.resolve(ctx(AgentMode.AGENT)).map { it.name }.toSet()
-        assertTrue(agentNames.containsAll(PlanModeBlockedTools))
+        assertTrue(
+            agentNames.containsAll(
+                setOf(
+                    "workspace_write_file",
+                    "workspace_edit_file",
+                    "workspace_shell",
+                    "calendar_create",
+                    "clipboard_tool",
+                    "memory_tool",
+                    "eval_javascript",
+                    "text_to_speech",
+                    "ask_user",
+                    "get_screen_time",
+                    "mcp__demo__unknown_side_effect",
+                ),
+            ),
+        )
         assertFalse(registry.resolve(ctx(AgentMode.CHAT)).isEmpty())
     }
 
@@ -120,7 +157,7 @@ class ToolRegistryTest {
             ),
             chatNames,
         )
-        assertTrue(chatNames.containsAll(PlanModeBlockedTools))
+        assertTrue(chatNames.containsAll(setOf("workspace_write_file", "workspace_edit_file", "workspace_shell")))
     }
 
     @Test

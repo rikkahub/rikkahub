@@ -2,17 +2,22 @@ package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -385,6 +390,44 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("", result[1].jsonObject["content"]?.jsonPrimitive?.content)
     }
 
+    @Test
+    fun `interleaved parallel tool deltas merge by protocol index`() {
+        val assembler = OpenAIChatToolCallAssembler()
+        val deltas = listOfNotNull(
+            assembler.resolve(0, streamToolCall(0, "call_weather", "weather", "{\"city\":")),
+            assembler.resolve(0, streamToolCall(1, "call_time", "time", "{\"zone\":")),
+            assembler.resolve(0, streamToolCall(0, arguments = "\"Shanghai\"}")),
+            assembler.resolve(0, streamToolCall(1, arguments = "\"Asia/Shanghai\"}")),
+        )
+
+        var message = UIMessage(role = MessageRole.ASSISTANT, parts = emptyList())
+        deltas.forEach { delta ->
+            message += MessageChunk(
+                id = "chunk",
+                model = "model",
+                choices = listOf(me.rerere.ai.ui.UIMessageChoice(0, UIMessage(
+                    role = MessageRole.ASSISTANT,
+                    parts = listOf(delta),
+                ), null, null)),
+            )
+        }
+
+        val tools = message.getTools().associateBy(UIMessagePart.Tool::toolCallId)
+        assertEquals("weather", tools["call_weather"]?.toolName)
+        assertEquals("{\"city\":\"Shanghai\"}", tools["call_weather"]?.input)
+        assertEquals("time", tools["call_time"]?.toolName)
+        assertEquals("{\"zone\":\"Asia/Shanghai\"}", tools["call_time"]?.input)
+    }
+
+    @Test
+    fun `tool delta without an id is withheld from execution`() {
+        val assembler = OpenAIChatToolCallAssembler()
+
+        val delta = assembler.resolve(0, streamToolCall(0, name = "weather", arguments = "{}"))
+
+        assertNull(delta)
+    }
+
     // ==================== Helper Functions ====================
 
     private fun createExecutedTool(
@@ -399,5 +442,21 @@ class ChatCompletionsAPIMessageTest {
             input = input,
             output = listOf(UIMessagePart.Text(output))
         )
+    }
+
+    private fun streamToolCall(
+        index: Int,
+        id: String? = null,
+        name: String? = null,
+        arguments: String? = null,
+    ): JsonObject = buildJsonObject {
+        put("index", index)
+        id?.let { put("id", it) }
+        if (name != null || arguments != null) {
+            put("function", buildJsonObject {
+                name?.let { put("name", it) }
+                arguments?.let { put("arguments", it) }
+            })
+        }
     }
 }

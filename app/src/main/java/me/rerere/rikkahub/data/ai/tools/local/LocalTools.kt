@@ -12,8 +12,6 @@ class LocalTools(
     private val ttsManager: TTSManager,
     private val settingsStore: SettingsStore,
 ) {
-    val javascriptTool by lazy { buildJavascriptTool() }
-
     val timeTool by lazy { buildTimeInfoTool() }
 
     val clipboardTool by lazy { buildClipboardTool(context) }
@@ -30,9 +28,6 @@ class LocalTools(
 
     fun getTools(options: List<LocalToolOption>): List<Tool> {
         val tools = mutableListOf<Tool>()
-        if (options.contains(LocalToolOption.JavascriptEngine)) {
-            tools.add(javascriptTool)
-        }
         if (options.contains(LocalToolOption.TimeInfo)) {
             tools.add(timeTool)
         }

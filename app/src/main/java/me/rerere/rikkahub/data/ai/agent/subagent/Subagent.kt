@@ -6,6 +6,8 @@ import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ChildRunBudgetSnapshot
+import me.rerere.rikkahub.data.model.ChildRunReport
 
 /**
  * Subagent 种类（对齐 Claude Code：Explore 只读探索 / General 预留）。
@@ -26,6 +28,7 @@ data class SubagentSpec(
     val allowedToolNames: Set<String>? = null,
     val mode: AgentMode = AgentMode.PLAN,
     val maxSteps: Int = DEFAULT_MAX_STEPS,
+    val budget: ChildRunBudget = ChildRunBudget(),
 ) {
     companion object {
         const val DEFAULT_MAX_STEPS = 12
@@ -33,27 +36,50 @@ data class SubagentSpec(
     }
 }
 
-/**
- * 子代理内单次工具调用轨迹（用于父会话 UI 观测面板）。
- */
-data class SubagentTraceStep(
-    val index: Int,
-    val toolName: String,
-    val inputPreview: String = "",
-    val outputPreview: String = "",
-    /** 输出是否像错误（含 "error" 字段或 error 前缀） */
-    val isError: Boolean = false,
-)
+data class ChildRunBudget(
+    val maxToolCalls: Int = 12,
+    val maxOutputTokens: Int = 2_048,
+    val maxDurationMillis: Long = 120_000,
+    val maxContextTokens: Int = 16 * 1024,
+) {
+    init {
+        require(maxToolCalls > 0 && maxOutputTokens > 0 && maxDurationMillis > 0 && maxContextTokens > 0)
+    }
+
+    fun snapshot(maxSteps: Int) = ChildRunBudgetSnapshot(
+        maxSteps = maxSteps,
+        maxToolCalls = maxToolCalls,
+        maxOutputTokens = maxOutputTokens,
+        maxDurationMillis = maxDurationMillis,
+        maxContextTokens = maxContextTokens,
+    )
+}
+
+/** Parent-level limits. They are injected into the runner so installations may configure them centrally. */
+data class ControlledSubagentLimits(
+    val maxConcurrentChildren: Int = 2,
+    val maxChildrenPerParent: Int = 2,
+    val maxTotalTokensPerParent: Int = 16_384,
+    val maxTotalDurationMillisPerParent: Long = 10 * 60_000,
+) {
+    init {
+        require(maxConcurrentChildren in 1..2) { "Controlled Explore supports one or two concurrent children" }
+        require(maxChildrenPerParent in 1..2) { "Controlled Explore supports at most two children per parent" }
+        require(maxTotalTokensPerParent > 0 && maxTotalDurationMillisPerParent > 0)
+    }
+}
+
+/** Deterministic admission used by the agent loop before launching same-turn Explore children. */
+object ControlledExploreBatch {
+    fun admittedCallIds(callIds: List<String>, maxConcurrent: Int = 2): Set<String> {
+        require(maxConcurrent in 1..2) { "Controlled Explore supports one or two concurrent children" }
+        return callIds.take(maxConcurrent).toSet()
+    }
+}
 
 data class SubagentResult(
-    val summary: String,
-    val rawNotes: String = "",
-    val stepsUsed: Int = 0,
-    val toolsUsed: List<String> = emptyList(),
-    /** 按执行顺序的工具轨迹，供 UI 时间线展示 */
-    val trace: List<SubagentTraceStep> = emptyList(),
-    val success: Boolean = true,
-    val error: String? = null,
+    val childRunId: String? = null,
+    val report: ChildRunReport = ChildRunReport(),
 )
 
 /**
@@ -64,6 +90,7 @@ data class SubagentRequest(
     val assistant: Assistant,
     val conversation: Conversation,
     val task: String,
+    val parentRunId: String? = null,
     val spec: SubagentSpec = SubagentSpec(),
     val inputTransformers: List<InputMessageTransformer> = emptyList(),
     val processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
@@ -76,9 +103,7 @@ interface SubagentRunner {
 object NoOpSubagentRunner : SubagentRunner {
     override suspend fun run(request: SubagentRequest): SubagentResult =
         SubagentResult(
-            summary = "",
-            success = false,
-            error = "Subagent runner is not enabled",
+            report = ChildRunReport(unresolved = listOf("SUBAGENT_RUNNER_NOT_ENABLED")),
         )
 }
 
@@ -89,12 +114,9 @@ object NoOpSubagentRunner : SubagentRunner {
 object ExploreToolAllowlist {
     val DEFAULT: Set<String> = setOf(
         "workspace_read_file",
-        "search_web",
-        "scrape_web",
-        "recent_chats",
-        "conversation_search",
-        "use_skill",
-        "get_time_info",
+        "workspace_search_files",
+        "artifact_read",
+        "artifact_search",
     )
 
     fun isAllowed(name: String): Boolean = name in DEFAULT
@@ -111,22 +133,22 @@ You are an Explore subagent running in an isolated session (inspired by Claude C
 Rules:
 1. READ-ONLY. Never modify files, never run shell, never change memory or user state.
 2. Use available tools to investigate the task thoroughly before concluding.
-3. Prefer workspace_read_file for code/docs; use search/conversation tools when relevant.
+3. Use only the exposed repository read tools. Do not request network, shell, memory, MCP, local-device, or nested-agent access.
 4. Your FINAL message must be a structured report for the parent agent (not the end user):
 
 ## Findings
 - ...
 
-## Relevant paths
+## Evidence paths
 - ...
 
-## Recommendations for parent agent
-- ...
+## Confidence
+- HIGH, MEDIUM, or LOW
 
 ## Open questions
 - ...
 
-5. Be concise but complete. Cite concrete file paths and symbols when possible.
+5. Be concise but complete. Cite concrete repository paths and symbols when possible.
 6. If tools fail or information is missing, say so explicitly in Open questions.
 """.trimIndent()
 

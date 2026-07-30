@@ -1,7 +1,6 @@
 package me.rerere.ai.provider.providers
 
 import android.content.Context
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -19,6 +18,9 @@ import me.rerere.ai.provider.EmbeddingGenerationResult
 import me.rerere.ai.provider.ImageEditParams
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelCapabilityProfile
+import me.rerere.ai.provider.ToolCallIdStability
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
@@ -27,6 +29,7 @@ import me.rerere.ai.provider.providers.openai.ResponseAPI
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.util.BoundedStreamBridge
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.json
@@ -44,16 +47,23 @@ import java.io.File
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
-private const val TAG = "OpenAIProvider"
-
 class OpenAIProvider(
     private val client: OkHttpClient,
-    context: Context? = null
+    context: Context? = null,
+    private val streamQueueCapacity: Int = BoundedStreamBridge.DEFAULT_CAPACITY,
 ) : Provider<ProviderSetting.OpenAI> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
 
-    private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette)
-    private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette)
+    private val chatCompletionsAPI = ChatCompletionsAPI(
+        client = client,
+        keyRoulette = keyRoulette,
+        streamQueueCapacity = streamQueueCapacity,
+    )
+    private val responseAPI = ResponseAPI(
+        client = client,
+        keyRoulette = keyRoulette,
+        streamQueueCapacity = streamQueueCapacity,
+    )
 
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
@@ -67,7 +77,7 @@ class OpenAIProvider(
 
             val response = client.newCall(request).await()
             if (!response.isSuccessful) {
-                error("Failed to get models: ${response.code} ${response.body?.string()}")
+                error("Failed to get models: status=${response.code}")
             }
 
             val bodyStr = response.body?.string() ?: ""
@@ -78,9 +88,19 @@ class OpenAIProvider(
                 val modelObj = modelJson.jsonObject
                 val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
 
+                val knownProfile = ModelRegistry.MODEL_CAPABILITY_PROFILE.getData(id)
                 Model(
                     modelId = id,
                     displayName = id,
+                    capabilityProfile = ModelCapabilityProfile(
+                        toolCalling = knownProfile.toolCalling,
+                        streaming = true,
+                        reasoning = knownProfile.reasoning,
+                        multimodalInput = knownProfile.multimodalInput,
+                        multimodalOutput = knownProfile.multimodalOutput,
+                        // The generic /models payload does not declare these tool capabilities.
+                        toolCallIdStability = ToolCallIdStability.UNKNOWN,
+                    ),
                 )
             }
         }
@@ -99,7 +119,7 @@ class OpenAIProvider(
             .build()
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            error("Failed to get balance: ${response.code} ${response.body?.string()}")
+            error("Failed to get balance: status=${response.code}")
         }
 
         val bodyStr = response.body.string()
@@ -180,7 +200,7 @@ class OpenAIProvider(
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            error("Failed to generate embedding: ${response.code} ${response.body?.string()}")
+            error("Failed to generate embedding: status=${response.code}")
         }
 
         val bodyStr = response.body?.string() ?: ""
@@ -222,8 +242,6 @@ class OpenAIProvider(
                 .mergeCustomBody(params.customBody)
         )
 
-        Log.i(TAG, "generateImage: $requestBody")
-
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/images/generations")
             .headers(params.customHeaders.toHeaders())
@@ -236,7 +254,7 @@ class OpenAIProvider(
         val items = withContext(Dispatchers.IO) {
             val response = client.newCall(request).await()
             if (!response.isSuccessful) {
-                error("Failed to generate image: ${response.code} ${response.body?.string()}")
+                error("Failed to generate image: status=${response.code}")
             }
             parseImageResponse(response.body.string())
         }
@@ -300,7 +318,7 @@ class OpenAIProvider(
         val items = withContext(Dispatchers.IO) {
             val response = client.newCall(request).await()
             if (!response.isSuccessful) {
-                error("Failed to edit image: ${response.code} ${response.body?.string()}")
+                error("Failed to edit image: status=${response.code}")
             }
             parseImageResponse(response.body.string())
         }
@@ -338,7 +356,7 @@ class OpenAIProvider(
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            error("Failed to download generated image: ${response.code} ${response.body.string()}")
+            error("Failed to download generated image: status=${response.code}")
         }
 
         val body = response.body

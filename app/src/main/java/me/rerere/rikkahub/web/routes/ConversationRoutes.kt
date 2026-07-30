@@ -15,7 +15,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.service.ChatService
@@ -34,6 +36,7 @@ import me.rerere.rikkahub.web.dto.PagedResult
 import me.rerere.rikkahub.web.dto.RegenerateRequest
 import me.rerere.rikkahub.web.dto.SelectMessageNodeRequest
 import me.rerere.rikkahub.web.dto.SendMessageRequest
+import me.rerere.rikkahub.web.dto.StopGenerationRequest
 import me.rerere.rikkahub.web.dto.ToolApprovalRequest
 import me.rerere.rikkahub.web.dto.MessageSearchResultDto
 import me.rerere.rikkahub.web.dto.UpdateConversationInjectionsRequest
@@ -48,7 +51,8 @@ fun Route.conversationRoutes(
     chatService: ChatService,
     conversationRepo: ConversationRepository,
     folderRepo: FolderRepository,
-    settingsStore: SettingsStore
+    settingsStore: SettingsStore,
+    filesManager: FilesManager,
 ) {
     route("/conversations") {
         // GET /api/conversations - List conversations of current assistant
@@ -102,11 +106,18 @@ fun Route.conversationRoutes(
                         limit = limit
                     )
 
-                else -> conversationRepo.getConversationsOfFolderPage(
-                    folderId = folderParam.toUuid("folderId"),
-                    offset = offset,
-                    limit = limit
-                )
+                else -> {
+                    val folder = folderRepo.getFolderById(folderParam.toUuid("folderId"))
+                        ?: throw NotFoundException("Folder not found")
+                    if (folder.assistantId != settings.assistantId) {
+                        throw NotFoundException("Folder not found")
+                    }
+                    conversationRepo.getConversationsOfFolderPage(
+                        folderId = folder.id,
+                        offset = offset,
+                        limit = limit
+                    )
+                }
             }
             val generationJobs = chatService.getConversationJobs().first()
 
@@ -120,14 +131,15 @@ fun Route.conversationRoutes(
             )
         }
 
-        // GET /api/conversations/search?query=foo - Full-text search messages
+        // GET /api/conversations/search?query=foo - Search messages of the current assistant only
         get("/search") {
+            val settings = settingsStore.settingsFlow.first()
             val query = call.request.queryParameters["query"]?.trim().orEmpty()
             if (query.isBlank()) {
                 call.respond(emptyList<MessageSearchResultDto>())
                 return@get
             }
-            val results = conversationRepo.searchMessages(query)
+            val results = conversationRepo.searchMessages(settings.assistantId, query)
             call.respond(results.map { result ->
                 MessageSearchResultDto(
                     nodeId = result.nodeId,
@@ -143,8 +155,7 @@ fun Route.conversationRoutes(
         // GET /api/conversations/{id} - Get single conversation
         get("/{id}") {
             val uuid = call.parameters["id"].toUuid("conversation id")
-            val conversation = conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
+            val conversation = requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
 
             val isGenerating = chatService.getGenerationJobStateFlow(uuid).first() != null
             call.respond(conversation.toDto(isGenerating))
@@ -153,8 +164,7 @@ fun Route.conversationRoutes(
         // DELETE /api/conversations/{id} - Delete conversation
         delete("/{id}") {
             val uuid = call.parameters["id"].toUuid("conversation id")
-            val conversation = conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
+            val conversation = requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
 
             conversationRepo.deleteConversation(conversation)
             call.respond(HttpStatusCode.NoContent)
@@ -163,8 +173,7 @@ fun Route.conversationRoutes(
         // POST /api/conversations/{id}/pin - Toggle pinned status
         post("/{id}/pin") {
             val uuid = call.parameters["id"].toUuid("conversation id")
-            val conversation = conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
+            val conversation = requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
 
             chatService.saveConversation(uuid, conversation.copy(isPinned = !conversation.isPinned))
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
@@ -173,8 +182,7 @@ fun Route.conversationRoutes(
         // POST /api/conversations/{id}/regenerate-title - Regenerate conversation title
         post("/{id}/regenerate-title") {
             val uuid = call.parameters["id"].toUuid("conversation id")
-            val conversation = conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
+            val conversation = requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
 
             chatService.generateTitle(uuid, conversation, force = true)
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
@@ -190,8 +198,7 @@ fun Route.conversationRoutes(
                 throw BadRequestException("Title must not be blank")
             }
 
-            val conversation = conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
+            val conversation = requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
 
             chatService.saveConversation(uuid, conversation.copy(title = title))
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
@@ -201,8 +208,7 @@ fun Route.conversationRoutes(
         post("/{id}/injections") {
             val uuid = call.parameters["id"].toUuid("conversation id")
             val request = call.receive<UpdateConversationInjectionsRequest>()
-            conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
+            requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
 
             chatService.initializeConversation(uuid)
             val conversation = chatService.getConversationFlow(uuid).first()
@@ -239,8 +245,7 @@ fun Route.conversationRoutes(
                 throw BadRequestException("Assistant not found")
             }
 
-            val conversation = conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
+            val conversation = requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
 
             chatService.saveConversation(uuid, conversation.copy(assistantId = targetAssistantId))
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
@@ -251,8 +256,7 @@ fun Route.conversationRoutes(
             val uuid = call.parameters["id"].toUuid("conversation id")
             val request = call.receive<MoveConversationToFolderRequest>()
 
-            val conversation = conversationRepo.getConversationById(uuid)
-                ?: throw NotFoundException("Conversation not found")
+            val conversation = requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
 
             val targetFolderId = request.folderId?.takeIf { it.isNotBlank() }?.toUuid("folder id")
             if (targetFolderId != null) {
@@ -271,6 +275,10 @@ fun Route.conversationRoutes(
         post("/{id}/messages") {
             val uuid = call.parameters["id"].toUuid("conversation id")
             val request = call.receive<SendMessageRequest>()
+            requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
+            validateWebDocumentReferences(request.parts) { url ->
+                filesManager.isManagedUploadDocumentUri(url)
+            }?.let { throw BadRequestException(it) }
 
             chatService.initializeConversation(uuid)
             applyInitialConversationInjections(
@@ -290,6 +298,10 @@ fun Route.conversationRoutes(
             val uuid = call.parameters["id"].toUuid("conversation id")
             val messageId = call.parameters["messageId"].toUuid("message id")
             val request = call.receive<EditMessageRequest>()
+            requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
+            validateWebDocumentReferences(request.parts) { url ->
+                filesManager.isManagedUploadDocumentUri(url)
+            }?.let { throw BadRequestException(it) }
 
             chatService.initializeConversation(uuid)
             chatService.editMessage(uuid, messageId, request.parts)
@@ -303,6 +315,7 @@ fun Route.conversationRoutes(
             val request = call.receive<ForkConversationRequest>()
             val messageId = request.messageId.toUuid("message id")
 
+            requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
             chatService.initializeConversation(uuid)
             val fork = chatService.forkConversationAtMessage(uuid, messageId)
 
@@ -314,6 +327,7 @@ fun Route.conversationRoutes(
             val uuid = call.parameters["id"].toUuid("conversation id")
             val messageId = call.parameters["messageId"].toUuid("message id")
 
+            requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
             chatService.initializeConversation(uuid)
             chatService.deleteMessage(uuid, messageId)
 
@@ -326,6 +340,7 @@ fun Route.conversationRoutes(
             val nodeId = call.parameters["nodeId"].toUuid("node id")
             val request = call.receive<SelectMessageNodeRequest>()
 
+            requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
             chatService.initializeConversation(uuid)
             chatService.selectMessageNode(uuid, nodeId, request.selectIndex)
 
@@ -338,6 +353,7 @@ fun Route.conversationRoutes(
             val request = call.receive<RegenerateRequest>()
             val messageId = request.messageId.toUuid("message id")
 
+            requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
             val conversation = chatService.getConversationFlow(uuid).first()
             val node = conversation.getMessageNodeByMessageId(messageId)
             val message = node?.messages?.find { it.id == messageId }
@@ -350,7 +366,9 @@ fun Route.conversationRoutes(
         // POST /api/conversations/{id}/stop - Stop generation
         post("/{id}/stop") {
             val uuid = call.parameters["id"].toUuid("conversation id")
-            chatService.stopGeneration(uuid)
+            val request = call.receive<StopGenerationRequest>()
+            requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
+            chatService.stopGeneration(uuid, request.runId)
             call.respond(HttpStatusCode.OK, mapOf("status" to "stopped"))
         }
 
@@ -358,7 +376,20 @@ fun Route.conversationRoutes(
         post("/{id}/tool-approval") {
             val uuid = call.parameters["id"].toUuid("conversation id")
             val request = call.receive<ToolApprovalRequest>()
-            chatService.handleToolApproval(uuid, request.toolCallId, request.approved, request.reason, request.answer)
+            requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
+            chatService.handleToolApproval(
+                uuid,
+                UIMessagePart.Tool(
+                    toolCallId = request.toolCallId,
+                    toolName = request.toolName,
+                    input = request.input,
+                    toolExecutionId = request.toolExecutionId,
+                    approvalId = request.approvalId,
+                ),
+                request.approved,
+                request.reason,
+                request.answer,
+            )
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }
 
@@ -367,6 +398,7 @@ fun Route.conversationRoutes(
             val id = call.parameters["id"] ?: return@sse
             val uuid = runCatching { Uuid.parse(id) }.getOrNull() ?: return@sse
 
+            requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
             chatService.initializeConversation(uuid)
             chatService.addConversationReference(uuid)
 
@@ -455,6 +487,14 @@ private sealed interface ConversationStreamPayload {
     data class Conversation(val value: ConversationDto) : ConversationStreamPayload
     data class BatchErrors(val messages: List<String>) : ConversationStreamPayload
 }
+
+private suspend fun requireCurrentAssistantConversation(
+    conversationRepo: ConversationRepository,
+    settingsStore: SettingsStore,
+    conversationId: Uuid,
+) = conversationRepo.getConversationById(conversationId)
+    ?.takeIf { it.assistantId == settingsStore.settingsFlow.first().assistantId }
+    ?: throw NotFoundException("Conversation not found")
 
 private data class ConversationInjectionIds(
     val modeInjectionIds: Set<Uuid>,

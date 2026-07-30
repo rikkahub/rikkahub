@@ -10,6 +10,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.coroutines.flow.first
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.web.BadRequestException
@@ -54,7 +55,7 @@ fun Route.folderRoutes(
                 throw BadRequestException("Folder name must not be blank")
             }
 
-            folderRepo.getFolderById(uuid) ?: throw NotFoundException("Folder not found")
+            requireCurrentAssistantFolder(folderRepo, settingsStore, uuid)
             folderRepo.renameFolder(uuid, name)
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
         }
@@ -62,15 +63,23 @@ fun Route.folderRoutes(
         // DELETE /api/folders/{id} - Delete a folder (conversations are kept, just unfiled)
         delete("/{id}") {
             val uuid = call.parameters["id"].toUuid("folder id")
-            folderRepo.getFolderById(uuid) ?: throw NotFoundException("Folder not found")
+            val folder = requireCurrentAssistantFolder(folderRepo, settingsStore, uuid)
 
             // Refuse to delete while a conversation inside is still generating
             if (chatService.hasGeneratingConversationInFolder(uuid)) {
                 throw ConflictException("Folder has a generating conversation")
             }
 
-            chatService.deleteFolder(uuid)
+            chatService.deleteFolder(folder)
             call.respond(HttpStatusCode.NoContent)
         }
     }
 }
+
+private suspend fun requireCurrentAssistantFolder(
+    folderRepo: FolderRepository,
+    settingsStore: SettingsStore,
+    folderId: kotlin.uuid.Uuid,
+): Folder = folderRepo.getFolderById(folderId)
+    ?.takeIf { it.assistantId == settingsStore.settingsFlow.first().assistantId }
+    ?: throw NotFoundException("Folder not found")

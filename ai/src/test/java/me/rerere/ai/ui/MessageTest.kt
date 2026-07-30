@@ -9,6 +9,19 @@ import org.junit.Test
 
 class MessageTest {
 
+    @Test
+    fun `mergeSystemMessages retains every system contribution in order`() {
+        val first = UIMessage.system("assistant")
+        val memory = UIMessage.system("memory")
+        val schema = UIMessage.system("tools")
+
+        val merged = listOf(first, UIMessage.user("question"), memory, schema).mergeSystemMessages()
+
+        assertEquals(2, merged.size)
+        assertEquals(first.id, merged.first().id)
+        assertEquals("assistant\nmemory\ntools", merged.first().toText())
+    }
+
     // ==================== isValidToUpload Tests ====================
 
     @Test

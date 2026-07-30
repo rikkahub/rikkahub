@@ -6,6 +6,8 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.agent.subagent.DefaultSubagentRunner
+import me.rerere.rikkahub.data.ai.agent.subagent.ControlledExploreBatch
+import me.rerere.rikkahub.data.ai.agent.subagent.ControlledSubagentLimits
 import me.rerere.rikkahub.data.ai.agent.subagent.EXPLORE_SUBAGENT_TOOL_NAME
 import me.rerere.rikkahub.data.ai.agent.subagent.ExploreToolAllowlist
 import me.rerere.rikkahub.data.ai.agent.tools.ToolProvider
@@ -25,12 +27,13 @@ class SubagentTest {
     @Test
     fun `explore allowlist is read-only and excludes write shell and explore itself`() {
         assertTrue(ExploreToolAllowlist.isAllowed("workspace_read_file"))
-        assertTrue(ExploreToolAllowlist.isAllowed("search_web"))
+        assertTrue(ExploreToolAllowlist.isAllowed("workspace_search_files"))
         assertFalse(ExploreToolAllowlist.isAllowed("workspace_write_file"))
         assertFalse(ExploreToolAllowlist.isAllowed("workspace_shell"))
         assertFalse(ExploreToolAllowlist.isAllowed("memory_tool"))
         assertFalse(ExploreToolAllowlist.isAllowed(EXPLORE_SUBAGENT_TOOL_NAME))
         assertFalse(ExploreToolAllowlist.isAllowed("mcp__server__tool"))
+        assertFalse(ExploreToolAllowlist.isAllowed("search_web"))
     }
 
     @Test
@@ -97,38 +100,40 @@ class SubagentTest {
     }
 
     @Test
-    fun `extractTrace builds ordered tool steps with previews`() {
-        val messages = listOf(
-            UIMessage.user("task"),
-            UIMessage(
-                role = MessageRole.ASSISTANT,
-                parts = listOf(
-                    UIMessagePart.Tool(
-                        toolCallId = "1",
-                        toolName = "workspace_read_file",
-                        input = """{"path":"/workspace/a.kt"}""",
-                        output = listOf(UIMessagePart.Text("""{"text":"hello"}""")),
-                    ),
-                    UIMessagePart.Tool(
-                        toolCallId = "2",
-                        toolName = "search_web",
-                        input = """{"query":"rikkahub"}""",
-                        output = listOf(UIMessagePart.Text("""{"error":"denied"}""")),
-                    ),
-                ),
-            ),
-        )
-        // Mark executed via output present - check UIMessagePart.Tool isExecuted
-        val tools = messages.flatMap { it.getTools() }
-        // Ensure tools report executed when output non-empty
-        assertTrue(tools.all { it.isExecuted })
+    fun `controlled explore admits at most two calls from one tool batch`() {
+        val admitted = ControlledExploreBatch.admittedCallIds(listOf("first", "second", "third"))
 
-        val trace = DefaultSubagentRunner.extractTrace(messages)
-        assertEquals(2, trace.size)
-        assertEquals("workspace_read_file", trace[0].toolName)
-        assertTrue(trace[0].inputPreview.contains("a.kt"))
-        assertFalse(trace[0].isError)
-        assertEquals("search_web", trace[1].toolName)
-        assertTrue(trace[1].isError)
+        assertEquals(setOf("first", "second"), admitted)
+        assertEquals(setOf("first"), ControlledExploreBatch.admittedCallIds(listOf("first", "second"), 1))
     }
+
+    @Test
+    fun `controlled explore never permits more than two children for one parent`() {
+        assertEquals(2, ControlledSubagentLimits().maxChildrenPerParent)
+        assertTrue(runCatching { ControlledSubagentLimits(maxChildrenPerParent = 3) }.isFailure)
+    }
+
+    @Test
+    fun `controlled report strips raw trace and non repository evidence`() {
+        val report = DefaultSubagentRunner.controlledReport(
+            """
+            ## Findings
+            - The policy is evaluated at execution.
+            ## Evidence paths
+            - app/src/main/java/Policy.kt
+            - C:/Users/secret.txt
+            ## Confidence
+            - HIGH
+            ## Open questions
+            - Is artifact search exposed?
+            """.trimIndent()
+        )
+
+        assertEquals(listOf("The policy is evaluated at execution."), report.findings)
+        assertEquals(listOf("app/src/main/java/Policy.kt"), report.evidencePaths)
+        assertEquals("HIGH", report.confidence)
+        assertEquals(listOf("Is artifact search exposed?"), report.unresolved)
+        assertFalse(report.toString().contains("C:/Users/secret.txt"))
+    }
+
 }

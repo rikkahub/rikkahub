@@ -92,7 +92,7 @@ class SearchVM(
         }
         isLoading = true
         try {
-            results = conversationRepo.searchMessages(query, sortOrder)
+            results = conversationRepo.searchMessagesAcrossAssistants(query, sortOrder)
         } finally {
             isLoading = false
         }

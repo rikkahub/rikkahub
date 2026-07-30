@@ -25,10 +25,19 @@ data class RegenerateRequest(
 
 @Serializable
 data class ToolApprovalRequest(
-    val toolCallId: String,
+    val toolCallId: String = "",
+    val toolName: String = "",
+    val input: String = "{}",
+    val toolExecutionId: String? = null,
+    val approvalId: String? = null,
     val approved: Boolean,
     val reason: String = "",
     val answer: String? = null,
+)
+
+@Serializable
+data class StopGenerationRequest(
+    val runId: String,
 )
 
 @Serializable

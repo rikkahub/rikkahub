@@ -18,6 +18,10 @@ data class ToolResolveContext(
      * Explore 工具自身不会再注册，防止嵌套 spawn。
      */
     val isSubagentRun: Boolean = false,
+    /** Persistent parent run identity. It is set only for a top-level agent execution. */
+    val agentRunId: String? = null,
+    /** Direct parent artifact scope explicitly granted to this child run; never inferred from tool input. */
+    val authorizedParentArtifactRunId: String? = null,
     /** 父会话生成状态（Explore 子代理可写入进度文案） */
     val processingStatus: MutableStateFlow<String?>? = null,
 )

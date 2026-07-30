@@ -13,7 +13,7 @@ class LoggingAgentHook(
     private val log: (String, String) -> Unit = { tag, msg -> Log.i(tag, msg) },
 ) : AgentHook {
     override suspend fun beforeTool(tool: Tool, args: JsonElement) {
-        log(TAG, "beforeTool name=${tool.name} args=${args.toString().take(500)}")
+        log(TAG, "beforeTool toolType=${tool.name}")
     }
 
     override suspend fun afterTool(
@@ -23,8 +23,8 @@ class LoggingAgentHook(
     ) {
         log(
             TAG,
-            "afterTool name=${tool.name} success=${result.isSuccess} " +
-                "error=${result.exceptionOrNull()?.message ?: "-"}",
+            "afterTool toolType=${tool.name} success=${result.isSuccess} " +
+                "errorType=${result.exceptionOrNull()?.javaClass?.simpleName ?: "-"}",
         )
     }
 

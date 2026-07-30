@@ -10,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -21,15 +22,12 @@ import me.rerere.rikkahub.web.startWebServer
 import java.net.ServerSocket
 
 private const val TAG = "WebServerManager"
-private const val HOST_ALL_INTERFACES = "0.0.0.0"
-private const val HOST_LOOPBACK = "127.0.0.1"
-
 data class WebServerState(
     val isRunning: Boolean = false,
     val isLoading: Boolean = false,
     val port: Int = 8080,
     val serviceName: String = DEFAULT_SERVICE_NAME,
-    val localhostOnly: Boolean = false,
+    val localhostOnly: Boolean = true,
     val hostname: String? = null,
     val address: String? = null,
     val error: String? = null
@@ -53,7 +51,7 @@ class WebServerManager(
     fun start(
         port: Int = 8080,
         serviceName: String = DEFAULT_SERVICE_NAME,
-        localhostOnly: Boolean = false
+        localhostOnly: Boolean = true
     ) {
         if (server != null) {
             Log.w(TAG, "Server already running")
@@ -61,8 +59,13 @@ class WebServerManager(
         }
 
         appScope.launch {
-            // 仅本机模式绑定回环地址
-            val host = if (localhostOnly) HOST_LOOPBACK else HOST_ALL_INTERFACES
+            val settings = settingsStore.settingsFlowRaw.first()
+            val startupOptions = WebServerStartupOptions(
+                localhostOnly = localhostOnly,
+                jwtEnabled = settings.webServerJwtEnabled,
+                accessPassword = settings.webServerAccessPassword,
+            )
+            val host = startupOptions.host()
             val baseState = WebServerState(
                 port = port,
                 serviceName = serviceName,
@@ -70,6 +73,16 @@ class WebServerManager(
             )
             try {
                 _state.value = _state.value.copy(isLoading = true)
+                startupOptions.validationError()?.let { error ->
+                    Log.w(TAG, "Refusing insecure web server startup: $error")
+                    settingsStore.update {
+                        it.copy(
+                            webServerEnabled = startupOptions.webServerEnabledAfterValidation(it.webServerEnabled),
+                        )
+                    }
+                    _state.value = baseState.copy(error = error)
+                    return@launch
+                }
                 Log.i(TAG, "Starting web server on $host:$port")
                 if (!isPortAvailable(port)) {
                     Log.w(TAG, "Port $port is already in use")
@@ -77,7 +90,15 @@ class WebServerManager(
                     return@launch
                 }
                 server = startWebServer(port = port, host = host) {
-                    configureWebApi(context, chatService, conversationRepo, folderRepo, settingsStore, filesManager)
+                    configureWebApi(
+                        context = context,
+                        chatService = chatService,
+                        conversationRepo = conversationRepo,
+                        folderRepo = folderRepo,
+                        settingsStore = settingsStore,
+                        filesManager = filesManager,
+                        jwtEnabled = startupOptions.jwtEnabled,
+                    )
                 }.start(wait = false)
 
                 _state.value = baseState.copy(isRunning = true)
