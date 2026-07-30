@@ -20,6 +20,7 @@ import me.rerere.highlight.languages.php.php
 import me.rerere.highlight.languages.python.python
 import me.rerere.highlight.languages.rust.rust
 import me.rerere.highlight.languages.sql.sql
+import me.rerere.highlight.languages.swift.swift
 import me.rerere.highlight.languages.typescript.typescript
 import me.rerere.highlight.languages.xml.xml
 import me.rerere.highlight.languages.yaml.yaml
@@ -52,4 +53,5 @@ internal fun builtinLanguages(): List<Language> = listOf(
     markdown(),
     rust(),
     php(),
+    swift(),
 )

@@ -60,9 +60,10 @@ class KotlinHighlighterTest {
     @Test
     fun `an unsupported language stays plain text`() {
         val code = "print(\"hi\")"
+        val language = "not-a-language"
 
-        assertFalse(highlighter.supports("swift"))
-        assertEquals(listOf(HighlightToken.Plain(code)), highlighter.highlight(code, "swift"))
+        assertFalse(highlighter.supports(language))
+        assertEquals(listOf(HighlightToken.Plain(code)), highlighter.highlight(code, language))
     }
 
     @Test

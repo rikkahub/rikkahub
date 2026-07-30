@@ -70,4 +70,7 @@ class LanguageFixtureTest {
 
     @Test
     fun php() = HljsFixtures.assertLanguageMatches("php")
+
+    @Test
+    fun swift() = HljsFixtures.assertLanguageMatches("swift")
 }
