@@ -8,11 +8,12 @@ import me.rerere.rikkahub.data.model.AgentTraceStatus
  * Pure replay validator. It consumes only already-redacted events and never invokes a provider,
  * a tool implementation, filesystem, network, or approval UI.
  */
-class DeterministicAgentTraceReplay(
-    private val provider: FakeReplayProvider = FakeReplayProvider(),
-    private val tool: FakeReplayTool = FakeReplayTool(),
-) {
+class DeterministicAgentTraceReplay {
     fun replay(events: List<AgentTraceEvent>): ReplayResult {
+        // Observations belong to one replay only. Keeping them on the replay instance leaks counts
+        // into subsequent validations and makes the otherwise pure result depend on call history.
+        val provider = FakeReplayProvider()
+        val tool = FakeReplayTool()
         require(events.zipWithNext().all { (before, after) -> after.sequence > before.sequence }) { "TRACE_SEQUENCE_NOT_MONOTONIC" }
         require(events.firstOrNull()?.type == AgentTraceEventType.RUN_STARTED.name) { "TRACE_MISSING_RUN_START" }
         var modelOpen = false

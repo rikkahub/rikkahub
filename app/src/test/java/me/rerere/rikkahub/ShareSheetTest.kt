@@ -40,8 +40,8 @@ class ShareSheetTest {
         assertEquals("Test OpenAI", decodedOpenAI.name)
         assertEquals("sk-test-key", decodedOpenAI.apiKey)
         assertEquals("https://api.openai.com/v1", decodedOpenAI.baseUrl)
-        assertEquals(1, decodedOpenAI.models.size)
-        assertEquals("gpt-4", decodedOpenAI.models[0].displayName)
+        // Shared provider payloads intentionally omit model lists; models are discovered after import.
+        assertTrue(decodedOpenAI.models.isEmpty())
     }
 
     @Test

@@ -106,7 +106,9 @@ class ContextGovernorTest {
                 profile = ModelCapabilityProfile(contextWindowTokens = 1_000, maxOutputTokens = 120),
             ),
         )
-        val fallback = governor().preflight(request(messages = listOf(UIMessage.user("intent")), profile = null))
+        val fallback = governor().preflight(
+            request(messages = listOf(UIMessage.user("intent")), reserve = 0, profile = null),
+        )
 
         assertEquals(120, clamped.plan.reservedOutputTokens)
         assertEquals(16 * 1024, fallback.plan.contextWindowTokens)
