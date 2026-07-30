@@ -223,6 +223,19 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
             """.trimIndent(),
         ),
         HighlightPreviewSample(
+            language = "dart",
+            code = """
+                class User {
+                  final String name;
+                  final int age;
+
+                  const User(this.name, {this.age = 18});
+
+                  String greet() => "Hello, ${'$'}name!";
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
             language = "java",
             code = """
                 public final class Greeter {
@@ -298,6 +311,42 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
                     let user = User { name: "Rikka".to_string(), age: 18 };
                     println!("Hello, {}!", user.name);
                 }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "php",
+            code = """
+                <?php
+
+                final readonly class User
+                {
+                    public function __construct(
+                        public string ${'$'}name,
+                        public int ${'$'}age = 18,
+                    ) {}
+
+                    public function greet(): string
+                    {
+                        return "Hello, {${'$'}this->name}!";
+                    }
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "swift",
+            code = """
+                import Foundation
+
+                struct User {
+                    let name: String
+                    var age: Int = 18
+
+                    func greet() -> String {
+                        "Hello, \(name)!"
+                    }
+                }
+
+                print(User(name: "Rikka").greet())
             """.trimIndent(),
         ),
         HighlightPreviewSample(

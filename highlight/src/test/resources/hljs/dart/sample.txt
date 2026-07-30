@@ -1,0 +1,19 @@
+import 'dart:async';
+
+/// A tiny [highlight.js] parity fixture.
+@immutable
+class Greeting implements Comparable<Greeting> {
+  final String? name;
+  const Greeting(this.name);
+
+  @override
+  int compareTo(Greeting other) => (name ?? '').compareTo(other.name ?? '');
+
+  String render(int count) {
+    final hex = 0xCA_FE;
+    final value = 1_024.5e-2;
+    final raw = r'$name stays raw';
+    return '''Hello ${name ?? 'world'}!
+count: $count, value: $value, hex: $hex''';
+  }
+}

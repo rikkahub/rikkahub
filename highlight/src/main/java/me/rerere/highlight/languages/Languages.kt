@@ -6,6 +6,7 @@ import me.rerere.highlight.languages.c.c
 import me.rerere.highlight.languages.cmake.cmake
 import me.rerere.highlight.languages.cpp.cpp
 import me.rerere.highlight.languages.css.css
+import me.rerere.highlight.languages.dart.dart
 import me.rerere.highlight.languages.diff.diff
 import me.rerere.highlight.languages.dockerfile.dockerfile
 import me.rerere.highlight.languages.go.go
@@ -15,6 +16,7 @@ import me.rerere.highlight.languages.javascript.javascript
 import me.rerere.highlight.languages.json.json
 import me.rerere.highlight.languages.kotlin.kotlin
 import me.rerere.highlight.languages.markdown.markdown
+import me.rerere.highlight.languages.php.php
 import me.rerere.highlight.languages.python.python
 import me.rerere.highlight.languages.rust.rust
 import me.rerere.highlight.languages.sql.sql
@@ -39,6 +41,7 @@ internal fun builtinLanguages(): List<Language> = listOf(
     typescript(),
     xml(),
     css(),
+    dart(),
     java(),
     kotlin(),
     python(),
@@ -48,4 +51,5 @@ internal fun builtinLanguages(): List<Language> = listOf(
     diff(),
     markdown(),
     rust(),
+    php(),
 )

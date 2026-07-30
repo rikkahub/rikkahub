@@ -39,6 +39,9 @@ class LanguageFixtureTest {
     fun css() = HljsFixtures.assertLanguageMatches("css")
 
     @Test
+    fun dart() = HljsFixtures.assertLanguageMatches("dart")
+
+    @Test
     fun java() = HljsFixtures.assertLanguageMatches("java")
 
     @Test
@@ -64,4 +67,7 @@ class LanguageFixtureTest {
 
     @Test
     fun rust() = HljsFixtures.assertLanguageMatches("rust")
+
+    @Test
+    fun php() = HljsFixtures.assertLanguageMatches("php")
 }

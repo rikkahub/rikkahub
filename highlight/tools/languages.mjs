@@ -20,6 +20,7 @@ export const LANGUAGES = [
     aliases: ['html', 'xhtml', 'rss', 'atom', 'xjb', 'xsd', 'xsl', 'plist', 'wsf', 'svg'],
   },
   { name: 'css', module: 'css', aliases: [] },
+  { name: 'dart', module: 'dart', aliases: [] },
   { name: 'java', module: 'java', aliases: ['jsp'] },
   { name: 'kotlin', module: 'kotlin', aliases: ['kt', 'kts'] },
   { name: 'python', module: 'python', aliases: ['py', 'gyp', 'ipython'] },
@@ -33,4 +34,6 @@ export const LANGUAGES = [
   { name: 'diff', module: 'diff', aliases: ['patch'] },
   { name: 'markdown', module: 'markdown', aliases: ['md', 'mkdown', 'mkd'] },
   { name: 'rust', module: 'rust', aliases: ['rs'] },
+  { name: 'php', module: 'php', aliases: [] },
+  { name: 'swift', module: 'swift', aliases: [] },
 ]
