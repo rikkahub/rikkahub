@@ -2,11 +2,13 @@ package me.rerere.workspace
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.OutputStream
+import java.nio.file.Files
 import java.util.zip.GZIPOutputStream
 
 class RootfsInstallerTest {
@@ -49,14 +51,47 @@ class RootfsInstallerTest {
         assertEquals("content", File(target, "dir/file.txt").readText())
     }
 
+    @Test
+    fun `extract preserves hard links after staging move`() {
+        val archive = tmp.newFile("rootfs.tar.gz")
+        GZIPOutputStream(archive.outputStream()).use { out ->
+            out.writeTarEntry("usr/bin/tool-before", '1', linkName = "bin/tool")
+            out.writeTarEntry("bin/tool", '0', "content".toByteArray())
+            out.writeTarEntry("usr/bin/tool-after", '1', linkName = "bin/tool")
+            out.write(ByteArray(TAR_BLOCK * 2))
+        }
+
+        val staging = tmp.newFolder("staging")
+        val installed = File(tmp.root, "linux")
+        createInstaller().extractTar(archive, staging, installedRoot = installed) {}
+        assertTrue(staging.renameTo(installed))
+
+        val paths = listOf(
+            File(installed, "bin/tool"),
+            File(installed, "usr/bin/tool-before"),
+            File(installed, "usr/bin/tool-after"),
+        )
+        val intermediate = Files.readSymbolicLink(paths.first().toPath())
+        assertTrue(paths.all { Files.isSymbolicLink(it.toPath()) })
+        assertTrue(paths.all { Files.readSymbolicLink(it.toPath()) == intermediate })
+        assertTrue(Files.readSymbolicLink(intermediate).fileName.toString().endsWith(".0003"))
+        assertTrue(paths.all { it.readText() == "content" })
+    }
+
     private fun createInstaller() = RootfsInstaller(WorkspaceManager(tmp.newFolder()))
 
-    private fun OutputStream.writeTarEntry(name: String, type: Char, data: ByteArray) {
+    private fun OutputStream.writeTarEntry(
+        name: String,
+        type: Char,
+        data: ByteArray = ByteArray(0),
+        linkName: String = "",
+    ) {
         val header = ByteArray(TAR_BLOCK)
         name.toByteArray(Charsets.UTF_8).copyInto(header, 0)
         "0000755".toByteArray().copyInto(header, 100)
         data.size.toLong().toOctalField().copyInto(header, 124)
         header[156] = type.code.toByte()
+        linkName.toByteArray(Charsets.UTF_8).copyInto(header, 157)
         write(header)
         write(data)
         val padding = (TAR_BLOCK - data.size % TAR_BLOCK) % TAR_BLOCK

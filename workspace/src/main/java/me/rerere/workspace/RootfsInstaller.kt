@@ -3,11 +3,11 @@ package me.rerere.workspace
 import java.io.BufferedInputStream
 import java.io.EOFException
 import java.io.File
-import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import java.util.Locale
 import java.util.zip.GZIPInputStream
 import org.tukaani.xz.XZInputStream
@@ -33,7 +33,13 @@ class RootfsInstaller(
             stagingDir.deleteRecursively()
             stagingDir.mkdirs()
             download(url, archive, onProgress)
-            extractTar(archive, stagingDir, format, onProgress)
+            extractTar(
+                archive = archive,
+                targetDir = stagingDir,
+                format = format,
+                installedRoot = linuxDir,
+                onProgress = onProgress,
+            )
             linuxDir.deleteRecursively()
             require(stagingDir.renameTo(linuxDir)) {
                 "Failed to move rootfs into workspace"
@@ -102,8 +108,10 @@ class RootfsInstaller(
         archive: File,
         targetDir: File,
         format: ArchiveFormat = ArchiveFormat.fromFile(archive),
+        installedRoot: File = targetDir,
         onProgress: (RootfsInstallProgress) -> Unit,
     ) {
+        val hardLinks = linkedMapOf<File, File>()
         format.wrapStream(BufferedInputStream(archive.inputStream())).use { input ->
             var entries = 0
             var pendingName: String? = null
@@ -140,10 +148,23 @@ class RootfsInstaller(
                 }
                 val target = targetDir.safeResolve(header.name)
                 target.parentFile?.mkdirs()
+                if (header.type == TarEntryType.FILE ||
+                    header.type == TarEntryType.DIRECTORY ||
+                    header.type == TarEntryType.SYMLINK
+                ) {
+                    hardLinks.remove(target)
+                }
                 when (header.type) {
                     TarEntryType.DIRECTORY -> target.mkdirs()
                     TarEntryType.SYMLINK -> createSymlink(targetDir, target, header.linkName)
-                    TarEntryType.HARDLINK -> createHardLink(targetDir, target, header.linkName)
+                    TarEntryType.HARDLINK -> {
+                        require(header.linkName.isNotBlank()) {
+                            "Hard link target is blank: ${header.name}"
+                        }
+                        target.delete()
+                        hardLinks[target] = targetDir.safeResolve(header.linkName)
+                    }
+
                     TarEntryType.FILE -> {
                         target.outputStream().use { output ->
                             input.copyExactly(output, header.size)
@@ -175,6 +196,7 @@ class RootfsInstaller(
                 )
             }
         }
+        materializeHardLinks(targetDir, installedRoot, hardLinks)
     }
 
     private fun createSymlink(root: File, target: File, linkName: String) {
@@ -193,25 +215,70 @@ class RootfsInstaller(
         Files.createSymbolicLink(target.toPath(), linkTarget.toPath())
     }
 
-    private fun createHardLink(root: File, target: File, linkName: String) {
-        if (linkName.isBlank()) return
-        val source = root.safeResolve(linkName)
-        if (!source.exists()) return
-        target.delete()
-        runCatching {
-            Files.createLink(target.toPath(), source.toPath())
-        }.recoverCatching { error ->
-            if (error !is IOException &&
-                error !is UnsupportedOperationException &&
-                error !is SecurityException
-            ) {
-                throw error
+    private fun materializeHardLinks(
+        extractedRoot: File,
+        installedRoot: File,
+        hardLinks: Map<File, File>,
+    ) {
+        if (hardLinks.isEmpty()) return
+
+        val sources = hardLinks.mapValues { (link, _) ->
+            var current = link
+            val visited = mutableSetOf<File>()
+            while (current in hardLinks) {
+                require(visited.add(current)) { "Hard link cycle: ${link.path}" }
+                current = hardLinks.getValue(current)
             }
-            source.copyTo(target, overwrite = true)
-            target.setReadable(source.canRead(), false)
-            target.setWritable(source.canWrite(), true)
-            target.setExecutable(source.canExecute(), false)
-        }.getOrThrow()
+            require(Files.isRegularFile(current.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+                "Hard link target is missing or not a regular file: ${current.path}"
+            }
+            current
+        }
+
+        val stagingRoot = extractedRoot.canonicalFile.toPath()
+        val finalRoot = installedRoot.canonicalFile.toPath()
+        fun finalPath(file: File): java.nio.file.Path {
+            val path = file.toPath().toAbsolutePath().normalize()
+            require(path.startsWith(stagingRoot)) { "Rootfs entry escapes target directory: $path" }
+            return finalRoot.resolve(stagingRoot.relativize(path))
+        }
+
+        sources.entries
+            .groupBy(keySelector = { it.value }, valueTransform = { it.key })
+            .forEach { (source, aliases) ->
+                checkInterrupted()
+                val publicPaths = listOf(source) + aliases
+                require(publicPaths.size in 2..MAX_LINK_COUNT) {
+                    "Unsupported hard link count: ${publicPaths.size}"
+                }
+                val countSuffix = publicPaths.size.toString().padStart(4, '0')
+                val (intermediate, backing) = (1..MAX_LINK_COUNT)
+                    .asSequence()
+                    .map { suffix ->
+                        val intermediate = File(
+                            source.parentFile,
+                            "$LINK2SYMLINK_PREFIX${source.name}${suffix.toString().padStart(4, '0')}",
+                        )
+                        intermediate to File("${intermediate.path}.$countSuffix")
+                    }
+                    .firstOrNull { (intermediate, backing) ->
+                        intermediate !in hardLinks &&
+                            backing !in hardLinks &&
+                            !Files.exists(intermediate.toPath(), LinkOption.NOFOLLOW_LINKS) &&
+                            !Files.exists(backing.toPath(), LinkOption.NOFOLLOW_LINKS)
+                    }
+                    ?: error("Unable to allocate hard link backing file for ${source.path}")
+
+                // PRoot recognizes public -> .l2s.* -> .l2s.*.NNNN as an emulated hard-link group.
+                // Targets use finalRoot because extractedRoot is renamed after extraction.
+                Files.move(source.toPath(), backing.toPath())
+                Files.createSymbolicLink(intermediate.toPath(), finalPath(backing))
+                publicPaths.forEach { path ->
+                    checkInterrupted()
+                    path.delete()
+                    Files.createSymbolicLink(path.toPath(), finalPath(intermediate))
+                }
+            }
     }
 
     private fun InputStream.readTarHeader(): TarHeader? {
@@ -414,5 +481,7 @@ class RootfsInstaller(
         private const val PROGRESS_STEP_BYTES = 512 * 1024
         private const val CONNECT_TIMEOUT_MS = 30_000
         private const val READ_TIMEOUT_MS = 60_000
+        private const val LINK2SYMLINK_PREFIX = ".l2s."
+        private const val MAX_LINK_COUNT = 9999
     }
 }
