@@ -15,6 +15,11 @@ import kotlin.uuid.Uuid
 private const val TAG = "ConversationSession"
 private const val IDLE_TIMEOUT_MS = 5_000L
 
+data class GenerationLease internal constructor(
+    val epoch: Long,
+    val job: Job,
+)
+
 class ConversationSession(
     val id: Uuid,
     initial: Conversation,
@@ -31,10 +36,12 @@ class ConversationSession(
     val processingStatus = MutableStateFlow<String?>(null)
 
     // 生成任务（内聚在 session 中）
+    private val generationLock = Any()
+    private var generationEpoch = 0L
+    private var currentGeneration: CurrentGeneration? = null
     private val _generationJob = MutableStateFlow<Job?>(null)
     val generationJob: StateFlow<Job?> = _generationJob.asStateFlow()
-    private var generationRunId: String? = null
-    val isGenerating: Boolean get() = _generationJob.value?.isActive == true
+    val isGenerating: Boolean get() = _generationJob.value != null
     val isInUse: Boolean get() = refCount.get() > 0 || isGenerating
 
     // 空闲检查任务
@@ -70,31 +77,97 @@ class ConversationSession(
         }
     }
 
+    /** Installs a new lazy generation boundary. The caller starts [job] only after this returns. */
+    fun install(job: Job): GenerationLease {
+        require(!job.isActive && !job.isCompleted) { "Generation job must be new and lazy" }
+        return installBoundary(job)
+    }
+
+    /** Compatibility bridge for callers that have not yet migrated to lazy [install]. */
     fun setJob(job: Job?) {
-        _generationJob.value?.cancel()
-        generationRunId = null
-        _generationJob.value = job
-        job?.invokeOnCompletion {
-            if (_generationJob.value === job) {
-                _generationJob.value = null
-                generationRunId = null
-            }
-            if (refCount.get() <= 0) {
-                scheduleIdleCheck()
+        if (job != null) {
+            installBoundary(job)
+            return
+        }
+        val previous = detachCurrentGeneration()
+        previous?.cancel()
+        if (refCount.get() <= 0) scheduleIdleCheck()
+    }
+
+    fun getJob(): Job? = synchronized(generationLock) {
+        currentGeneration?.lease?.job
+    }
+
+    fun bindRun(lease: GenerationLease, runId: String): Boolean {
+        if (runId.isBlank()) return false
+        return synchronized(generationLock) {
+            val current = currentGeneration ?: return@synchronized false
+            if (!current.matches(lease)) return@synchronized false
+            when (current.runId) {
+                null -> {
+                    currentGeneration = current.copy(runId = runId)
+                    true
+                }
+                runId -> true
+                else -> false
             }
         }
     }
 
-    fun getJob(): Job? = _generationJob.value
-
-    fun bindRun(runId: String, job: Job): Boolean {
-        if (_generationJob.value !== job || !job.isActive) return false
-        generationRunId = runId
-        return true
+    fun isCurrent(lease: GenerationLease, runId: String? = null): Boolean = synchronized(generationLock) {
+        val current = currentGeneration ?: return@synchronized false
+        current.matches(lease) && (runId == null || current.runId == runId)
     }
 
-    fun getJobForRun(runId: String): Job? = _generationJob.value?.takeIf {
-        generationRunId == runId
+    fun jobForRun(runId: String): Job? = synchronized(generationLock) {
+        currentGeneration?.takeIf { it.runId == runId }?.lease?.job
+    }
+
+    /** Compatibility bridge for the current ChatService call sites. */
+    fun bindRun(runId: String, job: Job): Boolean {
+        val lease = synchronized(generationLock) {
+            currentGeneration?.lease?.takeIf { it.job === job }
+        } ?: return false
+        return bindRun(lease, runId)
+    }
+
+    fun getJobForRun(runId: String): Job? = jobForRun(runId)
+
+    private fun installBoundary(job: Job): GenerationLease {
+        cancelIdleCheck()
+        val previous: Job?
+        val lease: GenerationLease
+        synchronized(generationLock) {
+            check(generationEpoch < Long.MAX_VALUE) { "Generation epoch exhausted" }
+            lease = GenerationLease(++generationEpoch, job)
+            previous = currentGeneration?.lease?.job
+            currentGeneration = CurrentGeneration(lease)
+            _generationJob.value = job
+        }
+        job.invokeOnCompletion { onGenerationCompleted(lease) }
+        if (previous !== job) previous?.cancel()
+        return lease
+    }
+
+    private fun onGenerationCompleted(lease: GenerationLease) {
+        val cleared = synchronized(generationLock) {
+            val current = currentGeneration
+            if (current == null || !current.matches(lease)) {
+                false
+            } else {
+                currentGeneration = null
+                _generationJob.value = null
+                true
+            }
+        }
+        if (cleared && refCount.get() <= 0) scheduleIdleCheck()
+    }
+
+    private fun detachCurrentGeneration(): Job? = synchronized(generationLock) {
+        val job = currentGeneration?.lease?.job
+        currentGeneration = null
+        _generationJob.value = null
+        job
     }
 
     private fun scheduleIdleCheck() {
@@ -113,10 +186,18 @@ class ConversationSession(
     }
 
     fun cleanup() {
-        _generationJob.value?.cancel()
-        _generationJob.value = null
-        generationRunId = null
-        idleCheckJob?.cancel()
+        val generationToCancel = detachCurrentGeneration()
+        val idleToCancel = idleCheckJob
         idleCheckJob = null
+        generationToCancel?.cancel()
+        idleToCancel?.cancel()
+    }
+
+    private data class CurrentGeneration(
+        val lease: GenerationLease,
+        val runId: String? = null,
+    ) {
+        fun matches(other: GenerationLease): Boolean =
+            lease.epoch == other.epoch && lease.job === other.job
     }
 }
