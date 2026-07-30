@@ -21,6 +21,7 @@ import java.nio.file.attribute.BasicFileAttributes
 enum class VoiceE2EArtifact(
     val fileName: String,
     val appendOnly: Boolean = false,
+    val privateContent: Boolean = false,
 ) {
     InputTranscript("input-transcript.txt"),
     OutputTranscript("output-transcript.txt"),
@@ -28,6 +29,12 @@ enum class VoiceE2EArtifact(
     HermesAnswer("hermes-answer.txt"),
     HermesEvents("hermes-events.ndjson", appendOnly = true),
     SessionJson("session.json"),
+    VoiceExperiencePrivate(
+        "voice-experience-private.ndjson",
+        appendOnly = true,
+        privateContent = true,
+    ),
+    VoiceExperienceEvents("voice-experience-events.ndjson", appendOnly = true),
 }
 
 class VoiceE2EArtifactWriter private constructor(
@@ -201,7 +208,16 @@ class VoiceE2EArtifactWriter private constructor(
             prepareActiveTraceDirectory()
             val file = File(directory, artifact.fileName)
             if (append) {
+                if (artifact.requiresOwnerOnlyPermissions && !file.exists()) {
+                    check(file.createNewFile() || file.isFile) {
+                        "Unable to create owner-only artifact ${artifact.fileName}"
+                    }
+                    file.setOwnerReadWriteOnly()
+                }
                 file.appendText("$content\n")
+                if (artifact.requiresOwnerOnlyPermissions) {
+                    file.setOwnerReadWriteOnly()
+                }
             } else {
                 file.replaceTextAtomically(content, atomicMove)
             }
@@ -311,6 +327,18 @@ internal fun defaultVoiceE2EAtomicMove(source: Path, target: Path, atomic: Boole
     }
 
 private fun String.containsLineBreak(): Boolean = contains('\n') || contains('\r')
+
+private val VoiceE2EArtifact.requiresOwnerOnlyPermissions: Boolean
+    get() = this == VoiceE2EArtifact.VoiceExperiencePrivate ||
+        this == VoiceE2EArtifact.VoiceExperienceEvents
+
+private fun File.setOwnerReadWriteOnly() {
+    check(setReadable(false, false)) { "Unable to clear artifact read permissions" }
+    check(setWritable(false, false)) { "Unable to clear artifact write permissions" }
+    check(setExecutable(false, false)) { "Unable to clear artifact execute permissions" }
+    check(setReadable(true, true)) { "Unable to set owner artifact read permission" }
+    check(setWritable(true, true)) { "Unable to set owner artifact write permission" }
+}
 
 private fun String.isSafeTraceDirectoryName(): Boolean =
     isNotBlank() &&

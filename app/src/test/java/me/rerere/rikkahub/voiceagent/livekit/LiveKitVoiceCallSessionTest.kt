@@ -20,6 +20,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.voiceagent.DirectFallbackVoiceAgentRouteLease
+import me.rerere.rikkahub.voiceagent.InMemoryVoiceConversationStore
 import me.rerere.rikkahub.voiceagent.OrchestratorFakeRoute
 import me.rerere.rikkahub.voiceagent.VoiceAgentSessionCreationResult
 import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomFailure
@@ -28,6 +29,7 @@ import me.rerere.rikkahub.voiceagent.VoiceAgentCleanupMode
 import me.rerere.rikkahub.voiceagent.VoiceAgentCleanupResult
 import me.rerere.rikkahub.voiceagent.VoiceAudioStatus
 import me.rerere.rikkahub.voiceagent.VoiceSessionStatus
+import me.rerere.rikkahub.voiceagent.VoiceE2EArtifactWriter
 import me.rerere.rikkahub.voiceagent.orchestratorRequest
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationAudioProbe
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationCorrelationKind
@@ -181,23 +183,33 @@ class LiveKitVoiceCallSessionTest {
     @Test
     fun `factory trace ID is published in the LiveKit session UI state`() = runTest {
         val trace = VoiceTraceContext(traceId = "VA123456-0000000000000001", voiceSessionId = "voice-session")
+        val root = Files.createTempDirectory("livekit-trace-factory").toFile()
         val factory = LiveKitVoiceCallFactory(
-            context = ContextWrapper(null),
+            context = object : ContextWrapper(null) {
+                override fun getNoBackupFilesDir(): File = root
+            },
             traceContextFactory = { trace },
             sessionDetailsFactory = { _, _ -> details() },
             roomFactory = { FakeLiveKitRoomFacade() },
+            conversationStoreFactory = { InMemoryVoiceConversationStore() },
+            artifactWriterFactory = { _, _, _ -> VoiceE2EArtifactWriter.disabled() },
         )
 
-        val result = factory.createOwned(
-            request = orchestratorRequest("livekit-trace").copy(
-                transport = VoiceAgentTransport.LiveKitExperimental,
-            ),
-            routeLease = OrchestratorFakeRoute().lease,
-            scope = backgroundScope,
-        )
+        try {
+            val result = factory.createOwned(
+                request = orchestratorRequest("livekit-trace").copy(
+                    transport = VoiceAgentTransport.LiveKitExperimental,
+                ),
+                routeLease = OrchestratorFakeRoute().lease,
+                scope = backgroundScope,
+            )
 
-        val session = (result as VoiceAgentSessionCreationResult.Created).session
-        assertEquals(trace.traceId, session.state.value.traceId)
+            val session = (result as VoiceAgentSessionCreationResult.Created).session
+            assertEquals(trace.traceId, session.state.value.traceId)
+            session.cleanupOperation.run(VoiceAgentCleanupMode.Immediate)
+        } finally {
+            root.deleteRecursively()
+        }
     }
 
     @Test
@@ -559,6 +571,106 @@ class LiveKitVoiceCallSessionTest {
     }
 
     @Test
+    fun `persistence RPC accepts only the expected worker and is drained before store close`() = runTest {
+        val persistence = RecordingPersistenceOwner()
+        val fixture = fixture(
+            persistenceHandler = persistence::handle,
+            persistenceOwner = persistence,
+        )
+        fixture.session.start()
+        runCurrent()
+        persistence.onDrain = {
+            assertTrue(fixture.room.rpcHandlers.containsKey(LIVEKIT_PERSISTENCE_RPC))
+        }
+
+        val handler = fixture.room.rpcHandlers.getValue(LIVEKIT_PERSISTENCE_RPC)
+        val wrongCallerFailure = runCatching {
+            handler(LiveKitRpcInvocation("unexpected-worker", acceptedEventJson()))
+        }.exceptionOrNull()
+        val ack = handler(LiveKitRpcInvocation(AGENT_IDENTITY, acceptedEventJson()))
+
+        assertTrue(wrongCallerFailure is IllegalArgumentException)
+        assertEquals("""{"status":"persisted"}""", ack)
+        assertEquals(listOf("evt_accepted"), persistence.events)
+        assertEquals(
+            VoiceAgentCleanupResult.Completed,
+            fixture.session.cleanupOperation.run(VoiceAgentCleanupMode.GracefulEnd),
+        )
+        assertEquals(listOf("drain", "close"), persistence.lifecycle)
+        assertFalse(
+            "lifecycle=${fixture.room.lifecycle} handlers=${fixture.room.rpcHandlers.keys}",
+            fixture.room.rpcHandlers.containsKey(LIVEKIT_PERSISTENCE_RPC),
+        )
+    }
+
+    @Test
+    fun `immediate cleanup joins an admitted persistence handler before closing its owner`() = runTest {
+        val handlerStarted = CompletableDeferred<Unit>()
+        val handlerGate = CompletableDeferred<Unit>()
+        val persistence = RecordingPersistenceOwner(
+            handlerStarted = handlerStarted,
+            handlerGate = handlerGate,
+        )
+        val fixture = fixture(
+            persistenceHandler = persistence::handle,
+            persistenceOwner = persistence,
+        )
+        fixture.session.start()
+        runCurrent()
+
+        val invocation = async {
+            fixture.room.rpcHandlers.getValue(LIVEKIT_PERSISTENCE_RPC)(
+                LiveKitRpcInvocation(AGENT_IDENTITY, acceptedEventJson()),
+            )
+        }
+        handlerStarted.await()
+        val cleanup = async {
+            fixture.session.cleanupOperation.run(VoiceAgentCleanupMode.Immediate)
+        }
+        runCurrent()
+
+        assertFalse(cleanup.isCompleted)
+        assertFalse(invocation.isCompleted)
+        assertTrue(persistence.lifecycle.isEmpty())
+
+        handlerGate.complete(Unit)
+        runCurrent()
+
+        assertEquals("""{"status":"persisted"}""", invocation.await())
+        assertEquals(VoiceAgentCleanupResult.Completed, cleanup.await())
+        assertEquals(listOf("close"), persistence.lifecycle)
+        assertEquals(listOf("evt_accepted"), persistence.events)
+    }
+
+    @Test
+    fun `failed persistence drain keeps owner and RPC open until a successful retry`() = runTest {
+        val persistence = RecordingPersistenceOwner()
+        val drainFailure = IllegalStateException("persistence drain failed")
+        persistence.drainFailure = drainFailure
+        val fixture = fixture(
+            persistenceHandler = persistence::handle,
+            persistenceOwner = persistence,
+        )
+        fixture.session.start()
+        runCurrent()
+
+        val first = fixture.session.cleanupOperation.run(VoiceAgentCleanupMode.GracefulEnd)
+
+        assertTrue(first is VoiceAgentCleanupResult.Failed)
+        assertSame(drainFailure, (first as VoiceAgentCleanupResult.Failed).error)
+        assertTrue(persistence.lifecycle.isEmpty())
+        assertTrue(fixture.room.rpcHandlers.containsKey(LIVEKIT_PERSISTENCE_RPC))
+
+        persistence.drainFailure = null
+        assertEquals(
+            VoiceAgentCleanupResult.Completed,
+            fixture.session.cleanupOperation.run(VoiceAgentCleanupMode.GracefulEnd),
+        )
+        assertEquals(listOf("drain", "close"), persistence.lifecycle)
+        assertFalse(fixture.room.rpcHandlers.containsKey(LIVEKIT_PERSISTENCE_RPC))
+    }
+
+    @Test
     fun `cleanup joins in flight connect and event collection before room release`() = runTest {
         val fixture = fixture(
             rpcMethods = mapOf("hermes.job.accepted" to { "persisted" }),
@@ -862,6 +974,8 @@ class LiveKitVoiceCallSessionTest {
 
     private fun kotlinx.coroutines.test.TestScope.fixture(
         rpcMethods: Map<String, suspend (LiveKitRpcInvocation) -> String> = emptyMap(),
+        persistenceHandler: (suspend (callerIdentity: String, payload: String) -> String)? = null,
+        persistenceOwner: LiveKitPersistenceOwner? = null,
         connectFailure: Throwable? = null,
         readyTimeoutMillis: Long = 30_000,
         route: OrchestratorFakeRoute = OrchestratorFakeRoute(),
@@ -884,6 +998,10 @@ class LiveKitVoiceCallSessionTest {
                 routeLease = route.lease,
                 scope = sessionScope,
                 rpcMethods = rpcMethods,
+                persistenceHandler = persistenceHandler?.let { handler ->
+                    { invocation -> handler(invocation.callerIdentity, invocation.payload) }
+                },
+                persistenceOwner = persistenceOwner,
                 connectTimeoutMillis = 10_000,
                 readyTimeoutMillis = readyTimeoutMillis,
                 cleanupDispatcher = cleanupDispatcher,
@@ -921,7 +1039,7 @@ private class FakeLiveKitRoomFacade(
     val remoteAudioParticipants = mutableListOf<String>()
     val microphoneValues = mutableListOf<Boolean>()
     val rpcCalls = mutableListOf<Triple<String, String, String>>()
-    private val handlers = mutableMapOf<String, suspend (LiveKitRpcInvocation) -> String>()
+    val rpcHandlers = mutableMapOf<String, suspend (LiveKitRpcInvocation) -> String>()
     var unregisterCalls = 0
     var disconnectCalls = 0
     var closeCalls = 0
@@ -943,10 +1061,10 @@ private class FakeLiveKitRoomFacade(
     }
 
     suspend fun invoke(method: String, caller: String, payload: String): String =
-        requireNotNull(handlers[method])(LiveKitRpcInvocation(caller, payload))
+        requireNotNull(rpcHandlers[method])(LiveKitRpcInvocation(caller, payload))
 
     fun captureHandler(method: String): suspend (LiveKitRpcInvocation) -> String =
-        requireNotNull(handlers[method])
+        requireNotNull(rpcHandlers[method])
 
     override fun selectRemoteAudioParticipant(participantIdentity: String) {
         lifecycle += "remote-audio:$participantIdentity"
@@ -991,14 +1109,14 @@ private class FakeLiveKitRoomFacade(
 
     override fun registerRpcMethod(method: String, handler: suspend (LiveKitRpcInvocation) -> String) {
         lifecycle += "register:$method"
-        handlers[method] = handler
+        rpcHandlers[method] = handler
     }
 
     override fun unregisterRpcMethod(method: String) {
         lifecycle += "unregister:$method"
         unregisterCalls += 1
         unregisterFailure?.let { throw it }
-        handlers.remove(method)
+        rpcHandlers.remove(method)
     }
 
     override fun disconnect() {
@@ -1012,6 +1130,34 @@ private class FakeLiveKitRoomFacade(
         lifecycle += "close"
         closeCalls += 1
         closeFailure?.let { throw it }
+    }
+}
+
+private class RecordingPersistenceOwner(
+    private val handlerStarted: CompletableDeferred<Unit>? = null,
+    private val handlerGate: CompletableDeferred<Unit>? = null,
+) : LiveKitPersistenceOwner {
+    val events = mutableListOf<String>()
+    val lifecycle = mutableListOf<String>()
+    var onDrain: () -> Unit = {}
+    var drainFailure: Throwable? = null
+
+    suspend fun handle(callerIdentity: String, payload: String): String {
+        require(callerIdentity == AGENT_IDENTITY) { "Unexpected LiveKit RPC caller" }
+        handlerStarted?.complete(Unit)
+        handlerGate?.await()
+        events += requireNotNull(Regex(""""eventId":"([^"]+)"""").find(payload)).groupValues[1]
+        return """{"status":"persisted"}"""
+    }
+
+    override suspend fun drain() {
+        onDrain()
+        drainFailure?.let { throw it }
+        lifecycle += "drain"
+    }
+
+    override fun close() {
+        lifecycle += "close"
     }
 }
 
@@ -1100,6 +1246,9 @@ private fun readyJson(
 ): String =
     """{"version":1,"voiceSessionId":"$voiceSessionId","kind":"ready",""" +
         """"observedAt":"$observedAt","eventIdHash":"$eventIdHash"}"""
+
+private fun acceptedEventJson(): String =
+    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"evt_accepted","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1","prompt":"private question"}"""
 
 private const val LIVEKIT_URL = "wss://project.livekit.cloud"
 private const val PARTICIPANT_TOKEN = "participant-token"

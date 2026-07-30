@@ -5,21 +5,33 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
+import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.voiceagent.ChatServiceVoiceConversationStore
+import me.rerere.rikkahub.voiceagent.SynchronizedVoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceAgentCallFactory
 import me.rerere.rikkahub.voiceagent.VoiceAgentCallRequest
 import me.rerere.rikkahub.voiceagent.VoiceAgentRouteLease
 import me.rerere.rikkahub.voiceagent.VoiceAgentSessionCreationResult
+import me.rerere.rikkahub.voiceagent.VoiceConversationStore
+import me.rerere.rikkahub.voiceagent.VoiceE2EArtifactWriter
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureFixtureArming
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureSource
 import me.rerere.rikkahub.voiceagent.finishFailedOwnedVoiceSessionCreation
 import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceApi
 import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceTraceHeaders
+import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStore
+import me.rerere.rikkahub.voiceagent.hermes.HermesToolRecordWriter
+import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
 import me.rerere.rikkahub.voiceagent.voiceAgentRouteCleanupOperation
+import me.rerere.rikkahub.voiceagent.createDefaultVoiceE2EArtifactWriter
+import java.io.File
+import kotlin.uuid.Uuid
 
 internal class LiveKitVoiceCallFactory internal constructor(
     private val context: Context,
+    private val chatService: ChatService? = null,
     private val traceContextFactory: () -> VoiceTraceContext = ::newVoiceTraceContext,
     private val sessionDetailsFactory: suspend (VoiceAgentCallRequest, VoiceTraceContext) -> LiveKitSessionDetails =
         { request, trace ->
@@ -33,8 +45,27 @@ internal class LiveKitVoiceCallFactory internal constructor(
             )
         },
     private val roomFactory: () -> LiveKitRoomFacade = { AndroidLiveKitRoomFacade(context) },
+    private val conversationStoreFactory: (Uuid) -> VoiceConversationStore = { conversationId ->
+        ChatServiceVoiceConversationStore(
+            conversationId = conversationId,
+            chatService = requireNotNull(chatService) {
+                "chatService is required for default conversation store"
+            },
+        )
+    },
+    private val artifactWriterFactory: (File, VoiceTraceContext, CoroutineScope) -> VoiceE2EArtifactWriter =
+        ::createDefaultVoiceE2EArtifactWriter,
     private val sessionCreationTimeoutMillis: Long = DEFAULT_LIVEKIT_SESSION_CREATION_TIMEOUT_MS,
 ) : VoiceAgentCallFactory {
+    constructor(
+        context: Context,
+        chatService: ChatService,
+    ) : this(
+        context = context,
+        chatService = chatService,
+        traceContextFactory = ::newVoiceTraceContext,
+    )
+
     init {
         require(sessionCreationTimeoutMillis > 0) { "sessionCreationTimeoutMillis must be positive" }
     }
@@ -47,6 +78,9 @@ internal class LiveKitVoiceCallFactory internal constructor(
     ): VoiceAgentSessionCreationResult {
         val cleanup = voiceAgentRouteCleanupOperation(routeLease)
         var captureSource: VoiceCaptureSource? = null
+        var conversationStore: VoiceConversationStore? = null
+        var artifactWriter: VoiceE2EArtifactWriter? = null
+        var resourcesTransferred = false
         return try {
             captureSource = VoiceCaptureFixtureArming.claimSource(request.captureFixtureToken)
                 .getOrElse { cause ->
@@ -59,24 +93,60 @@ internal class LiveKitVoiceCallFactory internal constructor(
             val details = withTimeout(sessionCreationTimeoutMillis) {
                 sessionDetailsFactory(request, trace)
             }
-            VoiceAgentSessionCreationResult.Created(
-                LiveKitVoiceCallSession(
-                    details = details,
-                    traceId = trace.traceId,
-                    room = roomFactory(),
-                    routeLease = routeLease,
-                    scope = scope,
-                    captureSource = checkNotNull(captureSource),
-                ),
+            conversationStore = SynchronizedVoiceConversationStore(
+                conversationStoreFactory(request.conversationId),
             )
+            artifactWriter = artifactWriterFactory(context.noBackupFilesDir, trace, scope)
+            val transcriptPersister = VoiceTranscriptPersister()
+            val persistenceBridge = LiveKitVoicePersistenceBridge(
+                voiceSessionId = details.voiceSessionId,
+                agentIdentity = details.agentParticipantIdentity,
+                queueStore = HermesQueueStore(
+                    conversationStore = conversationStore,
+                    writer = HermesToolRecordWriter(),
+                    transcriptPersister = transcriptPersister,
+                    persistenceSessionId = { details.voiceSessionId },
+                ),
+                transcriptPersister = transcriptPersister,
+                conversationStore = conversationStore,
+                evidence = VoiceExperienceEvidenceWriter(artifactWriter),
+            )
+            val persistenceOwner = LiveKitPersistenceResources(
+                bridge = persistenceBridge,
+                artifactWriter = artifactWriter,
+            )
+            val session = LiveKitVoiceCallSession(
+                details = details,
+                traceId = trace.traceId,
+                room = roomFactory(),
+                routeLease = routeLease,
+                scope = scope,
+                captureSource = checkNotNull(captureSource),
+                persistenceHandler = { invocation ->
+                    persistenceBridge.handle(invocation.callerIdentity, invocation.payload)
+                },
+                persistenceOwner = persistenceOwner,
+            )
+            resourcesTransferred = true
+            VoiceAgentSessionCreationResult.Created(session)
         } catch (_: TimeoutCancellationException) {
             captureSource?.close()
+            if (!resourcesTransferred) {
+                artifactWriter?.drain()
+                conversationStore?.close()
+            }
             finishFailedOwnedVoiceSessionCreation(
                 LiveKitExperimentalVoiceCallException("LiveKit experimental voice session request timed out"),
                 cleanup,
             )
         } catch (creationError: Throwable) {
             captureSource?.close()
+            if (!resourcesTransferred) {
+                runCatching { artifactWriter?.drain() }
+                    .onFailure(creationError::addSuppressed)
+                runCatching { conversationStore?.close() }
+                    .onFailure(creationError::addSuppressed)
+            }
             finishFailedOwnedVoiceSessionCreation(
                 if (creationError is CancellationException) {
                     creationError
@@ -93,6 +163,20 @@ internal class LiveKitVoiceCallFactory internal constructor(
 
     private companion object {
         const val DEFAULT_LIVEKIT_SESSION_CREATION_TIMEOUT_MS = 15_000L
+    }
+}
+
+private class LiveKitPersistenceResources(
+    private val bridge: LiveKitPersistenceOwner,
+    private val artifactWriter: VoiceE2EArtifactWriter,
+) : LiveKitPersistenceOwner {
+    override suspend fun drain() {
+        bridge.drain()
+        artifactWriter.drain()
+    }
+
+    override fun close() {
+        bridge.close()
     }
 }
 

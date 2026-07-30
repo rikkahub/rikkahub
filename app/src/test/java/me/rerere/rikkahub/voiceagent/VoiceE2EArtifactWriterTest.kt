@@ -15,6 +15,7 @@ import java.io.File
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.PosixFilePermission
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
@@ -594,6 +595,37 @@ class VoiceE2EArtifactWriterTest {
     }
 
     @Test
+    fun `voice experience artifacts are append only owner readable and private rows are not debug exposed`() =
+        runBlocking {
+            val root = Files.createTempDirectory("voice-experience-artifacts").toFile()
+            val scope = CoroutineScope(coroutineContext + SupervisorJob())
+            try {
+                val writer = VoiceE2EArtifactWriter.create(
+                    enabled = true,
+                    rootDirectory = root,
+                    scope = scope,
+                )
+
+                writer(VoiceE2EArtifact.VoiceExperiencePrivate, """{"prompt":"private"}""")
+                writer(VoiceE2EArtifact.VoiceExperienceEvents, """{"promptCharacterCount":7}""")
+                writer.drain()
+
+                val privateFile = File(root, "voice-e2e/voice-experience-private.ndjson")
+                val sanitizedFile = File(root, "voice-e2e/voice-experience-events.ndjson")
+                assertEquals(listOf("""{"prompt":"private"}"""), privateFile.readLines())
+                assertEquals(listOf("""{"promptCharacterCount":7}"""), sanitizedFile.readLines())
+                assertEquals(OWNER_READ_WRITE, Files.getPosixFilePermissions(privateFile.toPath()))
+                assertEquals(OWNER_READ_WRITE, Files.getPosixFilePermissions(sanitizedFile.toPath()))
+                val debugExposed = VoiceE2EArtifact.entries.filterNot { it.privateContent }
+                assertTrue(VoiceE2EArtifact.VoiceExperienceEvents in debugExposed)
+                assertFalse(VoiceE2EArtifact.VoiceExperiencePrivate in debugExposed)
+            } finally {
+                scope.cancel()
+                root.deleteRecursively()
+            }
+        }
+
+    @Test
     fun `enabled writer clears stale append-only hermes events before writing`() = runBlocking {
         val root = Files.createTempDirectory("voice-e2e-hermes-events-stale").toFile()
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
@@ -762,6 +794,11 @@ class VoiceE2EArtifactWriterTest {
         return directory
     }
 }
+
+private val OWNER_READ_WRITE = setOf(
+    PosixFilePermission.OWNER_READ,
+    PosixFilePermission.OWNER_WRITE,
+)
 
 private fun blockingSessionJsonMove(
     status: String,
