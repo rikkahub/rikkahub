@@ -25,7 +25,10 @@ import me.rerere.highlight.HighlightTextColorPalette
 import me.rerere.highlight.buildHighlightText
 import me.rerere.highlight.kotlin.engine.GrammarEngine
 import me.rerere.highlight.kotlin.languages.bash.BashLanguage
+import me.rerere.highlight.kotlin.languages.c.CLanguage
+import me.rerere.highlight.kotlin.languages.cmake.CMakeLanguage
 import me.rerere.highlight.kotlin.languages.css.CssLanguage
+import me.rerere.highlight.kotlin.languages.cpp.CppLanguage
 import me.rerere.highlight.kotlin.languages.go.GoLanguage
 import me.rerere.highlight.kotlin.languages.java.JavaLanguage
 import me.rerere.highlight.kotlin.languages.javascript.JavaScriptLanguage
@@ -59,6 +62,9 @@ class KotlinHighlighter {
             KotlinLanguage.definition,
             PythonLanguage.definition,
             GoLanguage.definition,
+            CLanguage.definition,
+            CppLanguage.definition,
+            CMakeLanguage.definition,
         ),
     )
 
