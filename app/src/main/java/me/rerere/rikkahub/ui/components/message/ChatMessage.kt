@@ -212,8 +212,10 @@ fun ChatMessage(
             assistant = assistant,
         )
 
-        ProvideTextStyle(textStyle) {
-            ChatMessageNerdLine(message = message)
+        if (shouldShowTokenUsage(message, loading)) {
+            ProvideTextStyle(textStyle) {
+                ChatMessageNerdLine(message = message)
+            }
         }
 
     }
@@ -259,6 +261,12 @@ fun ChatMessage(
             }
         )
     }
+}
+
+internal fun shouldShowTokenUsage(message: UIMessage, loading: Boolean): Boolean {
+    return !loading &&
+        message.usage != null &&
+        message.getTools().all { it.isExecuted }
 }
 
 @OptIn(FlowPreview::class)
