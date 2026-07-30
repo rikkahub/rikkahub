@@ -1,9 +1,11 @@
 package me.rerere.ai.provider.providers
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.ui.UIMessage
@@ -186,6 +188,35 @@ class ClaudeProviderMessageTest {
         }?.jsonObject
         assertEquals("Let me think about this...",
             thinkingBlock?.get("thinking")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `thinking block should replay its signature`() {
+        val assistantMessage = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Reasoning(
+                    reasoning = "Let me think about this...",
+                    metadata = buildJsonObject {
+                        put("signature", "anthropic-signature")
+                        put("content_block_index", 0)
+                    },
+                ),
+                UIMessagePart.Text("Here is my response"),
+            ),
+        )
+
+        val result = invokeBuildMessages(listOf(UIMessage.user("Question"), assistantMessage))
+        val thinkingBlock = result
+            .first { it.jsonObject["role"]?.jsonPrimitive?.content == "assistant" }
+            .jsonObject["content"]!!
+            .jsonArray
+            .first { it.jsonObject["type"]?.jsonPrimitive?.content == "thinking" }
+            .jsonObject
+
+        assertEquals("Let me think about this...", thinkingBlock["thinking"]?.jsonPrimitive?.content)
+        assertEquals("anthropic-signature", thinkingBlock["signature"]?.jsonPrimitive?.content)
+        assertTrue("Internal stream index must not be replayed", "content_block_index" !in thinkingBlock)
     }
 
     @Test

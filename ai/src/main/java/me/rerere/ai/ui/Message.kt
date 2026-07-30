@@ -34,6 +34,26 @@ data class UIMessage(
         val choice = chunk.choices.getOrNull(0)
         val message = choice?.delta ?: choice?.message
         return message?.let { delta ->
+            fun mergeMetadata(existing: JsonObject?, incoming: JsonObject?): JsonObject? = when {
+                existing == null -> incoming
+                incoming == null -> existing
+                else -> JsonObject(existing + incoming)
+            }
+
+            fun List<UIMessagePart>.reasoningTargetIndex(deltaPart: UIMessagePart.Reasoning): Int {
+                val metadata = deltaPart.metadataAs<ClaudeReasoningMetadata>()
+                metadata?.contentBlockIndex?.let { contentBlockIndex ->
+                    return indexOfLast { part ->
+                        part is UIMessagePart.Reasoning &&
+                            part.metadataAs<ClaudeReasoningMetadata>()?.contentBlockIndex == contentBlockIndex
+                    }
+                }
+                if (deltaPart.reasoning.isEmpty() && !metadata?.signature.isNullOrBlank()) {
+                    return indexOfLast { it is UIMessagePart.Reasoning }
+                }
+                return if (lastOrNull() is UIMessagePart.Reasoning) lastIndex else -1
+            }
+
             // Handle Parts
             var newParts = delta.parts.fold(parts) { acc, deltaPart ->
                 when (deltaPart) {
@@ -75,16 +95,29 @@ data class UIMessage(
                         if (deltaPart.reasoning.isEmpty() && deltaPart.metadata == null) {
                             acc
                         } else {
-                            val lastPart = acc.lastOrNull()
-                            if (lastPart is UIMessagePart.Reasoning) {
-                                // Append to the last Reasoning part
-                                acc.dropLast(1) + UIMessagePart.Reasoning(
-                                    reasoning = lastPart.reasoning + deltaPart.reasoning,
-                                    createdAt = lastPart.createdAt,
-                                    finishedAt = null,
-                                ).also {
-                                    it.metadata = deltaPart.metadata ?: lastPart.metadata
+                            val targetIndex = acc.reasoningTargetIndex(deltaPart)
+                            if (targetIndex >= 0) {
+                                acc.mapIndexed { index, part ->
+                                    if (index == targetIndex) {
+                                        val reasoningPart = part as UIMessagePart.Reasoning
+                                        reasoningPart.copy(
+                                            reasoning = reasoningPart.reasoning + deltaPart.reasoning,
+                                            finishedAt = if (deltaPart.reasoning.isEmpty()) {
+                                                reasoningPart.finishedAt
+                                            } else {
+                                                null
+                                            },
+                                            metadata = mergeMetadata(reasoningPart.metadata, deltaPart.metadata),
+                                        )
+                                    } else {
+                                        part
+                                    }
                                 }
+                            } else if (
+                                deltaPart.reasoning.isEmpty() &&
+                                !deltaPart.metadataAs<ClaudeReasoningMetadata>()?.signature.isNullOrBlank()
+                            ) {
+                                acc
                             } else {
                                 // Create new Reasoning part
                                 acc + deltaPart

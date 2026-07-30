@@ -26,6 +26,8 @@ sealed interface PartMetadata
 @Serializable
 data class ClaudeReasoningMetadata(
     val signature: String? = null,
+    @SerialName("content_block_index")
+    val contentBlockIndex: Int? = null,
 ) : PartMetadata
 
 /**

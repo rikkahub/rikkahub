@@ -197,7 +197,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     if (deltaObj != null) {
                         add(deltaObj)
                     }
-                })
+                }, contentBlockIndex = dataJson["index"]?.jsonPrimitive?.intOrNull)
                 val tokenUsage = parseTokenUsage(dataJson)
                 val messageChunk = MessageChunk(
                     id = id ?: "",
@@ -517,7 +517,10 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         }
     }
 
-    private fun parseMessage(content: JsonArray): UIMessage {
+    private fun parseMessage(
+        content: JsonArray,
+        contentBlockIndex: Int? = null,
+    ): UIMessage {
         val parts = mutableListOf<UIMessagePart>()
 
         content.forEach { contentBlock ->
@@ -535,14 +538,18 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 "thinking", "thinking_delta", "signature_delta" -> {
                     val thinking = block["thinking"]?.jsonPrimitive?.contentOrNull ?: ""
                     val signature = block["signature"]?.jsonPrimitive?.contentOrNull
-                    if (thinking.isNotEmpty() || signature != null) {
+                    if (thinking.isNotEmpty() || signature != null || contentBlockIndex != null) {
                         val reasoning = UIMessagePart.Reasoning(
                             reasoning = thinking,
                             createdAt = Clock.System.now(),
                             finishedAt = null
                         )
-                        if (signature != null) {
-                            reasoning.metadata = ClaudeReasoningMetadata(signature = signature).toMetadata()
+                        val metadata = ClaudeReasoningMetadata(
+                            signature = signature,
+                            contentBlockIndex = contentBlockIndex,
+                        ).toMetadata()
+                        if (metadata.isNotEmpty()) {
+                            reasoning.metadata = metadata
                         }
                         parts.add(reasoning)
                     }
