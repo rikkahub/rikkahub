@@ -260,6 +260,32 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
             """.trimIndent(),
         ),
         HighlightPreviewSample(
+            language = "c",
+            code = """
+                #include <stdio.h>
+
+                int main(void)
+                {
+                    const char *name = "Rikka";
+                    printf("Hello, %s!\n", name);
+                    return 0;
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "cpp",
+            code = """
+                #include <iostream>
+                #include <string>
+
+                int main() {
+                    const std::string name = "Rikka";
+                    std::cout << "Hello, " << name << std::endl;
+                    return 0;
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
             language = "cmake",
             code = """
                 cmake_minimum_required(VERSION 3.22)

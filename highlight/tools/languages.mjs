@@ -23,4 +23,10 @@ export const LANGUAGES = [
   { name: 'java', module: 'java', aliases: ['jsp'] },
   { name: 'kotlin', module: 'kotlin', aliases: ['kt', 'kts'] },
   { name: 'python', module: 'python', aliases: ['py', 'gyp', 'ipython'] },
+  { name: 'c', module: 'c', aliases: ['h'] },
+  {
+    name: 'cpp',
+    module: 'cpp',
+    aliases: ['cc', 'c++', 'h++', 'hpp', 'hh', 'hxx', 'cxx'],
+  },
 ]

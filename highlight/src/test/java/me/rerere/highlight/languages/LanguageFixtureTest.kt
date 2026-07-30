@@ -46,4 +46,10 @@ class LanguageFixtureTest {
 
     @Test
     fun python() = HljsFixtures.assertLanguageMatches("python")
+
+    @Test
+    fun c() = HljsFixtures.assertLanguageMatches("c")
+
+    @Test
+    fun cpp() = HljsFixtures.assertLanguageMatches("cpp")
 }

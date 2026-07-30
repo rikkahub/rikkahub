@@ -1,0 +1,81 @@
+#pragma once
+
+#include <cstdint>
+#include <optional>
+#include <unordered_map>
+#include <vector>
+
+template <typename T, typename U = std::uint32_t>
+struct Pair {
+    T first;
+    U second;
+};
+
+enum class Color : std::uint8_t { Red, Green, Blue };
+
+enum Legacy { LEGACY_A, LEGACY_B };
+
+union Value {
+    std::int64_t i;
+    double d;
+};
+
+constexpr auto kMask = 0xDEAD'BEEFu;
+constexpr auto kBinary = 0b1010'1010;
+constexpr auto kOctal = 0755;
+constexpr auto kBig = 1'000'000LL;
+constexpr auto kUnsigned = 42ULL;
+constexpr auto kSize = 7uz;
+constexpr auto kFloat = 3.14f;
+constexpr auto kHalf = .5;
+constexpr auto kExp = 1e-3;
+constexpr auto kHexFloat = 0x1.8p3;
+constexpr auto kFloat128 = 1.0f128;
+constexpr auto kBrainFloat = 1.0bf16;
+
+const char kChar = 'a';
+const char kEscape = '\n';
+const char kHexChar = '\x41';
+const char kOctChar = '\101';
+const wchar_t kWide = L'w';
+
+const char *kUtf8 = u8"utf-8";
+const char16_t *kUtf16 = u"utf-16";
+const char32_t *kUtf32 = U"utf-32";
+const wchar_t *kWideStr = L"wide";
+const char *kRaw = R"(no \n escapes here)";
+const char *kDelimited = R"sql(SELECT )" FROM t)sql";
+
+std::unordered_map<int, std::string> lookup;
+std::vector<int> rooms (9);
+
+decltype(auto) identity(int &value) { return (value); }
+
+template <typename... Args>
+constexpr auto sum(Args... args) {
+    return (args + ... + 0);
+}
+
+class Widget final : public Pair<int, int> {
+public:
+    Widget() : Pair<int, int>{0, 0}, name_("widget") {}
+
+    virtual ~Widget() = default;
+
+    [[nodiscard]] const std::string &name() const noexcept { return name_; }
+
+private:
+    std::string name_;
+};
+
+int main() {
+    auto doubler = [&](int x) noexcept { return x * 2; };
+    static_assert(sizeof(std::int64_t) == 8, "unexpected width");
+
+    std::optional<int> maybe = std::nullopt;
+    if (!maybe.has_value()) {
+        maybe = doubler(21);
+    }
+
+    return sum(1, 2, 3) + maybe.value_or(0);
+}

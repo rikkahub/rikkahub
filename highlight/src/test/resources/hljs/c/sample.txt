@@ -1,0 +1,59 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define MAX_MESSAGES 4096
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+typedef enum {
+    ROLE_USER,
+    ROLE_ASSISTANT
+} role_t;
+
+typedef struct message {
+    role_t role;
+    char *content;
+    size_t length;
+} message_t;
+
+static const char *ROLE_NAMES[] = { "user", "assistant" };
+
+/* Appends one message to the session, growing the buffer when needed. */
+int session_append(message_t **messages, size_t *count, role_t role, const char *content)
+{
+    if (content == NULL) {
+        return -1;
+    }
+
+    message_t *grown = realloc(*messages, (*count + 1) * sizeof(message_t));
+    if (grown == NULL) {
+        return -1;
+    }
+
+    grown[*count].role = role;
+    grown[*count].content = strdup(content);
+    grown[*count].length = strlen(content);
+
+    *messages = grown;
+    *count += 1;
+    return 0;
+}
+
+void session_print(const message_t *messages, size_t count)
+{
+    for (size_t i = 0; i < count; i++) {
+        printf("%s: %s\n", ROLE_NAMES[messages[i].role], messages[i].content);
+    }
+}
+
+int main(void)
+{
+    message_t *messages = NULL;
+    size_t count = 0;
+
+    session_append(&messages, &count, ROLE_USER, "hello");
+    session_print(messages, count);
+
+    free(messages);
+    return 0;
+}
