@@ -367,7 +367,7 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
-    private val KIMI_K2_5 = defineModel {
+    val KIMI_K2_5 = defineModel {
         tokens("kimi", "k", "2", "5")
         visionInput()
         toolReasoningAbility()
@@ -379,14 +379,14 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
-    private val KIMI_K3 = defineModel {
+    val KIMI_K3 = defineModel {
         tokens("kimi", "k", "3")
         visionInput()
         toolReasoningAbility()
     }
 
     // 兼容不带 kimi 前缀的裸 id "k3"
-    private val KIMI_K3_ALIAS = defineModel {
+    val KIMI_K3_ALIAS = defineModel {
         exact("k3")
         visionInput()
         toolReasoningAbility()
