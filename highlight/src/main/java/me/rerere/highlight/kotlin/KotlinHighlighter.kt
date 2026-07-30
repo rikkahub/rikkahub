@@ -36,6 +36,7 @@ import me.rerere.highlight.kotlin.languages.javascript.TypeScriptLanguage
 import me.rerere.highlight.kotlin.languages.json.JsonLanguage
 import me.rerere.highlight.kotlin.languages.kotlin.KotlinLanguage
 import me.rerere.highlight.kotlin.languages.python.PythonLanguage
+import me.rerere.highlight.kotlin.languages.rust.RustLanguage
 import me.rerere.highlight.kotlin.languages.sql.SqlLanguage
 import me.rerere.highlight.kotlin.languages.toml.TomlLanguage
 
@@ -65,6 +66,7 @@ class KotlinHighlighter {
             CLanguage.definition,
             CppLanguage.definition,
             CMakeLanguage.definition,
+            RustLanguage.definition,
         ),
     )
 
