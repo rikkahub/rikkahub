@@ -1,6 +1,9 @@
 name: Agent Validation
 
 on:
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       ref:
@@ -13,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: agent-validation-${{ inputs.ref }}
+  group: agent-validation-${{ github.event_name }}-${{ github.event.pull_request.head.sha || inputs.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -23,10 +26,10 @@ jobs:
     timeout-minutes: 100
 
     steps:
-      - name: Checkout requested ref
+      - name: Checkout validation ref
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ github.event.pull_request.head.sha || inputs.ref }}
           fetch-depth: 0
           submodules: recursive
 
@@ -107,7 +110,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: agent-validation-room-schemas-${{ github.run_number }}
+          name: agent-validation-room-schemas-${{ github.event_name }}-${{ github.run_number }}
           path: app/schemas/**
           if-no-files-found: warn
           retention-days: 14
@@ -228,7 +231,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: agent-validation-test-reports-${{ github.run_number }}
+          name: agent-validation-test-reports-${{ github.event_name }}-${{ github.run_number }}
           path: |
             **/build/test-results/**/*.xml
             **/build/reports/tests/**
@@ -239,7 +242,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: agent-validation-debug-apk-${{ github.run_number }}
+          name: agent-validation-debug-apk-${{ github.event_name }}-${{ github.run_number }}
           path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
           retention-days: 14
@@ -252,10 +255,10 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Checkout requested ref
+      - name: Checkout validation ref
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ github.event.pull_request.head.sha || inputs.ref }}
           fetch-depth: 0
           submodules: recursive
 
@@ -353,7 +356,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: agent-validation-lint-reports-${{ github.run_number }}
+          name: agent-validation-lint-reports-${{ github.event_name }}-${{ github.run_number }}
           path: |
             **/build/reports/lint/**
             **/build/reports/lint-results-*.*
