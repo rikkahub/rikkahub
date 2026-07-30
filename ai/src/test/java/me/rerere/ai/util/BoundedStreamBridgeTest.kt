@@ -129,7 +129,7 @@ class BoundedStreamBridgeTest {
         }
 
         withTimeout(1_000) {
-            stream.take(1).collect()
+            stream.take(1).collect { }
         }
         assertEquals(1, cancelled.get())
     }
