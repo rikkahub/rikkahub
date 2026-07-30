@@ -4,8 +4,8 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ChatMessageTokenUsageTest {
@@ -17,8 +17,18 @@ class ChatMessageTokenUsageTest {
             usage = TokenUsage(promptTokens = 100),
         )
 
-        assertFalse(shouldShowTokenUsage(message, loading = true))
-        assertTrue(shouldShowTokenUsage(message, loading = false))
+        assertNull(tokenUsageToDisplay(message, loading = true))
+        assertEquals(message.usage, tokenUsageToDisplay(message, loading = false))
+    }
+
+    @Test
+    fun `usage is hidden when unavailable`() {
+        val message = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(UIMessagePart.Text("done")),
+        )
+
+        assertNull(tokenUsageToDisplay(message, loading = false))
     }
 
     @Test
@@ -35,7 +45,7 @@ class ChatMessageTokenUsageTest {
             usage = TokenUsage(promptTokens = 100),
         )
 
-        assertFalse(shouldShowTokenUsage(message, loading = false))
+        assertNull(tokenUsageToDisplay(message, loading = false))
     }
 
     @Test
@@ -53,6 +63,6 @@ class ChatMessageTokenUsageTest {
             usage = TokenUsage(promptTokens = 100),
         )
 
-        assertTrue(shouldShowTokenUsage(message, loading = false))
+        assertEquals(message.usage, tokenUsageToDisplay(message, loading = false))
     }
 }

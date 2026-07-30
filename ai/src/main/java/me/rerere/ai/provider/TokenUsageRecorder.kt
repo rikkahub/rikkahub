@@ -9,6 +9,11 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.common.android.Logging
 
+/**
+ * Application-provided sink for usage from successful text requests.
+ *
+ * The AI layer reports usage without assuming how it is stored.
+ */
 fun interface TokenUsageRecorder {
     suspend fun record(usage: TokenUsage)
 }

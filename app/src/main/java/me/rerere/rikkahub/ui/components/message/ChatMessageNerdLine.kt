@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import kotlinx.datetime.toJavaLocalDateTime
+import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessage
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Clock02
@@ -34,6 +35,7 @@ import java.time.Duration
 @Composable
 fun ChatMessageNerdLine(
     message: UIMessage,
+    loading: Boolean,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f),
 ) {
@@ -46,7 +48,7 @@ fun ChatMessageNerdLine(
                 itemVerticalAlignment = Alignment.CenterVertically,
                 modifier = modifier.padding(horizontal = 4.dp),
             ) {
-                val usage = message.usage
+                val usage = tokenUsageToDisplay(message, loading)
                 if (settings.showTokenUsage && usage != null) {
                     // Input tokens
                     StatsItem(
@@ -63,7 +65,7 @@ fun ChatMessageNerdLine(
                             // Cached tokens
                             if (usage.cachedTokens > 0) {
                                 Text(
-                                    text = "(${message.usage?.cachedTokens?.formatNumber() ?: "0"} cached)"
+                                    text = "(${usage.cachedTokens.formatNumber()} cached)"
                                 )
                             }
                         }
@@ -118,6 +120,12 @@ fun ChatMessageNerdLine(
                 }
             }
         }
+    }
+}
+
+internal fun tokenUsageToDisplay(message: UIMessage, loading: Boolean): TokenUsage? {
+    return message.usage?.takeIf {
+        !loading && message.getTools().all { tool -> tool.isExecuted }
     }
 }
 
