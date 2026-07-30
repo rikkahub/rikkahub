@@ -48,6 +48,9 @@ class LanguageFixtureTest {
     fun kotlin() = HljsFixtures.assertLanguageMatches("kotlin")
 
     @Test
+    fun lua() = HljsFixtures.assertLanguageMatches("lua")
+
+    @Test
     fun python() = HljsFixtures.assertLanguageMatches("python")
 
     @Test

@@ -16,6 +16,7 @@ import me.rerere.highlight.languages.java.java
 import me.rerere.highlight.languages.javascript.javascript
 import me.rerere.highlight.languages.json.json
 import me.rerere.highlight.languages.kotlin.kotlin
+import me.rerere.highlight.languages.lua.lua
 import me.rerere.highlight.languages.markdown.markdown
 import me.rerere.highlight.languages.php.php
 import me.rerere.highlight.languages.python.python
@@ -46,6 +47,7 @@ internal fun builtinLanguages(): List<Language> = listOf(
     dart(),
     java(),
     kotlin(),
+    lua(),
     python(),
     c(),
     cpp(),

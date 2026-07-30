@@ -23,6 +23,7 @@ export const LANGUAGES = [
   { name: 'dart', module: 'dart', aliases: [] },
   { name: 'java', module: 'java', aliases: ['jsp'] },
   { name: 'kotlin', module: 'kotlin', aliases: ['kt', 'kts'] },
+  { name: 'lua', module: 'lua', aliases: ['pluto'] },
   { name: 'python', module: 'python', aliases: ['py', 'gyp', 'ipython'] },
   { name: 'c', module: 'c', aliases: ['h'] },
   {

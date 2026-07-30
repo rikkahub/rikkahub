@@ -258,6 +258,21 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
             """.trimIndent(),
         ),
         HighlightPreviewSample(
+            language = "lua",
+            code = """
+                local User = {}
+                User.__index = User
+
+                function User:new(name)
+                  return setmetatable({ name = name }, self)
+                end
+
+                function User:greet()
+                  print("Hello, " .. self.name .. "!")
+                end
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
             language = "python",
             code = """
                 from dataclasses import dataclass
