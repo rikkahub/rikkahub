@@ -10,15 +10,30 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.model.Conversation
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.uuid.Uuid
 
 private const val TAG = "ConversationSession"
 private const val IDLE_TIMEOUT_MS = 5_000L
 
-data class GenerationLease internal constructor(
+class GenerationLease internal constructor(
     val epoch: Long,
     val job: Job,
+    val replacedRunId: String? = null,
 )
+
+class ConversationSessionHandle internal constructor(
+    val conversation: StateFlow<Conversation>,
+    val generationJob: StateFlow<Job?>,
+    val processingStatus: StateFlow<String?>,
+    private val release: () -> Unit,
+) : AutoCloseable {
+    private val closed = AtomicBoolean(false)
+
+    override fun close() {
+        if (closed.compareAndSet(false, true)) release()
+    }
+}
 
 class ConversationSession(
     val id: Uuid,
@@ -31,6 +46,8 @@ class ConversationSession(
 
     // 原子引用计数
     private val refCount = AtomicInteger(0)
+    private val lifecycleLock = Any()
+    private var closing = false
 
     // 处理状态（如 OCR 识别中）
     val processingStatus = MutableStateFlow<String?>(null)
@@ -42,19 +59,32 @@ class ConversationSession(
     private val _generationJob = MutableStateFlow<Job?>(null)
     val generationJob: StateFlow<Job?> = _generationJob.asStateFlow()
     val isGenerating: Boolean get() = _generationJob.value != null
-    val isInUse: Boolean get() = refCount.get() > 0 || isGenerating
+    val isInUse: Boolean get() = synchronized(lifecycleLock) { refCount.get() > 0 || isGenerating }
 
     // 空闲检查任务
     private var idleCheckJob: Job? = null
 
-    fun acquire(): Int = refCount.incrementAndGet().also {
-        cancelIdleCheck()
-        Log.d(TAG, "acquire $id (refs=$it)")
+    init {
+        // Background loads may never receive an explicit acquire/release pair.
+        scheduleIdleCheck()
     }
 
-    fun release(): Int = refCount.decrementAndGet().also {
-        Log.d(TAG, "release $id (refs=$it)")
-        if (it <= 0) scheduleIdleCheck()
+    fun acquire(): Int = checkNotNull(tryAcquire()) { "Conversation session is closing: $id" }
+
+    fun tryAcquire(): Int? = synchronized(lifecycleLock) {
+        if (closing) return@synchronized null
+        refCount.incrementAndGet().also {
+            cancelIdleCheckLocked()
+            Log.d(TAG, "acquire $id (refs=$it)")
+        }
+    }
+
+    fun release(): Int = synchronized(lifecycleLock) {
+        check(refCount.get() > 0) { "Conversation session reference underflow: $id" }
+        refCount.decrementAndGet().also {
+            Log.d(TAG, "release $id (refs=$it)")
+            if (it == 0) scheduleIdleCheckLocked()
+        }
     }
 
     // 作用域 API - 短请求（REST）
@@ -79,8 +109,30 @@ class ConversationSession(
 
     /** Installs a new lazy generation boundary. The caller starts [job] only after this returns. */
     fun install(job: Job): GenerationLease {
-        require(!job.isActive && !job.isCompleted) { "Generation job must be new and lazy" }
+        requireLazyGeneration(job)
         return installBoundary(job)
+    }
+
+    /** Returns an optimistic token without exposing the current generation lease. */
+    fun epochToken(): Long = synchronized(generationLock) {
+        generationEpoch
+    }
+
+    /** Installs [job] only when no generation boundary has been installed since [expectedEpoch]. */
+    fun installIfEpoch(job: Job, expectedEpoch: Long): GenerationLease? {
+        require(expectedEpoch >= 0) { "Expected generation epoch must be non-negative" }
+        requireLazyGeneration(job)
+        val installation = synchronized(generationLock) {
+            if (generationEpoch != expectedEpoch) {
+                null
+            } else {
+                // Recheck while holding the boundary lock so validation and installation are one operation.
+                requireLazyGeneration(job)
+                installBoundaryLocked(job)
+            }
+        } ?: return null
+        completeInstallation(installation)
+        return installation.lease
     }
 
     /** Compatibility bridge for callers that have not yet migrated to lazy [install]. */
@@ -97,6 +149,11 @@ class ConversationSession(
     fun getJob(): Job? = synchronized(generationLock) {
         currentGeneration?.lease?.job
     }
+
+    /** Requests prompt cancellation without advancing the epoch; installation remains transaction-serialized. */
+    fun cancelCurrentJob(): Job? = synchronized(generationLock) {
+        currentGeneration?.lease?.job
+    }?.also { it.cancel() }
 
     fun bindRun(lease: GenerationLease, runId: String): Boolean {
         if (runId.isBlank()) return false
@@ -119,8 +176,26 @@ class ConversationSession(
         current.matches(lease) && (runId == null || current.runId == runId)
     }
 
+    /** Executes a non-suspending side effect atomically with respect to generation replacement. */
+    fun <T> runIfCurrent(lease: GenerationLease, runId: String? = null, block: () -> T): T? =
+        synchronized(generationLock) {
+            val current = currentGeneration ?: return@synchronized null
+            if (!current.matches(lease) || runId != null && current.runId != runId) {
+                return@synchronized null
+            }
+            block()
+        }
+
     fun jobForRun(runId: String): Job? = synchronized(generationLock) {
         currentGeneration?.takeIf { it.runId == runId }?.lease?.job
+    }
+
+    fun leaseForRun(runId: String): GenerationLease? = synchronized(generationLock) {
+        currentGeneration?.takeIf { it.runId == runId }?.lease
+    }
+
+    fun currentRunId(): String? = synchronized(generationLock) {
+        currentGeneration?.runId
     }
 
     /** Compatibility bridge for the current ChatService call sites. */
@@ -134,19 +209,36 @@ class ConversationSession(
     fun getJobForRun(runId: String): Job? = jobForRun(runId)
 
     private fun installBoundary(job: Job): GenerationLease {
-        cancelIdleCheck()
-        val previous: Job?
-        val lease: GenerationLease
-        synchronized(generationLock) {
-            check(generationEpoch < Long.MAX_VALUE) { "Generation epoch exhausted" }
-            lease = GenerationLease(++generationEpoch, job)
-            previous = currentGeneration?.lease?.job
-            currentGeneration = CurrentGeneration(lease)
-            _generationJob.value = job
+        val installation = synchronized(generationLock) {
+            installBoundaryLocked(job)
         }
-        job.invokeOnCompletion { onGenerationCompleted(lease) }
-        if (previous !== job) previous?.cancel()
-        return lease
+        completeInstallation(installation)
+        return installation.lease
+    }
+
+    private fun installBoundaryLocked(job: Job): Installation {
+        check(generationEpoch < Long.MAX_VALUE) { "Generation epoch exhausted" }
+        val previousGeneration = currentGeneration
+        val lease = GenerationLease(
+            epoch = ++generationEpoch,
+            job = job,
+            replacedRunId = previousGeneration?.runId ?: previousGeneration?.lease?.replacedRunId,
+        )
+        val previous = previousGeneration?.lease?.job
+        currentGeneration = CurrentGeneration(lease)
+        _generationJob.value = job
+        processingStatus.value = null
+        return Installation(lease, previous)
+    }
+
+    private fun completeInstallation(installation: Installation) {
+        cancelIdleCheck()
+        installation.lease.job.invokeOnCompletion { onGenerationCompleted(installation.lease) }
+        if (installation.previous !== installation.lease.job) installation.previous?.cancel()
+    }
+
+    private fun requireLazyGeneration(job: Job) {
+        require(!job.isActive && !job.isCompleted) { "Generation job must be new and lazy" }
     }
 
     private fun onGenerationCompleted(lease: GenerationLease) {
@@ -164,6 +256,8 @@ class ConversationSession(
     }
 
     private fun detachCurrentGeneration(): Job? = synchronized(generationLock) {
+        check(generationEpoch < Long.MAX_VALUE) { "Generation epoch exhausted" }
+        generationEpoch++
         val job = currentGeneration?.lease?.job
         currentGeneration = null
         _generationJob.value = null
@@ -171,6 +265,11 @@ class ConversationSession(
     }
 
     private fun scheduleIdleCheck() {
+        synchronized(lifecycleLock) { scheduleIdleCheckLocked() }
+    }
+
+    private fun scheduleIdleCheckLocked() {
+        if (closing) return
         idleCheckJob?.cancel()
         idleCheckJob = scope.launch {
             delay(IDLE_TIMEOUT_MS)
@@ -181,16 +280,33 @@ class ConversationSession(
     }
 
     private fun cancelIdleCheck() {
+        synchronized(lifecycleLock) { cancelIdleCheckLocked() }
+    }
+
+    private fun cancelIdleCheckLocked() {
         idleCheckJob?.cancel()
         idleCheckJob = null
     }
 
+    /** Atomically excludes new references and removes this exact idle session from its owner map. */
+    fun tryCloseIfIdle(removeFromOwner: () -> Boolean): Boolean = synchronized(lifecycleLock) {
+        if (closing || refCount.get() > 0 || isGenerating) return@synchronized false
+        closing = true
+        if (!removeFromOwner()) {
+            closing = false
+            return@synchronized false
+        }
+        cancelIdleCheckLocked()
+        true
+    }
+
     fun cleanup() {
+        synchronized(lifecycleLock) {
+            closing = true
+            cancelIdleCheckLocked()
+        }
         val generationToCancel = detachCurrentGeneration()
-        val idleToCancel = idleCheckJob
-        idleCheckJob = null
         generationToCancel?.cancel()
-        idleToCancel?.cancel()
     }
 
     private data class CurrentGeneration(
@@ -200,4 +316,9 @@ class ConversationSession(
         fun matches(other: GenerationLease): Boolean =
             lease.epoch == other.epoch && lease.job === other.job
     }
+
+    private data class Installation(
+        val lease: GenerationLease,
+        val previous: Job?,
+    )
 }

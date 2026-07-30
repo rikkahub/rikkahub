@@ -1,5 +1,10 @@
 package me.rerere.rikkahub.ui.pages.chat
 
+import me.rerere.rikkahub.data.ai.agent.routing.AgentIntent
+import me.rerere.rikkahub.data.ai.agent.routing.AgentRoutingSnapshotCodec
+import me.rerere.rikkahub.data.ai.agent.routing.AgentRoutingSnapshotDecodeResult
+import me.rerere.rikkahub.data.ai.agent.routing.AgentRoutingSnapshotError
+import me.rerere.rikkahub.data.ai.agent.routing.InputTrust
 import me.rerere.rikkahub.data.db.entity.AgentApprovalEntity
 import me.rerere.rikkahub.data.db.entity.AgentRunEntity
 import me.rerere.rikkahub.data.db.entity.AgentStepEntity
@@ -31,12 +36,41 @@ data class ChildRunPresentation(
     val findings: String,
 )
 
+enum class AgentRunRoutingKind {
+    AUTO,
+    LEGACY,
+    UNAVAILABLE,
+}
+
+enum class AgentRunRoutingDegradedReason {
+    MALFORMED,
+    TOO_LARGE,
+    UNSUPPORTED,
+    INVALID,
+}
+
+/** Content-free routing facts safe for the active card and Run Center. */
+data class AgentRunRoutingPresentation(
+    val kind: AgentRunRoutingKind,
+    val intent: AgentIntent? = null,
+    val inputTrust: InputTrust? = null,
+    /** Only allow-listed router codes reach the UI. Unknown values are represented by null. */
+    val reasonCode: String? = null,
+    val toolCount: Int = 0,
+    val visibleToolNames: List<String> = emptyList(),
+    val toolNamesTruncated: Boolean = false,
+    val permissionDigest: String? = null,
+    val policyVersion: String? = null,
+    val legacyMode: String? = null,
+    val degradedReason: AgentRunRoutingDegradedReason? = null,
+)
+
 data class AgentRunPresentation(
     val runId: String,
     val status: String,
     val statusDescription: String?,
     val model: String?,
-    val mode: String?,
+    val routing: AgentRunRoutingPresentation,
     val runtimeVersion: String?,
     val maxSteps: Int?,
     val completedSteps: Int,
@@ -64,6 +98,17 @@ data class AgentRunTimelineItem(
 
 fun AgentRunEntity.toPresentation(): AgentRunPresentation = AgentRunDetail(this, emptyList(), emptyList(), emptyList()).toPresentation()
 
+/** Never combines an old detail payload with a replacement active run. */
+internal fun selectActiveRunPresentation(
+    activeRun: AgentRunEntity?,
+    activeRunDetail: AgentRunDetail?,
+): AgentRunPresentation? = activeRun?.let { current ->
+    activeRunDetail
+        ?.takeIf { it.run.id == current.id }
+        ?.toPresentation()
+        ?: current.toPresentation()
+}
+
 fun AgentRunDetail.toPresentation(): AgentRunPresentation {
     val config = run.configSnapshotJson.decodeOrNull<AgentRunConfigSnapshot>()
     val runSummary = run.summaryJson?.decodeOrNull<AgentRunSummary>()
@@ -79,7 +124,7 @@ fun AgentRunDetail.toPresentation(): AgentRunPresentation {
         status = run.status.statusLabel(),
         statusDescription = run.status.statusDescription(),
         model = config?.modelId,
-        mode = config?.agentMode,
+        routing = run.configSnapshotJson.toRoutingPresentation(),
         runtimeVersion = config?.runtimeVersion,
         maxSteps = config?.maxSteps,
         completedSteps = completedSteps,
@@ -98,6 +143,53 @@ fun AgentRunDetail.toPresentation(): AgentRunPresentation {
             )
         },
     )
+}
+
+private fun String.toRoutingPresentation(): AgentRunRoutingPresentation =
+    when (val decoded = AgentRoutingSnapshotCodec.decode(this)) {
+        is AgentRoutingSnapshotDecodeResult.Auto -> {
+            val routing = decoded.routing
+            val visibleNames = routing.resolvedToolNames
+                .take(MAX_VISIBLE_TOOL_NAMES)
+                .map { it.take(MAX_VISIBLE_TOOL_NAME_LENGTH) }
+            AgentRunRoutingPresentation(
+                kind = AgentRunRoutingKind.AUTO,
+                intent = routing.intent,
+                inputTrust = routing.inputTrust,
+                reasonCode = routing.reasonCode.takeIf(KNOWN_ROUTING_REASON_CODES::contains),
+                toolCount = routing.resolvedToolNames.size,
+                visibleToolNames = visibleNames,
+                toolNamesTruncated = routing.resolvedToolNames.size > visibleNames.size ||
+                    routing.resolvedToolNames.zip(visibleNames).any { (full, visible) -> full != visible },
+                permissionDigest = routing.permissionDigest.auditPreview(),
+                policyVersion = routing.version,
+            )
+        }
+
+        is AgentRoutingSnapshotDecodeResult.Legacy -> AgentRunRoutingPresentation(
+            kind = AgentRunRoutingKind.LEGACY,
+            legacyMode = decoded.config.agentMode,
+        )
+
+        is AgentRoutingSnapshotDecodeResult.Invalid -> AgentRunRoutingPresentation(
+            kind = AgentRunRoutingKind.UNAVAILABLE,
+            degradedReason = decoded.error.toPresentationReason(),
+        )
+    }
+
+private fun AgentRoutingSnapshotError.toPresentationReason(): AgentRunRoutingDegradedReason = when (this) {
+    AgentRoutingSnapshotError.MALFORMED_CONFIG -> AgentRunRoutingDegradedReason.MALFORMED
+    AgentRoutingSnapshotError.CONFIG_TOO_LARGE -> AgentRunRoutingDegradedReason.TOO_LARGE
+    AgentRoutingSnapshotError.UNSUPPORTED_VERSION -> AgentRunRoutingDegradedReason.UNSUPPORTED
+    AgentRoutingSnapshotError.INVALID_ROUTING,
+    AgentRoutingSnapshotError.INVALID_LEGACY_MODE,
+    -> AgentRunRoutingDegradedReason.INVALID
+}
+
+private fun String.auditPreview(): String = if (length <= MAX_AUDIT_VALUE_LENGTH) {
+    this
+} else {
+    take(20) + "…" + takeLast(8)
 }
 
 private fun AgentRunDetail.timelineItems(): List<AgentRunTimelineItem> {
@@ -238,3 +330,19 @@ private fun String.statusDescription(): String? = when (this) {
 private inline fun <reified T> String.decodeOrNull(): T? = runCatching {
     JsonInstant.decodeFromString<T>(this)
 }.getOrNull()
+
+private const val MAX_VISIBLE_TOOL_NAMES = 8
+private const val MAX_VISIBLE_TOOL_NAME_LENGTH = 48
+private const val MAX_AUDIT_VALUE_LENGTH = 40
+
+private val KNOWN_ROUTING_REASON_CODES = setOf(
+    "empty_or_inert_request",
+    "ambiguous_request",
+    "untrusted_execution_downgraded",
+    "workspace_not_available",
+    "explicit_mutation",
+    "confirmation_required",
+    "missing_action_target",
+    "explicit_exploration",
+    "general_answer",
+)

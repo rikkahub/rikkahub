@@ -15,5 +15,5 @@ class LocalToolProvider(
         ctx.assistant.localTools.isNotEmpty()
 
     override suspend fun provide(ctx: ToolResolveContext): List<Tool> =
-        localTools.getTools(ctx.assistant.localTools)
+        localTools.getTools(ctx.assistant.localTools, ctx.settings)
 }

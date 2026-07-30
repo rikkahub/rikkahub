@@ -78,6 +78,8 @@ class GenerationHandler(
         isSubagentRun: Boolean = false,
         allowParallelToolCalls: Boolean = true,
         useClientGeneratedToolExecutionIdentity: Boolean = false,
+        providerIdleTimeoutMillis: Long = 45_000L,
+        defaultToolTimeoutMillis: Long = 30_000L,
     ): Flow<GenerationChunk> = agentLoop.run(
         settings = settings,
         model = model,
@@ -102,6 +104,8 @@ class GenerationHandler(
         isSubagentRun = isSubagentRun,
         allowParallelToolCalls = allowParallelToolCalls,
         useClientGeneratedToolExecutionIdentity = useClientGeneratedToolExecutionIdentity,
+        providerIdleTimeoutMillis = providerIdleTimeoutMillis,
+        defaultToolTimeoutMillis = defaultToolTimeoutMillis,
     )
 
     fun translateText(

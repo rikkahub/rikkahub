@@ -1,10 +1,15 @@
 package me.rerere.rikkahub.data.event
 
 import me.rerere.ai.ui.UIMessage
+import me.rerere.tts.provider.TTSProviderSetting
 import kotlin.uuid.Uuid
 
 sealed class AppEvent {
-    data class Speak(val text: String) : AppEvent()
+    data class Speak(
+        val text: String,
+        val provider: TTSProviderSetting? = null,
+        val providerFrozen: Boolean = false,
+    ) : AppEvent()
     data object OpenUsageAccessSettings : AppEvent()
 
     /** MCP OAuth 授权完成后经 deep link 回传的结果。 */
@@ -14,9 +19,18 @@ sealed class AppEvent {
         val error: String?,
     ) : AppEvent()
 
+    /** Reliably establishes notification ownership before any lossy stream updates. */
+    data class ChatGenerationStarted(
+        val conversationId: Uuid,
+        val runId: String,
+        val phaseEpoch: Long,
+    ) : AppEvent()
+
     /** 聊天生成过程中的流式更新，由 ChatNotificationManager 消费用于 Live Update 通知。 */
     data class ChatGenerationUpdate(
         val conversationId: Uuid,
+        val runId: String,
+        val phaseEpoch: Long,
         val lastMessage: UIMessage,
         val senderName: String,
     ) : AppEvent()
@@ -27,7 +41,12 @@ sealed class AppEvent {
      */
     data class ChatGenerationEnded(
         val conversationId: Uuid,
+        val runId: String,
+        val phaseEpoch: Long,
         val senderName: String,
         val contentPreview: String?,
     ) : AppEvent()
+
+    /** Reliably clears generation notification ownership when its conversation is deleted. */
+    data class ChatGenerationDeleted(val conversationId: Uuid) : AppEvent()
 }

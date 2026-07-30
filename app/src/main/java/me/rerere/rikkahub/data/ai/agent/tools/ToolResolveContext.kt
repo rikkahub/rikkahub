@@ -6,11 +6,23 @@ import me.rerere.rikkahub.data.ai.agent.permission.PermissionPolicy
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.workspace.Workspace
+
+sealed interface WorkspaceToolPolicy {
+    data object Live : WorkspaceToolPolicy
+    data object FrozenAbsent : WorkspaceToolPolicy
+    data class Frozen(
+        val workspace: Workspace,
+        val approvalOverrides: Map<String, Boolean>,
+    ) : WorkspaceToolPolicy
+}
 
 data class ToolResolveContext(
     val settings: Settings,
     val assistant: Assistant,
     val conversation: Conversation,
+    val workspace: Workspace? = null,
+    val workspaceToolPolicy: WorkspaceToolPolicy = WorkspaceToolPolicy.Live,
     val mode: AgentMode = AgentMode.CHAT,
     val permissionPolicy: PermissionPolicy = PermissionPolicy.compatibleDefault(),
     /**

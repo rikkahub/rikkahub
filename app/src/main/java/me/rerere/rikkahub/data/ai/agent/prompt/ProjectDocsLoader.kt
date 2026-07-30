@@ -17,7 +17,7 @@ class ProjectDocsLoader(
      * @param workspaceId workspace id
      * @param cwd absolute rootfs path like /workspace or /workspace/foo；可为 null
      */
-    suspend fun load(workspaceId: String, cwd: String?): String {
+    suspend fun load(workspaceId: String, cwd: String?, expectedRoot: String? = null): String {
         val candidates = candidatePaths(cwd)
         val sections = mutableListOf<Pair<String, String>>()
         var total = 0
@@ -25,7 +25,7 @@ class ProjectDocsLoader(
         for (dir in candidates) {
             for (name in fileNames) {
                 val relative = joinPath(dir, name)
-                val content = readQuietly(workspaceId, relative) ?: continue
+                val content = readQuietly(workspaceId, relative, expectedRoot) ?: continue
                 val remaining = maxChars - total
                 if (remaining <= 0) break
                 val clipped = if (content.length > remaining) {
@@ -54,8 +54,8 @@ class ProjectDocsLoader(
         }.trim()
     }
 
-    private suspend fun readQuietly(workspaceId: String, path: String): String? = try {
-        workspaceRepository.readText(workspaceId, path).takeIf { it.isNotBlank() }
+    private suspend fun readQuietly(workspaceId: String, path: String, expectedRoot: String?): String? = try {
+        workspaceRepository.readText(workspaceId, path, expectedRoot).takeIf { it.isNotBlank() }
     } catch (e: Exception) {
         Log.d(TAG, "project doc not found or unreadable: $path (${e.message})")
         null

@@ -29,10 +29,12 @@ class McpToolProvider(
     }
 
     override suspend fun provideWithDescriptors(ctx: ToolResolveContext): List<DescribedTool> {
-        val allTools = mcpToolExecutor.getAllAvailableTools(ctx.assistant)
+        val allTools = mcpToolExecutor.getAllAvailableTools(ctx.settings, ctx.assistant)
         if (allTools.isEmpty()) return emptyList()
+        val frozenServers = ctx.settings.mcpServers.associateBy { it.id }
 
-        return allTools.map { (serverId, serverName, tool) ->
+        return allTools.mapNotNull { (serverId, serverName, tool) ->
+            val frozenServer = frozenServers[serverId] ?: return@mapNotNull null
             val exposedName = exposedToolName(serverId.toString(), serverName, tool.name)
             val exposedTool = Tool(
                 name = exposedName,
@@ -40,7 +42,7 @@ class McpToolProvider(
                 parameters = { tool.inputSchema },
                 needsApproval = { tool.needsApproval },
                 execute = {
-                    mcpToolExecutor.callTool(ctx.assistant, serverId, tool.name, it.jsonObject)
+                    mcpToolExecutor.callTool(ctx.assistant, frozenServer, tool.name, it.jsonObject)
                 },
             )
             DescribedTool(

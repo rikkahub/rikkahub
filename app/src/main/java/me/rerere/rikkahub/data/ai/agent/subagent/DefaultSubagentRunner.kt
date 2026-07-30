@@ -2,10 +2,13 @@ package me.rerere.rikkahub.data.ai.agent.subagent
 
 import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.effectiveCapabilityProfile
+import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.GenerationChunk
@@ -32,7 +35,6 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.rikkahub.data.model.ChildRunReport
 import me.rerere.rikkahub.data.model.toSnapshotSummary
 import me.rerere.rikkahub.data.repository.AgentRunRepository
-import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import kotlin.uuid.Uuid
 
 private const val TAG = "DefaultSubagentRunner"
@@ -44,7 +46,6 @@ class DefaultSubagentRunner(
     private val agentLoop: AgentLoop,
     private val toolRegistry: ToolRegistry,
     private val agentRunRepository: AgentRunRepository,
-    private val workspaceRepository: WorkspaceRepository,
     private val limits: ControlledSubagentLimits = ControlledSubagentLimits(),
 ) : SubagentRunner {
 
@@ -100,6 +101,9 @@ class DefaultSubagentRunner(
                 maxConcurrentChildren = limits.maxConcurrentChildren,
             )
             agentRunRepository.transitionRun(childRunId, setOf(AgentRunStatus.QUEUED), AgentRunStatus.PREFLIGHT)
+        } catch (error: CancellationException) {
+            withContext(NonCancellable) { agentRunRepository.cancelRun(childRunId) }
+            throw error
         } catch (error: IllegalArgumentException) {
             return rejected(error.message ?: "CHILD_RUN_REJECTED")
         }
@@ -108,6 +112,8 @@ class DefaultSubagentRunner(
             settings = settings,
             assistant = exploreAssistant,
             conversation = request.conversation,
+            workspace = request.workspace,
+            workspaceToolPolicy = request.workspaceToolPolicy,
             mode = request.spec.mode,
             permissionPolicy = PermissionPolicy.compatibleDefault(injectPromptForWorkspace = true),
             isSubagentRun = true,
@@ -125,6 +131,7 @@ class DefaultSubagentRunner(
                     allowedByDefault && allowedBySpec
                 }
         } catch (e: CancellationException) {
+            withContext(NonCancellable) { agentRunRepository.cancelRun(childRunId) }
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Failed to resolve explore tools", e)
@@ -148,30 +155,37 @@ class DefaultSubagentRunner(
                 multimodalInputRequested = false,
             ),
         )
-        if (preflight.codes.isNotEmpty()) {
-            agentRunRepository.recordStep(
-                id = Uuid.random().toString(),
-                runId = childRunId,
-                kind = "provider_preflight",
-                status = if (preflight.action == ProviderPreflightAction.BLOCK) AgentStepStatus.FAILED else AgentStepStatus.SUCCEEDED,
-                summary = AgentStepSummary("provider_preflight", preflight.codes.joinToString(",") { it.name }),
+        val requestModel: Model
+        val requestAssistant: Assistant
+        try {
+            if (preflight.codes.isNotEmpty()) {
+                agentRunRepository.recordStep(
+                    id = Uuid.random().toString(),
+                    runId = childRunId,
+                    kind = "provider_preflight",
+                    status = if (preflight.action == ProviderPreflightAction.BLOCK) AgentStepStatus.FAILED else AgentStepStatus.SUCCEEDED,
+                    summary = AgentStepSummary("provider_preflight", preflight.codes.joinToString(",") { it.name }),
+                )
+            }
+            if (preflight.action == ProviderPreflightAction.BLOCK) {
+                agentRunRepository.blockRun(
+                    childRunId,
+                    preflight.codes.joinToString("_") { it.name },
+                    category = "provider_capability",
+                )
+                return SubagentResult(childRunId, ChildRunReport(unresolved = preflight.codes.map { it.name }))
+            }
+            requestModel = if (preflight.allowNativeTools) model else model.copy(tools = emptySet())
+            requestAssistant = exploreAssistant.copy(
+                maxTokens = preflight.outputTokens,
+                streamOutput = preflight.streaming,
+                reasoningLevel = if (preflight.reasoning) exploreAssistant.reasoningLevel else ReasoningLevel.OFF,
             )
+            agentRunRepository.transitionRun(childRunId, setOf(AgentRunStatus.PREFLIGHT), AgentRunStatus.RUNNING)
+        } catch (error: CancellationException) {
+            withContext(NonCancellable) { agentRunRepository.cancelRun(childRunId) }
+            throw error
         }
-        if (preflight.action == ProviderPreflightAction.BLOCK) {
-            agentRunRepository.blockRun(
-                childRunId,
-                preflight.codes.joinToString("_") { it.name },
-                category = "provider_capability",
-            )
-            return SubagentResult(childRunId, ChildRunReport(unresolved = preflight.codes.map { it.name }))
-        }
-        val requestModel = if (preflight.allowNativeTools) model else model.copy(tools = emptySet())
-        val requestAssistant = exploreAssistant.copy(
-            maxTokens = preflight.outputTokens,
-            streamOutput = preflight.streaming,
-            reasoningLevel = if (preflight.reasoning) exploreAssistant.reasoningLevel else ReasoningLevel.OFF,
-        )
-        agentRunRepository.transitionRun(childRunId, setOf(AgentRunStatus.PREFLIGHT), AgentRunStatus.RUNNING)
 
         Log.i(
             TAG,
@@ -193,9 +207,7 @@ class DefaultSubagentRunner(
                     assistant = requestAssistant,
                     memories = emptyList(),
                     tools = if (preflight.allowFunctionTools) tools else emptyList(),
-                    workspace = request.assistant.workspaceId?.let { workspaceId ->
-                        workspaceRepository.getById(workspaceId.toString())?.toWorkspace()
-                    },
+                    workspace = request.workspace,
                     runRuntime = BudgetedChildRuntime(
                         PersistedAgentRunRuntime(agentRunRepository, childRunId),
                         budget.maxToolCalls,
@@ -235,9 +247,11 @@ class DefaultSubagentRunner(
             SubagentResult(childRunId, report)
         } catch (e: TimeoutCancellationException) {
             val report = ChildRunReport(unresolved = listOf("CHILD_DURATION_BUDGET_EXCEEDED"))
+            agentRunRepository.failRun(childRunId, "CHILD_DURATION_BUDGET_EXCEEDED", "controlled_child")
             agentRunRepository.updateRunSummary(childRunId, AgentRunSummary(childReport = report))
             SubagentResult(childRunId, report)
         } catch (e: CancellationException) {
+            withContext(NonCancellable) { agentRunRepository.cancelRun(childRunId) }
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Explore subagent failed", e)
@@ -246,6 +260,7 @@ class DefaultSubagentRunner(
                     if (e is ChildToolBudgetExceeded) "CHILD_TOOL_BUDGET_EXCEEDED" else "CHILD_EXECUTION_FAILED",
                 ),
             )
+            agentRunRepository.failRun(childRunId, report.unresolved.first(), "controlled_child")
             agentRunRepository.updateRunSummary(childRunId, AgentRunSummary(childReport = report))
             SubagentResult(
                 childRunId = childRunId,

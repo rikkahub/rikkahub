@@ -69,6 +69,9 @@ interface AgentRunDAO {
     @Query("SELECT * FROM agent_runs WHERE status IN (:statuses) ORDER BY updated_at DESC")
     suspend fun getActiveRuns(statuses: List<String>): List<AgentRunEntity>
 
+    @Query("SELECT * FROM agent_runs WHERE status = :status AND error_json = :errorJson ORDER BY updated_at ASC, id ASC")
+    suspend fun getRunsByStatusAndError(status: String, errorJson: String): List<AgentRunEntity>
+
     @Query("SELECT * FROM agent_steps WHERE run_id = :runId ORDER BY sequence ASC")
     suspend fun getSteps(runId: String): List<AgentStepEntity>
 
@@ -197,6 +200,18 @@ interface AgentRunDAO {
 
     @Query("UPDATE agent_runs SET summary_json = :summaryJson, updated_at = :updatedAt WHERE id = :id")
     suspend fun updateRunSummary(id: String, summaryJson: String, updatedAt: Long): Int
+
+    @Query(
+        "UPDATE agent_runs SET error_json = :newErrorJson, updated_at = :updatedAt " +
+            "WHERE id = :id AND status = :status AND error_json = :expectedErrorJson"
+    )
+    suspend fun updateRunErrorIfMatches(
+        id: String,
+        status: String,
+        expectedErrorJson: String,
+        newErrorJson: String,
+        updatedAt: Long,
+    ): Int
 
     @Query("""
         UPDATE tool_executions

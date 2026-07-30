@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
   <string name="about_page_github">Github</string>
   <string name="about_page_license">License</string>
   <string name="about_page_system">System</string>
@@ -1160,12 +1160,35 @@
   <string name="assistant_page_workspace">Workspace</string>
   <string name="assistant_page_workspace_desc">After binding, the Agent can use this workspace\'s files and sandbox capabilities</string>
   <string name="assistant_page_workspace_unbound">Not bound</string>
-  <string name="agent_mode_chat">Chat</string>
-  <string name="agent_mode_plan">Plan</string>
-  <string name="agent_mode_agent">Agent</string>
-  <string name="agent_mode_label">Mode: %1$s</string>
-  <string name="agent_mode_hint">Chat = full tools. Plan = read-only. Agent = execute after plan.</string>
-  <string name="agent_mode_workspace_not_ready">Workspace shell is not ready yet. Mode is saved and applies when READY.</string>
+  <string name="agent_mode_auto" tools:ignore="MissingTranslation">Auto</string>
+  <string name="agent_intent_answer" tools:ignore="MissingTranslation">Answer</string>
+  <string name="agent_intent_explore" tools:ignore="MissingTranslation">Explore</string>
+  <string name="agent_intent_execute" tools:ignore="MissingTranslation">Execute</string>
+  <string name="agent_intent_clarify" tools:ignore="MissingTranslation">Needs confirmation</string>
+  <string name="agent_intent_unknown" tools:ignore="MissingTranslation">Unknown</string>
+  <string name="agent_routing_auto_label" tools:ignore="MissingTranslation">Auto · %1$s</string>
+  <string name="agent_routing_legacy_label" tools:ignore="MissingTranslation">Legacy · %1$s</string>
+  <string name="agent_routing_unavailable_label" tools:ignore="MissingTranslation">Auto · Unavailable</string>
+  <string name="agent_routing_label" tools:ignore="MissingTranslation">Routing</string>
+  <string name="agent_routing_section" tools:ignore="MissingTranslation">AUTO routing snapshot</string>
+  <string name="agent_routing_trust" tools:ignore="MissingTranslation">Input trust</string>
+  <string name="agent_routing_trust_user_direct" tools:ignore="MissingTranslation">Direct user input</string>
+  <string name="agent_routing_trust_derived" tools:ignore="MissingTranslation">Derived, untrusted input</string>
+  <string name="agent_routing_reason" tools:ignore="MissingTranslation">Reason code</string>
+  <string name="agent_routing_reason_unknown" tools:ignore="MissingTranslation">Unknown routing reason</string>
+  <string name="agent_routing_tool_count" tools:ignore="MissingTranslation">Frozen tool count</string>
+  <string name="agent_routing_tools" tools:ignore="MissingTranslation">Frozen tools</string>
+  <string name="agent_routing_tools_none" tools:ignore="MissingTranslation">None</string>
+  <string name="agent_routing_permission_digest" tools:ignore="MissingTranslation">Permission digest</string>
+  <string name="agent_routing_policy_version" tools:ignore="MissingTranslation">Policy version</string>
+  <string name="agent_routing_legacy" tools:ignore="MissingTranslation">Compatibility</string>
+  <string name="agent_routing_legacy_description" tools:ignore="MissingTranslation">Created before AUTO routing; shown with its frozen legacy mode.</string>
+  <string name="agent_routing_degraded" tools:ignore="MissingTranslation">Degraded state</string>
+  <string name="agent_routing_degraded_malformed" tools:ignore="MissingTranslation">Snapshot could not be decoded.</string>
+  <string name="agent_routing_degraded_too_large" tools:ignore="MissingTranslation">Snapshot exceeds the supported audit size.</string>
+  <string name="agent_routing_degraded_unsupported" tools:ignore="MissingTranslation">Snapshot version is not supported.</string>
+  <string name="agent_routing_degraded_invalid" tools:ignore="MissingTranslation">Snapshot is incomplete or invalid.</string>
+  <string name="agent_routing_unknown" tools:ignore="MissingTranslation">Unknown</string>
   <string name="workspace_page_title">Workspace</string>
   <string name="workspace_page_create">Create Workspace</string>
   <string name="workspace_page_rename">Rename Workspace</string>

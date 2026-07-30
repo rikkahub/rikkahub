@@ -600,17 +600,54 @@ class AgentRunRepository(
         convergeRun(runId, AgentRunStatus.CANCELLED, AgentStepStatus.CANCELLED, ToolExecutionStatus.CANCELLED, timeSource.nowMillis())
     }
 
-    /** Marks in-flight work as interrupted after a process restart; it never attempts to resume tool calls. */
-    suspend fun interruptActiveRunsOnStartup(): Int {
+    /**
+     * Marks in-flight work as interrupted after a process restart; it never attempts to resume tool calls.
+     * [reconcilePresentation] runs before the startup gate opens so a new generation cannot race the
+     * interrupted Run's persisted message-card cleanup.
+     */
+    suspend fun interruptActiveRunsOnStartup(
+        reconcilePresentation: (suspend (List<AgentRunEntity>) -> Unit)? = null,
+    ): Int {
+        val recoveryGate = startupRecovery
         return try {
             val now = timeSource.nowMillis()
-            database.withTransaction {
-                dao.getActiveRuns(AgentRunStatus.ACTIVE.runStatusNames()).count { run ->
+            val pendingPresentationError = encodeError(
+                AgentRunError(STARTUP_PRESENTATION_PENDING_CODE, "lifecycle")
+            )
+            val newlyInterruptedRuns = database.withTransaction {
+                dao.getActiveRuns(AgentRunStatus.ACTIVE.runStatusNames()).filter { run ->
                     interruptRun(run.id, now)
                 }
             }
-        } finally {
-            startupRecovery.complete(Unit)
+            if (reconcilePresentation != null) {
+                // Include durable markers left by a process death between Run convergence and UI cleanup.
+                val pendingRuns = dao.getRunsByStatusAndError(
+                    AgentRunStatus.INTERRUPTED.name,
+                    pendingPresentationError,
+                )
+                reconcilePresentation(pendingRuns)
+                val reconciledError = encodeError(AgentRunError("PROCESS_INTERRUPTED", "lifecycle"))
+                database.withTransaction {
+                    pendingRuns.forEach { run ->
+                        check(
+                            dao.updateRunErrorIfMatches(
+                                id = run.id,
+                                status = AgentRunStatus.INTERRUPTED.name,
+                                expectedErrorJson = pendingPresentationError,
+                                newErrorJson = reconciledError,
+                                updatedAt = timeSource.nowMillis(),
+                            ) == 1
+                        ) { "Startup presentation marker changed for Run ${run.id}" }
+                    }
+                }
+            }
+            recoveryGate.complete(Unit)
+            newlyInterruptedRuns.size
+        } catch (error: Throwable) {
+            // Opening the gate after a partial presentation recovery lets a new Run overwrite
+            // unresolved cards. Fail closed for this process; the next startup can retry safely.
+            recoveryGate.completeExceptionally(error)
+            throw error
         }
     }
 
@@ -714,7 +751,7 @@ class AgentRunRepository(
         dao.cancelPendingApprovals(runId, AgentApprovalStatus.PENDING.name, AgentApprovalStatus.CANCELLED.name, now)
         val transitioned = dao.transitionRun(
             runId, AgentRunStatus.ACTIVE.runStatusNames(), AgentRunStatus.INTERRUPTED.name,
-            encodeError(AgentRunError("PROCESS_INTERRUPTED", "lifecycle")), null, now, null, now,
+            encodeError(AgentRunError(STARTUP_PRESENTATION_PENDING_CODE, "lifecycle")), null, now, null, now,
         ) == 1
         if (transitioned) recordRunFinished(runId, AgentRunStatus.INTERRUPTED, "lifecycle")
         return transitioned
@@ -842,6 +879,8 @@ class AgentRunRepository(
         }
     }
 }
+
+private const val STARTUP_PRESENTATION_PENDING_CODE = "PROCESS_INTERRUPTED_PENDING_PRESENTATION"
 
 private val SAFE_TOOL_NAME = Regex("[A-Za-z0-9_.:-]{1,128}")
 private val SAFE_TOOL_CALL_ID = Regex("[A-Za-z0-9_.:-]{1,128}")

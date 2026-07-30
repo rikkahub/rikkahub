@@ -14,15 +14,21 @@ import java.io.StringReader
 import java.io.StringWriter
 import kotlin.time.toJavaInstant
 
-class TemplateTransformer(
-    private val engine: PebbleEngine,
-    private val settingsStore: SettingsStore
-) : InputMessageTransformer {
+class TemplateTransformer : InputMessageTransformer {
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        val template = engine.getTemplate(ctx.assistant.id.toString())
+        // Compile the template carried by this generation's frozen Assistant instead of consulting
+        // the live SettingsStore-backed loader during an approval continuation.
+        val frozenTemplates = ctx.settings.assistants.associate {
+            it.id.toString() to it.messageTemplate
+        } + (ctx.assistant.id.toString() to ctx.assistant.messageTemplate)
+        val frozenEngine = PebbleEngine.Builder()
+            .loader(SnapshotAssistantTemplateLoader(frozenTemplates))
+            .autoEscaping(false)
+            .build()
+        val template = frozenEngine.getLiteralTemplate(ctx.assistant.messageTemplate)
         val timeZone = TimeZone.currentSystemDefault()
         return messages.map { message ->
             // 使用消息本身的发送时间而不是当前时间, 保证多次请求时渲染结果稳定, 不破坏 prompt 缓存
@@ -51,6 +57,20 @@ class TemplateTransformer(
             )
         }
     }
+}
+
+private class SnapshotAssistantTemplateLoader(
+    private val templates: Map<String, String>,
+) : Loader<String> {
+    override fun getReader(cacheKey: String?): Reader? =
+        templates[cacheKey]?.let(::StringReader)
+
+    override fun setCharset(charset: String?) = Unit
+    override fun setPrefix(prefix: String?) = Unit
+    override fun setSuffix(suffix: String?) = Unit
+    override fun resolveRelativePath(relativePath: String?, anchorPath: String?): String? = relativePath
+    override fun createCacheKey(templateName: String?): String? = templateName
+    override fun resourceExists(templateName: String?): Boolean = templateName in templates
 }
 
 class AssistantTemplateLoader(private val settingsStore: SettingsStore) : Loader<String> {

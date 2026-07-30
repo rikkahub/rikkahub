@@ -18,11 +18,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Cpu
+import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.agent.routing.AgentIntent
+import me.rerere.rikkahub.data.ai.agent.routing.InputTrust
 import me.rerere.rikkahub.data.db.entity.AgentApprovalEntity
 
 @Composable
@@ -31,6 +35,7 @@ fun AgentRunActiveCard(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val routingLabel = run.routing.displayLabel()
     Card(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -41,7 +46,7 @@ fun AgentRunActiveCard(
         ) {
             Icon(HugeIcons.Cpu, contentDescription = null, modifier = Modifier.size(20.dp))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("运行 · ${run.status}", style = MaterialTheme.typography.titleSmall)
+                Text("$routingLabel · ${run.status}", style = MaterialTheme.typography.titleSmall)
                 Text(
                     run.currentStep ?: run.waitingReason ?: "正在等待运行遥测",
                     style = MaterialTheme.typography.labelMedium,
@@ -51,7 +56,6 @@ fun AgentRunActiveCard(
                 Text(
                     listOfNotNull(
                         run.model,
-                        run.mode,
                         "${run.completedSteps}/${run.maxSteps ?: "?"} 步",
                     ).joinToString(" · ").ifBlank { "运行配置尚未写入" },
                     style = MaterialTheme.typography.labelSmall,
@@ -118,13 +122,21 @@ fun AgentRunDetailSheet(
                 item {
                     AgentRunSection("基本信息") {
                         AgentRunInfo("模型", presentation.model ?: "未记录")
-                        AgentRunInfo("模式", presentation.mode ?: "未记录")
-                        AgentRunInfo("步骤", presentation.maxSteps?.let { "${presentation.completedSteps}/$it" } ?: "${presentation.completedSteps}")
+                        AgentRunInfo(
+                            stringResource(R.string.agent_routing_label),
+                            presentation.routing.displayLabel(),
+                        )
+                        AgentRunInfo(
+                            "步骤",
+                            presentation.maxSteps?.let { "${presentation.completedSteps}/$it" }
+                                ?: "${presentation.completedSteps}",
+                        )
                         presentation.runtimeVersion?.let { AgentRunInfo("运行时", it) }
                         presentation.waitingReason?.let { AgentRunInfo("等待原因", it) }
                         presentation.failureCategory?.let { AgentRunInfo("失败分类", it) }
                     }
                 }
+                item { AgentRunRoutingSection(presentation.routing) }
                 if (presentation.children.isNotEmpty()) {
                     item {
                         AgentRunSection("子运行") {
@@ -141,7 +153,13 @@ fun AgentRunDetailSheet(
                         }
                     }
                 }
-                item { Text("步骤、工具与追踪", modifier = Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium) }
+                item {
+                    Text(
+                        "步骤、工具与追踪",
+                        modifier = Modifier.padding(horizontal = 24.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
                 if (presentation.timeline.isEmpty()) {
                     item {
                         Text(
@@ -158,6 +176,93 @@ fun AgentRunDetailSheet(
                 item { androidx.compose.foundation.layout.Spacer(Modifier.padding(bottom = 24.dp)) }
             }
             }
+        }
+    }
+}
+
+@Composable
+internal fun AgentRunRoutingPresentation.displayLabel(): String = when (kind) {
+    AgentRunRoutingKind.AUTO -> stringResource(
+        R.string.agent_routing_auto_label,
+        intent.intentLabel(),
+    )
+    AgentRunRoutingKind.LEGACY -> stringResource(
+        R.string.agent_routing_legacy_label,
+        legacyMode.safeLegacyModeLabel(),
+    )
+    AgentRunRoutingKind.UNAVAILABLE -> stringResource(R.string.agent_routing_unavailable_label)
+}
+
+@Composable
+private fun AgentIntent?.intentLabel(): String = when (this) {
+    AgentIntent.ANSWER -> stringResource(R.string.agent_intent_answer)
+    AgentIntent.EXPLORE -> stringResource(R.string.agent_intent_explore)
+    AgentIntent.EXECUTE -> stringResource(R.string.agent_intent_execute)
+    AgentIntent.CLARIFY -> stringResource(R.string.agent_intent_clarify)
+    null -> stringResource(R.string.agent_intent_unknown)
+}
+
+private fun String?.safeLegacyModeLabel(): String = when (this) {
+    "CHAT" -> "Chat"
+    "PLAN" -> "Plan"
+    "AGENT" -> "Agent"
+    else -> "Legacy"
+}
+
+@Composable
+internal fun AgentRunRoutingSection(routing: AgentRunRoutingPresentation) {
+    AgentRunSection(stringResource(R.string.agent_routing_section)) {
+        when (routing.kind) {
+            AgentRunRoutingKind.AUTO -> {
+                AgentRunInfo(
+                    stringResource(R.string.agent_routing_trust),
+                    when (routing.inputTrust) {
+                        InputTrust.USER_DIRECT -> stringResource(R.string.agent_routing_trust_user_direct)
+                        InputTrust.DERIVED_UNTRUSTED -> stringResource(R.string.agent_routing_trust_derived)
+                        null -> stringResource(R.string.agent_routing_unknown)
+                    },
+                )
+                AgentRunInfo(
+                    stringResource(R.string.agent_routing_reason),
+                    routing.reasonCode ?: stringResource(R.string.agent_routing_reason_unknown),
+                )
+                AgentRunInfo(
+                    stringResource(R.string.agent_routing_tool_count),
+                    routing.toolCount.toString(),
+                )
+                val noToolsLabel = stringResource(R.string.agent_routing_tools_none)
+                val toolNames = routing.visibleToolNames.joinToString(", ")
+                    .ifBlank { noToolsLabel }
+                    .let { if (routing.toolNamesTruncated) "$it …" else it }
+                AgentRunInfo(stringResource(R.string.agent_routing_tools), toolNames)
+                AgentRunInfo(
+                    stringResource(R.string.agent_routing_permission_digest),
+                    routing.permissionDigest ?: stringResource(R.string.agent_routing_unknown),
+                )
+                AgentRunInfo(
+                    stringResource(R.string.agent_routing_policy_version),
+                    routing.policyVersion ?: stringResource(R.string.agent_routing_unknown),
+                )
+            }
+
+            AgentRunRoutingKind.LEGACY -> AgentRunInfo(
+                stringResource(R.string.agent_routing_legacy),
+                stringResource(R.string.agent_routing_legacy_description),
+            )
+
+            AgentRunRoutingKind.UNAVAILABLE -> AgentRunInfo(
+                stringResource(R.string.agent_routing_degraded),
+                when (routing.degradedReason) {
+                    AgentRunRoutingDegradedReason.MALFORMED -> stringResource(R.string.agent_routing_degraded_malformed)
+                    AgentRunRoutingDegradedReason.TOO_LARGE -> stringResource(R.string.agent_routing_degraded_too_large)
+                    AgentRunRoutingDegradedReason.UNSUPPORTED -> stringResource(
+                        R.string.agent_routing_degraded_unsupported
+                    )
+                    AgentRunRoutingDegradedReason.INVALID,
+                    null,
+                    -> stringResource(R.string.agent_routing_degraded_invalid)
+                },
+            )
         }
     }
 }

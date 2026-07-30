@@ -258,7 +258,14 @@ class AgentRunRepositoryTest {
         repository.recordToolExecution("tool", "child", "step", "safe_tool", "call", "hash")
 
         assertEquals("parent", database.agentRunDao().getRun("child")?.parentRunId)
-        assertEquals(2, repository.interruptActiveRunsOnStartup())
+        var reconciledRunIds = emptySet<String>()
+        assertEquals(2, repository.interruptActiveRunsOnStartup { interruptedRuns ->
+            reconciledRunIds = interruptedRuns.mapTo(hashSetOf()) { it.id }
+            assertTrue(interruptedRuns.all {
+                database.agentRunDao().getRun(it.id)?.status == AgentRunStatus.INTERRUPTED.name
+            })
+        })
+        assertEquals(setOf("parent", "child"), reconciledRunIds)
         assertEquals(AgentRunStatus.INTERRUPTED.name, database.agentRunDao().getRun("child")?.status)
         assertEquals(
             ToolExecutionStatus.CANCELLED.name,
@@ -377,7 +384,14 @@ class AgentRunRepositoryTest {
         assertTrue(runtime.approvedFor(execution, tool, binding))
 
         runtime.toolStarted(execution)
-        runtime.toolFinished(execution, ToolExecutionStatus.SUCCEEDED, listOf(UIMessagePart.Text("secret output")))
+        assertTrue(runtime.toolFinished(
+            execution,
+            ToolExecutionStatus.SUCCEEDED,
+            listOf(UIMessagePart.Text("secret output")),
+        ))
+        val traceCount = repository.getTraceEvents("run").size
+        assertFalse(runtime.toolFinished(execution, ToolExecutionStatus.SUCCEEDED))
+        assertEquals(traceCount, repository.getTraceEvents("run").size)
         val persisted = database.agentRunDao().getToolExecution(execution!!)
         assertEquals(ToolExecutionStatus.SUCCEEDED.name, persisted?.status)
         assertFalse(persisted?.summaryJson.orEmpty().contains("a.txt"))
@@ -535,7 +549,7 @@ class AgentRunRepositoryTest {
         assertTrue(repository.resumeRunAfterApproval("run"))
         assertTrue(runtime.approvedFor(execution, tool, expiredBinding.copy(expiresAt = 300_150)))
         assertTrue(runtime.toolStarted(execution))
-        runtime.toolFinished(execution, ToolExecutionStatus.SUCCEEDED)
+        assertTrue(runtime.toolFinished(execution, ToolExecutionStatus.SUCCEEDED))
         assertEquals(ToolExecutionStatus.SUCCEEDED.name, repository.getToolExecution(execution)?.status)
         assertFalse(repository.getApprovals("run").any { it.status == AgentApprovalStatus.PENDING.name })
     }
@@ -559,7 +573,7 @@ class AgentRunRepositoryTest {
         assertTrue(approvedRuntime.approvalResolved(pendingApprovalId(approvedExecution), approvedExecution, true))
         assertTrue(repository.resumeRunAfterApproval("approved"))
         assertTrue(approvedRuntime.toolStarted(approvedExecution))
-        approvedRuntime.toolFinished(approvedExecution, ToolExecutionStatus.SUCCEEDED)
+        assertTrue(approvedRuntime.toolFinished(approvedExecution, ToolExecutionStatus.SUCCEEDED))
         approvedRuntime.finished("no_tools")
         assertEquals(AgentRunStatus.SUCCEEDED.name, repository.getRun("approved")?.status)
         assertEquals(ToolExecutionStatus.SUCCEEDED.name, repository.getToolExecution(approvedExecution)?.status)

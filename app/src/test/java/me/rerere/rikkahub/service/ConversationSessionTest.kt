@@ -10,11 +10,16 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.data.model.Conversation
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
 
 class ConversationSessionTest {
@@ -126,6 +131,149 @@ class ConversationSessionTest {
 
         val nextLease = session.install(lazyJob(scope))
         assertTrue(nextLease.epoch > lease.epoch)
+        session.cleanup()
+    }
+
+    @Test
+    fun `conditional install succeeds only for the unchanged epoch and does not start the job`() = runBlocking {
+        val scope = testScope()
+        val session = testSession(scope)
+        val expectedEpoch = session.epochToken()
+        val bodyStarted = CompletableDeferred<Unit>()
+        val candidate = scope.launch(start = CoroutineStart.LAZY) {
+            bodyStarted.complete(Unit)
+            awaitCancellation()
+        }
+
+        val lease = session.installIfEpoch(candidate, expectedEpoch)
+            ?: error("Unchanged epoch must install")
+
+        assertTrue(lease.epoch > expectedEpoch)
+        assertEquals(lease.epoch, session.epochToken())
+        assertSame(candidate, session.getJob())
+        assertTrue(session.isCurrent(lease))
+        assertFalse(candidate.isActive)
+        assertFalse(bodyStarted.isCompleted)
+        assertTrue(candidate.start())
+        assertTrue(bodyStarted.isCompleted)
+        session.cleanup()
+    }
+
+    @Test
+    fun `stale approval cannot replace or cancel a newer send and leaves its job untouched`() = runBlocking {
+        val scope = testScope()
+        val session = testSession(scope)
+        val approvalEpoch = session.epochToken()
+        val newerLease = session.install(lazyJob(scope))
+        assertTrue(newerLease.job.start())
+        val staleApprovalJob = lazyJob(scope)
+
+        val staleLease = session.installIfEpoch(staleApprovalJob, approvalEpoch)
+
+        assertNull(staleLease)
+        assertFalse(staleApprovalJob.isActive)
+        assertFalse(staleApprovalJob.isCompleted)
+        assertFalse(staleApprovalJob.isCancelled)
+        assertTrue(session.isCurrent(newerLease))
+        assertTrue(newerLease.job.isActive)
+        assertSame(newerLease.job, session.getJob())
+        assertEquals(newerLease.epoch, session.epochToken())
+        staleApprovalJob.cancel()
+        session.cleanup()
+    }
+
+    @Test
+    fun `concurrent conditional installs allow exactly one winner`() = runBlocking {
+        val scope = testScope()
+        val session = testSession(scope)
+        val expectedEpoch = session.epochToken()
+        val firstJob = lazyJob(scope)
+        val secondJob = lazyJob(scope)
+        val ready = CountDownLatch(2)
+        val start = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(2)
+        try {
+            val first = executor.submit<GenerationLease?> {
+                ready.countDown()
+                start.await()
+                session.installIfEpoch(firstJob, expectedEpoch)
+            }
+            val second = executor.submit<GenerationLease?> {
+                ready.countDown()
+                start.await()
+                session.installIfEpoch(secondJob, expectedEpoch)
+            }
+            assertTrue(ready.await(5, TimeUnit.SECONDS))
+            start.countDown()
+
+            val results = listOf(
+                first.get(5, TimeUnit.SECONDS),
+                second.get(5, TimeUnit.SECONDS),
+            )
+            assertEquals(1, results.count { it != null })
+            val winner = results.filterNotNull().single()
+            val loser = if (winner.job === firstJob) secondJob else firstJob
+            assertTrue(session.isCurrent(winner))
+            assertSame(winner.job, session.getJob())
+            assertEquals(winner.epoch, session.epochToken())
+            assertFalse(loser.isActive)
+            assertFalse(loser.isCompleted)
+            assertFalse(loser.isCancelled)
+            loser.cancel()
+        } finally {
+            session.cleanup()
+            firstJob.cancel()
+            secondJob.cancel()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
+    fun `negative conditional epoch is rejected without installing the job`() = runBlocking {
+        val scope = testScope()
+        val session = testSession(scope)
+        val candidate = lazyJob(scope)
+
+        try {
+            session.installIfEpoch(candidate, -1)
+            fail("Negative epoch must be rejected")
+        } catch (_: IllegalArgumentException) {
+            // Expected.
+        }
+
+        assertNull(session.getJob())
+        assertFalse(candidate.isActive)
+        assertFalse(candidate.isCompleted)
+        candidate.cancel()
+        session.cleanup()
+    }
+
+    @Test
+    fun `cleanup invalidates optimistic approval epochs`() = runBlocking {
+        val scope = testScope()
+        val session = testSession(scope)
+        val staleEpoch = session.epochToken()
+        val candidate = lazyJob(scope)
+
+        session.cleanup()
+
+        assertTrue(session.epochToken() > staleEpoch)
+        assertNull(session.installIfEpoch(candidate, staleEpoch))
+        assertFalse(candidate.isActive)
+        candidate.cancel()
+    }
+
+    @Test
+    fun `installing a replacement clears processing status immediately`() = runBlocking {
+        val scope = testScope()
+        val session = testSession(scope)
+        session.processingStatus.value = "old generation is working"
+        val candidate = lazyJob(scope)
+
+        session.install(candidate)
+
+        assertNull(session.processingStatus.value)
+        candidate.cancel()
         session.cleanup()
     }
 

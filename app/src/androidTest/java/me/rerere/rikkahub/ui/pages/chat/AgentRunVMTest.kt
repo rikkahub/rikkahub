@@ -80,4 +80,17 @@ class AgentRunVMTest {
             viewModel.detail.filter { it == AgentRunDetailState.Missing }.first(),
         )
     }
+
+    @Test
+    fun activeDetailConvergesOnReplacementRunIdentity() = runBlocking {
+        repository.createRun("run-a", "conversation", "assistant", AgentRunConfigSnapshot())
+        repository.recordStep("step-a", "run-a", "model", AgentStepStatus.RUNNING)
+        val viewModel = AgentRunVM("conversation", repository)
+        assertEquals("run-a", viewModel.activeDetail.filterNotNull().first().run.id)
+
+        repository.replaceActiveRun("run-b", "conversation", "assistant", AgentRunConfigSnapshot())
+
+        assertEquals("run-b", viewModel.activeRun.filterNotNull().first { it.id == "run-b" }.id)
+        assertEquals("run-b", viewModel.activeDetail.filterNotNull().first { it.run.id == "run-b" }.run.id)
+    }
 }

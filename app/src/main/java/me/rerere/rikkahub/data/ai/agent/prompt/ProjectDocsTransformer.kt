@@ -6,6 +6,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.TransformerContext
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.workspace.Workspace
 import me.rerere.workspace.WorkspaceShellStatus
 
 /**
@@ -16,6 +17,13 @@ class ProjectDocsTransformer(
     private val workspaceRepository: WorkspaceRepository,
     private val loader: ProjectDocsLoader = ProjectDocsLoader(workspaceRepository),
 ) : InputMessageTransformer {
+    suspend fun snapshot(workspace: Workspace?, cwd: String?): String? {
+        if (workspace?.shellStatus != WorkspaceShellStatus.READY) return null
+        return loader.load(workspace.id, cwd, workspace.root).takeIf(String::isNotBlank)
+    }
+
+    fun fromSnapshot(docs: String?): InputMessageTransformer = FrozenProjectDocsTransformer(docs)
+
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,
@@ -24,11 +32,18 @@ class ProjectDocsTransformer(
         val workspace = workspaceRepository.getById(workspaceId) ?: return messages
         if (workspace.shellStatus != WorkspaceShellStatus.READY.name) return messages
 
-        val docs = loader.load(workspaceId, ctx.workspaceCwd)
+        val docs = loader.load(workspaceId, ctx.workspaceCwd, workspace.root)
         if (docs.isBlank()) return messages
 
         return appendToSystem(messages, "\n\n$docs")
     }
+}
+
+private class FrozenProjectDocsTransformer(
+    private val docs: String?,
+) : InputMessageTransformer {
+    override suspend fun transform(ctx: TransformerContext, messages: List<UIMessage>): List<UIMessage> =
+        docs?.let { appendToSystem(messages, "\n\n$it") } ?: messages
 }
 
 internal fun appendToSystem(messages: List<UIMessage>, extra: String): List<UIMessage> {

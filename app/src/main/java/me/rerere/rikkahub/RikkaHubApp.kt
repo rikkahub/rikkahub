@@ -34,6 +34,8 @@ import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.WebServerService
+import me.rerere.rikkahub.service.ChatNotificationManager
+import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -106,8 +108,7 @@ class RikkaHubApp : Application() {
         get<AppScope>().launch {
             runCatching {
                 val store = get<SettingsStore>()
-                val current = store.settingsFlowRaw.first()
-                store.update(current.copy(launchCount = current.launchCount + 1))
+                store.update { current -> current.copy(launchCount = current.launchCount + 1) }
                 Log.i(TAG, "incrementLaunchCount: ${store.settingsFlowRaw.first().launchCount}")
             }.onFailure {
                 Log.e(TAG, "incrementLaunchCount failed", it)
@@ -174,9 +175,17 @@ class RikkaHubApp : Application() {
     }
 
     private fun interruptActiveAgentRuns() {
-        get<AgentRunRepository>().beginStartupRecovery()
+        val repository = get<AgentRunRepository>()
+        repository.beginStartupRecovery()
         get<AppScope>().launch(Dispatchers.IO) {
-            runCatching { get<AgentRunRepository>().interruptActiveRunsOnStartup() }
+            runCatching {
+                repository.interruptActiveRunsOnStartup { interruptedRuns ->
+                    val conversationIds = get<ChatService>()
+                        .reconcileInterruptedRunsOnStartup(interruptedRuns)
+                    val notificationManager = get<ChatNotificationManager>()
+                    conversationIds.forEach(notificationManager::reconcileInterruptedGeneration)
+                }
+            }
                 .onFailure { Log.e(TAG, "interruptActiveAgentRuns failed", it) }
         }
     }

@@ -12,16 +12,21 @@ import io.ktor.server.sse.heartbeat
 import io.ktor.server.sse.sse
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
+import kotlinx.coroutines.flow.takeWhile
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.ConversationSessionHandle
 import me.rerere.rikkahub.web.BadRequestException
+import me.rerere.rikkahub.web.ConflictException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.web.dto.ConversationDto
 import me.rerere.rikkahub.web.dto.ConversationNodeUpdateEvent
@@ -166,7 +171,9 @@ fun Route.conversationRoutes(
             val uuid = call.parameters["id"].toUuid("conversation id")
             val conversation = requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
 
-            conversationRepo.deleteConversation(conversation)
+            if (!chatService.deleteConversation(conversation.id)) {
+                throw ConflictException("Conversation generation did not stop in time")
+            }
             call.respond(HttpStatusCode.NoContent)
         }
 
@@ -210,28 +217,28 @@ fun Route.conversationRoutes(
             val request = call.receive<UpdateConversationInjectionsRequest>()
             requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
 
-            chatService.initializeConversation(uuid)
-            val conversation = chatService.getConversationFlow(uuid).first()
-            val settings = settingsStore.settingsFlow.first()
-            val assistant = settings.assistants.firstOrNull { it.id == conversation.assistantId }
-                ?: throw NotFoundException("Assistant not found")
-            if (!assistant.allowConversationPromptInjection) {
-                throw BadRequestException("Conversation prompt injection is not enabled for this assistant")
+            val updated = chatService.withInitializedConversationSession(uuid) { handle ->
+                val conversation = handle.conversation.value
+                val settings = settingsStore.settingsFlow.first()
+                val assistant = settings.assistants.firstOrNull { it.id == conversation.assistantId }
+                    ?: throw NotFoundException("Assistant not found")
+                if (!assistant.allowConversationPromptInjection) {
+                    throw BadRequestException("Conversation prompt injection is not enabled for this assistant")
+                }
+
+                val (modeInjectionIds, lorebookIds) = validateConversationInjectionIds(
+                    settings = settings,
+                    modeInjectionIds = request.modeInjectionIds,
+                    lorebookIds = request.lorebookIds,
+                )
+                val updatedConversation = conversation.copy(
+                    modeInjectionIds = modeInjectionIds,
+                    lorebookIds = lorebookIds,
+                )
+                chatService.saveConversation(uuid, updatedConversation)
+                updatedConversation.toDto(handle.generationJob.value != null)
             }
-
-            val (modeInjectionIds, lorebookIds) = validateConversationInjectionIds(
-                settings = settings,
-                modeInjectionIds = request.modeInjectionIds,
-                lorebookIds = request.lorebookIds,
-            )
-            val updatedConversation = conversation.copy(
-                modeInjectionIds = modeInjectionIds,
-                lorebookIds = lorebookIds,
-            )
-            chatService.saveConversation(uuid, updatedConversation)
-
-            val isGenerating = chatService.getGenerationJobStateFlow(uuid).first() != null
-            call.respond(HttpStatusCode.OK, updatedConversation.toDto(isGenerating))
+            call.respond(HttpStatusCode.OK, updated)
         }
 
         // POST /api/conversations/{id}/move - Move conversation to another assistant
@@ -280,15 +287,17 @@ fun Route.conversationRoutes(
                 filesManager.isManagedUploadDocumentUri(url)
             }?.let { throw BadRequestException(it) }
 
-            chatService.initializeConversation(uuid)
-            applyInitialConversationInjections(
-                chatService = chatService,
-                settingsStore = settingsStore,
-                conversationId = uuid,
-                modeInjectionIds = request.modeInjectionIds,
-                lorebookIds = request.lorebookIds,
-            )
-            chatService.sendMessage(uuid, request.parts, answer = true)
+            chatService.withInitializedConversationSession(uuid) { handle ->
+                applyInitialConversationInjections(
+                    chatService = chatService,
+                    settingsStore = settingsStore,
+                    conversationId = uuid,
+                    conversation = handle.conversation.value,
+                    modeInjectionIds = request.modeInjectionIds,
+                    lorebookIds = request.lorebookIds,
+                )
+                chatService.sendMessage(uuid, request.parts, answer = true)
+            }
 
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }
@@ -303,8 +312,9 @@ fun Route.conversationRoutes(
                 filesManager.isManagedUploadDocumentUri(url)
             }?.let { throw BadRequestException(it) }
 
-            chatService.initializeConversation(uuid)
-            chatService.editMessage(uuid, messageId, request.parts)
+            chatService.withInitializedConversationSession(uuid) {
+                chatService.editMessage(uuid, messageId, request.parts)
+            }
 
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }
@@ -316,8 +326,9 @@ fun Route.conversationRoutes(
             val messageId = request.messageId.toUuid("message id")
 
             requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
-            chatService.initializeConversation(uuid)
-            val fork = chatService.forkConversationAtMessage(uuid, messageId)
+            val fork = chatService.withInitializedConversationSession(uuid) {
+                chatService.forkConversationAtMessage(uuid, messageId)
+            }
 
             call.respond(HttpStatusCode.Created, ForkConversationResponse(conversationId = fork.id.toString()))
         }
@@ -328,8 +339,9 @@ fun Route.conversationRoutes(
             val messageId = call.parameters["messageId"].toUuid("message id")
 
             requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
-            chatService.initializeConversation(uuid)
-            chatService.deleteMessage(uuid, messageId)
+            chatService.withInitializedConversationSession(uuid) {
+                chatService.deleteMessage(uuid, messageId)
+            }
 
             call.respond(HttpStatusCode.OK, mapOf("status" to "deleted"))
         }
@@ -341,8 +353,9 @@ fun Route.conversationRoutes(
             val request = call.receive<SelectMessageNodeRequest>()
 
             requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
-            chatService.initializeConversation(uuid)
-            chatService.selectMessageNode(uuid, nodeId, request.selectIndex)
+            chatService.withInitializedConversationSession(uuid) {
+                chatService.selectMessageNode(uuid, nodeId, request.selectIndex)
+            }
 
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }
@@ -354,12 +367,14 @@ fun Route.conversationRoutes(
             val messageId = request.messageId.toUuid("message id")
 
             requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
-            val conversation = chatService.getConversationFlow(uuid).first()
-            val node = conversation.getMessageNodeByMessageId(messageId)
-            val message = node?.messages?.find { it.id == messageId }
-                ?: throw NotFoundException("Message not found")
+            chatService.withInitializedConversationSession(uuid) { handle ->
+                val conversation = handle.conversation.value
+                val node = conversation.getMessageNodeByMessageId(messageId)
+                val message = node?.messages?.find { it.id == messageId }
+                    ?: throw NotFoundException("Message not found")
 
-            chatService.regenerateAtMessage(uuid, message)
+                chatService.regenerateAtMessage(uuid, message)
+            }
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }
 
@@ -377,19 +392,21 @@ fun Route.conversationRoutes(
             val uuid = call.parameters["id"].toUuid("conversation id")
             val request = call.receive<ToolApprovalRequest>()
             requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
-            chatService.handleToolApproval(
-                uuid,
-                UIMessagePart.Tool(
-                    toolCallId = request.toolCallId,
-                    toolName = request.toolName,
-                    input = request.input,
-                    toolExecutionId = request.toolExecutionId,
-                    approvalId = request.approvalId,
-                ),
-                request.approved,
-                request.reason,
-                request.answer,
-            )
+            chatService.withInitializedConversationSession(uuid) {
+                chatService.handleToolApproval(
+                    uuid,
+                    UIMessagePart.Tool(
+                        toolCallId = request.toolCallId,
+                        toolName = request.toolName,
+                        input = request.input,
+                        toolExecutionId = request.toolExecutionId,
+                        approvalId = request.approvalId,
+                    ),
+                    request.approved,
+                    request.reason,
+                    request.answer,
+                )
+            }
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }
 
@@ -399,23 +416,19 @@ fun Route.conversationRoutes(
             val uuid = runCatching { Uuid.parse(id) }.getOrNull() ?: return@sse
 
             requireCurrentAssistantConversation(conversationRepo, settingsStore, uuid)
-            chatService.initializeConversation(uuid)
-            chatService.addConversationReference(uuid)
+            chatService.withInitializedConversationSession(uuid) { sessionHandle ->
+                heartbeat {
+                    period = 1.seconds
+                }
 
-            heartbeat {
-                period = 1.seconds
-            }
-
-            try {
                 var sequence = 0L
                 var previousDto: ConversationDto? = null
 
                 val knownErrorIds = chatService.errors.value.map { it.id }.toMutableSet()
 
                 val conversationEvents = combine(
-                    chatService.getConversationFlow(uuid),
-                    chatService
-                        .getGenerationJobStateFlow(uuid)
+                    sessionHandle.conversation,
+                    sessionHandle.generationJob
                         .map { it != null }
                         .distinctUntilChanged()
                 ) { conversation, isGenerating ->
@@ -435,49 +448,57 @@ fun Route.conversationRoutes(
                     ConversationStreamPayload.BatchErrors(events)
                 }
 
-                merge(conversationEvents, errorEvents).collect { payload ->
-                    when (payload) {
-                        is ConversationStreamPayload.Conversation -> {
-                            sequence += 1
-                            val currentDto = payload.value
-                            val nodeDiff = previousDto?.singleNodeDiffOrNull(currentDto)
-                            if (nodeDiff != null) {
-                                val json = JsonInstant.encodeToString(
-                                    ConversationNodeUpdateEvent(
-                                        seq = sequence,
-                                        conversationId = currentDto.id,
-                                        nodeId = nodeDiff.node.id,
-                                        nodeIndex = nodeDiff.nodeIndex,
-                                        node = nodeDiff.node,
-                                        updateAt = currentDto.updateAt,
-                                        isGenerating = currentDto.isGenerating
-                                    )
-                                )
-                                send(data = json, event = "node_update")
-                            } else {
-                                val json = JsonInstant.encodeToString(
-                                    ConversationSnapshotEvent(
-                                        seq = sequence,
-                                        conversation = currentDto
-                                    )
-                                )
-                                send(data = json, event = "snapshot")
-                            }
-                            previousDto = currentDto
-                        }
+                val deletionEvents = conversationRepo
+                    .observeConversationExistsById(uuid)
+                    .distinctUntilChanged()
+                    .filter { exists -> !exists }
+                    .map { ConversationStreamPayload.Deleted }
 
-                        is ConversationStreamPayload.BatchErrors -> {
-                            payload.messages.forEach { message ->
-                                val json = JsonInstant.encodeToString(
-                                    ErrorEvent(message = message)
-                                )
-                                send(data = json, event = "error")
+                merge(conversationEvents, errorEvents, deletionEvents)
+                    .takeWhile { payload -> payload !is ConversationStreamPayload.Deleted }
+                    .collect { payload ->
+                        when (payload) {
+                            is ConversationStreamPayload.Conversation -> {
+                                sequence += 1
+                                val currentDto = payload.value
+                                val nodeDiff = previousDto?.singleNodeDiffOrNull(currentDto)
+                                if (nodeDiff != null) {
+                                    val json = JsonInstant.encodeToString(
+                                        ConversationNodeUpdateEvent(
+                                            seq = sequence,
+                                            conversationId = currentDto.id,
+                                            nodeId = nodeDiff.node.id,
+                                            nodeIndex = nodeDiff.nodeIndex,
+                                            node = nodeDiff.node,
+                                            updateAt = currentDto.updateAt,
+                                            isGenerating = currentDto.isGenerating
+                                        )
+                                    )
+                                    send(data = json, event = "node_update")
+                                } else {
+                                    val json = JsonInstant.encodeToString(
+                                        ConversationSnapshotEvent(
+                                            seq = sequence,
+                                            conversation = currentDto
+                                        )
+                                    )
+                                    send(data = json, event = "snapshot")
+                                }
+                                previousDto = currentDto
                             }
+
+                            is ConversationStreamPayload.BatchErrors -> {
+                                payload.messages.forEach { message ->
+                                    val json = JsonInstant.encodeToString(
+                                        ErrorEvent(message = message)
+                                    )
+                                    send(data = json, event = "error")
+                                }
+                            }
+
+                            ConversationStreamPayload.Deleted -> Unit
                         }
                     }
-                }
-            } finally {
-                chatService.removeConversationReference(uuid)
             }
         }
     }
@@ -486,6 +507,20 @@ fun Route.conversationRoutes(
 private sealed interface ConversationStreamPayload {
     data class Conversation(val value: ConversationDto) : ConversationStreamPayload
     data class BatchErrors(val messages: List<String>) : ConversationStreamPayload
+    data object Deleted : ConversationStreamPayload
+}
+
+private suspend fun <T> ChatService.withInitializedConversationSession(
+    conversationId: Uuid,
+    block: suspend (ConversationSessionHandle) -> T,
+): T {
+    val handle = acquireConversationSessionHandle(conversationId)
+    return try {
+        initializeConversation(conversationId)
+        block(handle)
+    } finally {
+        handle.close()
+    }
 }
 
 private suspend fun requireCurrentAssistantConversation(
@@ -528,6 +563,7 @@ private suspend fun applyInitialConversationInjections(
     chatService: ChatService,
     settingsStore: SettingsStore,
     conversationId: Uuid,
+    conversation: Conversation,
     modeInjectionIds: List<String>?,
     lorebookIds: List<String>?,
 ) {
@@ -535,7 +571,6 @@ private suspend fun applyInitialConversationInjections(
         return
     }
 
-    val conversation = chatService.getConversationFlow(conversationId).first()
     val settings = settingsStore.settingsFlow.first()
     val assistant = settings.assistants.firstOrNull { it.id == conversation.assistantId }
         ?: throw NotFoundException("Assistant not found")

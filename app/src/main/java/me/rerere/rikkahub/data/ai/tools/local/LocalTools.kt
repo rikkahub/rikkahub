@@ -2,7 +2,8 @@ package me.rerere.rikkahub.data.ai.tools.local
 
 import android.content.Context
 import me.rerere.ai.core.Tool
-import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.getSelectedTTSProvider
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.tts.provider.TTSManager
 
@@ -10,13 +11,10 @@ class LocalTools(
     private val context: Context,
     private val eventBus: AppEventBus,
     private val ttsManager: TTSManager,
-    private val settingsStore: SettingsStore,
 ) {
     val timeTool by lazy { buildTimeInfoTool() }
 
     val clipboardTool by lazy { buildClipboardTool(context) }
-
-    val ttsTool by lazy { buildTextToSpeechTool(eventBus, ttsManager, settingsStore) }
 
     val askUserTool by lazy { buildAskUserTool() }
 
@@ -26,7 +24,7 @@ class LocalTools(
 
     val calendarCreateTool by lazy { buildCalendarCreateTool(context) }
 
-    fun getTools(options: List<LocalToolOption>): List<Tool> {
+    fun getTools(options: List<LocalToolOption>, settings: Settings): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.TimeInfo)) {
             tools.add(timeTool)
@@ -35,7 +33,11 @@ class LocalTools(
             tools.add(clipboardTool)
         }
         if (options.contains(LocalToolOption.Tts)) {
-            tools.add(ttsTool)
+            val provider = settings.getSelectedTTSProvider()
+            val promptGuidance = provider
+                ?.let(ttsManager::getPromptGuidance)
+                .orEmpty()
+            tools.add(buildTextToSpeechTool(eventBus, provider, promptGuidance))
         }
         if (options.contains(LocalToolOption.AskUser)) {
             tools.add(askUserTool)

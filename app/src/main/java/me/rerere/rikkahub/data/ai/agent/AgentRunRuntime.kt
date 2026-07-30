@@ -50,7 +50,7 @@ interface AgentRunRuntime {
         output: List<UIMessagePart> = emptyList(),
         error: String? = null,
         artifact: ToolArtifactReference? = null,
-    )
+    ): Boolean
     suspend fun contextPlanned(plan: ContextPlan)
     suspend fun contextBlocked(plan: ContextPlan)
     suspend fun modelCallStarted(stepId: String?)
@@ -83,7 +83,7 @@ object NoOpAgentRunRuntime : AgentRunRuntime {
         output: List<UIMessagePart>,
         error: String?,
         artifact: ToolArtifactReference?,
-    ) = Unit
+    ) = true
     override suspend fun contextPlanned(plan: ContextPlan) = Unit
     override suspend fun contextBlocked(plan: ContextPlan) = Unit
     override suspend fun modelCallStarted(stepId: String?) = Unit
@@ -226,14 +226,14 @@ class PersistedAgentRunRuntime(
         output: List<UIMessagePart>,
         error: String?,
         artifact: ToolArtifactReference?,
-    ) {
-        if (executionId == null) return
+    ): Boolean {
+        if (executionId == null) return false
         val text = JsonInstant.encodeToString(output)
         val existing = repository.getToolExecution(executionId)
         val summary = existing?.summaryJson?.let {
             runCatching { JsonInstant.decodeFromString<ToolExecutionSummary>(it) }.getOrNull()
         } ?: ToolExecutionSummary()
-        repository.transitionToolExecution(
+        val transitioned = repository.transitionToolExecution(
             executionId,
             setOf(ToolExecutionStatus.PENDING, ToolExecutionStatus.AUTHORIZED, ToolExecutionStatus.RUNNING),
             status,
@@ -247,6 +247,7 @@ class PersistedAgentRunRuntime(
                 outputArtifactId = artifact?.artifactId,
             ),
         )
+        if (!transitioned) return false
         safeTrace(
             AgentTraceEventType.TOOL_FINISHED,
             when (status) {
@@ -268,6 +269,7 @@ class PersistedAgentRunRuntime(
                 else -> AgentTraceErrorCategory.TOOL
             },
         )
+        return true
     }
 
     override suspend fun contextPlanned(plan: ContextPlan) {

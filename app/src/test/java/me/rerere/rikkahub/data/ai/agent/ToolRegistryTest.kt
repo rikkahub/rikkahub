@@ -13,6 +13,8 @@ import me.rerere.rikkahub.data.ai.agent.routing.AgentIntent
 import me.rerere.rikkahub.data.ai.agent.routing.InputTrust
 import me.rerere.rikkahub.data.ai.agent.routing.ToolNameCollisionException
 import me.rerere.rikkahub.data.ai.agent.tools.providers.McpToolProvider
+import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
+import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.mcp.McpTool
 import me.rerere.rikkahub.data.ai.mcp.McpToolExecutor
 import me.rerere.rikkahub.data.datastore.Settings
@@ -42,10 +44,20 @@ class ToolRegistryTest {
             }
     }
 
-    private fun ctx(mode: AgentMode = AgentMode.CHAT): ToolResolveContext {
-        val assistant = Assistant(id = Uuid.random(), name = "t")
+    private fun ctx(
+        mode: AgentMode = AgentMode.CHAT,
+        mcpServerIds: Set<Uuid> = emptySet(),
+    ): ToolResolveContext {
+        val assistant = Assistant(id = Uuid.random(), name = "t", mcpServers = mcpServerIds)
         return ToolResolveContext(
-            settings = Settings(),
+            settings = Settings(
+                mcpServers = mcpServerIds.map { serverId ->
+                    McpServerConfig.StreamableHTTPServer(
+                        id = serverId,
+                        commonOptions = McpCommonOptions(name = "server"),
+                    )
+                },
+            ),
             assistant = assistant,
             conversation = Conversation.ofId(id = Uuid.random(), assistantId = assistant.id),
             mode = mode,
@@ -220,11 +232,11 @@ class ToolRegistryTest {
         val executor = object : McpToolExecutor {
             var availableTools = emptyList<Triple<Uuid, String, McpTool>>()
 
-            override fun getAllAvailableTools(assistant: Assistant) = availableTools
+            override fun getAllAvailableTools(settings: Settings, assistant: Assistant) = availableTools
 
             override suspend fun callTool(
                 assistant: Assistant,
-                serverId: Uuid,
+                server: McpServerConfig,
                 toolName: String,
                 args: JsonObject,
             ): List<UIMessagePart> = emptyList()
@@ -235,7 +247,8 @@ class ToolRegistryTest {
                 McpToolProvider(executor),
             ),
         )
-        val context = ctx(AgentMode.PLAN)
+        val serverId = Uuid.random()
+        val context = ctx(AgentMode.PLAN, setOf(serverId))
         val original = registry.resolveProfile(
             ctx = context,
             intent = AgentIntent.ANSWER,
@@ -254,7 +267,6 @@ class ToolRegistryTest {
             toolTimeoutMillis = 30_000,
             runTimeoutMillis = 600_000,
         )
-        val serverId = Uuid.random()
         val duplicate = Triple(serverId, "duplicate", McpTool(name = "inspect"))
         executor.availableTools = listOf(duplicate, duplicate)
 

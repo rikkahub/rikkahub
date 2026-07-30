@@ -57,4 +57,58 @@ class McpConnectionKeyTest {
         )
         assertEquals(manualAuthWithoutOAuth.connectionKey(), manualAuth.connectionKey())
     }
+
+    @Test
+    fun `frozen identity allows OAuth token rotation but rejects authority changes`() {
+        val oauth = McpOAuthState(
+            enabled = true,
+            clientId = "client",
+            tokenEndpoint = "https://example.com/token",
+            accessToken = "old-token",
+            refreshToken = "old-refresh",
+            expiresAt = 1L,
+        )
+        val planned = base.copy(commonOptions = base.commonOptions.copy(oauth = oauth))
+        val refreshed = planned.copy(
+            commonOptions = planned.commonOptions.copy(
+                oauth = oauth.copy(accessToken = "new-token", refreshToken = "new-refresh", expiresAt = 2L),
+            ),
+        )
+
+        assertEquals(planned.frozenConnectionKey(), refreshed.frozenConnectionKey())
+        assertNotEquals(
+            planned.frozenConnectionKey(),
+            refreshed.copy(url = "https://example.com/other").frozenConnectionKey(),
+        )
+        assertNotEquals(
+            planned.frozenConnectionKey(),
+            refreshed.copy(
+                commonOptions = refreshed.commonOptions.copy(
+                    oauth = refreshed.commonOptions.oauth?.copy(clientId = "other-client"),
+                ),
+            ).frozenConnectionKey(),
+        )
+    }
+
+    @Test
+    fun `frozen tool policy ignores metadata refresh but rejects approval drift`() {
+        val planned = base.copy(
+            commonOptions = base.commonOptions.copy(
+                tools = listOf(McpTool(name = "search", description = "old", needsApproval = false)),
+            ),
+        )
+        val metadataRefresh = planned.copy(
+            commonOptions = planned.commonOptions.copy(
+                tools = listOf(McpTool(name = "search", description = "new", needsApproval = false)),
+            ),
+        )
+        val stricter = metadataRefresh.copy(
+            commonOptions = metadataRefresh.commonOptions.copy(
+                tools = listOf(McpTool(name = "search", description = "new", needsApproval = true)),
+            ),
+        )
+
+        assertEquals(true, hasSameFrozenToolPolicy(planned, metadataRefresh, "search"))
+        assertEquals(false, hasSameFrozenToolPolicy(planned, stricter, "search"))
+    }
 }

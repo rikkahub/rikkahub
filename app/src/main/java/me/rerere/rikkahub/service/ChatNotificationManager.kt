@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.service
 
 import android.app.Application
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -31,6 +32,16 @@ import kotlin.uuid.Uuid
 // notify() 是 binder IPC 且系统本身会对高频更新限流，必须在应用侧节流
 private const val LIVE_UPDATE_NOTIFICATION_THROTTLE_MS = 1000L
 
+private data class GenerationPhase(val runId: String, val epoch: Long)
+
+internal fun shouldAcceptGenerationEnded(
+    latestRunId: String?,
+    latestPhaseEpoch: Long?,
+    endedRunId: String,
+    endedPhaseEpoch: Long,
+): Boolean = latestRunId == null ||
+    latestRunId == endedRunId && latestPhaseEpoch == endedPhaseEpoch
+
 /**
  * 订阅 [AppEventBus] 上的聊天生成事件，负责后台生成相关的系统通知
  * （Live Update 进度通知和生成完成通知）。
@@ -43,8 +54,23 @@ class ChatNotificationManager(
 ) {
     private val isForeground = MutableStateFlow(false)
     private val liveUpdateLastSentAt = ConcurrentHashMap<Uuid, Long>()
+    private val latestGenerationPhase = ConcurrentHashMap<Uuid, GenerationPhase>()
+
+    /** Clears OS/process-local generation state after durable startup reconciliation. */
+    fun reconcileInterruptedGeneration(conversationId: Uuid) {
+        latestGenerationPhase.remove(conversationId)
+        cancelLiveUpdateNotification(conversationId)
+    }
 
     init {
+        // No generation survives process death. Clear live cards left behind when the old process
+        // died after durable terminal persistence but before its Ended event was delivered.
+        runCatching {
+            context.getSystemService(NotificationManager::class.java)
+                .activeNotifications
+                .filter { it.notification.channelId == CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID }
+                .forEach { context.cancelNotification(it.id) }
+        }
         // ProcessLifecycleOwner 要求在主线程注册观察者
         appScope.launch {
             ProcessLifecycleOwner.get().lifecycle.addObserver(
@@ -60,15 +86,25 @@ class ChatNotificationManager(
         appScope.launch(Dispatchers.Default) {
             eventBus.events.collect { event ->
                 when (event) {
+                    is AppEvent.ChatGenerationStarted -> handleGenerationStarted(event)
                     is AppEvent.ChatGenerationUpdate -> handleGenerationUpdate(event)
                     is AppEvent.ChatGenerationEnded -> handleGenerationEnded(event)
+                    is AppEvent.ChatGenerationDeleted -> reconcileInterruptedGeneration(event.conversationId)
                     else -> {}
                 }
             }
         }
     }
 
+    private fun handleGenerationStarted(event: AppEvent.ChatGenerationStarted) {
+        latestGenerationPhase[event.conversationId] = GenerationPhase(event.runId, event.phaseEpoch)
+        // A replacement phase owns a fresh notification lifecycle. Clear the predecessor's
+        // ongoing card and throttle watermark even when its delayed Ended event is rejected.
+        cancelLiveUpdateNotification(event.conversationId)
+    }
+
     private fun handleGenerationUpdate(event: AppEvent.ChatGenerationUpdate) {
+        latestGenerationPhase[event.conversationId] = GenerationPhase(event.runId, event.phaseEpoch)
         if (isForeground.value) return
         val displaySetting = settingsStore.settingsFlow.value.displaySetting
         if (!displaySetting.enableNotificationOnMessageGeneration) return
@@ -83,6 +119,12 @@ class ChatNotificationManager(
     }
 
     private fun handleGenerationEnded(event: AppEvent.ChatGenerationEnded) {
+        val phase = GenerationPhase(event.runId, event.phaseEpoch)
+        val latestPhase = latestGenerationPhase[event.conversationId]
+        if (!shouldAcceptGenerationEnded(latestPhase?.runId, latestPhase?.epoch, phase.runId, phase.epoch)) return
+        // Keep the terminal watermark until the next reliable Started event. A delayed terminal event
+        // from an older phase must not become acceptable merely because the current notification closed.
+        latestGenerationPhase[event.conversationId] = phase
         cancelLiveUpdateNotification(event.conversationId)
 
         val contentPreview = event.contentPreview ?: return

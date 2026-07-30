@@ -3,9 +3,11 @@ package me.rerere.rikkahub.data.ai.agent.subagent
 import kotlinx.coroutines.flow.MutableStateFlow
 import me.rerere.rikkahub.data.ai.agent.AgentMode
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
+import me.rerere.rikkahub.data.ai.agent.tools.WorkspaceToolPolicy
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.workspace.Workspace
 import me.rerere.rikkahub.data.model.ChildRunBudgetSnapshot
 import me.rerere.rikkahub.data.model.ChildRunReport
 
@@ -89,6 +91,8 @@ data class SubagentRequest(
     val settings: Settings,
     val assistant: Assistant,
     val conversation: Conversation,
+    val workspace: Workspace? = null,
+    val workspaceToolPolicy: WorkspaceToolPolicy = WorkspaceToolPolicy.Live,
     val task: String,
     val parentRunId: String? = null,
     val spec: SubagentSpec = SubagentSpec(),

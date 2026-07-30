@@ -25,7 +25,6 @@ import me.rerere.rikkahub.data.ai.agent.tools.ToolProviderOrder
 import me.rerere.rikkahub.data.ai.agent.tools.ToolResolveContext
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
-import me.rerere.rikkahub.data.repository.WorkspaceRepository
 
 /**
  * 向主 Agent 暴露 [EXPLORE_SUBAGENT_TOOL_NAME]。
@@ -36,21 +35,21 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 class ExploreSubagentToolProvider(
     private val subagentRunner: () -> SubagentRunner,
     private val json: Json,
-    private val workspaceRepository: WorkspaceRepository,
     private val projectDocsTransformer: ProjectDocsTransformer,
 ) : ToolProvider {
-    private val exploreInputTransformers: List<InputMessageTransformer> by lazy {
-        listOf(
-            WorkspaceReminderTransformer(workspaceRepository),
-            projectDocsTransformer,
-        )
-    }
     override val order: Int = ToolProviderOrder.SUBAGENT
 
     override fun isEnabled(ctx: ToolResolveContext): Boolean =
         !ctx.isSubagentRun
 
-    override suspend fun provide(ctx: ToolResolveContext): List<Tool> = listOf(
+    override suspend fun provide(ctx: ToolResolveContext): List<Tool> {
+        val frozenProjectDocs = projectDocsTransformer.snapshot(ctx.workspace, ctx.conversation.workspaceCwd)
+        val frozenWorkspaceToolPolicy = ctx.workspaceToolPolicy
+        val exploreInputTransformers: List<InputMessageTransformer> = listOf(
+            WorkspaceReminderTransformer(),
+            projectDocsTransformer.fromSnapshot(frozenProjectDocs),
+        )
+        return listOf(
         Tool(
             name = EXPLORE_SUBAGENT_TOOL_NAME,
             description = """
@@ -117,6 +116,8 @@ class ExploreSubagentToolProvider(
                         settings = ctx.settings,
                         assistant = ctx.assistant,
                         conversation = ctx.conversation,
+                        workspace = ctx.workspace,
+                        workspaceToolPolicy = frozenWorkspaceToolPolicy,
                         task = task,
                         parentRunId = ctx.agentRunId,
                         spec = SubagentSpec(
@@ -144,5 +145,6 @@ class ExploreSubagentToolProvider(
                 listOf(UIMessagePart.Text(json.encodeToString(payload)))
             },
         )
-    )
+        )
+    }
 }

@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.chat
 
+import me.rerere.rikkahub.data.ai.agent.routing.AgentIntent
+import me.rerere.rikkahub.data.ai.agent.routing.AgentRoutingSnapshot
+import me.rerere.rikkahub.data.ai.agent.routing.InputTrust
 import me.rerere.rikkahub.data.db.entity.AgentApprovalEntity
 import me.rerere.rikkahub.data.db.entity.AgentRunEntity
 import me.rerere.rikkahub.data.db.entity.AgentStepEntity
@@ -22,6 +25,7 @@ import me.rerere.rikkahub.data.model.AgentTraceStatus
 import me.rerere.rikkahub.utils.JsonInstant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -58,7 +62,8 @@ class AgentRunPresentationTest {
 
         assertEquals("等待审批", presentation.status)
         assertEquals("gpt-test", presentation.model)
-        assertEquals("AGENT", presentation.mode)
+        assertEquals(AgentRunRoutingKind.LEGACY, presentation.routing.kind)
+        assertEquals("AGENT", presentation.routing.legacyMode)
         assertEquals(12, presentation.maxSteps)
         assertEquals(3, presentation.completedSteps)
         assertEquals("步骤 4 · tool", presentation.currentStep)
@@ -66,6 +71,84 @@ class AgentRunPresentationTest {
         assertEquals("workspace / read", presentation.timeline.single { it.label.startsWith("工具") }.summary)
         assertEquals("输出已脱敏（256 B）", presentation.timeline.single { it.label.startsWith("工具") }.outputSummary)
         assertFalse(presentation.toString().contains("do not render this"))
+    }
+
+    @Test
+    fun autoSnapshotsExposeFrozenRoutingAuditFacts() {
+        AgentIntent.entries.forEach { intent ->
+            val presentation = run(
+                status = AgentRunStatus.RUNNING.name,
+                config = autoConfig(
+                    intent = intent,
+                    reasonCode = if (intent == AgentIntent.EXECUTE) "explicit_mutation" else "general_answer",
+                    toolNames = listOf("workspace_read", "ask_user"),
+                ),
+            ).toPresentation()
+
+            assertEquals(AgentRunRoutingKind.AUTO, presentation.routing.kind)
+            assertEquals(intent, presentation.routing.intent)
+            assertEquals(InputTrust.USER_DIRECT, presentation.routing.inputTrust)
+            assertEquals(2, presentation.routing.toolCount)
+            assertEquals(listOf("ask_user", "workspace_read"), presentation.routing.visibleToolNames)
+            assertEquals("policy:v1", presentation.routing.permissionDigest)
+            assertEquals(AgentRoutingSnapshot.CURRENT_VERSION, presentation.routing.policyVersion)
+        }
+    }
+
+    @Test
+    fun unknownRoutingReasonNeverLeaksAndLongToolListsAreTruncated() {
+        val unknownReason = "internal_future_reason_42"
+        val presentation = run(
+            status = AgentRunStatus.RUNNING.name,
+            config = autoConfig(
+                intent = AgentIntent.EXPLORE,
+                reasonCode = unknownReason,
+                toolNames = (0..11).map { "tool_${it.toString().padStart(2, '0')}" },
+            ),
+        ).toPresentation()
+
+        assertNull(presentation.routing.reasonCode)
+        assertFalse(presentation.toString().contains(unknownReason))
+        assertEquals(12, presentation.routing.toolCount)
+        assertEquals(8, presentation.routing.visibleToolNames.size)
+        assertTrue(presentation.routing.toolNamesTruncated)
+    }
+
+    @Test
+    fun malformedSnapshotsUseGenericUnavailablePresentation() {
+        val presentation = run(AgentRunStatus.BLOCKED.name).copy(
+            configSnapshotJson = "{not-json",
+        ).toPresentation()
+
+        assertEquals(AgentRunRoutingKind.UNAVAILABLE, presentation.routing.kind)
+        assertEquals(AgentRunRoutingDegradedReason.MALFORMED, presentation.routing.degradedReason)
+        assertFalse(presentation.toString().contains("not-json"))
+    }
+
+    @Test
+    fun activePresentationRejectsDetailFromReplacedRun() {
+        val activeRun = run(AgentRunStatus.RUNNING.name).copy(id = "run-b")
+        val staleDetail = AgentRunDetail(
+            run = run(AgentRunStatus.RUNNING.name).copy(id = "run-a"),
+            steps = listOf(
+                AgentStepEntity(
+                    "old-step",
+                    "run-a",
+                    8,
+                    "stale",
+                    AgentStepStatus.RUNNING.name,
+                    createdAt = 0,
+                    updatedAt = 0,
+                ),
+            ),
+            tools = emptyList(),
+            approvals = emptyList(),
+        )
+
+        val presentation = selectActiveRunPresentation(activeRun, staleDetail)
+
+        assertEquals("run-b", presentation?.runId)
+        assertNull(presentation?.currentStep)
     }
 
     @Test
@@ -178,5 +261,25 @@ class AgentRunPresentationTest {
         summaryJson = summary?.let(JsonInstant::encodeToString),
         createdAt = 0,
         updatedAt = 1_500,
+    )
+
+    private fun autoConfig(
+        intent: AgentIntent,
+        reasonCode: String,
+        toolNames: List<String>,
+    ) = AgentRunConfigSnapshot(
+        modelId = "gpt-test",
+        toolPolicyVersion = AgentRoutingSnapshot.CURRENT_VERSION,
+        routing = AgentRoutingSnapshot.create(
+            intent = intent,
+            inputTrust = InputTrust.USER_DIRECT,
+            reasonCode = reasonCode,
+            resolvedToolNames = toolNames,
+            permissionDigest = "policy:v1",
+            executionContextDigest = "sha256:" + "a".repeat(64),
+            providerIdleTimeoutMillis = 30_000,
+            toolTimeoutMillis = 60_000,
+            runTimeoutMillis = 120_000,
+        ),
     )
 }

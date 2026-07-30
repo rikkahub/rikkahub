@@ -7,6 +7,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
@@ -41,19 +42,29 @@ internal class McpOAuthCoordinator(
     private val updateStatus: (Uuid, McpStatus) -> Unit,
 ) {
     private val authorizationJobs = ConcurrentHashMap<Uuid, Job>()
+    private val authorizationGenerations = ConcurrentHashMap<Uuid, Long>()
     private val refreshLocks = ConcurrentHashMap<Uuid, Mutex>()
 
     fun startAuthorization(config: McpServerConfig, context: Context) {
+        val generation = nextAuthorizationGeneration(config.id)
         authorizationJobs.remove(config.id)?.cancel()
         val job = appScope.launch {
             updateStatus(config.id, McpStatus.Authorizing)
             try {
-                authorize(config, context.applicationContext)
+                authorize(config, context.applicationContext, generation)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: McpClientUnavailableException) {
+                Log.i(TAG, "Discarded stale OAuth authorization for ${config.commonOptions.name}")
             } catch (e: Exception) {
                 Log.e(TAG, "OAuth authorization failed for ${config.commonOptions.name}", e)
-                updateStatus(config.id, McpStatus.Error.from(e, fallbackMessage = "OAuth authorization failed"))
+                val current = settingsStore.settingsFlow.value.mcpServers.find { it.id == config.id }
+                if (
+                    authorizationGenerations[config.id] == generation &&
+                    hasSameAuthorizationAuthority(current, config)
+                ) {
+                    updateStatus(config.id, McpStatus.Error.from(e, fallbackMessage = "OAuth authorization failed"))
+                }
             }
         }
         authorizationJobs[config.id] = job
@@ -61,17 +72,20 @@ internal class McpOAuthCoordinator(
     }
 
     fun cancelAuthorization(configId: Uuid) {
+        nextAuthorizationGeneration(configId)
         authorizationJobs.remove(configId)?.cancel()
         updateStatus(configId, McpStatus.NeedsAuthorization)
     }
 
     fun forget(configId: Uuid) {
+        nextAuthorizationGeneration(configId)
         authorizationJobs.remove(configId)?.cancel()
-        refreshLocks.remove(configId)
     }
 
     suspend fun clearAuthorization(config: McpServerConfig): McpServerConfig {
-        persistOAuthState(config.id, null)
+        nextAuthorizationGeneration(config.id)
+        authorizationJobs.remove(config.id)?.cancelAndJoin()
+        clearOAuthStateIfSameAuthority(config)
         return settingsStore.settingsFlow.value.mcpServers.find { it.id == config.id }
             ?: config.clone(commonOptions = config.commonOptions.copy(oauth = null))
     }
@@ -83,7 +97,7 @@ internal class McpOAuthCoordinator(
         val lock = refreshLocks.computeIfAbsent(configInput.id) { Mutex() }
         return lock.withLock {
             val config = settingsStore.settingsFlow.value.mcpServers.find { it.id == configInput.id }
-                ?: configInput
+                ?: throw McpClientUnavailableException("MCP server ${configInput.id} was removed")
             val oauth = config.commonOptions.oauth ?: return@withLock config
             if (!oauth.enabled || oauth.refreshToken.isNullOrBlank()) return@withLock config
 
@@ -93,7 +107,7 @@ internal class McpOAuthCoordinator(
 
             val tokenEndpoint = oauth.tokenEndpoint ?: return@withLock config
             val clientId = oauth.clientId ?: return@withLock config
-            runCatching {
+            try {
                 val token = oauthClient.refreshToken(
                     tokenEndpoint = tokenEndpoint,
                     clientId = clientId,
@@ -106,14 +120,79 @@ internal class McpOAuthCoordinator(
                     accessToken = token.accessToken,
                     refreshToken = token.refreshToken ?: oauth.refreshToken,
                     expiresAt = computeExpiry(token.expiresIn),
-                    scope = token.scope ?: oauth.scope,
+                    scope = oauth.scope,
                 )
-                persistOAuthState(config.id, updated)
-                config.clone(commonOptions = config.commonOptions.copy(oauth = updated))
-            }.getOrElse {
-                Log.w(TAG, "Token refresh failed for ${config.commonOptions.name}: ${it.message}")
+                persistRefreshedOAuthState(
+                    expectedConfig = config,
+                    expectedOAuth = oauth,
+                    updatedOAuth = updated,
+                ) ?: throw McpClientUnavailableException(
+                    "MCP configuration changed while refreshing credentials",
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: McpClientUnavailableException) {
+                throw error
+            } catch (error: Throwable) {
+                Log.w(TAG, "Token refresh failed for ${config.commonOptions.name}: ${error.message}")
                 config
             }
+        }
+    }
+
+    /** Refreshes rotating credentials only after the frozen Run authority and tool policy are validated. */
+    suspend fun ensureFreshTokenForFrozen(
+        expectedConfig: McpServerConfig,
+        toolName: String,
+    ): McpServerConfig {
+        val lock = refreshLocks.computeIfAbsent(expectedConfig.id) { Mutex() }
+        return lock.withLock {
+            val config = settingsStore.settingsFlow.value.mcpServers.find { it.id == expectedConfig.id }
+                ?: throw McpClientUnavailableException("MCP server ${expectedConfig.id} was removed")
+            if (
+                !hasSameFrozenConnectionIdentity(config, expectedConfig) ||
+                !hasSameFrozenToolPolicy(config, expectedConfig, toolName)
+            ) {
+                throw McpClientUnavailableException("MCP policy changed after the run was planned")
+            }
+
+            val oauth = config.commonOptions.oauth ?: return@withLock config
+            if (!oauth.enabled || oauth.refreshToken.isNullOrBlank()) return@withLock config
+            val expired = oauth.expiresAt > 0 &&
+                System.currentTimeMillis() >= oauth.expiresAt - TOKEN_REFRESH_LEEWAY_MS
+            if (!oauth.accessToken.isNullOrBlank() && !expired) return@withLock config
+            val tokenEndpoint = oauth.tokenEndpoint ?: return@withLock config
+            val clientId = oauth.clientId ?: return@withLock config
+
+            val token = try {
+                oauthClient.refreshToken(
+                    tokenEndpoint = tokenEndpoint,
+                    clientId = clientId,
+                    clientSecret = oauth.clientSecret,
+                    refreshToken = checkNotNull(oauth.refreshToken),
+                    resource = McpOAuthClient.canonicalResource(config.serverUrl),
+                    scope = oauth.scope,
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Log.w(TAG, "Token refresh failed for frozen MCP ${config.commonOptions.name}: ${error.message}")
+                return@withLock config
+            }
+            val updatedOAuth = oauth.copy(
+                accessToken = token.accessToken,
+                refreshToken = token.refreshToken ?: oauth.refreshToken,
+                expiresAt = computeExpiry(token.expiresIn),
+                scope = oauth.scope,
+            )
+            persistRefreshedOAuthState(
+                expectedConfig = expectedConfig,
+                expectedOAuth = oauth,
+                updatedOAuth = updatedOAuth,
+                toolName = toolName,
+            ) ?: throw McpClientUnavailableException(
+                "MCP policy changed while refreshing frozen credentials",
+            )
         }
     }
 
@@ -130,7 +209,11 @@ internal class McpOAuthCoordinator(
             .isSuccess
     }
 
-    private suspend fun authorize(config: McpServerConfig, context: Context) = withContext(Dispatchers.IO) {
+    private suspend fun authorize(
+        config: McpServerConfig,
+        context: Context,
+        generation: Long,
+    ) = withContext(Dispatchers.IO) {
         val serverUrl = config.serverUrl
         require(serverUrl.isNotBlank()) { "Server URL 为空，无法授权" }
 
@@ -165,9 +248,7 @@ internal class McpOAuthCoordinator(
         val pkce = oauthClient.generatePkce()
         val state = oauthClient.generateState()
         val resource = McpOAuthClient.canonicalResource(serverUrl)
-        persistOAuthState(
-            config.id,
-            (existing ?: McpOAuthState()).copy(
+        val pendingOAuth = (existing ?: McpOAuthState()).copy(
                 enabled = true,
                 clientId = clientId,
                 clientSecret = clientSecret,
@@ -176,7 +257,12 @@ internal class McpOAuthCoordinator(
                 registrationEndpoint = metadata.registrationEndpoint,
                 scope = scope,
             )
-        )
+        val stagedConfig = persistAuthorizationState(
+            expectedConfig = config,
+            expectedOAuth = existing,
+            updatedOAuth = pendingOAuth,
+            generation = generation,
+        ) ?: throw McpClientUnavailableException("MCP authorization became stale")
 
         val authorizationUrl = oauthClient.buildAuthorizationUrl(
             authorizationEndpoint = authorizationEndpoint,
@@ -201,21 +287,24 @@ internal class McpOAuthCoordinator(
             redirectUri = MCP_OAUTH_REDIRECT_URI,
             resource = resource,
         )
-        persistOAuthState(
-            config.id,
-            McpOAuthState(
+        val authorizedOAuth = McpOAuthState(
                 enabled = true,
                 clientId = clientId,
                 clientSecret = clientSecret,
                 authorizationEndpoint = authorizationEndpoint,
                 tokenEndpoint = tokenEndpoint,
                 registrationEndpoint = metadata.registrationEndpoint,
-                scope = token.scope ?: scope,
+                scope = canonicalOAuthScope(token.scope ?: scope),
                 accessToken = token.accessToken,
                 refreshToken = token.refreshToken,
                 expiresAt = computeExpiry(token.expiresIn),
             )
-        )
+        persistAuthorizationState(
+            expectedConfig = stagedConfig,
+            expectedOAuth = pendingOAuth,
+            updatedOAuth = authorizedOAuth,
+            generation = generation,
+        ) ?: throw McpClientUnavailableException("MCP authorization changed before token persistence")
 
     }
 
@@ -240,15 +329,83 @@ internal class McpOAuthCoordinator(
         callback.await()
     }
 
-    private suspend fun persistOAuthState(configId: Uuid, oauth: McpOAuthState?) {
+    private suspend fun clearOAuthStateIfSameAuthority(expectedConfig: McpServerConfig): McpServerConfig? {
+        var persisted: McpServerConfig? = null
         settingsStore.update { old ->
-            old.copy(
-                mcpServers = old.mcpServers.map { server ->
-                    if (server.id != configId) server
-                    else server.clone(commonOptions = server.commonOptions.copy(oauth = oauth))
-                }
+            val latest = old.mcpServers.find { it.id == expectedConfig.id }
+            if (!hasSameAuthorizationAuthority(latest, expectedConfig)) return@update old
+            val replacement = checkNotNull(latest).clone(
+                commonOptions = latest.commonOptions.copy(oauth = null),
             )
+            persisted = replacement
+            old.copy(mcpServers = old.mcpServers.map { server ->
+                if (server.id == expectedConfig.id) replacement else server
+            })
         }
+        return persisted
+    }
+
+    private suspend fun persistAuthorizationState(
+        expectedConfig: McpServerConfig,
+        expectedOAuth: McpOAuthState?,
+        updatedOAuth: McpOAuthState,
+        generation: Long,
+    ): McpServerConfig? {
+        var persisted: McpServerConfig? = null
+        settingsStore.update { old ->
+            val latest = old.mcpServers.find { it.id == expectedConfig.id }
+            if (
+                authorizationGenerations[expectedConfig.id] != generation ||
+                !hasSameAuthorizationAuthority(latest, expectedConfig) ||
+                latest?.commonOptions?.oauth != expectedOAuth
+            ) {
+                return@update old
+            }
+            val current = checkNotNull(latest)
+            val replacement = current.clone(
+                commonOptions = current.commonOptions.copy(oauth = updatedOAuth),
+            )
+            persisted = replacement
+            old.copy(mcpServers = old.mcpServers.map { server ->
+                if (server.id == expectedConfig.id) replacement else server
+            })
+        }
+        return persisted
+    }
+
+    private fun nextAuthorizationGeneration(configId: Uuid): Long =
+        authorizationGenerations.compute(configId) { _, current -> (current ?: 0L) + 1L }!!
+
+    /** Atomically publishes a refresh only while its authority and source credential are still current. */
+    private suspend fun persistRefreshedOAuthState(
+        expectedConfig: McpServerConfig,
+        expectedOAuth: McpOAuthState,
+        updatedOAuth: McpOAuthState,
+        toolName: String? = null,
+    ): McpServerConfig? {
+        var persisted: McpServerConfig? = null
+        settingsStore.update { old ->
+            val latest = old.mcpServers.find { it.id == expectedConfig.id }
+            if (
+                latest == null ||
+                latest.commonOptions.oauth != expectedOAuth ||
+                !hasSameFrozenConnectionIdentity(latest, expectedConfig) ||
+                toolName != null && !hasSameFrozenToolPolicy(latest, expectedConfig, toolName)
+            ) {
+                old
+            } else {
+                val replacement = latest.clone(
+                    commonOptions = latest.commonOptions.copy(oauth = updatedOAuth),
+                )
+                persisted = replacement
+                old.copy(
+                    mcpServers = old.mcpServers.map { server ->
+                        if (server.id == expectedConfig.id) replacement else server
+                    },
+                )
+            }
+        }
+        return persisted
     }
 
     private fun computeExpiry(expiresIn: Long?): Long =

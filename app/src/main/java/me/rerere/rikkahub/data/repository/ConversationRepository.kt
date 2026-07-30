@@ -10,6 +10,8 @@ import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
@@ -39,7 +41,14 @@ class ConversationRepository(
     companion object {
         private const val PAGE_SIZE = 20
         private const val INITIAL_LOAD_SIZE = 40
+        private const val PERSISTENCE_MUTEX_STRIPES = 64
     }
+
+    /** Serializes the Room transaction with its external FTS side effect. */
+    private val persistenceMutexes = List(PERSISTENCE_MUTEX_STRIPES) { Mutex() }
+
+    private fun persistenceMutexFor(conversationId: Uuid): Mutex =
+        persistenceMutexes[Math.floorMod(conversationId.hashCode(), persistenceMutexes.size)]
 
     suspend fun getRecentConversations(assistantId: Uuid, limit: Int = 10): List<Conversation> {
         return conversationDAO.getRecentConversationsOfAssistant(
@@ -281,30 +290,46 @@ class ConversationRepository(
         return conversationDAO.existsById(uuid.toString())
     }
 
+    fun observeConversationExistsById(uuid: Uuid): Flow<Boolean> {
+        return conversationDAO.observeExistsById(uuid.toString())
+    }
+
     suspend fun countConversations(): Int {
         return conversationDAO.countAll()
     }
 
-    suspend fun insertConversation(conversation: Conversation) {
-        database.withTransaction {
-            conversationDAO.insert(
-                conversationToConversationEntity(conversation)
-            )
-            saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
+    suspend fun insertConversation(
+        conversation: Conversation,
+        canWrite: () -> Boolean = { true },
+    ) {
+        persistenceMutexFor(conversation.id).withLock {
+            database.withTransaction {
+                check(canWrite()) { "Conversation lifecycle changed before insert" }
+                conversationDAO.insert(
+                    conversationToConversationEntity(conversation)
+                )
+                saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
+            }
+            messageFtsManager.indexConversation(conversation)
         }
-        messageFtsManager.indexConversation(conversation)
     }
 
-    suspend fun updateConversation(conversation: Conversation) {
-        database.withTransaction {
-            conversationDAO.update(
-                conversationToConversationEntity(conversation)
-            )
+    suspend fun updateConversation(
+        conversation: Conversation,
+        canWrite: () -> Boolean = { true },
+    ) {
+        persistenceMutexFor(conversation.id).withLock {
+            database.withTransaction {
+                check(canWrite()) { "Conversation lifecycle changed before update" }
+                conversationDAO.update(
+                    conversationToConversationEntity(conversation)
+                )
             // 删除旧的节点，插入新的节点
-            messageNodeDAO.deleteByConversation(conversation.id.toString())
-            saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
+                messageNodeDAO.deleteByConversation(conversation.id.toString())
+                saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
+            }
+            messageFtsManager.indexConversation(conversation)
         }
-        messageFtsManager.indexConversation(conversation)
     }
 
     suspend fun deleteConversation(conversation: Conversation) {
@@ -314,12 +339,14 @@ class ConversationRepository(
         } else {
             conversation
         }
-        messageFtsManager.deleteConversation(conversation.id.toString())
-        database.withTransaction {
+        persistenceMutexFor(conversation.id).withLock {
+            database.withTransaction {
             // message_node 会通过 CASCADE 自动删除
-            conversationDAO.delete(
-                conversationToConversationEntity(conversation)
-            )
+                conversationDAO.delete(
+                    conversationToConversationEntity(conversation)
+                )
+            }
+            messageFtsManager.deleteConversation(conversation.id.toString())
         }
         filesManager.deleteChatFiles(fullConversation.files)
         toolArtifactStore.deleteConversation(conversation.assistantId.toString(), conversation.id.toString())
@@ -341,10 +368,13 @@ class ConversationRepository(
         val allIds = conversationDAO.getAllIds()
         val total = allIds.size
         allIds.forEachIndexed { index, id ->
-            val entity = conversationDAO.getConversationById(id) ?: return@forEachIndexed
-            val nodes = loadMessageNodes(entity.id)
-            val conversation = conversationEntityToConversation(entity, nodes)
-            messageFtsManager.indexConversation(conversation)
+            val conversationId = Uuid.parse(id)
+            persistenceMutexFor(conversationId).withLock {
+                val entity = conversationDAO.getConversationById(id) ?: return@withLock
+                val nodes = loadMessageNodes(entity.id)
+                val conversation = conversationEntityToConversation(entity, nodes)
+                messageFtsManager.indexConversation(conversation)
+            }
             onProgress(index + 1, total)
         }
     }

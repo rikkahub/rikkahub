@@ -66,7 +66,6 @@ import me.rerere.hugeicons.stroke.Settings02
 import me.rerere.hugeicons.stroke.Video01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.data.ai.agent.AgentMode
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -240,7 +239,7 @@ internal fun FilesPicker(
                 },
         )
 
-        // Workspace CWD + Agent mode
+        // Workspace CWD. AUTO routing is informational in the chat bar and is not duplicated here.
         val boundWorkspace = remember(workspaces, assistant.workspaceId) {
             workspaces.find { it.id == assistant.workspaceId?.toString() }
         }
@@ -271,33 +270,6 @@ internal fun FilesPicker(
                         onUpdateConversation(conversation.copy(workspaceCwd = newCwd))
                     },
                     onDismiss = { showCwdSheet = false },
-                )
-            }
-
-            val modeLabel = when (conversation.agentMode) {
-                AgentMode.CHAT -> stringResource(R.string.agent_mode_chat)
-                AgentMode.PLAN -> stringResource(R.string.agent_mode_plan)
-                AgentMode.AGENT -> stringResource(R.string.agent_mode_agent)
-            }
-            TextButton(
-                onClick = {
-                    onUpdateConversation(
-                        conversation.copy(agentMode = conversation.agentMode.next())
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-            ) {
-                Icon(
-                    imageVector = HugeIcons.Codesandbox,
-                    contentDescription = stringResource(R.string.agent_mode_hint),
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(Modifier.width(4.dp))
-                Text(
-                    text = stringResource(R.string.agent_mode_label, modeLabel),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

@@ -90,6 +90,13 @@ interface CustomTtsState {
      */
     fun speak(text: String, flushCalled: Boolean = true)
 
+    /** Speaks with an explicitly captured provider; null means the captured Run had no provider. */
+    fun speakWithProvider(
+        text: String,
+        provider: TTSProviderSetting?,
+        flushCalled: Boolean = true,
+    )
+
     /** Stops the current speech and clears the queue. */
     fun stop()
 
@@ -125,6 +132,7 @@ private class CustomTtsStateImpl(
 
     private val scope = CoroutineScope(Dispatchers.Main)
     private var currentJob: Job? = null
+    private var configuredProvider: TTSProviderSetting? = null
 
     override val isAvailable: StateFlow<Boolean> get() = controller.isAvailable
     override val isSpeaking: StateFlow<Boolean> get() = controller.isSpeaking
@@ -134,12 +142,22 @@ private class CustomTtsStateImpl(
     override val playbackState: StateFlow<PlaybackState> get() = controller.playbackState
 
     fun updateProvider(provider: TTSProviderSetting?) {
+        configuredProvider = provider
         controller.setProvider(provider)
     }
 
     override fun speak(text: String, flushCalled: Boolean) {
         val processed = text.stripMarkdown()
-        controller.speak(processed, flushCalled)
+        controller.speak(processed, flushCalled, configuredProvider)
+    }
+
+    override fun speakWithProvider(
+        text: String,
+        provider: TTSProviderSetting?,
+        flushCalled: Boolean,
+    ) {
+        val processed = text.stripMarkdown()
+        controller.speak(processed, flushCalled, provider)
     }
 
     override fun stop() {

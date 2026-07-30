@@ -99,11 +99,13 @@ class McpManager(
 
     fun getAllAvailableTools(): List<Triple<Uuid, String, McpTool>> {
         val settings = settingsStore.settingsFlow.value
-        return getAllAvailableTools(settings.getCurrentAssistant())
+        return getAllAvailableTools(settings, settings.getCurrentAssistant())
     }
 
-    override fun getAllAvailableTools(assistant: Assistant): List<Triple<Uuid, String, McpTool>> {
-        val settings = settingsStore.settingsFlow.value
+    override fun getAllAvailableTools(
+        settings: me.rerere.rikkahub.data.datastore.Settings,
+        assistant: Assistant,
+    ): List<Triple<Uuid, String, McpTool>> {
         return settings.mcpServers
             .filter { it.commonOptions.enable && it.id in assistant.mcpServers }
             .flatMap { server ->
@@ -115,20 +117,38 @@ class McpManager(
 
     override suspend fun callTool(
         assistant: Assistant,
-        serverId: Uuid,
+        server: McpServerConfig,
         toolName: String,
         args: JsonObject,
     ): List<UIMessagePart> {
-        val server = settingsStore.settingsFlow.value.mcpServers.find { it.id == serverId }
+        val currentSettings = settingsStore.settingsFlow.value
+        val currentServer = currentSettings.mcpServers.find { it.id == server.id }
+        val currentAssistant = currentSettings.assistants.find { it.id == assistant.id }
         if (
-            server == null ||
-            serverId !in assistant.mcpServers ||
+            !hasSameFrozenConnectionIdentity(currentServer, server) ||
+            !hasSameFrozenToolPolicy(currentServer, server, toolName) ||
+            currentAssistant == null ||
+            server.id !in currentAssistant.mcpServers ||
+            server.id !in assistant.mcpServers ||
             !server.commonOptions.enable ||
             server.commonOptions.tools.none { it.enable && it.name == toolName }
         ) {
-            return listOf(UIMessagePart.Text("MCP tool is not enabled for this conversation's assistant."))
+            return listOf(UIMessagePart.Text("MCP tool configuration changed after this run was planned."))
         }
-        return callTool(serverId, toolName, args)
+        val result = try {
+            sessionRegistry.callFrozenTool(server, toolName, args)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: McpClientUnavailableException) {
+            return listOf(UIMessagePart.Text("Failed to execute MCP tool: ${e.message ?: e.javaClass.name}"))
+        }
+        return result.content.map { content ->
+            when (content) {
+                is TextContent -> UIMessagePart.Text(content.text)
+                is ImageContent -> convertImageContentToFilePart(content)
+                else -> UIMessagePart.Text(JsonInstant.encodeToString(content))
+            }
+        }
     }
 
     suspend fun callTool(serverId: Uuid, toolName: String, args: JsonObject): List<UIMessagePart> {

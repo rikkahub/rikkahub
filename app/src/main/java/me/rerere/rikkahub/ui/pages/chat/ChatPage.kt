@@ -15,8 +15,6 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
@@ -76,7 +74,6 @@ import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.ai.agent.AgentMode
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
@@ -85,9 +82,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
-import me.rerere.hugeicons.stroke.Codesandbox
 import me.rerere.hugeicons.stroke.Cpu
-import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.components.ai.FilesPicker
@@ -336,7 +331,7 @@ private fun ChatPageContent(
     var approvalAnnouncement by remember { mutableStateOf<String?>(null) }
     val approvalAnnouncementFocusRequester = remember { FocusRequester() }
     val activeRunPresentation = remember(activeRun, activeRunDetail) {
-        activeRunDetail?.toPresentation() ?: activeRun?.toPresentation()
+        selectActiveRunPresentation(activeRun, activeRunDetail)
     }
     // Keep the run identity from this composition; an old click must not stop a later run.
     val stopRunId = activeRun?.id
@@ -381,11 +376,7 @@ private fun ChatPageContent(
                     onUpdateTitle = {
                         vm.updateTitle(it)
                     },
-                    onCycleAgentMode = {
-                        val next = conversation.agentMode.next()
-                        vm.updateConversation(conversation.copy(agentMode = next))
-                        vm.saveConversationAsync()
-                    },
+                    activeRouting = activeRunPresentation?.routing,
                     showRunEntry = latestRunId != null,
                     onOpenLatestRun = { latestRunId?.let(onOpenRun) },
                 )
@@ -829,26 +820,16 @@ private fun TopBar(
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit,
-    onCycleAgentMode: () -> Unit = {},
+    activeRouting: AgentRunRoutingPresentation? = null,
     showRunEntry: Boolean = false,
     onOpenLatestRun: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
-    val workspaceRepository: WorkspaceRepository = koinInject()
-    val workspaces by workspaceRepository.listFlow().collectAsStateWithLifecycle(initialValue = emptyList())
     val titleState = useEditState<String> {
         onUpdateTitle(it)
     }
     val assistant = settings.getCurrentAssistant()
-    val boundWorkspace = remember(workspaces, assistant.workspaceId) {
-        workspaces.find { it.id == assistant.workspaceId?.toString() }
-    }
-    val workspaceReady =
-        boundWorkspace != null && boundWorkspace.shellStatus == WorkspaceShellStatus.READY.name
-    // 绑定了 Workspace 就显示模式 chip（未 READY 也可切换，就绪后立刻生效）
-    val showAgentModeChip = assistant.workspaceId != null
-
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
         navigationIcon = {
@@ -903,52 +884,7 @@ private fun TopBar(
                     Icon(HugeIcons.Cpu, contentDescription = "运行详情")
                 }
             }
-            if (showAgentModeChip) {
-                val modeLabel = when (conversation.agentMode) {
-                    AgentMode.CHAT -> stringResource(R.string.agent_mode_chat)
-                    AgentMode.PLAN -> stringResource(R.string.agent_mode_plan)
-                    AgentMode.AGENT -> stringResource(R.string.agent_mode_agent)
-                }
-                val modeHint = stringResource(R.string.agent_mode_hint)
-                val workspaceNotReadyMsg = stringResource(R.string.agent_mode_workspace_not_ready)
-                val chipColors = when (conversation.agentMode) {
-                    AgentMode.PLAN -> AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                        labelColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    )
-                    AgentMode.AGENT -> AssistChipDefaults.assistChipColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        labelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                    AgentMode.CHAT -> AssistChipDefaults.assistChipColors()
-                }
-                AssistChip(
-                    onClick = {
-                        onCycleAgentMode()
-                        if (!workspaceReady) {
-                            toaster.show(
-                                workspaceNotReadyMsg,
-                                type = ToastType.Warning,
-                            )
-                        }
-                    },
-                    label = {
-                        Text(
-                            text = modeLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            maxLines = 1,
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = HugeIcons.Codesandbox,
-                            contentDescription = modeHint,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    },
-                    colors = chipColors,
-                )
-            }
+            AgentAutoStatus(activeRouting)
             IconButton(
                 onClick = {
                     onClickMenu()
@@ -1000,6 +936,28 @@ private fun TopBar(
                     Text(stringResource(R.string.chat_page_cancel))
                 }
             }
+        )
+    }
+}
+
+/** Informational only: routing is frozen per Run and cannot be changed from the chat chrome. */
+@Composable
+internal fun AgentAutoStatus(routing: AgentRunRoutingPresentation?) {
+    val label = if (routing?.kind == AgentRunRoutingKind.AUTO && routing.intent != null) {
+        routing.displayLabel()
+    } else {
+        stringResource(R.string.agent_mode_auto)
+    }
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
         )
     }
 }

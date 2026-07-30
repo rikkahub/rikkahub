@@ -45,6 +45,7 @@ class TtsController(
 
     // Provider & 作业
     private var currentProvider: TTSProviderSetting? = null
+    private var playbackProvider: TTSProviderSetting? = null
     private var workerJob: Job? = null
     private var isPaused = false
 
@@ -105,9 +106,12 @@ class TtsController(
      * - flush=true: 清空当前进度并重新开始
      * - flush=false: 继续队列，追加朗读
      */
-    fun speak(text: String, flush: Boolean = true) {
+    fun speak(
+        text: String,
+        flush: Boolean = true,
+        provider: TTSProviderSetting? = currentProvider,
+    ) {
         if (text.isBlank()) return
-        val provider = currentProvider
         if (provider == null) {
             _error.update { "No TTS provider selected" }
             return
@@ -118,6 +122,7 @@ class TtsController(
 
         if (flush) {
             internalReset()
+            playbackProvider = provider
             allChunks.addAll(newChunks)
             queue.addAll(newChunks)
             _currentChunk.update { 0 }
@@ -139,8 +144,9 @@ class TtsController(
             )
         }
 
-        if (workerJob?.isActive != true) startWorker()
-        prefetchFrom((_currentChunk.value).coerceAtLeast(0))
+        val providerForPlayback = playbackProvider ?: provider.also { playbackProvider = it }
+        if (workerJob?.isActive != true) startWorker(providerForPlayback)
+        prefetchFrom((_currentChunk.value).coerceAtLeast(0), providerForPlayback)
     }
 
     private fun internalReset() {
@@ -154,6 +160,7 @@ class TtsController(
         cache.values.forEach { it.cancel(CancellationException("Reset")) }
         cache.clear()
         lastPrefetchedIndex = -1
+        playbackProvider = null
         _isSpeaking.update { false }
         _currentChunk.update { 0 }
         _totalChunks.update { 0 }
@@ -204,6 +211,7 @@ class TtsController(
         cache.values.forEach { it.cancel(CancellationException("Stopped")) }
         cache.clear()
         lastPrefetchedIndex = -1
+        playbackProvider = null
         _isSpeaking.update { false }
         _currentChunk.update { 0 }
         _totalChunks.update { 0 }
@@ -218,13 +226,7 @@ class TtsController(
     }
 
     // region 内部：播放调度
-    private fun startWorker() {
-        val provider = currentProvider
-        if (provider == null) {
-            _error.update { "No TTS provider selected" }
-            return
-        }
-
+    private fun startWorker(provider: TTSProviderSetting) {
         workerJob = scope.launch {
             _isSpeaking.update { true }
             var processedCount = _currentChunk.value
@@ -248,7 +250,7 @@ class TtsController(
                     }
 
                     // 预取下一窗口
-                    prefetchFrom(chunk.index + 1)
+                    prefetchFrom(chunk.index + 1, provider)
 
                     val response = try {
                         awaitOrCreate(chunk, provider)
@@ -276,14 +278,14 @@ class TtsController(
             } finally {
                 _isSpeaking.update { false }
                 if (queue.isEmpty()) {
+                    playbackProvider = null
                     _playbackState.update { it.copy(status = PlaybackStatus.Ended) }
                 }
             }
         }
     }
 
-    private fun prefetchFrom(startIndex: Int) {
-        val provider = currentProvider ?: return
+    private fun prefetchFrom(startIndex: Int, provider: TTSProviderSetting) {
         val begin = startIndex.coerceAtLeast(lastPrefetchedIndex + 1)
         val endExclusive = (begin + prefetchCount).coerceAtMost(allChunks.size)
         if (begin >= endExclusive) return

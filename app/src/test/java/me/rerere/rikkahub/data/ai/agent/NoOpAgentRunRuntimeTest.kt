@@ -33,6 +33,12 @@ class NoOpAgentRunRuntimeTest {
             descriptor = ToolDescriptorRegistry.descriptorFor(automaticTool.toolName),
         )
         assertTrue(NoOpAgentRunRuntime.toolStarted(automaticExecution))
+        assertTrue(
+            NoOpAgentRunRuntime.toolFinished(
+                automaticExecution,
+                me.rerere.rikkahub.data.model.ToolExecutionStatus.SUCCEEDED,
+            )
+        )
     }
 
     @Test

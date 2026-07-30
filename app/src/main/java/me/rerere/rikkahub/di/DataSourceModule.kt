@@ -116,7 +116,7 @@ val dataSourceModule = module {
             .build()
     }
 
-    single { TemplateTransformer(engine = get(), settingsStore = get()) }
+    single { TemplateTransformer() }
 
     single {
         get<AppDatabase>().conversationDao()
@@ -226,7 +226,6 @@ val dataSourceModule = module {
                 me.rerere.rikkahub.data.ai.agent.tools.providers.ExploreSubagentToolProvider(
                     subagentRunner = { get() },
                     json = get(),
-                    workspaceRepository = get(),
                     projectDocsTransformer = get(),
                 ),
                 me.rerere.rikkahub.data.ai.agent.tools.providers.SkillToolProvider(skillManager = get()),
@@ -246,7 +245,6 @@ val dataSourceModule = module {
             agentLoop = get(),
             toolRegistry = get(),
             agentRunRepository = get(),
-            workspaceRepository = get(),
         )
     }
 
