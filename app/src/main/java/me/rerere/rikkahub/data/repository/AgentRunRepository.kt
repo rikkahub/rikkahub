@@ -14,6 +14,7 @@ import me.rerere.rikkahub.data.db.entity.AgentTraceEvent
 import me.rerere.rikkahub.data.db.entity.ToolExecutionEntity
 import me.rerere.rikkahub.data.ai.agent.canonicalJson
 import me.rerere.rikkahub.data.ai.agent.digest
+import me.rerere.rikkahub.data.ai.agent.routing.AgentRoutingSnapshotCodec
 import me.rerere.rikkahub.data.model.AgentApprovalStatus
 import me.rerere.rikkahub.data.model.ApprovalResolution
 import me.rerere.rikkahub.data.model.AgentApprovalSummary
@@ -728,7 +729,7 @@ class AgentRunRepository(
         require(expected.all { it.canTransitionTo(target) }) { "Invalid tool status transition to $target" }
     }
 
-    private fun encodeConfig(value: AgentRunConfigSnapshot): String = encodeBounded(value, MAX_CONFIG_JSON_BYTES)
+    private fun encodeConfig(value: AgentRunConfigSnapshot): String = AgentRoutingSnapshotCodec.encode(value)
 
     private fun encodeError(value: AgentRunError): String = encodeBounded(value, MAX_ERROR_JSON_BYTES)
 
@@ -806,7 +807,6 @@ class AgentRunRepository(
 
     private companion object {
         const val APPROVAL_TTL_MILLIS = 5 * 60 * 1000L
-        const val MAX_CONFIG_JSON_BYTES = 8 * 1024
         const val MAX_ERROR_JSON_BYTES = 2 * 1024
         const val MAX_SUMMARY_JSON_BYTES = 4 * 1024
         const val MAX_TRACE_ATTRIBUTES_BYTES = 2 * 1024

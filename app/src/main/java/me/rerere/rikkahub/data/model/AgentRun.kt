@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.model
 import kotlinx.serialization.Serializable
 import me.rerere.ai.provider.ModelCapabilityProfile
 import me.rerere.ai.provider.ToolCallIdStability
+import me.rerere.rikkahub.data.ai.agent.routing.AgentRoutingSnapshot
 
 enum class AgentRunStatus {
     QUEUED,
@@ -96,6 +97,8 @@ data class AgentRunConfigSnapshot(
     /** Present only for controlled Explore children; it contains limits, never prompts or tool bodies. */
     val childBudget: ChildRunBudgetSnapshot? = null,
     val capabilitySummary: ModelCapabilitySummary? = null,
+    /** Null only for runs created before AUTO intent routing was introduced. */
+    val routing: AgentRoutingSnapshot? = null,
 )
 
 @Serializable
