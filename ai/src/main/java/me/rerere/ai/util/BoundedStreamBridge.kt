@@ -190,7 +190,7 @@ fun <T> boundedStreamFlow(
     onTerminated: (ProviderStreamDiagnostics) -> Unit = {},
     start: suspend (BoundedStreamBridge<T>) -> Unit,
 ): Flow<T> = flow {
-    val bridge = BoundedStreamBridge(capacity, onTerminated)
+    val bridge = BoundedStreamBridge<T>(capacity, onTerminated)
     try {
         try {
             start(bridge)
