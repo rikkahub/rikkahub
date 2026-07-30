@@ -462,8 +462,6 @@
   <string name="placeholder_battery_level">Уровень заряда</string>
   <string name="placeholder_char">Имя ассистента</string>
   <string name="placeholder_current_date">Дата</string>
-  <string name="placeholder_current_datetime">Дата и время</string>
-  <string name="placeholder_current_time">Время</string>
   <string name="placeholder_device_info">Информация об устройстве</string>
   <string name="placeholder_locale">Язык</string>
   <string name="placeholder_model_id">ID модели</string>

@@ -462,8 +462,6 @@
   <string name="placeholder_battery_level">電池電量</string>
   <string name="placeholder_char">助手名稱</string>
   <string name="placeholder_current_date">日期</string>
-  <string name="placeholder_current_datetime">日期和時間</string>
-  <string name="placeholder_current_time">時間</string>
   <string name="placeholder_device_info">設備資訊</string>
   <string name="placeholder_locale">語言環境</string>
   <string name="placeholder_model_id">模型ID</string>

@@ -469,8 +469,6 @@
   <string name="placeholder_battery_level">Battery Level</string>
   <string name="placeholder_char">Assistant Name</string>
   <string name="placeholder_current_date">Date</string>
-  <string name="placeholder_current_datetime">Date and Time</string>
-  <string name="placeholder_current_time">Time</string>
   <string name="placeholder_device_info">Device Info</string>
   <string name="placeholder_locale">Locale</string>
   <string name="placeholder_model_id">Model ID</string>

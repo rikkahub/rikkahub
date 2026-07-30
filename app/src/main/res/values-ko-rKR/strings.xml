@@ -462,8 +462,6 @@
   <string name="placeholder_battery_level">배터리 잔량</string>
   <string name="placeholder_char">어시스턴트명</string>
   <string name="placeholder_current_date">날짜</string>
-  <string name="placeholder_current_datetime">날짜와 시간</string>
-  <string name="placeholder_current_time">시간</string>
   <string name="placeholder_device_info">기기 정보</string>
   <string name="placeholder_locale">로케일</string>
   <string name="placeholder_model_id">모델 ID</string>
