@@ -10,7 +10,7 @@
 
 此外，`CHAT` 与 `AGENT` 当前暴露相同的工具集合，差异主要存在于提示词、Provider 预检和权限摘要。这三个模式对用户是显式状态，对运行时却不是互斥能力，导致产品语义和安全边界难以推断。
 
-本设计将模式选择改成一次 Run 一次决策，并把决策冻结为可恢复的策略快照。
+本设计将模式选择改成一次 Run 一次决策，并把决策冻结为可验证的策略快照。快照服务于同一进程内的审批续跑和审计；第一阶段不承诺跨进程恢复执行。
 
 ## 2. 目标与非目标
 
@@ -21,7 +21,7 @@
 - 明确修改意图可以自动进入执行阶段；敏感工具仍按既有权限策略审批。
 - 模糊请求保持只读或请求澄清，识别失败不得扩大权限。
 - Run 创建后冻结模型、意图、工具集合、权限摘要和超时策略。
-- 审批恢复、应用重启和设置变化不得改变既有 Run 的策略。
+- 同一进程内的审批续跑和设置变化不得改变既有 Run 的策略；进程重启继续沿用现有恢复规则，将活跃 Run 标记为 `INTERRUPTED`，不自动重放。
 - 每个会话最多一个活跃 Run；超时或取消后，迟到结果不得写回会话。
 - 保持旧 Conversation 和旧 Run 数据兼容，不为本次功能升级 Room schema。
 
@@ -129,9 +129,9 @@ data class IntentRoutingDecision(
 
 1. 在会话 generation lock 内取消并等待旧 Run 结束。
 2. 对最后一条用户消息做意图路由。
-3. 创建 `QUEUED/PREFLIGHT` Run。
-4. 用新 Run ID 解析工具，形成完整路由快照并原子更新配置。
-5. 使用快照执行预检、提示词拼装和 AgentLoop。
+3. 生成新 Run ID，以该 ID 解析工具并形成完整路由快照。
+4. 使用完整且不可变的配置快照，原子替换当前会话的活跃根 Run 并进入 `PREFLIGHT`。
+5. 使用快照执行预检、提示词拼装和 AgentLoop；创建后不再改写配置快照。
 
 继续旧 Run 的处理顺序：
 
@@ -139,6 +139,8 @@ data class IntentRoutingDecision(
 2. 验证它仍属于当前会话且处于可恢复状态。
 3. 若存在 `routing`，全部运行参数由它恢复；不得读取 `Conversation.agentMode`。
 4. 若是旧 Run，则只按原 `agentMode` 兼容路径恢复。
+
+应用进程重启时继续执行现有 `interruptActiveRunsOnStartup()`：所有活跃 Run 和待审批状态进入中断终态，不静默重路由、不重放工具，也不把旧待审批卡片当作可恢复 Run。真正的跨进程恢复需要持久化输入消息边界、Provider 游标和幂等语义，留待后续独立设计。
 
 对仍依赖 `AgentMode` 的内部接口提供临时映射：`ANSWER -> CHAT`、`EXPLORE/CLARIFY -> PLAN`、`EXECUTE -> AGENT`。后续逐步把 Permission、Prompt 和 Preflight 接口改为直接接受 `AgentIntent`，但不要求在第一提交中一次性删除所有兼容代码。
 
@@ -161,7 +163,7 @@ data class IntentRoutingDecision(
 超时分层：
 
 - Provider 单轮无进展超时。
-- 每个工具使用 `ToolDescriptor.timeoutMillis`，缺省 30 秒。
+- 每个工具使用 `ToolDescriptor.timeoutMillis`，一般工具缺省 30 秒；Workspace Shell 和 Explore 子 Agent 的 descriptor 必须覆盖其既有 600 秒和 120 秒预算，避免外层 watchdog 提前截断合法调用。
 - Run 设置总时间预算，缺省 30 分钟。
 - 取消先走协作式 Job cancellation；宽限期后仍未结束则终止 lease、将 Run 标为失败或取消并释放会话所有权。
 
@@ -175,13 +177,14 @@ data class IntentRoutingDecision(
 - 该状态只用于解释，不允许在 Run 中途点击切换。
 - Run Center 展示 `intent`、`reasonCode`、`inputTrust`、冻结工具数量、策略版本和降级原因，不展示敏感提示词或工具参数。
 - `CLARIFY` 使用既有询问用户能力或普通助手文本呈现，不新增可执行权限。
+- 活跃卡片只有在 `activeRunDetail.run.id == activeRun.id` 时才采用详情，否则回退到当前活跃 Run 的摘要，避免 Run A 的详情与 Run B 的停止操作短暂错配。
 
 ## 10. 兼容与迁移
 
 - `Conversation.agentMode` 与数据库 `agent_mode` 保留，读取时不再影响新 Run。
 - UI 不再写入 `agent_mode`。
 - 新 Run 总是写 `routing`。
-- 升级前已进入等待审批状态的 Run 继续按 `agentMode` 完成。
+- 同一进程内仍处于等待审批状态的旧 Run 继续按原 `agentMode` 完成；进程重启后的旧活跃 Run 按现有规则中断，不恢复执行。
 - 序列化未知值或损坏快照时阻塞 Run，不能回退为全工具模式。
 - 不增加 Room v29；只更新 Kotlin 序列化模型和相关展示逻辑。
 
@@ -238,4 +241,3 @@ data class IntentRoutingDecision(
 - Pi 对活动 Run、steer/follow-up、AbortSignal 与工具执行门的处理：<https://github.com/badlogic/pi-mono/blob/main/packages/agent/src/agent.ts>、<https://github.com/badlogic/pi-mono/blob/main/packages/agent/src/agent-loop.ts>
 - Hermes 的组合式 Toolsets 与不可信 webhook 安全工具集：<https://github.com/NousResearch/hermes-agent/blob/main/toolsets.py>
 - Hermes 对 Skills/Memory 写入审批的设计：<https://github.com/NousResearch/hermes-agent/blob/main/website/docs/user-guide/configuration.md>
-
