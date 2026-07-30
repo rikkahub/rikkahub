@@ -57,6 +57,19 @@ class ToolDescriptorRegistryTest {
     }
 
     @Test
+    fun `long-running tools retain their existing budgets`() {
+        assertEquals(610_000L, ToolDescriptorRegistry.descriptorFor("workspace_shell").timeoutMillis)
+        assertEquals(125_000L, ToolDescriptorRegistry.descriptorFor("explore_subagent").timeoutMillis)
+        assertEquals(30_000L, ToolDescriptorRegistry.descriptorFor("search_web").timeoutMillis)
+        assertEquals(30_000L, ToolDescriptorRegistry.descriptorFor("future_tool").timeoutMillis)
+    }
+
+    @Test
+    fun `screen time is not described as side effect free`() {
+        assertEquals(ToolSideEffect.EXTERNAL, ToolDescriptorRegistry.descriptorFor("get_screen_time").sideEffect)
+    }
+
+    @Test
     fun `legacy providers receive descriptors through registry adapter`() = runBlocking {
         val provider = object : ToolProvider {
             override val order: Int = 0

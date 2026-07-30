@@ -1,18 +1,27 @@
 package me.rerere.rikkahub.data.ai.agent
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonObject
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.agent.routing.AgentRoutingSnapshot
 import me.rerere.rikkahub.data.ai.agent.tools.ToolProvider
 import me.rerere.rikkahub.data.ai.agent.tools.ToolProviderOrder
 import me.rerere.rikkahub.data.ai.agent.tools.ToolRegistry
 import me.rerere.rikkahub.data.ai.agent.tools.ToolResolveContext
+import me.rerere.rikkahub.data.ai.agent.routing.AgentIntent
+import me.rerere.rikkahub.data.ai.agent.routing.InputTrust
+import me.rerere.rikkahub.data.ai.agent.routing.ToolNameCollisionException
+import me.rerere.rikkahub.data.ai.agent.tools.providers.McpToolProvider
+import me.rerere.rikkahub.data.ai.mcp.McpTool
+import me.rerere.rikkahub.data.ai.mcp.McpToolExecutor
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import kotlin.uuid.Uuid
 
@@ -179,5 +188,87 @@ class ToolRegistryTest {
             registry.resolve(ctx(AgentMode.CHAT)).map { it.name },
             registry.resolve(ctx(AgentMode.AGENT)).map { it.name },
         )
+    }
+
+    @Test
+    fun `auto profile discovers the full candidate set through agent compatibility mode`() = runBlocking {
+        val modeAwareProvider = object : ToolProvider {
+            override val order: Int = ToolProviderOrder.MCP
+
+            override fun isEnabled(ctx: ToolResolveContext): Boolean = ctx.mode == AgentMode.AGENT
+
+            override suspend fun provide(ctx: ToolResolveContext): List<Tool> = listOf(
+                Tool(
+                    name = "mcp__server__tool",
+                    description = "mcp",
+                    execute = { listOf(UIMessagePart.Text("ok")) },
+                ),
+            )
+        }
+        val profile = ToolRegistry(listOf(modeAwareProvider)).resolveProfile(
+            ctx = ctx(AgentMode.PLAN),
+            intent = AgentIntent.EXECUTE,
+            inputTrust = InputTrust.USER_DIRECT,
+            defaultToolTimeoutMillis = 30_000,
+        )
+
+        assertEquals(listOf("mcp__server__tool"), profile.resolvedToolNames)
+    }
+
+    @Test
+    fun `frozen profile ignores unrelated MCP duplicates while new profile fails closed`() = runBlocking {
+        val executor = object : McpToolExecutor {
+            var availableTools = emptyList<Triple<Uuid, String, McpTool>>()
+
+            override fun getAllAvailableTools(assistant: Assistant) = availableTools
+
+            override suspend fun callTool(
+                assistant: Assistant,
+                serverId: Uuid,
+                toolName: String,
+                args: JsonObject,
+            ): List<UIMessagePart> = emptyList()
+        }
+        val registry = ToolRegistry(
+            listOf(
+                FixedProvider(ToolProviderOrder.LOCAL, listOf("get_time_info")),
+                McpToolProvider(executor),
+            ),
+        )
+        val context = ctx(AgentMode.PLAN)
+        val original = registry.resolveProfile(
+            ctx = context,
+            intent = AgentIntent.ANSWER,
+            inputTrust = InputTrust.USER_DIRECT,
+            defaultToolTimeoutMillis = 30_000,
+        )
+        val snapshot = AgentRoutingSnapshot.create(
+            intent = AgentIntent.ANSWER,
+            inputTrust = InputTrust.USER_DIRECT,
+            reasonCode = "registry_test",
+            resolvedToolNames = original.resolvedToolNames,
+            permissionDigest = original.permissionDigest,
+            providerIdleTimeoutMillis = 60_000,
+            toolTimeoutMillis = 30_000,
+            runTimeoutMillis = 600_000,
+        )
+        val serverId = Uuid.random()
+        val duplicate = Triple(serverId, "duplicate", McpTool(name = "inspect"))
+        executor.availableTools = listOf(duplicate, duplicate)
+
+        val frozen = registry.resolveFrozenProfile(context, snapshot)
+        assertEquals(listOf("get_time_info"), frozen.resolvedToolNames)
+
+        try {
+            registry.resolveProfile(
+                ctx = context,
+                intent = AgentIntent.EXECUTE,
+                inputTrust = InputTrust.USER_DIRECT,
+                defaultToolTimeoutMillis = 30_000,
+            )
+            fail("New profiles must reject global MCP duplicates")
+        } catch (_: ToolNameCollisionException) {
+            // Expected.
+        }
     }
 }

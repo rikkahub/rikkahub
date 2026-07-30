@@ -16,10 +16,6 @@ class McpInvalidServerNameException(
     val invalidNames: List<String>,
 ) : IllegalStateException("Invalid MCP server names: ${invalidNames.joinToString(", ")}")
 
-class McpToolNameCollisionException(
-    val exposedNames: List<String>,
-) : IllegalStateException("Colliding MCP tool names: ${exposedNames.joinToString(", ")}")
-
 class McpToolProvider(
     private val mcpToolExecutor: McpToolExecutor,
 ) : ToolProvider {
@@ -36,7 +32,7 @@ class McpToolProvider(
         val allTools = mcpToolExecutor.getAllAvailableTools(ctx.assistant)
         if (allTools.isEmpty()) return emptyList()
 
-        val describedTools = allTools.map { (serverId, serverName, tool) ->
+        return allTools.map { (serverId, serverName, tool) ->
             val exposedName = exposedToolName(serverId.toString(), serverName, tool.name)
             val exposedTool = Tool(
                 name = exposedName,
@@ -53,9 +49,6 @@ class McpToolProvider(
                 McpServerPolicyContext(serverId.toString(), serverName, tool.needsApproval),
             )
         }
-        val collisions = describedTools.groupBy { it.tool.name }.filterValues { it.size > 1 }.keys
-        if (collisions.isNotEmpty()) throw McpToolNameCollisionException(collisions.sorted())
-        return describedTools
     }
 
     /** MCP display names are untrusted; function names must remain portable across providers (<= 64 ASCII chars). */

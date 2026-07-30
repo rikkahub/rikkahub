@@ -3,6 +3,10 @@ package me.rerere.rikkahub.data.ai.agent.permission
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.Tool
 
+private const val DEFAULT_TOOL_TIMEOUT_MS = 30_000L
+private const val WORKSPACE_SHELL_TIMEOUT_MS = 610_000L
+private const val EXPLORE_SUBAGENT_TIMEOUT_MS = 125_000L
+
 /** Stable, serializable metadata used to make tool permission decisions. */
 @Serializable
 data class ToolDescriptor(
@@ -19,6 +23,10 @@ data class ToolDescriptor(
     val defaultApproval: ToolDefaultApproval,
     val redactionPolicy: ToolRedactionPolicy,
 ) {
+    init {
+        require(timeoutMillis == null || timeoutMillis > 0) { "Tool timeout must be positive" }
+    }
+
     companion object {
         fun unknown(toolName: String) = ToolDescriptor(
             toolName = toolName,
@@ -28,6 +36,7 @@ data class ToolDescriptor(
             sideEffect = ToolSideEffect.UNKNOWN,
             dataScope = ToolDataScope.UNKNOWN,
             networkScope = ToolNetworkScope.UNKNOWN,
+            timeoutMillis = DEFAULT_TOOL_TIMEOUT_MS,
             idempotency = ToolIdempotency.UNKNOWN,
             replayPolicy = ToolReplayPolicy.UNKNOWN,
             defaultApproval = ToolDefaultApproval.ASK,
@@ -81,6 +90,12 @@ data class DescribedTool(
     val tool: Tool,
     val descriptor: ToolDescriptor,
     val mcpServer: McpServerPolicyContext? = null,
+    /** Static, provider-resolved approval fact that cannot be recovered from descriptor metadata. */
+    val approvalPolicy: ToolApprovalPolicyContext? = null,
+)
+
+data class ToolApprovalPolicyContext(
+    val configuredNeedsApproval: Boolean,
 )
 
 /**
@@ -88,8 +103,6 @@ data class DescribedTool(
  * policy-aware callers receive a descriptor for every tool, including future or third-party tools.
  */
 object ToolDescriptorRegistry {
-    private const val DEFAULT_TIMEOUT_MS = 30_000L
-
     private val descriptors = listOf(
         descriptor("search_web", ToolCapability.SEARCH, ToolCategory.SEARCH, ToolRiskLevel.LOW,
             ToolDataScope.PUBLIC, ToolNetworkScope.INTERNET, ToolReplayPolicy.REPLAY_SAFE, ToolDefaultApproval.ALLOW),
@@ -111,7 +124,8 @@ object ToolDescriptorRegistry {
             ToolDataScope.LOCAL_SENSITIVE, ToolNetworkScope.NONE, ToolReplayPolicy.REQUIRES_APPROVAL, ToolDefaultApproval.ASK,
             ToolSideEffect.LOCAL_WRITE),
         descriptor("get_screen_time", ToolCapability.LOCAL_READ, ToolCategory.LOCAL_SENSITIVE, ToolRiskLevel.HIGH,
-            ToolDataScope.LOCAL_SENSITIVE, ToolNetworkScope.NONE, ToolReplayPolicy.REQUIRES_APPROVAL, ToolDefaultApproval.ASK),
+            ToolDataScope.LOCAL_SENSITIVE, ToolNetworkScope.NONE, ToolReplayPolicy.REQUIRES_APPROVAL, ToolDefaultApproval.ASK,
+            ToolSideEffect.EXTERNAL),
         descriptor("eval_javascript", ToolCapability.LOCAL_WRITE, ToolCategory.LOCAL_SENSITIVE, ToolRiskLevel.HIGH,
             ToolDataScope.LOCAL_SENSITIVE, ToolNetworkScope.NONE, ToolReplayPolicy.NEVER_REPLAY, ToolDefaultApproval.ASK,
             ToolSideEffect.PROCESS_EXECUTION),
@@ -135,14 +149,15 @@ object ToolDescriptorRegistry {
             ToolSideEffect.WORKSPACE_WRITE),
         descriptor("workspace_shell", ToolCapability.WORKSPACE_SHELL, ToolCategory.WORKSPACE_SHELL, ToolRiskLevel.CRITICAL,
             ToolDataScope.WORKSPACE, ToolNetworkScope.NONE, ToolReplayPolicy.NEVER_REPLAY, ToolDefaultApproval.ASK,
-            ToolSideEffect.PROCESS_EXECUTION),
+            ToolSideEffect.PROCESS_EXECUTION, timeoutMillis = WORKSPACE_SHELL_TIMEOUT_MS),
         descriptor("memory_tool", ToolCapability.MEMORY_MUTATION, ToolCategory.MEMORY, ToolRiskLevel.HIGH,
             ToolDataScope.MEMORY, ToolNetworkScope.NONE, ToolReplayPolicy.REQUIRES_APPROVAL, ToolDefaultApproval.ASK,
             ToolSideEffect.LOCAL_WRITE),
         descriptor("use_skill", ToolCapability.SKILL_READ, ToolCategory.SKILL, ToolRiskLevel.MEDIUM,
             ToolDataScope.LOCAL_SENSITIVE, ToolNetworkScope.NONE, ToolReplayPolicy.IDEMPOTENT, ToolDefaultApproval.ASK),
         descriptor("explore_subagent", ToolCapability.SUBAGENT_READ, ToolCategory.LOCAL_SAFE, ToolRiskLevel.LOW,
-            ToolDataScope.WORKSPACE, ToolNetworkScope.NONE, ToolReplayPolicy.REPLAY_SAFE, ToolDefaultApproval.ALLOW),
+            ToolDataScope.WORKSPACE, ToolNetworkScope.NONE, ToolReplayPolicy.REPLAY_SAFE, ToolDefaultApproval.ALLOW,
+            timeoutMillis = EXPLORE_SUBAGENT_TIMEOUT_MS),
     ).associateBy(ToolDescriptor::toolName)
 
     fun descriptorFor(tool: Tool): ToolDescriptor = descriptorFor(tool.name)
@@ -175,6 +190,7 @@ object ToolDescriptorRegistry {
         replayPolicy: ToolReplayPolicy,
         defaultApproval: ToolDefaultApproval,
         sideEffect: ToolSideEffect = ToolSideEffect.NONE,
+        timeoutMillis: Long = DEFAULT_TOOL_TIMEOUT_MS,
         redactionPolicy: ToolRedactionPolicy = ToolRedactionPolicy.REDACT_SENSITIVE,
     ) = ToolDescriptor(
         toolName = toolName,
@@ -184,7 +200,7 @@ object ToolDescriptorRegistry {
         sideEffect = sideEffect,
         dataScope = dataScope,
         networkScope = networkScope,
-        timeoutMillis = DEFAULT_TIMEOUT_MS,
+        timeoutMillis = timeoutMillis,
         idempotency = idempotencyFor(replayPolicy),
         replayPolicy = replayPolicy,
         defaultApproval = defaultApproval,

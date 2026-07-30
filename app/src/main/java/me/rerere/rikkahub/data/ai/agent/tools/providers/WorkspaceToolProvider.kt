@@ -2,10 +2,14 @@ package me.rerere.rikkahub.data.ai.agent.tools.providers
 
 import android.util.Log
 import me.rerere.ai.core.Tool
+import me.rerere.rikkahub.data.ai.agent.permission.DescribedTool
+import me.rerere.rikkahub.data.ai.agent.permission.ToolApprovalPolicyContext
+import me.rerere.rikkahub.data.ai.agent.permission.ToolDescriptorRegistry
 import me.rerere.rikkahub.data.ai.agent.tools.ToolProvider
 import me.rerere.rikkahub.data.ai.agent.tools.ToolProviderOrder
 import me.rerere.rikkahub.data.ai.agent.tools.ToolResolveContext
 import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
+import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceShellStatus
 
@@ -17,19 +21,43 @@ class WorkspaceToolProvider(
     override fun isEnabled(ctx: ToolResolveContext): Boolean =
         ctx.assistant.workspaceId != null
 
-    override suspend fun provide(ctx: ToolResolveContext): List<Tool> {
-        val workspaceId = ctx.assistant.workspaceId?.toString() ?: return emptyList()
-        val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
+    override suspend fun provide(ctx: ToolResolveContext): List<Tool> =
+        resolveWorkspaceTools(ctx)?.tools.orEmpty()
+
+    override suspend fun provideWithDescriptors(ctx: ToolResolveContext): List<DescribedTool> {
+        val resolved = resolveWorkspaceTools(ctx) ?: return emptyList()
+        return resolved.tools.map { tool ->
+            DescribedTool(
+                tool = tool,
+                descriptor = ToolDescriptorRegistry.descriptorFor(tool),
+                approvalPolicy = ToolApprovalPolicyContext(
+                    configuredNeedsApproval = resolveWorkspaceToolApproval(tool.name, resolved.approvalOverrides),
+                ),
+            )
+        }
+    }
+
+    private suspend fun resolveWorkspaceTools(ctx: ToolResolveContext): ResolvedWorkspaceTools? {
+        val workspaceId = ctx.assistant.workspaceId?.toString() ?: return null
+        val workspace = workspaceRepository.getById(workspaceId) ?: return null
         if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
             Log.d(TAG, "skip workspace tools, workspace=$workspaceId, status=${workspace.shellStatus}")
-            return emptyList()
+            return null
         }
-        return createWorkspaceTools(
+        val approvalOverrides = workspace.toolApprovalOverrides()
+        val tools = createWorkspaceTools(
             workspaceId = workspaceId,
             workspaceRepository = workspaceRepository,
             cwd = ctx.conversation.workspaceCwd,
+            approvalOverrides = approvalOverrides,
         )
+        return ResolvedWorkspaceTools(tools, approvalOverrides)
     }
+
+    private data class ResolvedWorkspaceTools(
+        val tools: List<Tool>,
+        val approvalOverrides: Map<String, Boolean>,
+    )
 
     companion object {
         private const val TAG = "WorkspaceToolProvider"
