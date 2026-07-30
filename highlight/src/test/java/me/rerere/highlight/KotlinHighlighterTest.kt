@@ -30,6 +30,7 @@ class KotlinHighlighterTest {
             "css",
             "java", "jsp",
             "kotlin", "kt", "kts",
+            "python", "py", "gyp", "ipython",
         ).forEach { assertTrue(it, highlighter.supports(it)) }
     }
 

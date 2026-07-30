@@ -245,6 +245,21 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
             """.trimIndent(),
         ),
         HighlightPreviewSample(
+            language = "python",
+            code = """
+                from dataclasses import dataclass
+
+
+                @dataclass
+                class User:
+                    name: str
+                    age: int = 18
+
+                    def greet(self) -> str:
+                        return f"Hello, {self.name}!"
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
             language = "cmake",
             code = """
                 cmake_minimum_required(VERSION 3.22)

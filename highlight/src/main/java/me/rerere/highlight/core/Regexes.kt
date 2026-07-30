@@ -133,6 +133,7 @@ internal fun compilePattern(
  * - `[` and `&&` inside a character class are literal in JavaScript, but mean nested class union
  *   and class intersection in Java.
  * - `{` that does not open a valid quantifier is literal in JavaScript, but an error in Java.
+ * - a few Unicode properties are named differently by the two flavours.
  */
 internal fun translateJsRegex(source: String): String {
     val out = StringBuilder(source.length + 8)
@@ -143,8 +144,7 @@ internal fun translateJsRegex(source: String): String {
         val char = source[index]
         when {
             char == '\\' && index + 1 < source.length -> {
-                out.append(char).append(source[index + 1])
-                index += 2
+                index = appendEscape(source, index, out)
             }
 
             !inCharacterClass && char == '[' -> {
@@ -195,6 +195,38 @@ internal fun translateJsRegex(source: String): String {
     }
     return out.toString()
 }
+
+/**
+ * Appends the escape sequence starting at [index] and returns the index just past it.
+ *
+ * `\p{…}` and `\P{…}` are passed through under the name [java.util.regex] knows them by.
+ */
+private fun appendEscape(source: String, index: Int, out: StringBuilder): Int {
+    val escaped = source[index + 1]
+    if ((escaped == 'p' || escaped == 'P') && source.getOrNull(index + 2) == '{') {
+        val close = source.indexOf('}', startIndex = index + 3)
+        if (close != -1) {
+            val name = source.substring(index + 3, close)
+            out.append('\\').append(escaped).append('{')
+                .append(UNICODE_PROPERTY_NAMES[name] ?: name).append('}')
+            return close + 1
+        }
+    }
+    out.append(source[index]).append(escaped)
+    return index + 2
+}
+
+/**
+ * Unicode properties the two flavours spell differently.
+ *
+ * `java.util.regex` has no `XID_*`, but it exposes `Character.isUnicodeIdentifier*` as a property,
+ * which describes the same characters bar the identifier-ignorable ones — control and format
+ * characters that no source file uses inside a name anyway.
+ */
+private val UNICODE_PROPERTY_NAMES = mapOf(
+    "XID_Start" to "javaUnicodeIdentifierStart",
+    "XID_Continue" to "javaUnicodeIdentifierPart",
+)
 
 /** Is the `{` at [braceIndex] the start of a `{n}`, `{n,}` or `{n,m}` quantifier? */
 private fun opensQuantifier(source: String, braceIndex: Int): Boolean {

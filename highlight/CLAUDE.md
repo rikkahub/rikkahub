@@ -33,7 +33,8 @@ tools/                     Node script that captures golden fixtures from highli
 
 - **Transcribe upstream verbatim.** Grammars are written with JS-flavoured regex; `translateJsRegex`
   in `Regexes.kt` is the single place that bridges the dialects (`[^]`, `[]`, literal `[`/`&` in a
-  character class, bare `{`). Fix regex incompatibilities there, not in individual grammars.
+  character class, bare `{`, the `\p{XID_…}` property names). Fix regex incompatibilities there, not
+  in individual grammars.
 - Shared modes in `CommonModes.kt` are `.frozen()` because compilation mutates modes in place;
   `builtinLanguages()` builds a fresh tree per engine instance for the same reason.
 - The emitter is flat, so **the innermost scope wins** — e.g. JSON's `true` ends up `keyword`, not
@@ -69,9 +70,9 @@ name (`ini` ships as `toml`).
 ## Currently bundled
 
 json · ini (toml) · cmake · go · yaml · bash · dockerfile · javascript · typescript · xml (html) ·
-css · java · kotlin
+css · java · kotlin · python
 
-Everything else — python, rust, c, cpp, sql — is **not ported yet** and renders as plain text.
+Everything else — rust, c, cpp, sql — is **not ported yet** and renders as plain text.
 JavaScript's `gql` tagged templates and JSX name sub-languages name grammars we do not ship, so
 their bodies stay plain, upstream included.
 

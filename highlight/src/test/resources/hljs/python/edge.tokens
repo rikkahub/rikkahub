@@ -1,0 +1,179 @@
+comment	#!/usr/bin/env python3
+	\n
+comment	# type: ignore
+	\n
+string	"""Doctests, string prefixes and every numeric literal.\n\n
+meta	>>> 
+string	add(1, 2)\n3\n
+meta	... 
+string	still the same prompt\n"""
+	\n\n
+keyword	import
+	 re\n\n\n
+keyword	def
+	 
+title.function	add
+	(
+params	left, right
+	):\n    
+comment	# type: (
+built_in	int
+comment	, 
+built_in	int
+comment	) -> 
+built_in	int
+	\n    
+keyword	return
+	 left + right\n\n\n
+keyword	def
+	 
+title.function	empty
+	():\n    
+keyword	pass
+	\n\n\n
+keyword	def
+	 
+title.function	计算
+	(
+params	值, 倍数=
+number	2
+	):\n    
+string	"""Names may be written in any script."""
+	\n    
+keyword	return
+	 值 * 倍数\n\n\n
+keyword	class
+	 
+title.class	Base
+	:\n    
+keyword	pass
+	\n\n\n
+keyword	class
+	 
+title.class	Derived
+	(
+title.class.inherited	Base
+	):\n    标记 = 
+string	"ok"
+	\n\n\nPLAIN = 
+string	'single'
+	\nUNICODE = 
+string	u"unicode"
+	\nRAW = 
+string	r"raw\\nnot escaped"
+	\nBYTES = 
+string	b'bytes'
+	\nRAW_BYTES = 
+string	br'\\x00'
+	\nBYTES_RAW = 
+string	rb"\\x00"
+	\nFSTRING = 
+string	f"
+subst	{PLAIN}
+string	 and {{literal}}"
+	\nFRAW = 
+string	rf'
+subst	{PLAIN}
+string	'
+	\nFRAW2 = 
+string	fr"
+subst	{PLAIN}
+string	"
+	\nBLOCK = 
+string	'''triple\nsingle'''
+	\nFBLOCK = 
+string	f"""\n
+subst	{PLAIN}
+string	 {{brace}}\n"""
+	\n\nDEC = 
+number	1_000_000
+	\nZEROS = 
+number	0000
+	\nHEX = 
+number	0xCAFE_BABE
+	\nOCT = 
+number	0o755
+	\nBIN = 
+number	0b1010_1010
+	\nLONG = 
+number	42L
+	\nIMAG = 
+number	3.5j
+	\nIMAG2 = 
+number	12j
+	\nEXP = 
+number	1_0.5e-3
+	\nPOINT = 
+number	.5
+	\nTRAILING = 
+number	10.
+	\nNEG = -
+number	0.5e+10
+	\n\n\n
+keyword	def
+	 
+title.function	classify
+	(
+params	value
+	):\n    
+keyword	match
+	 value:\n        
+keyword	case
+	 
+number	0
+	:\n            
+keyword	return
+	 
+string	"zero"
+	\n        
+keyword	case
+	 [first, *rest]:\n            
+keyword	return
+	 first\n        
+keyword	case
+	 _:\n            
+keyword	return
+	 value\n\n\n
+keyword	def
+	 
+title.function	counter
+	():\n    total = 
+number	0
+	\n\n    
+keyword	def
+	 
+title.function	bump
+	(
+params	step=
+number	1
+	):\n        
+keyword	nonlocal
+	 total\n        total += step\n        
+keyword	return
+	 total\n\n    
+keyword	return
+	 bump\n\n\nsquare = 
+keyword	lambda
+	 n: n * n\npairs = {name: 
+built_in	len
+	(name) 
+keyword	for
+	 name 
+keyword	in
+	 (
+string	"a"
+	, 
+string	"bb"
+	)}\nmatched = re.
+keyword	match
+	(
+string	"^a+"
+	, 
+string	"aaa"
+	) 
+keyword	is
+	 
+keyword	not
+	 
+literal	None
+	\n

@@ -11,6 +11,7 @@ import me.rerere.highlight.languages.java.java
 import me.rerere.highlight.languages.javascript.javascript
 import me.rerere.highlight.languages.json.json
 import me.rerere.highlight.languages.kotlin.kotlin
+import me.rerere.highlight.languages.python.python
 import me.rerere.highlight.languages.typescript.typescript
 import me.rerere.highlight.languages.xml.xml
 import me.rerere.highlight.languages.yaml.yaml
@@ -34,4 +35,5 @@ internal fun builtinLanguages(): List<Language> = listOf(
     css(),
     java(),
     kotlin(),
+    python(),
 )
