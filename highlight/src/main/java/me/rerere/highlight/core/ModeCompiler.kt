@@ -227,13 +227,16 @@ private fun dependencyOnParent(mode: Mode?): Boolean {
  */
 private fun expandOrCloneMode(mode: Mode): List<Mode> {
     mode.variants?.let { variants ->
-        return variants.map { variant ->
-            mode.copy().apply {
-                this.variants = null
-                variant()
+        if (mode.cachedVariants == null) {
+            mode.cachedVariants = variants.map { variant ->
+                mode.copy().apply {
+                    this.variants = null
+                    variant()
+                }
             }
         }
     }
+    mode.cachedVariants?.let { return it }
 
     // A mode that reads its parent needs an instance per parent.
     if (dependencyOnParent(mode)) {

@@ -223,6 +223,28 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
             """.trimIndent(),
         ),
         HighlightPreviewSample(
+            language = "java",
+            code = """
+                public final class Greeter {
+                    private final String name;
+
+                    public String greet() {
+                        return "Hello, " + name + "!";
+                    }
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "kotlin",
+            code = """
+                data class User(val name: String, val age: Int = 18)
+
+                fun greet(user: User) {
+                    println("Hello, ${'$'}{user.name}!")
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
             language = "cmake",
             code = """
                 cmake_minimum_required(VERSION 3.22)

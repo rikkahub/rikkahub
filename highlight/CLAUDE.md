@@ -44,6 +44,11 @@ tools/                     Node script that captures golden fixtures from highli
   gets back — `Mode.label` is what it finds them by. The one deviation: upstream mutates the shared
   keyword object in place, which Kotlin cannot, so `javascriptGrammar()` takes the keywords as a
   parameter instead. Fixtures are the source of truth that the two stay equivalent.
+- `Mode.variants` are expanded **once per mode instance** and the result is cached
+  (`Mode.cachedVariants`), like upstream. That is not an optimisation: a mode whose variants list
+  the mode itself — Kotlin's parenthesised type — only terminates because the second expansion
+  returns objects the first one already compiled. It also means two `contains` lists holding the
+  same variant mode end up sharing its expansion.
 - `Mode.subLanguageList` is `subLanguage: ['css', 'xml']` upstream, and it means **auto detection**,
   not "try in order": every candidate is highlighted and the highest relevance wins, with a plain
   text result winning any tie. That makes `<style>` and `<script>` bodies sensitive to relevance
@@ -64,11 +69,11 @@ name (`ini` ships as `toml`).
 ## Currently bundled
 
 json · ini (toml) · cmake · go · yaml · bash · dockerfile · javascript · typescript · xml (html) ·
-css
+css · java · kotlin
 
-Everything else — python, java, kotlin, rust, c, cpp, sql — is **not ported yet** and renders as
-plain text. JavaScript's `gql` tagged templates and JSX name sub-languages name grammars we do not
-ship, so their bodies stay plain, upstream included.
+Everything else — python, rust, c, cpp, sql — is **not ported yet** and renders as plain text.
+JavaScript's `gql` tagged templates and JSX name sub-languages name grammars we do not ship, so
+their bodies stay plain, upstream included.
 
 ## Tests
 

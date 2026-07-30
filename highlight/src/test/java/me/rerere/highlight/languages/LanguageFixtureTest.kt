@@ -37,4 +37,10 @@ class LanguageFixtureTest {
 
     @Test
     fun css() = HljsFixtures.assertLanguageMatches("css")
+
+    @Test
+    fun java() = HljsFixtures.assertLanguageMatches("java")
+
+    @Test
+    fun kotlin() = HljsFixtures.assertLanguageMatches("kotlin")
 }

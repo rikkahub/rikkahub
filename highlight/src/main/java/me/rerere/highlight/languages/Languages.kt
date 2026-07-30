@@ -7,8 +7,10 @@ import me.rerere.highlight.languages.css.css
 import me.rerere.highlight.languages.dockerfile.dockerfile
 import me.rerere.highlight.languages.go.go
 import me.rerere.highlight.languages.ini.ini
+import me.rerere.highlight.languages.java.java
 import me.rerere.highlight.languages.javascript.javascript
 import me.rerere.highlight.languages.json.json
+import me.rerere.highlight.languages.kotlin.kotlin
 import me.rerere.highlight.languages.typescript.typescript
 import me.rerere.highlight.languages.xml.xml
 import me.rerere.highlight.languages.yaml.yaml
@@ -30,4 +32,6 @@ internal fun builtinLanguages(): List<Language> = listOf(
     typescript(),
     xml(),
     css(),
+    java(),
+    kotlin(),
 )

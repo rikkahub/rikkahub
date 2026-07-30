@@ -1,0 +1,48 @@
+package com.example.edge;
+
+import java.util.function.Function;
+
+sealed interface Shape permits Circle, Square {}
+
+record Circle(double radius, String label) implements Shape {}
+
+non-sealed class Square implements Shape {
+    int side = 1;
+}
+
+public class Edge {
+    static final String BLOCK = """
+        hello "world"
+            indented line
+        """;
+
+    static final int HEX = 0xCAFE_BABE;
+    static final int OCTAL = 0755;
+    static final int BINARY = 0b1010_1010;
+    static final long BIG = 9_007_199_254_740_991L;
+    static final float FLT = 1_0.5e-3f;
+    static final double HEXFLOAT = 0x1.8p3;
+    static final double BARE = .5d;
+
+    String café = "latin-1 identifier";
+
+    @SafeVarargs
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    static <T> void accept(Function<Map<String, List<T>>, T> mapper, T... values) {
+        var count = values.length;
+        for (T value : values) {
+            System.out.println(mapper.apply(null));
+        }
+    }
+
+    static String describe(Object subject) {
+        return switch (subject) {
+            case Integer number when number > 0 -> "positive";
+            case String text -> text;
+            default -> "other";
+        };
+    }
+
+    /* A plain block comment, kept short. */
+    static int counter = 0;
+}

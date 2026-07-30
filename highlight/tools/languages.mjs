@@ -20,4 +20,6 @@ export const LANGUAGES = [
     aliases: ['html', 'xhtml', 'rss', 'atom', 'xjb', 'xsd', 'xsl', 'plist', 'wsf', 'svg'],
   },
   { name: 'css', module: 'css', aliases: [] },
+  { name: 'java', module: 'java', aliases: ['jsp'] },
+  { name: 'kotlin', module: 'kotlin', aliases: ['kt', 'kts'] },
 ]

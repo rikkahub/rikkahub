@@ -140,6 +140,15 @@ internal class Mode {
 
     // ---- compiled state -----------------------------------------------------------------------
 
+    /**
+     * The expansion of [variants], computed once per mode instance.
+     *
+     * Caching is not an optimisation: a mode whose variants contain the mode itself — Kotlin's
+     * parenthesised type is one — only terminates because the second expansion hands back the
+     * very objects the first one produced, which are compiled by then.
+     */
+    internal var cachedVariants: List<Mode>? = null
+
     internal var isCompiled: Boolean = false
     internal var compiledKeywords: Map<String, KeywordData>? = null
     internal var keywordPatternRe: Pattern? = null

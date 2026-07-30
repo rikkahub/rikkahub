@@ -28,6 +28,8 @@ class KotlinHighlighterTest {
             "typescript", "ts", "tsx", "mts", "cts",
             "xml", "html", "xhtml", "rss", "atom", "xjb", "xsd", "xsl", "plist", "wsf", "svg",
             "css",
+            "java", "jsp",
+            "kotlin", "kt", "kts",
         ).forEach { assertTrue(it, highlighter.supports(it)) }
     }
 
