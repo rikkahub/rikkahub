@@ -9,6 +9,7 @@ export const LANGUAGES = [
   { name: 'ini', module: 'ini', aliases: ['ini'] },
   { name: 'cmake', module: 'cmake', aliases: [] },
   { name: 'go', module: 'go', aliases: [] },
+  { name: 'glsl', module: 'glsl', aliases: [] },
   { name: 'yaml', module: 'yaml', aliases: [] },
   { name: 'bash', module: 'bash', aliases: ['shell'] },
   { name: 'dockerfile', module: 'dockerfile', aliases: [] },
@@ -23,7 +24,9 @@ export const LANGUAGES = [
   { name: 'dart', module: 'dart', aliases: [] },
   { name: 'java', module: 'java', aliases: ['jsp'] },
   { name: 'kotlin', module: 'kotlin', aliases: ['kt', 'kts'] },
+  { name: 'latex', module: 'latex', aliases: ['tex'] },
   { name: 'lua', module: 'lua', aliases: ['pluto'] },
+  { name: 'ruby', module: 'ruby', aliases: ['rb', 'gemspec', 'podspec', 'thor', 'irb'] },
   { name: 'python', module: 'python', aliases: ['py', 'gyp', 'ipython'] },
   { name: 'c', module: 'c', aliases: ['h'] },
   {

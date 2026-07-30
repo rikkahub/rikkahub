@@ -69,11 +69,11 @@ name (`ini` ships as `toml`).
 
 ## Currently bundled
 
-json · ini (toml) · cmake · go · yaml · bash · dockerfile · javascript · typescript · xml (html) ·
-css · dart · java · kotlin · lua · python · c · cpp · csharp · sql · diff · markdown · rust · php ·
-swift
+json · ini (toml) · cmake · go · glsl · yaml · bash · dockerfile · javascript · typescript ·
+xml (html) · css · dart · java · kotlin · latex · lua · python · c · cpp · csharp · sql · diff ·
+markdown · rust · php · swift · ruby
 
-Everything else — ruby — is **not ported yet** and renders as plain text.
+Unbundled grammars render as plain text.
 JavaScript's `gql` tagged templates and JSX name sub-languages name grammars we do not ship, so
 their bodies stay plain, upstream included.
 

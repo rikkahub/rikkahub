@@ -67,6 +67,14 @@ class KotlinHighlighterTest {
     }
 
     @Test
+    fun `yaml erb uses the bundled ruby grammar`() {
+        val tokens = highlighter.highlight("template: <% if user %><%= user.name %><% end %>", "yaml")
+
+        assertToken(tokens, "if", "keyword")
+        assertToken(tokens, "end", "keyword")
+    }
+
+    @Test
     fun `empty input yields no tokens`() {
         assertTrue(highlighter.highlight("", "json").isEmpty())
     }

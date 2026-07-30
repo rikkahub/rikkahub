@@ -223,6 +223,19 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
             """.trimIndent(),
         ),
         HighlightPreviewSample(
+            language = "glsl",
+            code = """
+                #version 450
+
+                layout(location = 0) in vec3 position;
+                uniform mat4 transform;
+
+                void main() {
+                  gl_Position = transform * vec4(position, 1.0);
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
             language = "dart",
             code = """
                 class User {
@@ -269,6 +282,21 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
 
                 function User:greet()
                   print("Hello, " .. self.name .. "!")
+                end
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "ruby",
+            code = """
+                class User
+                  attr_reader :name
+
+                  def initialize(name, age: 18)
+                    @name = name
+                    @age = age
+                  end
+
+                  def greet = "Hello, #{name}!"
                 end
             """.trimIndent(),
         ),
@@ -408,6 +436,20 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
 
                 - [Docs](https://example.com)
                 - Inline `code`
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "latex",
+            code = """
+                \documentclass{article}
+                \usepackage{amsmath}
+
+                \begin{document}
+                \section{Greeting}
+                \[
+                  E = mc^2
+                \]
+                \end{document}
             """.trimIndent(),
         ),
         HighlightPreviewSample(

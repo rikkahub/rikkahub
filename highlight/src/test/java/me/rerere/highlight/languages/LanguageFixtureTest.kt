@@ -18,6 +18,9 @@ class LanguageFixtureTest {
     fun go() = HljsFixtures.assertLanguageMatches("go")
 
     @Test
+    fun glsl() = HljsFixtures.assertLanguageMatches("glsl")
+
+    @Test
     fun yaml() = HljsFixtures.assertLanguageMatches("yaml")
 
     @Test
@@ -48,6 +51,9 @@ class LanguageFixtureTest {
     fun kotlin() = HljsFixtures.assertLanguageMatches("kotlin")
 
     @Test
+    fun latex() = HljsFixtures.assertLanguageMatches("latex")
+
+    @Test
     fun lua() = HljsFixtures.assertLanguageMatches("lua")
 
     @Test
@@ -73,6 +79,9 @@ class LanguageFixtureTest {
 
     @Test
     fun rust() = HljsFixtures.assertLanguageMatches("rust")
+
+    @Test
+    fun ruby() = HljsFixtures.assertLanguageMatches("ruby")
 
     @Test
     fun php() = HljsFixtures.assertLanguageMatches("php")
