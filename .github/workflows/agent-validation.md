@@ -8,7 +8,7 @@ The `verify` job is blocking: Kotlin compilation, third-batch targeted JVM tests
 
 Room schemas under `app/schemas/**` are uploaded after the compilation step even if compilation fails, so the generated v28 schema can be downloaded from the workflow artifacts. Artifact names include the trigger type and run number, while concurrency is scoped by trigger type and the validated PR SHA or dispatch ref.
 
-Push the workflow to the fork `ningbainb/rikkahub`, then open a pull request into `master` to run it automatically. A workflow-dispatch run can validate another ref with:
+Push the workflow to the fork `ningbainb/rikkahub`, then open a pull request into `master` to run it automatically. GitHub does not schedule regular `pull_request` runs while a PR is a draft, so mark a newly created draft ready for review to schedule validation; it can be returned to draft after the run is queued. A workflow-dispatch run can validate another ref with:
 
 ```bash
 gh workflow run agent-validation.yml --repo ningbainb/rikkahub --ref agent/third-batch-context-orchestration -f ref=agent/third-batch-context-orchestration
