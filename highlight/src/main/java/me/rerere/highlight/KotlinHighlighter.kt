@@ -111,11 +111,12 @@ private fun KotlinHighlightTextPreview(
 private data class HighlightPreviewSample(
     val language: String,
     val code: String,
-) {
-    override fun toString(): String = language
-}
+)
 
 private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPreviewSample> {
+    /** Titles every preview after the language it renders instead of after its position. */
+    override fun getDisplayName(index: Int): String = values.elementAt(index).language
+
     override val values = sequenceOf(
         HighlightPreviewSample(
             language = "json",
