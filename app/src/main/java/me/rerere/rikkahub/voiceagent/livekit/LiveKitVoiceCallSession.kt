@@ -66,11 +66,11 @@ internal class LiveKitVoiceCallSession(
         VoiceAutomationAudioProbes::activeSharedOrNull,
 ) : RouteOwnedManagedVoiceCallSession {
     private val registeredRpcMethods = buildMap {
+        require(LIVEKIT_PERSISTENCE_RPC !in rpcMethods) {
+            "$LIVEKIT_PERSISTENCE_RPC is owned by the persistence handler"
+        }
         putAll(rpcMethods)
         persistenceHandler?.let { handler ->
-            require(LIVEKIT_PERSISTENCE_RPC !in this) {
-                "$LIVEKIT_PERSISTENCE_RPC is owned by the persistence handler"
-            }
             put(LIVEKIT_PERSISTENCE_RPC, handler)
         }
     }
@@ -423,7 +423,6 @@ private class LiveKitCleanupOperation(
     private var eventJobCompleted = false
     private var microphoneJobCompleted = false
     private var persistenceDrainCompleted = persistenceOwner == null
-    private var persistenceDrainSkipped = false
     private var rpcWorkCompleted = false
     private var persistenceOwnerCompleted = persistenceOwner == null
     private var automationAudioCompleted = false
@@ -445,15 +444,15 @@ private class LiveKitCleanupOperation(
                 )
                 captureSourceCompleted = cleanCaptureSource(captureSourceCompleted, failures)
                 retireRoute(failures)
-                drainPersistenceOwner(mode, failures)
-                unregisterRpcMethods(
-                    allowed = mode == VoiceAgentCleanupMode.Immediate || persistenceDrainCompleted,
-                    failures = failures,
-                )
                 connectionJobCompleted = cleanJob(connectionJob(), connectionJobCompleted, failures)
                 eventJobCompleted = cleanJob(eventJob(), eventJobCompleted, failures)
                 microphoneJobCompleted = cleanJob(microphoneJob(), microphoneJobCompleted, failures)
                 rpcWorkCompleted = cleanRpcWork(rpcWorkCompleted, failures)
+                drainPersistenceOwner(failures)
+                unregisterRpcMethods(
+                    allowed = rpcWorkCompleted && persistenceDrainCompleted,
+                    failures = failures,
+                )
                 closePersistenceOwner(failures)
                 disconnectRoom(failures)
                 closeRoom(failures)
@@ -519,15 +518,8 @@ private class LiveKitCleanupOperation(
         }
     }
 
-    private suspend fun drainPersistenceOwner(
-        mode: VoiceAgentCleanupMode,
-        failures: CleanupAttemptFailures,
-    ) {
-        if (persistenceDrainCompleted || persistenceDrainSkipped) return
-        if (mode == VoiceAgentCleanupMode.Immediate) {
-            persistenceDrainSkipped = true
-            return
-        }
+    private suspend fun drainPersistenceOwner(failures: CleanupAttemptFailures) {
+        if (persistenceDrainCompleted || !rpcWorkCompleted) return
         try {
             persistenceOwner?.drain()
             persistenceDrainCompleted = true
@@ -569,7 +561,7 @@ private class LiveKitCleanupOperation(
         if (
             persistenceOwnerCompleted ||
             !rpcWorkCompleted ||
-            (!persistenceDrainCompleted && !persistenceDrainSkipped)
+            !persistenceDrainCompleted
         ) return
         try {
             persistenceOwner?.close()
@@ -615,7 +607,7 @@ private class LiveKitCleanupOperation(
             !captureSourceCompleted ||
             !routeCompleted ||
             !jobsCompleted() ||
-            (!persistenceDrainCompleted && !persistenceDrainSkipped) ||
+            !persistenceDrainCompleted ||
             !rpcWorkCompleted ||
             !persistenceOwnerCompleted ||
             pendingRpcMethods.isNotEmpty() ||

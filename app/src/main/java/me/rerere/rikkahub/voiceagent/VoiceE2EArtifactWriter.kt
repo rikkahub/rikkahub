@@ -4,10 +4,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
@@ -67,10 +70,13 @@ class VoiceE2EArtifactWriter private constructor(
     private val pendingWrites = LinkedHashMap<VoiceE2EArtifact, String>()
     private val pendingAppends = mutableListOf<PendingAppend>()
     private var flushQueued = false
+    private var closed = false
+    private val commandWorker: Job?
+    private val closeCompleted = CompletableDeferred<Unit>()
 
     init {
         val queue = commands
-        if (queue != null && scope != null) {
+        commandWorker = if (queue != null && scope != null) {
             scope.launch(Dispatchers.IO) {
                 for (command in queue) {
                     when (command) {
@@ -84,6 +90,10 @@ class VoiceE2EArtifactWriter private constructor(
                     }
                 }
             }
+        } else {
+            null
+        }
+        if (queue != null && commandWorker != null) {
             if (activeTraceId != null && queue.trySend(WriteCommand.CleanOldTraceDirectories).isFailure) {
                 VoiceAgentLog.w(TAG, "artifact trace retention cleanup queue rejected")
             }
@@ -103,6 +113,7 @@ class VoiceE2EArtifactWriter private constructor(
         }
         var shouldQueueFlush = false
         synchronized(pendingLock) {
+            if (closed) return
             if (artifact.appendOnly) {
                 pendingAppends += PendingAppend(artifact, content)
             } else {
@@ -120,13 +131,14 @@ class VoiceE2EArtifactWriter private constructor(
 
     fun writeTerminalSessionJson(content: String): Deferred<Unit> {
         val writerScope = terminalWriteScope ?: return completedWrite()
-        synchronized(pendingLock) {
-            pendingWrites.remove(VoiceE2EArtifact.SessionJson)
-        }
         val completed = CompletableDeferred<Unit>()
-        val previous = synchronized(terminalWriteLock) {
-            terminalWriteTail.also {
-                terminalWriteTail = completed
+        val previous = synchronized(pendingLock) {
+            if (closed) return completedWrite()
+            pendingWrites.remove(VoiceE2EArtifact.SessionJson)
+            synchronized(terminalWriteLock) {
+                terminalWriteTail.also {
+                    terminalWriteTail = completed
+                }
             }
         }
         writerScope.launch {
@@ -139,9 +151,7 @@ class VoiceE2EArtifactWriter private constructor(
             }
             completed.complete(Unit)
         }
-        return writerScope.async {
-            completed.await()
-        }
+        return completed
     }
 
     suspend fun drain() {
@@ -156,6 +166,33 @@ class VoiceE2EArtifactWriter private constructor(
             terminalWriteTail
         }
         terminalWrite.await()
+    }
+
+    suspend fun close() {
+        val queue = commands ?: return
+        withContext(NonCancellable) {
+            val shouldClose = synchronized(pendingLock) {
+                if (closed) {
+                    false
+                } else {
+                    closed = true
+                    true
+                }
+            }
+            if (!shouldClose) {
+                closeCompleted.await()
+                return@withContext
+            }
+            try {
+                queue.close()
+                commandWorker?.join()
+                flushPendingWrites()
+                drainTerminalWrites()
+            } finally {
+                terminalWriteScope?.cancel()
+                closeCompleted.complete(Unit)
+            }
+        }
     }
 
     private fun clearAppendOnlyArtifacts() {

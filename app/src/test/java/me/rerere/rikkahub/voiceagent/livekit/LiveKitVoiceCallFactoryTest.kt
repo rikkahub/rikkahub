@@ -3,9 +3,13 @@ package me.rerere.rikkahub.voiceagent.livekit
 import android.content.ContextWrapper
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -13,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
+import me.rerere.rikkahub.voiceagent.VoiceE2EArtifact
 import me.rerere.rikkahub.voiceagent.VoiceE2EArtifactWriter
 import me.rerere.rikkahub.voiceagent.OrchestratorFakeRoute
 import me.rerere.rikkahub.voiceagent.VoiceAgentCleanupMode
@@ -27,6 +32,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
 
 class LiveKitVoiceCallFactoryTest {
@@ -192,6 +200,118 @@ class LiveKitVoiceCallFactoryTest {
         }
     }
 
+    @Test
+    fun `room construction failure flushes and retires the enabled artifact writer`() = runTest {
+        val root = Files.createTempDirectory("livekit-factory-writer-retirement").toFile()
+        val writerJob = SupervisorJob()
+        val writerScope = CoroutineScope(writerJob + StandardTestDispatcher(testScheduler))
+        try {
+            val factory = factory(
+                sessionDetailsFactory = { _, _ -> factoryDetails() },
+                roomFactory = { throw IllegalStateException("room construction failed") },
+                artifactWriterFactory = { directory, trace, _ ->
+                    VoiceE2EArtifactWriter.create(
+                        enabled = true,
+                        rootDirectory = directory,
+                        traceId = trace.traceId,
+                        scope = writerScope,
+                    ).also { writer ->
+                        writer.write(
+                            VoiceE2EArtifact.VoiceExperienceEvents,
+                            """{"kind":"construction_failed"}""",
+                        )
+                    }
+                },
+                noBackupFilesDir = root,
+            )
+
+            val result = factory.createOwned(request(), OrchestratorFakeRoute().lease, writerScope)
+
+            assertTrue(result is VoiceAgentSessionCreationResult.FailedClean)
+            assertEquals(
+                listOf("""{"kind":"construction_failed"}"""),
+                File(
+                    root,
+                    "voice-e2e/VA123456-0000000000000001/voice-experience-events.ndjson",
+                ).readLines(),
+            )
+            assertTrue(writerJob.children.none { it.isActive })
+        } finally {
+            writerScope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `immediate cleanup flushes persisted evidence before call scope cancellation`() = runTest {
+        val root = Files.createTempDirectory("livekit-immediate-evidence").toFile()
+        val callJob = SupervisorJob()
+        val callScope = CoroutineScope(callJob + StandardTestDispatcher(testScheduler))
+        val terminalWriteStarted = CountDownLatch(1)
+        val releaseTerminalWrite = CountDownLatch(1)
+        val room = InertLiveKitRoomFacade()
+        try {
+            val factory = factory(
+                sessionDetailsFactory = { _, _ -> factoryDetails() },
+                roomFactory = { room },
+                artifactWriterFactory = { directory, trace, _ ->
+                    VoiceE2EArtifactWriter.create(
+                        enabled = true,
+                        rootDirectory = directory,
+                        traceId = trace.traceId,
+                        scope = callScope,
+                        atomicMove = { source, target, _ ->
+                            if (target.fileName.toString() == "session.json") {
+                                terminalWriteStarted.countDown()
+                                check(releaseTerminalWrite.await(5, TimeUnit.SECONDS)) {
+                                    "terminal write release timed out"
+                                }
+                            }
+                            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING)
+                        },
+                    ).also { writer ->
+                        writer.writeTerminalSessionJson("""{"status":"active"}""")
+                    }
+                },
+                noBackupFilesDir = root,
+            )
+            val result = factory.createOwned(
+                request(),
+                OrchestratorFakeRoute().lease,
+                callScope,
+            )
+            val session = (result as VoiceAgentSessionCreationResult.Created).session
+            assertTrue(terminalWriteStarted.await(5, TimeUnit.SECONDS))
+            session.start()
+
+            val ack = room.invoke(
+                method = LIVEKIT_PERSISTENCE_RPC,
+                caller = factoryDetails().agentParticipantIdentity,
+                payload = acceptedEventJson(),
+            )
+            val cleanup = async {
+                session.cleanupOperation.run(VoiceAgentCleanupMode.Immediate)
+            }
+            runCurrent()
+
+            assertEquals("persisted", parseLiveKitPersistenceAck(ack)?.status)
+            assertTrue("cleanup returned before evidence flush", !cleanup.isCompleted)
+
+            releaseTerminalWrite.countDown()
+            assertEquals(VoiceAgentCleanupResult.Completed, cleanup.await())
+            callScope.cancel()
+            runCurrent()
+
+            val traceDirectory = File(root, "voice-e2e/VA123456-0000000000000001")
+            assertEquals(listOf(acceptedEventJson()), File(traceDirectory, "voice-experience-private.ndjson").readLines())
+            assertEquals(1, File(traceDirectory, "voice-experience-events.ndjson").readLines().size)
+        } finally {
+            releaseTerminalWrite.countDown()
+            callScope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
     private fun factory(
         sessionDetailsFactory: suspend (
             me.rerere.rikkahub.voiceagent.VoiceAgentCallRequest,
@@ -201,6 +321,8 @@ class LiveKitVoiceCallFactoryTest {
         conversationStoreFactory: (Uuid) -> VoiceConversationStore = {
             RecordingFactoryConversationStore(it)
         },
+        artifactWriterFactory: (File, VoiceTraceContext, CoroutineScope) -> VoiceE2EArtifactWriter =
+            { _, _, _ -> VoiceE2EArtifactWriter.disabled() },
         noBackupFilesDir: File = File("build/tmp/livekit-factory-test"),
         timeoutMillis: Long = 1_000,
     ) = LiveKitVoiceCallFactory(
@@ -216,7 +338,7 @@ class LiveKitVoiceCallFactoryTest {
         sessionDetailsFactory = sessionDetailsFactory,
         roomFactory = roomFactory,
         conversationStoreFactory = conversationStoreFactory,
-        artifactWriterFactory = { _, _, _ -> VoiceE2EArtifactWriter.disabled() },
+        artifactWriterFactory = artifactWriterFactory,
         sessionCreationTimeoutMillis = timeoutMillis,
     )
 

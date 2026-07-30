@@ -130,19 +130,26 @@ internal class LiveKitVoiceCallFactory internal constructor(
             resourcesTransferred = true
             VoiceAgentSessionCreationResult.Created(session)
         } catch (_: TimeoutCancellationException) {
-            captureSource?.close()
+            val creationError = LiveKitExperimentalVoiceCallException(
+                "LiveKit experimental voice session request timed out",
+            )
             if (!resourcesTransferred) {
-                artifactWriter?.drain()
-                conversationStore?.close()
+                runCatching { captureSource?.close() }
+                    .onFailure(creationError::addSuppressed)
+                runCatching { artifactWriter?.close() }
+                    .onFailure(creationError::addSuppressed)
+                runCatching { conversationStore?.close() }
+                    .onFailure(creationError::addSuppressed)
             }
             finishFailedOwnedVoiceSessionCreation(
-                LiveKitExperimentalVoiceCallException("LiveKit experimental voice session request timed out"),
+                creationError,
                 cleanup,
             )
         } catch (creationError: Throwable) {
-            captureSource?.close()
             if (!resourcesTransferred) {
-                runCatching { artifactWriter?.drain() }
+                runCatching { captureSource?.close() }
+                    .onFailure(creationError::addSuppressed)
+                runCatching { artifactWriter?.close() }
                     .onFailure(creationError::addSuppressed)
                 runCatching { conversationStore?.close() }
                     .onFailure(creationError::addSuppressed)
@@ -172,7 +179,7 @@ private class LiveKitPersistenceResources(
 ) : LiveKitPersistenceOwner {
     override suspend fun drain() {
         bridge.drain()
-        artifactWriter.drain()
+        artifactWriter.close()
     }
 
     override fun close() {

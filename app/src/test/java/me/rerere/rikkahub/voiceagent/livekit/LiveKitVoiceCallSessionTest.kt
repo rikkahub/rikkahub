@@ -638,8 +638,50 @@ class LiveKitVoiceCallSessionTest {
 
         assertEquals("""{"status":"persisted"}""", invocation.await())
         assertEquals(VoiceAgentCleanupResult.Completed, cleanup.await())
-        assertEquals(listOf("close"), persistence.lifecycle)
+        assertEquals(listOf("drain", "close"), persistence.lifecycle)
         assertEquals(listOf("evt_accepted"), persistence.events)
+    }
+
+    @Test
+    fun `graceful cleanup joins admitted work before entering persistence drain`() = runTest {
+        val admittedBeforePersistence = CompletableDeferred<Unit>()
+        val enterPersistence = CompletableDeferred<Unit>()
+        val persistence = RecordingPersistenceOwner()
+        val fixture = fixture(
+            persistenceHandler = { callerIdentity, payload ->
+                admittedBeforePersistence.complete(Unit)
+                enterPersistence.await()
+                persistence.handle(callerIdentity, payload)
+            },
+            persistenceOwner = persistence,
+        )
+        fixture.session.start()
+        runCurrent()
+
+        val invocation = async {
+            fixture.room.invoke(
+                LIVEKIT_PERSISTENCE_RPC,
+                AGENT_IDENTITY,
+                acceptedEventJson(),
+            )
+        }
+        admittedBeforePersistence.await()
+        val cleanup = async {
+            fixture.session.cleanupOperation.run(VoiceAgentCleanupMode.GracefulEnd)
+        }
+        runCurrent()
+
+        assertFalse(cleanup.isCompleted)
+        assertTrue(persistence.lifecycle.isEmpty())
+        assertTrue(fixture.room.rpcHandlers.containsKey(LIVEKIT_PERSISTENCE_RPC))
+
+        enterPersistence.complete(Unit)
+        runCurrent()
+
+        assertEquals("""{"status":"persisted"}""", invocation.await())
+        assertEquals(VoiceAgentCleanupResult.Completed, cleanup.await())
+        assertEquals(listOf("drain", "close"), persistence.lifecycle)
+        assertFalse(fixture.room.rpcHandlers.containsKey(LIVEKIT_PERSISTENCE_RPC))
     }
 
     @Test
@@ -668,6 +710,18 @@ class LiveKitVoiceCallSessionTest {
         )
         assertEquals(listOf("drain", "close"), persistence.lifecycle)
         assertFalse(fixture.room.rpcHandlers.containsKey(LIVEKIT_PERSISTENCE_RPC))
+    }
+
+    @Test
+    fun `reserved persistence RPC cannot be supplied without its owner`() = runTest {
+        val error = runCatching {
+            fixture(
+                rpcMethods = mapOf(LIVEKIT_PERSISTENCE_RPC to { "forged-ack" }),
+            )
+        }.exceptionOrNull()
+
+        assertTrue(error is IllegalArgumentException)
+        assertTrue(error?.message.orEmpty().contains("owned", ignoreCase = true))
     }
 
     @Test
@@ -839,7 +893,7 @@ class LiveKitVoiceCallSessionTest {
                 "hermes.job.accepted" to {
                     handlerStarted.complete(Unit)
                     handlerGate.await()
-                    assertTrue("unregister:hermes.job.accepted" in fixture.room.lifecycle)
+                    assertFalse("unregister:hermes.job.accepted" in fixture.room.lifecycle)
                     handlerCompleted = true
                     "persisted"
                 },
@@ -869,6 +923,7 @@ class LiveKitVoiceCallSessionTest {
         assertEquals("persisted", invocation.await())
         assertTrue(handlerCompleted)
         assertEquals(VoiceAgentCleanupResult.Completed, cleanup.await())
+        assertTrue("unregister:hermes.job.accepted" in fixture.room.lifecycle)
         assertEquals(1, fixture.room.disconnectCalls)
         assertEquals(1, fixture.room.closeCalls)
     }
