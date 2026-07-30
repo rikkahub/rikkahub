@@ -57,6 +57,9 @@ class LanguageFixtureTest {
     fun cpp() = HljsFixtures.assertLanguageMatches("cpp")
 
     @Test
+    fun csharp() = HljsFixtures.assertLanguageMatches("csharp")
+
+    @Test
     fun sql() = HljsFixtures.assertLanguageMatches("sql")
 
     @Test

@@ -5,6 +5,7 @@ import me.rerere.highlight.languages.bash.bash
 import me.rerere.highlight.languages.c.c
 import me.rerere.highlight.languages.cmake.cmake
 import me.rerere.highlight.languages.cpp.cpp
+import me.rerere.highlight.languages.csharp.csharp
 import me.rerere.highlight.languages.css.css
 import me.rerere.highlight.languages.dart.dart
 import me.rerere.highlight.languages.diff.diff
@@ -48,6 +49,7 @@ internal fun builtinLanguages(): List<Language> = listOf(
     python(),
     c(),
     cpp(),
+    csharp(),
     sql(),
     diff(),
     markdown(),

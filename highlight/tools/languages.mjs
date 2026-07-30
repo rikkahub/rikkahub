@@ -30,6 +30,7 @@ export const LANGUAGES = [
     module: 'cpp',
     aliases: ['cc', 'c++', 'h++', 'hpp', 'hh', 'hxx', 'cxx'],
   },
+  { name: 'csharp', module: 'csharp', aliases: ['cs', 'c#'] },
   { name: 'sql', module: 'sql', aliases: [] },
   { name: 'diff', module: 'diff', aliases: ['patch'] },
   { name: 'markdown', module: 'markdown', aliases: ['md', 'mkdown', 'mkd'] },

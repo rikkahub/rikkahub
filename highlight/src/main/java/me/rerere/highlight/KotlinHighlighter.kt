@@ -299,6 +299,19 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
             """.trimIndent(),
         ),
         HighlightPreviewSample(
+            language = "csharp",
+            code = """
+                namespace RikkaHub;
+
+                public sealed record User(string Name, int Age = 18)
+                {
+                    public string Greet() => ${'$'}"Hello, {Name}!";
+                }
+
+                Console.WriteLine(new User("Rikka").Greet());
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
             language = "rust",
             code = """
                 #[derive(Debug)]
