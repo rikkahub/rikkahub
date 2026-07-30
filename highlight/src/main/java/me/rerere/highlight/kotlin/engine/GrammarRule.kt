@@ -79,6 +79,8 @@ internal enum class LexemeKind(val canStartExpression: Boolean) {
     KeywordExpressionStarter(true),
     Keyword(true),
     ClassDeclaration(true),
+    FunctionDeclaration(true),
+    VariableDeclaration(true),
     PropertyAccess(false),
     Value(false),
 }

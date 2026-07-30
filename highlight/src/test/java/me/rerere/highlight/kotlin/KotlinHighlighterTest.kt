@@ -13,8 +13,8 @@ class KotlinHighlighterTest {
     fun `unsupported language is returned as plain text`() {
         val code = "fun main() = Unit"
 
-        assertEquals(listOf(HighlightToken.Plain(code)), highlighter.highlight(code, "kotlin"))
-        assertFalse(highlighter.supports("kotlin"))
+        assertEquals(listOf(HighlightToken.Plain(code)), highlighter.highlight(code, "unsupported"))
+        assertFalse(highlighter.supports("unsupported"))
         assertTrue(highlighter.highlight("", "js").isEmpty())
     }
 
