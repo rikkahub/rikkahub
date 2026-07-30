@@ -46,7 +46,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.common.http.jsonObjectOrNull
-import me.rerere.highlight.kotlin.KotlinHighlightText
+import me.rerere.highlight.KotlinHighlightText
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Clipboard
 import me.rerere.hugeicons.stroke.Delete01

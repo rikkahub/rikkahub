@@ -31,7 +31,7 @@ import kotlinx.serialization.json.longOrNull
 import me.rerere.ai.ui.DiffMetadata
 import me.rerere.ai.ui.metadataAs
 import me.rerere.common.http.jsonObjectOrNull
-import me.rerere.highlight.kotlin.KotlinHighlightText
+import me.rerere.highlight.KotlinHighlightText
 import androidx.compose.ui.res.stringResource
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ComputerTerminal01

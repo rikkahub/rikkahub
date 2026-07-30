@@ -1,0 +1,24 @@
+package main
+
+import "fmt"
+
+// Server holds the listener config.
+type Server struct {
+	address string
+	port    int
+}
+
+/* block comment */
+const mask = 0xCA_FE
+
+func (s *Server) Start(port int) error {
+	values := make([]int, 0, 4)
+	values = append(values, 1, 2)
+	raw := `back
+tick`
+	fmt.Println(len(values), raw, 'x', "quoted", 1.5e3, 0o755)
+	if port == 0 {
+		return nil
+	}
+	return nil
+}

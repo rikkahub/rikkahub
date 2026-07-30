@@ -56,8 +56,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import me.rerere.highlight.HighlightTextColorPalette
 import me.rerere.highlight.buildHighlightText
-import me.rerere.highlight.kotlin.KotlinHighlightText
-import me.rerere.highlight.kotlin.KotlinHighlighter
+import me.rerere.highlight.KotlinHighlightText
+import me.rerere.highlight.KotlinHighlighter
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01

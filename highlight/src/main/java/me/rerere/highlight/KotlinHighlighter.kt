@@ -1,0 +1,189 @@
+package me.rerere.highlight
+
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
+import androidx.compose.ui.tooling.preview.PreviewParameterProvider
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import me.rerere.highlight.core.HighlightEngine
+import me.rerere.highlight.languages.builtinLanguages
+
+private const val MAX_CODE_LENGTH = 4096
+
+val LocalKotlinHighlighter = staticCompositionLocalOf { KotlinHighlighter() }
+
+/**
+ * A pure Kotlin syntax highlighter.
+ *
+ * Grammars are ported from highlight.js 11.11.1 and run on [HighlightEngine], a port of its mode
+ * stack parser. An unsupported language is returned unhighlighted.
+ */
+class KotlinHighlighter {
+    private val engine = HighlightEngine(builtinLanguages())
+
+    fun highlight(code: String, language: String): List<HighlightToken> {
+        if (code.isEmpty()) return emptyList()
+
+        return engine.highlight(code, language)
+            ?: listOf(HighlightToken.Plain(code))
+    }
+
+    fun supports(language: String): Boolean = engine.supports(language)
+}
+
+@Composable
+fun KotlinHighlightText(
+    code: String,
+    language: String,
+    modifier: Modifier = Modifier,
+    colors: HighlightTextColorPalette = HighlightTextColorPalette.Default,
+    fontSize: TextUnit = 12.sp,
+    fontFamily: FontFamily = FontFamily.Monospace,
+    fontStyle: FontStyle = FontStyle.Normal,
+    fontWeight: FontWeight = FontWeight.Normal,
+    lineHeight: TextUnit = TextUnit.Unspecified,
+    overflow: TextOverflow = TextOverflow.Clip,
+    softWrap: Boolean = true,
+    maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1,
+) {
+    val highlighter = LocalKotlinHighlighter.current
+    val annotatedString = remember(code, language, colors, highlighter) {
+        if (code.length > MAX_CODE_LENGTH) {
+            AnnotatedString(code)
+        } else {
+            buildAnnotatedString {
+                highlighter.highlight(code, language).forEach { token ->
+                    buildHighlightText(token, colors)
+                }
+            }
+        }
+    }
+
+    Text(
+        modifier = modifier,
+        text = annotatedString,
+        fontSize = fontSize,
+        fontFamily = fontFamily,
+        fontStyle = fontStyle,
+        fontWeight = fontWeight,
+        lineHeight = lineHeight,
+        overflow = overflow,
+        softWrap = softWrap,
+        maxLines = maxLines,
+        minLines = minLines,
+    )
+}
+
+@Preview
+@Composable
+private fun KotlinHighlightTextPreview(
+    @PreviewParameter(HighlightPreviewProvider::class)
+    sample: HighlightPreviewSample,
+) {
+    Surface(
+        color = Color(0xFF282C34),
+        contentColor = Color(0xFFABB2BF),
+    ) {
+        KotlinHighlightText(
+            code = sample.code,
+            language = sample.language,
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+private data class HighlightPreviewSample(
+    val language: String,
+    val code: String,
+) {
+    override fun toString(): String = language
+}
+
+private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPreviewSample> {
+    override val values = sequenceOf(
+        HighlightPreviewSample(
+            language = "json",
+            code = """
+                {
+                  "name": "Rikka",
+                  "age": 18,
+                  "active": true
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "bash",
+            code = """
+                #!/usr/bin/env bash
+                name="Rikka"
+                echo "Hello, ${'$'}name!"
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "go",
+            code = """
+                package main
+
+                import "fmt"
+
+                func main() {
+                    user := "Rikka"
+                    fmt.Println("Hello,", user)
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "toml",
+            code = """
+                [user]
+                name = "Rikka"
+                age = 18
+                active = true
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "yaml",
+            code = """
+                user:
+                  name: Rikka
+                  age: 18
+                  tags:
+                    - chat
+                    - llm
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "dockerfile",
+            code = """
+                FROM eclipse-temurin:21-jre
+                WORKDIR /app
+                COPY app.jar .
+                CMD ["java", "-jar", "app.jar"]
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "cmake",
+            code = """
+                cmake_minimum_required(VERSION 3.22)
+                project(rikka LANGUAGES CXX)
+                add_executable(rikka main.cpp)
+            """.trimIndent(),
+        ),
+    )
+}

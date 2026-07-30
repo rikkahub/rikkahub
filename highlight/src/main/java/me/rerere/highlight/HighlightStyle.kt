@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 
 fun AnnotatedString.Builder.buildHighlightText(
@@ -58,25 +59,66 @@ data class HighlightTextColorPalette(
     }
 }
 
+/**
+ * Resolves a token scope to a span style.
+ *
+ * Scopes follow the `highlight.js` vocabulary and can be tiered, such as `title.function` or
+ * `char.escape`. An unknown tier falls back to its parent scope, which is what the upstream CSS
+ * themes do by emitting one class per tier.
+ */
 private fun getStyleForTokenType(
     type: String,
     colors: HighlightTextColorPalette,
 ): SpanStyle {
-    return when (type) {
-        "keyword" -> SpanStyle(color = colors.keyword)
-        "string" -> SpanStyle(color = colors.string)
-        "number" -> SpanStyle(color = colors.number)
-        "comment" -> SpanStyle(color = colors.comment, fontStyle = FontStyle.Italic)
-        "function", "method" -> SpanStyle(color = colors.function)
-        "operator" -> SpanStyle(color = colors.operator)
-        "punctuation" -> SpanStyle(color = colors.punctuation)
-        "class-name" -> SpanStyle(color = colors.className)
-        "property" -> SpanStyle(color = colors.property)
-        "boolean", "constant" -> SpanStyle(color = colors.boolean)
-        "regex", "important", "variable" -> SpanStyle(color = colors.variable)
-        "tag" -> SpanStyle(color = colors.tag)
-        "attr-name" -> SpanStyle(color = colors.attrName)
-        "attr-value" -> SpanStyle(color = colors.attrValue)
-        else -> SpanStyle(color = colors.fallback)
+    var scope = type
+    while (true) {
+        styleForScope(scope, colors)?.let { return it }
+        val separator = scope.lastIndexOf('.')
+        if (separator == -1) return SpanStyle(color = colors.fallback)
+        scope = scope.substring(0, separator)
     }
+}
+
+/**
+ * Colours follow the Atom One theme, the same palette the upstream stylesheet of that name uses,
+ * so several scopes deliberately share a slot.
+ */
+private fun styleForScope(
+    scope: String,
+    colors: HighlightTextColorPalette,
+): SpanStyle? = when (scope) {
+    "comment", "quote" -> SpanStyle(color = colors.comment, fontStyle = FontStyle.Italic)
+
+    "keyword", "doctag", "formula" -> SpanStyle(color = colors.keyword)
+
+    "string", "regexp", "addition" -> SpanStyle(color = colors.string)
+
+    "attribute" -> SpanStyle(color = colors.attrValue)
+
+    "attr", "template-variable" -> SpanStyle(color = colors.attrName)
+
+    "number", "type", "selector-class", "selector-attr", "selector-pseudo" ->
+        SpanStyle(color = colors.number)
+
+    "literal", "char", "operator" -> SpanStyle(color = colors.operator)
+
+    "built_in" -> SpanStyle(color = colors.className)
+
+    "title", "function", "symbol", "bullet", "link", "meta", "selector-id" ->
+        SpanStyle(color = colors.function)
+
+    "section", "name", "selector-tag", "deletion", "subst", "property" ->
+        SpanStyle(color = colors.property)
+
+    "tag" -> SpanStyle(color = colors.tag)
+
+    "variable" -> SpanStyle(color = colors.variable)
+
+    "punctuation", "params" -> SpanStyle(color = colors.punctuation)
+
+    "emphasis" -> SpanStyle(color = colors.fallback, fontStyle = FontStyle.Italic)
+
+    "strong" -> SpanStyle(color = colors.fallback, fontWeight = FontWeight.Bold)
+
+    else -> null
 }

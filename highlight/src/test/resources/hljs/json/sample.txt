@@ -1,0 +1,8 @@
+{
+  "name": "rikkahub",
+  "version": 2,
+  "active": true,
+  "tags": ["chat", "llm"],
+  "nested": { "ratio": -1.5e3, "missing": null },
+  "escaped": "quote \" and \\ backslash"
+}
