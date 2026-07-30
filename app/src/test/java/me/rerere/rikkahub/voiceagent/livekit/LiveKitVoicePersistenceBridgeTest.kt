@@ -110,7 +110,19 @@ class LiveKitVoicePersistenceBridgeTest {
             AGENT_IDENTITY,
             succeededEventJson(answer = "Hermes answer"),
         )
-        bridge.handle(AGENT_IDENTITY, deliveryAnnouncedJson())
+        bridge.handle(
+            AGENT_IDENTITY,
+            assistantTranscriptJson(
+                text = "grounded presentation",
+                eventId = "evt_announced_presentation",
+                groundedJobId = "hj_1",
+                groundedResultHash = RESULT_HASH,
+            ),
+        )
+        bridge.handle(
+            AGENT_IDENTITY,
+            deliveryAnnouncedJson(assistantTurnId = "evt_announced_presentation_turn"),
+        )
 
         val records = store.conversation.value.hermesQueueRecords()
         assertEquals(1, records.size)
@@ -211,6 +223,189 @@ class LiveKitVoicePersistenceBridgeTest {
         assertTrue(mismatchStore.conversation.value.currentMessages.single().parts.single() is UIMessagePart.Tool)
     }
 
+    @Test
+    fun `delivery announcement requires its exact persisted grounded assistant turn`() = runTest {
+        val phantomStore = RecordingVoiceConversationStore()
+        val phantomBridge = bridge(phantomStore)
+        phantomBridge.handle(AGENT_IDENTITY, succeededEventJson(answer = "Hermes answer"))
+        val phantomFailure = runCatching {
+            phantomBridge.handle(
+                AGENT_IDENTITY,
+                deliveryAnnouncedJson(assistantTurnId = "phantom_turn"),
+            )
+        }.exceptionOrNull()
+
+        val unrelatedStore = RecordingVoiceConversationStore()
+        val unrelatedBridge = bridge(unrelatedStore)
+        unrelatedBridge.handle(AGENT_IDENTITY, succeededEventJson(answer = "Hermes answer"))
+        unrelatedBridge.handle(
+            AGENT_IDENTITY,
+            assistantTranscriptJson(
+                text = "ordinary assistant turn",
+                eventId = "evt_unrelated",
+            ),
+        )
+        val unrelatedFailure = runCatching {
+            unrelatedBridge.handle(
+                AGENT_IDENTITY,
+                deliveryAnnouncedJson(assistantTurnId = "evt_unrelated_turn"),
+            )
+        }.exceptionOrNull()
+
+        assertTrue(phantomFailure is IllegalArgumentException)
+        assertFalse(phantomStore.conversation.value.hermesQueueRecords().single().resultAnnounced)
+        assertTrue(unrelatedFailure is IllegalArgumentException)
+        assertFalse(unrelatedStore.conversation.value.hermesQueueRecords().single().resultAnnounced)
+    }
+
+    @Test
+    fun `conflicting terminal events are rejected without replacing the first terminal record`() = runTest {
+        data class TerminalConflict(
+            val first: String,
+            val second: String,
+            val expectedStatus: String,
+            val expectedAnswer: String?,
+            val expectedError: String?,
+            val expectedResultHash: String?,
+        )
+
+        val conflicts = listOf(
+            TerminalConflict(
+                first = succeededEventJson(answer = "answer one", eventId = "evt_first_success"),
+                second = succeededEventJson(answer = "answer two", eventId = "evt_second_success"),
+                expectedStatus = "complete",
+                expectedAnswer = "answer one",
+                expectedError = null,
+                expectedResultHash = ANSWER_ONE_HASH,
+            ),
+            TerminalConflict(
+                first = succeededEventJson(answer = "answer one", eventId = "evt_success"),
+                second = failedEventJson(reason = "safe failure", eventId = "evt_failed"),
+                expectedStatus = "complete",
+                expectedAnswer = "answer one",
+                expectedError = null,
+                expectedResultHash = ANSWER_ONE_HASH,
+            ),
+            TerminalConflict(
+                first = failedEventJson(reason = "first safe reason", eventId = "evt_first_failure"),
+                second = failedEventJson(reason = "different safe reason", eventId = "evt_second_failure"),
+                expectedStatus = "failed",
+                expectedAnswer = null,
+                expectedError = "first safe reason",
+                expectedResultHash = null,
+            ),
+        )
+
+        conflicts.forEachIndexed { index, conflict ->
+            val store = RecordingVoiceConversationStore()
+            val evidence = RecordingEvidenceSink()
+            val bridge = bridge(store, evidence)
+            bridge.handle(AGENT_IDENTITY, conflict.first)
+
+            val failure = runCatching {
+                bridge.handle(AGENT_IDENTITY, conflict.second)
+            }.exceptionOrNull()
+
+            assertTrue("conflict $index", failure is IllegalArgumentException)
+            val record = store.conversation.value.hermesQueueRecords().single()
+            assertEquals("conflict $index", conflict.expectedStatus, record.status.wireName)
+            assertEquals("conflict $index", conflict.expectedAnswer, record.answer)
+            assertEquals("conflict $index", conflict.expectedError, record.error)
+            assertEquals("conflict $index", conflict.expectedResultHash, record.resultHash)
+            assertEquals("conflict $index", 1, evidence.events.size)
+        }
+    }
+
+    @Test
+    fun `semantically identical terminal event with a new event id is persisted once`() = runTest {
+        val store = RecordingVoiceConversationStore()
+        val evidence = RecordingEvidenceSink()
+        val bridge = bridge(store, evidence)
+
+        bridge.handle(
+            AGENT_IDENTITY,
+            succeededEventJson(answer = "Hermes answer", eventId = "evt_terminal_first"),
+        )
+        val ack = bridge.handle(
+            AGENT_IDENTITY,
+            succeededEventJson(answer = "Hermes answer", eventId = "evt_terminal_equivalent"),
+        )
+
+        assertEquals("persisted", parseLiveKitPersistenceAck(ack)!!.status)
+        assertEquals(1, store.conversation.value.hermesQueueRecords().size)
+        assertEquals(
+            listOf("evt_terminal_first", "evt_terminal_equivalent"),
+            evidence.events.map { it.eventId },
+        )
+    }
+
+    @Test
+    fun `second acceptance cannot change prompt or immutable correlation`() = runTest {
+        val conflictingAcceptances = listOf(
+            acceptedEventJson(eventId = "evt_second_prompt", prompt = "different private question"),
+            acceptedEventJson(eventId = "evt_second_turn", userTurnId = "turn_2"),
+            acceptedEventJson(
+                eventId = "evt_second_request",
+                requestHash = "sha256:${"5".repeat(64)}",
+            ),
+            acceptedEventJson(
+                eventId = "evt_second_argument",
+                argumentHash = "sha256:${"6".repeat(64)}",
+            ),
+        )
+
+        conflictingAcceptances.forEachIndexed { index, conflictingPayload ->
+            val store = RecordingVoiceConversationStore()
+            val evidence = RecordingEvidenceSink()
+            val bridge = bridge(store, evidence)
+            bridge.handle(AGENT_IDENTITY, acceptedEventJson())
+
+            val failure = runCatching {
+                bridge.handle(AGENT_IDENTITY, conflictingPayload)
+            }.exceptionOrNull()
+
+            assertTrue("conflict $index", failure is IllegalArgumentException)
+            val record = store.conversation.value.hermesQueueRecords().single()
+            assertEquals("conflict $index", "private question", record.prompt)
+            assertEquals("conflict $index", "turn_1", record.originatingUserTurnId)
+            assertEquals("conflict $index", REQUEST_HASH, record.requestHash)
+            assertEquals("conflict $index", ARGUMENT_HASH, record.argumentHash)
+            assertEquals("conflict $index", 1, evidence.events.size)
+        }
+    }
+
+    @Test
+    fun `event id collision rejects changed content and changed kind`() = runTest {
+        val contentStore = RecordingVoiceConversationStore()
+        val contentEvidence = RecordingEvidenceSink()
+        val contentBridge = bridge(contentStore, contentEvidence)
+        contentBridge.handle(AGENT_IDENTITY, acceptedEventJson())
+        val contentFailure = runCatching {
+            contentBridge.handle(
+                AGENT_IDENTITY,
+                acceptedEventJson(prompt = "changed private question"),
+            )
+        }.exceptionOrNull()
+
+        val kindStore = RecordingVoiceConversationStore()
+        val kindEvidence = RecordingEvidenceSink()
+        val kindBridge = bridge(kindStore, kindEvidence)
+        kindBridge.handle(AGENT_IDENTITY, acceptedEventJson())
+        val kindFailure = runCatching {
+            kindBridge.handle(
+                AGENT_IDENTITY,
+                deliveryEligibleJson(eventId = "evt_accepted"),
+            )
+        }.exceptionOrNull()
+
+        assertTrue(contentFailure is IllegalArgumentException)
+        assertEquals("private question", contentStore.conversation.value.hermesQueueRecords().single().prompt)
+        assertEquals(listOf("evt_accepted"), contentEvidence.events.map { it.eventId })
+        assertTrue(kindFailure is IllegalArgumentException)
+        assertEquals(1, kindStore.conversation.value.hermesQueueRecords().size)
+        assertEquals(listOf("evt_accepted"), kindEvidence.events.map { it.eventId })
+    }
+
     private fun bridge(
         store: VoiceConversationStore,
         evidence: VoiceExperienceEvidenceSink = RecordingEvidenceSink(),
@@ -271,14 +466,30 @@ private fun me.rerere.ai.ui.UIMessage.groundedResultHash(): String? =
         ?.jsonPrimitive
         ?.content
 
-private fun acceptedEventJson(): String =
-    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"evt_accepted","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"$REQUEST_HASH","toolCallId":"call_1","argumentHash":"$ARGUMENT_HASH","jobId":"hj_1","prompt":"private question"}"""
+private fun acceptedEventJson(
+    eventId: String = "evt_accepted",
+    userTurnId: String = "turn_1",
+    requestHash: String = REQUEST_HASH,
+    argumentHash: String = ARGUMENT_HASH,
+    prompt: String = "private question",
+): String =
+    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"$userTurnId","requestHash":"$requestHash","toolCallId":"call_1","argumentHash":"$argumentHash","jobId":"hj_1","prompt":"$prompt"}"""
 
-private fun succeededEventJson(answer: String): String =
+private fun succeededEventJson(
+    answer: String,
+    eventId: String = "evt_succeeded",
+): String =
     jobStateJson(
         kind = "job_succeeded",
-        eventId = "evt_succeeded",
+        eventId = eventId,
         suffix = ""","resultHash":"${voiceSha256(answer)}","answer":"$answer"""",
+    )
+
+private fun failedEventJson(reason: String, eventId: String): String =
+    jobStateJson(
+        kind = "job_failed",
+        eventId = eventId,
+        suffix = ""","failureReason":"$reason"""",
     )
 
 private fun jobStateJson(
@@ -302,11 +513,14 @@ private fun assistantTranscriptJson(
     return """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"transcript","observedAt":"2026-07-30T12:00:02Z","turnId":"${eventId}_turn","role":"assistant","text":"$text","interrupted":false$grounding}"""
 }
 
-private fun deliveryEligibleJson(): String =
-    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"evt_eligible","kind":"delivery_eligible","observedAt":"2026-07-30T12:00:03Z","toolCallId":"call_1","jobId":"hj_1"}"""
+private fun deliveryEligibleJson(eventId: String = "evt_eligible"): String =
+    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"delivery_eligible","observedAt":"2026-07-30T12:00:03Z","toolCallId":"call_1","jobId":"hj_1"}"""
 
-private fun deliveryAnnouncedJson(): String =
-    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"evt_announced","kind":"delivery_announced","observedAt":"2026-07-30T12:00:04Z","toolCallId":"call_1","jobId":"hj_1","assistantTurnId":"assistant_1"}"""
+private fun deliveryAnnouncedJson(
+    assistantTurnId: String,
+    eventId: String = "evt_announced",
+): String =
+    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"delivery_announced","observedAt":"2026-07-30T12:00:04Z","toolCallId":"call_1","jobId":"hj_1","assistantTurnId":"$assistantTurnId"}"""
 
 private const val VOICE_SESSION_ID = "lvs_1"
 private const val AGENT_IDENTITY = "agent_1"
@@ -317,3 +531,5 @@ private const val ARGUMENT_HASH =
     "sha256:2222222222222222222222222222222222222222222222222222222222222222"
 private const val RESULT_HASH =
     "sha256:5ba14662f757c0819a81f38b78c10d7b8cf7dda9ef6014b3ca7c25b5b7711d77"
+private const val ANSWER_ONE_HASH =
+    "sha256:83331a5e274ed68d54e09fd859e39f92c0e833301485dbef3cfc216f778db5bd"

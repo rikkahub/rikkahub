@@ -2,9 +2,23 @@ package me.rerere.rikkahub.voiceagent.hermes
 
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import me.rerere.ai.core.MessageRole
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
+import me.rerere.rikkahub.voiceagent.persistence.VOICE_EVENT_ID_KEY
+import me.rerere.rikkahub.voiceagent.persistence.VOICE_GROUNDED_JOB_ID_KEY
+import me.rerere.rikkahub.voiceagent.persistence.VOICE_GROUNDED_RESULT_HASH_KEY
+import me.rerere.rikkahub.voiceagent.persistence.VOICE_SESSION_ID_KEY
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
+
+internal enum class HermesQueuePersistenceResult {
+    Mutated,
+    Equivalent,
+    Conflict,
+}
 
 class HermesQueueStore(
     private val conversationStore: VoiceConversationStore,
@@ -57,6 +71,147 @@ class HermesQueueStore(
                 callId = callId,
                 jobId = jobId,
             )
+        }
+    }
+
+    internal suspend fun persistLiveKitAcceptance(
+        callId: String,
+        prompt: String,
+        jobId: String,
+        originatingUserTurnId: String,
+        requestHash: String,
+        argumentHash: String,
+        producer: String,
+    ): HermesQueuePersistenceResult {
+        val sessionId = persistenceSessionId()
+        return updateWithResult { conversation ->
+            val existing = conversation.hermesQueueRecords()
+                .lastOrNull { it.matchesIdentity(callId = callId, jobId = jobId) }
+            when {
+                existing == null -> {
+                    val updated = writer.upsertHermesTool(
+                        conversation = conversation,
+                        callId = callId,
+                        prompt = prompt,
+                        status = VoiceToolRecordStatus.Queued,
+                        sessionId = sessionId,
+                        jobId = jobId,
+                        originatingUserTurnId = originatingUserTurnId,
+                        requestHash = requestHash,
+                        argumentHash = argumentHash,
+                        producer = producer,
+                    )
+                    updated to HermesQueuePersistenceResult.Mutated
+                }
+
+                existing.hasLiveKitProvenance(
+                    prompt = prompt,
+                    originatingUserTurnId = originatingUserTurnId,
+                    requestHash = requestHash,
+                    argumentHash = argumentHash,
+                    producer = producer,
+                ) -> conversation to HermesQueuePersistenceResult.Equivalent
+
+                else -> conversation to HermesQueuePersistenceResult.Conflict
+            }
+        }
+    }
+
+    internal suspend fun persistLiveKitTerminal(
+        callId: String,
+        status: VoiceToolRecordStatus,
+        jobId: String,
+        originatingUserTurnId: String,
+        requestHash: String,
+        argumentHash: String,
+        resultHash: String?,
+        producer: String,
+    ): HermesQueuePersistenceResult {
+        val sessionId = persistenceSessionId()
+        return updateWithResult { conversation ->
+            val existing = conversation.hermesQueueRecords()
+                .lastOrNull { it.matchesIdentity(callId = callId, jobId = jobId) }
+            when {
+                existing?.status?.isTerminal == true -> {
+                    val equivalent = existing.hasLiveKitCorrelation(
+                        originatingUserTurnId = originatingUserTurnId,
+                        requestHash = requestHash,
+                        argumentHash = argumentHash,
+                        producer = producer,
+                    ) && existing.hasEquivalentTerminal(status = status, resultHash = resultHash)
+                    conversation to if (equivalent) {
+                        HermesQueuePersistenceResult.Equivalent
+                    } else {
+                        HermesQueuePersistenceResult.Conflict
+                    }
+                }
+
+                existing != null && !existing.hasLiveKitCorrelation(
+                    originatingUserTurnId = originatingUserTurnId,
+                    requestHash = requestHash,
+                    argumentHash = argumentHash,
+                    producer = producer,
+                ) -> conversation to HermesQueuePersistenceResult.Conflict
+
+                else -> {
+                    val updated = writer.upsertHermesTool(
+                        conversation = conversation,
+                        callId = callId,
+                        prompt = existing?.prompt.orEmpty(),
+                        status = status,
+                        sessionId = sessionId,
+                        jobId = jobId,
+                        announceOnWrite = false,
+                        originatingUserTurnId = originatingUserTurnId,
+                        requestHash = requestHash,
+                        argumentHash = argumentHash,
+                        resultHash = resultHash,
+                        producer = producer,
+                    )
+                    updated to HermesQueuePersistenceResult.Mutated
+                }
+            }
+        }
+    }
+
+    internal suspend fun markLiveKitResultAnnounced(
+        callId: String,
+        jobId: String,
+        assistantTurnId: String,
+    ): HermesQueuePersistenceResult {
+        val sessionId = persistenceSessionId()
+        return updateWithResult { conversation ->
+            val record = conversation.hermesQueueRecords()
+                .lastOrNull { it.matchesIdentity(callId = callId, jobId = jobId) }
+            val resultHash = record?.resultHash
+            val hasGroundedAssistantTurn =
+                record?.status == HermesQueueStatus.Complete &&
+                    resultHash != null &&
+                    conversation.currentMessages.any { message ->
+                        message.role == MessageRole.ASSISTANT &&
+                            message.parts.filterIsInstance<UIMessagePart.Text>().any textPart@{ part ->
+                                val metadata = part.metadata ?: return@textPart false
+                                metadata.stringOrNull(VOICE_EVENT_ID_KEY) == assistantTurnId &&
+                                    metadata.stringOrNull(VOICE_GROUNDED_JOB_ID_KEY) == jobId &&
+                                    metadata.stringOrNull(VOICE_GROUNDED_RESULT_HASH_KEY) == resultHash &&
+                                    (sessionId == null ||
+                                        metadata.stringOrNull(VOICE_SESSION_ID_KEY) == sessionId)
+                            }
+                    }
+            if (!hasGroundedAssistantTurn) {
+                conversation to HermesQueuePersistenceResult.Conflict
+            } else {
+                val updated = writer.markResultAnnounced(
+                    conversation = conversation,
+                    callId = callId,
+                    jobId = jobId,
+                )
+                updated to if (updated === conversation) {
+                    HermesQueuePersistenceResult.Equivalent
+                } else {
+                    HermesQueuePersistenceResult.Mutated
+                }
+            }
         }
     }
 
@@ -211,4 +366,50 @@ class HermesQueueStore(
             requireNotNull(result)
         }
     }
+
+    private fun HermesQueueRecord.hasLiveKitProvenance(
+        prompt: String,
+        originatingUserTurnId: String,
+        requestHash: String,
+        argumentHash: String,
+        producer: String,
+    ): Boolean =
+        this.prompt == prompt &&
+            hasLiveKitCorrelation(
+                originatingUserTurnId = originatingUserTurnId,
+                requestHash = requestHash,
+                argumentHash = argumentHash,
+                producer = producer,
+            )
+
+    private fun HermesQueueRecord.hasLiveKitCorrelation(
+        originatingUserTurnId: String,
+        requestHash: String,
+        argumentHash: String,
+        producer: String,
+    ): Boolean =
+        this.originatingUserTurnId == originatingUserTurnId &&
+            this.requestHash == requestHash &&
+            this.argumentHash == argumentHash &&
+            this.producer == producer
+
+    private fun HermesQueueRecord.hasEquivalentTerminal(
+        status: VoiceToolRecordStatus,
+        resultHash: String?,
+    ): Boolean {
+        if (this.status != status.queueStatus || this.resultHash != resultHash) return false
+        return when (status) {
+            is VoiceToolRecordStatus.Complete -> answer == status.answer && error == null
+            is VoiceToolRecordStatus.Failed -> answer == null && error == status.message
+            is VoiceToolRecordStatus.Expired -> answer == null && error == status.message
+            is VoiceToolRecordStatus.Canceled -> answer == null && error == status.message
+            VoiceToolRecordStatus.Pending,
+            VoiceToolRecordStatus.Queued,
+            VoiceToolRecordStatus.Running,
+                -> false
+        }
+    }
+
+    private fun kotlinx.serialization.json.JsonObject.stringOrNull(key: String): String? =
+        (this[key] as? JsonPrimitive)?.contentOrNull
 }

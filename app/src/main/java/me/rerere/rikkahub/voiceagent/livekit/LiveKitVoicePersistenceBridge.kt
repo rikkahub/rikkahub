@@ -6,6 +6,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
 import me.rerere.rikkahub.voiceagent.hermes.HERMES_PRODUCER
+import me.rerere.rikkahub.voiceagent.hermes.HermesQueuePersistenceResult
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStore
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.VoiceToolRecordStatus
@@ -34,7 +35,7 @@ internal class LiveKitVoicePersistenceBridge(
     private val now: () -> Instant = Instant::now,
 ) : LiveKitPersistenceOwner {
     private val mutex = Mutex()
-    private val persistedEventIds = mutableSetOf<String>()
+    private val persistedEventPayloadHashes = mutableMapOf<String, String>()
     private val closed = AtomicBoolean(false)
 
     suspend fun handle(callerIdentity: String, payload: String): String = mutex.withLock {
@@ -46,10 +47,16 @@ internal class LiveKitVoicePersistenceBridge(
         require(event.voiceSessionId == voiceSessionId) {
             "Unexpected LiveKit voice session"
         }
-        if (event.eventId !in persistedEventIds) {
+        val payloadHash = voiceSha256(payload)
+        val persistedPayloadHash = persistedEventPayloadHashes[event.eventId]
+        if (persistedPayloadHash != null) {
+            require(persistedPayloadHash == payloadHash) {
+                "LiveKit persistence event ID collision"
+            }
+        } else {
             persist(event)
             evidence.append(event)
-            persistedEventIds += event.eventId
+            persistedEventPayloadHashes[event.eventId] = payloadHash
         }
         LiveKitPersistenceAck(
             version = 1,
@@ -72,24 +79,28 @@ internal class LiveKitVoicePersistenceBridge(
 
     private suspend fun persist(event: LiveKitVoiceExperienceEvent) {
         when (event) {
-            is LiveKitVoiceExperienceEvent.JobAccepted -> queueStore.persistActive(
-                callId = event.toolCallId,
-                prompt = event.prompt,
-                status = VoiceToolRecordStatus.Queued,
-                jobId = event.jobId,
-                originatingUserTurnId = event.userTurnId,
-                requestHash = event.requestHash,
-                argumentHash = event.argumentHash,
-                producer = HERMES_PRODUCER,
-            )
+            is LiveKitVoiceExperienceEvent.JobAccepted ->
+                queueStore.persistLiveKitAcceptance(
+                    callId = event.toolCallId,
+                    prompt = event.prompt,
+                    jobId = event.jobId,
+                    originatingUserTurnId = event.userTurnId,
+                    requestHash = event.requestHash,
+                    argumentHash = event.argumentHash,
+                    producer = HERMES_PRODUCER,
+                ).requireNonConflicting("LiveKit Hermes acceptance conflicts with persisted record")
 
             is LiveKitVoiceExperienceEvent.JobState -> persistJobState(event)
             is LiveKitVoiceExperienceEvent.Transcript -> persistTranscript(event)
             is LiveKitVoiceExperienceEvent.Delivery -> when (event.kind) {
-                "delivery_announced" -> queueStore.markResultAnnounced(
-                    callId = event.toolCallId,
-                    jobId = event.jobId,
-                )
+                "delivery_announced" ->
+                    queueStore.markLiveKitResultAnnounced(
+                        callId = event.toolCallId,
+                        jobId = event.jobId,
+                        assistantTurnId = requireNotNull(event.assistantTurnId),
+                    ).requireNonConflicting(
+                        "LiveKit delivery announcement has no matching grounded assistant turn"
+                    )
 
                 else -> Unit
             }
@@ -97,32 +108,23 @@ internal class LiveKitVoicePersistenceBridge(
     }
 
     private suspend fun persistJobState(event: LiveKitVoiceExperienceEvent.JobState) {
-        val existingRecord = queueStore.latestRecord(event.toolCallId, event.jobId)
-        if (existingRecord != null) {
-            require(existingRecord.originatingUserTurnId == event.userTurnId) {
-                "LiveKit Hermes user turn correlation changed"
-            }
-            require(existingRecord.requestHash == event.requestHash) {
-                "LiveKit Hermes request correlation changed"
-            }
-            require(existingRecord.argumentHash == event.argumentHash) {
-                "LiveKit Hermes argument correlation changed"
-            }
-        }
-        val prompt = existingRecord?.prompt.orEmpty()
         when (event.kind) {
-            "job_running" -> queueStore.persistActive(
-                callId = event.toolCallId,
-                prompt = prompt,
-                status = VoiceToolRecordStatus.Running,
-                jobId = event.jobId,
-                originatingUserTurnId = event.userTurnId,
-                requestHash = event.requestHash,
-                argumentHash = event.argumentHash,
-                producer = HERMES_PRODUCER,
-            )
+            "job_running" -> {
+                val prompt = requireMatchingActivePrompt(event)
+                queueStore.persistActive(
+                    callId = event.toolCallId,
+                    prompt = prompt,
+                    status = VoiceToolRecordStatus.Running,
+                    jobId = event.jobId,
+                    originatingUserTurnId = event.userTurnId,
+                    requestHash = event.requestHash,
+                    argumentHash = event.argumentHash,
+                    producer = HERMES_PRODUCER,
+                )
+            }
 
             "still_working" -> {
+                val prompt = requireMatchingActivePrompt(event)
                 queueStore.persistActive(
                     callId = event.toolCallId,
                     prompt = prompt,
@@ -139,55 +141,65 @@ internal class LiveKitVoicePersistenceBridge(
                 )
             }
 
-            "job_succeeded" -> queueStore.persistTerminal(
-                callId = event.toolCallId,
-                prompt = prompt,
+            "job_succeeded" -> persistTerminalState(
+                event = event,
                 status = VoiceToolRecordStatus.Complete(requireNotNull(event.answer)),
-                jobId = event.jobId,
-                announced = false,
-                originatingUserTurnId = event.userTurnId,
-                requestHash = event.requestHash,
-                argumentHash = event.argumentHash,
-                resultHash = event.resultHash,
-                producer = HERMES_PRODUCER,
             )
 
             "job_failed" -> persistFailedState(
                 event = event,
-                prompt = prompt,
                 status = VoiceToolRecordStatus.Failed(requireNotNull(event.failureReason)),
             )
 
             "job_expired" -> persistFailedState(
                 event = event,
-                prompt = prompt,
                 status = VoiceToolRecordStatus.Expired(requireNotNull(event.failureReason)),
             )
 
             "job_canceled" -> persistFailedState(
                 event = event,
-                prompt = prompt,
                 status = VoiceToolRecordStatus.Canceled(requireNotNull(event.failureReason)),
             )
         }
     }
 
+    private fun requireMatchingActivePrompt(event: LiveKitVoiceExperienceEvent.JobState): String {
+        val existingRecord = queueStore.latestRecord(event.toolCallId, event.jobId)
+        if (existingRecord != null) {
+            require(existingRecord.originatingUserTurnId == event.userTurnId) {
+                "LiveKit Hermes user turn correlation changed"
+            }
+            require(existingRecord.requestHash == event.requestHash) {
+                "LiveKit Hermes request correlation changed"
+            }
+            require(existingRecord.argumentHash == event.argumentHash) {
+                "LiveKit Hermes argument correlation changed"
+            }
+        }
+        return existingRecord?.prompt.orEmpty()
+    }
+
     private suspend fun persistFailedState(
         event: LiveKitVoiceExperienceEvent.JobState,
-        prompt: String,
         status: VoiceToolRecordStatus,
     ) {
-        queueStore.persistTerminal(
+        persistTerminalState(event = event, status = status)
+    }
+
+    private suspend fun persistTerminalState(
+        event: LiveKitVoiceExperienceEvent.JobState,
+        status: VoiceToolRecordStatus,
+    ) {
+        queueStore.persistLiveKitTerminal(
             callId = event.toolCallId,
-            prompt = prompt,
             status = status,
             jobId = event.jobId,
-            announced = false,
             originatingUserTurnId = event.userTurnId,
             requestHash = event.requestHash,
             argumentHash = event.argumentHash,
+            resultHash = event.resultHash,
             producer = HERMES_PRODUCER,
-        )
+        ).requireNonConflicting("LiveKit Hermes terminal state conflicts with persisted record")
     }
 
     private suspend fun persistTranscript(event: LiveKitVoiceExperienceEvent.Transcript) {
@@ -222,5 +234,9 @@ internal class LiveKitVoicePersistenceBridge(
                 else -> conversation
             }
         }
+    }
+
+    private fun HermesQueuePersistenceResult.requireNonConflicting(message: String) {
+        require(this != HermesQueuePersistenceResult.Conflict) { message }
     }
 }
