@@ -130,21 +130,21 @@ data class HighlightTextColorPalette(
 ) {
     companion object {
         val Default = HighlightTextColorPalette(
-            keyword = Color(0xFFCC7832),
-            string = Color(0xFF6A8759),
-            number = Color(0xFF6897BB),
-            comment = Color(0xFF808080),
-            function = Color(0xFFFFC66D),
-            operator = Color(0xFFCC7832),
-            punctuation = Color(0xFFCC7832),
-            className = Color(0xFFCB772F),
-            property = Color(0xFFCB772F),
-            boolean = Color(0xFF6897BB),
-            variable = Color(0xFF6A8759),
-            tag = Color(0xFFE8BF6A),
-            attrName = Color(0xFFBABABA),
-            attrValue = Color(0xFF6A8759),
-            fallback = Color(0xFF808080),
+            keyword = Color(0xFFC678DD),
+            string = Color(0xFF98C379),
+            number = Color(0xFFD19A66),
+            comment = Color(0xFF5C6370),
+            function = Color(0xFF61AFEF),
+            operator = Color(0xFF56B6C2),
+            punctuation = Color(0xFFABB2BF),
+            className = Color(0xFFE5C07B),
+            property = Color(0xFFE06C75),
+            boolean = Color(0xFFD19A66),
+            variable = Color(0xFFE06C75),
+            tag = Color(0xFFE06C75),
+            attrName = Color(0xFFD19A66),
+            attrValue = Color(0xFF98C379),
+            fallback = Color(0xFFABB2BF),
         )
     }
 }
@@ -153,18 +153,19 @@ data class HighlightTextColorPalette(
 private fun getStyleForTokenType(type: String, colors: HighlightTextColorPalette): SpanStyle {
     return when (type) {
         "keyword" -> SpanStyle(color = colors.keyword)
-        "string" -> SpanStyle(color = colors.string) // 绿色
-        "number" -> SpanStyle(color = colors.number) // 蓝色
-        "comment" -> SpanStyle(color = colors.comment, fontStyle = FontStyle.Italic) // 灰色斜体
-        "function", "method" -> SpanStyle(color = colors.function) // 黄色
-        "operator" -> SpanStyle(color = colors.operator) // 橙色
-        "punctuation" -> SpanStyle(color = colors.punctuation) // 橙色
-        "class-name", "property" -> SpanStyle(color = colors.className) // 棕色
-        "boolean", "constant" -> SpanStyle(color = colors.boolean) // 蓝色
+        "string" -> SpanStyle(color = colors.string)
+        "number" -> SpanStyle(color = colors.number)
+        "comment" -> SpanStyle(color = colors.comment, fontStyle = FontStyle.Italic)
+        "function", "method" -> SpanStyle(color = colors.function)
+        "operator" -> SpanStyle(color = colors.operator)
+        "punctuation" -> SpanStyle(color = colors.punctuation)
+        "class-name" -> SpanStyle(color = colors.className)
+        "property" -> SpanStyle(color = colors.property)
+        "boolean", "constant" -> SpanStyle(color = colors.boolean)
         "regex", "important", "variable" -> SpanStyle(color = colors.variable)
-        "tag" -> SpanStyle(color = colors.tag) // 黄色
-        "attr-name" -> SpanStyle(color = colors.attrName) // 浅灰色
-        "attr-value" -> SpanStyle(color = colors.attrValue) // 绿色
+        "tag" -> SpanStyle(color = colors.tag)
+        "attr-name" -> SpanStyle(color = colors.attrName)
+        "attr-value" -> SpanStyle(color = colors.attrValue)
         else -> {
             // println("unknown type $type")
             SpanStyle(color = colors.fallback)

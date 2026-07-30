@@ -1,9 +1,12 @@
 package me.rerere.highlight.kotlin
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -11,7 +14,10 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.tooling.preview.PreviewParameter
+import androidx.compose.ui.tooling.preview.PreviewParameterProvider
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.rerere.highlight.HighlightToken
 import me.rerere.highlight.HighlightTextColorPalette
@@ -103,23 +109,120 @@ fun KotlinHighlightText(
     )
 }
 
-@Preview(showBackground = true)
+@Preview
 @Composable
-private fun KotlinHighlightTextPreview() {
-    KotlinHighlightText(
-        code = """
-            data class User(
-                val name: String,
-                val age: Int,
-            )
+private fun KotlinHighlightTextPreview(
+    @PreviewParameter(HighlightPreviewProvider::class)
+    sample: HighlightPreviewSample,
+) {
+    Surface(
+        color = Color(0xFF282C34),
+        contentColor = Color(0xFFABB2BF),
+    ) {
+        KotlinHighlightText(
+            code = sample.code,
+            language = sample.language,
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
 
-            fun main() {
-                val user = User(name = "Rikka", age = 18)
-                // Kotlin syntax highlighting preview
-                println("${'$'}{user.name}: ${'$'}{user.age}")
-            }
-        """.trimIndent(),
-        language = "kotlin",
-        modifier = Modifier,
+private data class HighlightPreviewSample(
+    val language: String,
+    val code: String,
+) {
+    override fun toString(): String = language
+}
+
+private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPreviewSample> {
+    override val values = sequenceOf(
+        HighlightPreviewSample(
+            language = "kotlin",
+            code = """
+                data class User(val name: String, val age: Int)
+
+                fun main() {
+                    val user = User(name = "Rikka", age = 18)
+                    println("${'$'}{user.name}: ${'$'}{user.age}")
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "java",
+            code = """
+                record User(String name, int age) {}
+
+                class Main {
+                    public static void main(String[] args) {
+                        var user = new User("Rikka", 18);
+                        System.out.println(user.name());
+                    }
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "javascript",
+            code = """
+                const greet = (name) => `Hello, ${'$'}{name}!`;
+                console.log(greet("Rikka"));
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "typescript",
+            code = """
+                interface User {
+                    name: string;
+                    age: number;
+                }
+
+                const greet = (user: User): string => `Hello, ${'$'}{user.name}!`;
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "json",
+            code = """
+                {
+                  "name": "Rikka",
+                  "age": 18,
+                  "active": true
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "bash",
+            code = """
+                #!/usr/bin/env bash
+                name="Rikka"
+                echo "Hello, ${'$'}name!"
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "toml",
+            code = """
+                [user]
+                name = "Rikka"
+                age = 18
+                active = true
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "sql",
+            code = """
+                SELECT name, age
+                FROM users
+                WHERE active = TRUE
+                ORDER BY age DESC;
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "css",
+            code = """
+                .profile-card {
+                  display: grid;
+                  color: #6a8759;
+                  border-radius: 12px;
+                }
+            """.trimIndent(),
+        ),
     )
 }
