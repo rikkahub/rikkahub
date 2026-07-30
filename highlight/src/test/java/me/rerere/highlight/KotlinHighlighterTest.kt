@@ -36,6 +36,7 @@ class KotlinHighlighterTest {
             "sql",
             "diff", "patch",
             "markdown", "md", "mkdown", "mkd",
+            "rust", "rs",
         ).forEach { assertTrue(it, highlighter.supports(it)) }
     }
 
@@ -58,10 +59,10 @@ class KotlinHighlighterTest {
 
     @Test
     fun `an unsupported language stays plain text`() {
-        val code = "fn main() { println!(\"hi\") }"
+        val code = "print(\"hi\")"
 
-        assertFalse(highlighter.supports("rust"))
-        assertEquals(listOf(HighlightToken.Plain(code)), highlighter.highlight(code, "rust"))
+        assertFalse(highlighter.supports("swift"))
+        assertEquals(listOf(HighlightToken.Plain(code)), highlighter.highlight(code, "swift"))
     }
 
     @Test

@@ -1,0 +1,307 @@
+comment	// Raw identifiers, raw strings, lifetimes and every numeric suffix.
+	\n
+meta	#![allow(dead_code, unused_variables)]
+	\n
+meta	#[cfg(test)]
+	\n
+meta	#[doc = 
+string	"an attribute holding a string"
+meta	]
+	\n
+keyword	mod
+	 tests {}\n\n
+comment	/* outer /* nested */ still a comment */
+	\n\n
+keyword	type
+	 
+title.class	r#Alias
+	 = 
+type	Vec
+	<
+type	u8
+	>;\n
+keyword	union
+	 
+title.class	r#union
+	 { a: 
+type	u32
+	, b: 
+type	f32
+	 }\n\n
+keyword	struct
+	 
+title.class	Holder
+	<
+symbol	'a
+	> {\n    slice: &
+symbol	'a
+	 [
+type	u8
+	],\n    name: &
+symbol	'static
+	 
+type	str
+	,\n}\n\n
+keyword	fn
+	 
+title.function	r#match
+	<
+symbol	'a
+	, T: 
+built_in	Clone
+	>(r#
+keyword	type
+	: &
+symbol	'a
+	 T, r#
+keyword	fn
+	: 
+type	usize
+	) 
+punctuation	->
+	 &
+symbol	'a
+	 T {\n    r#
+keyword	type
+	\n}\n\n
+keyword	const
+	 RAW: &
+type	str
+	 = 
+string	r"no \\escapes here"
+	;\n
+keyword	const
+	 HASHED: &
+type	str
+	 = 
+string	r#"he said "hi" and left"#
+	;\n
+keyword	const
+	 DEEP: &
+type	str
+	 = 
+string	r##"contains "# inside"##
+	;\n
+keyword	const
+	 BYTES: &[
+type	u8
+	] = 
+string	b"byte string"
+	;\n
+keyword	const
+	 RAW_BYTES: &[
+type	u8
+	] = 
+string	br#"raw "byte" string"#
+	;\n\n
+keyword	fn
+	 
+title.function	literals
+	() {\n    
+keyword	let
+	 
+variable	ch
+	 = 
+string	'x'
+	;\n    
+keyword	let
+	 
+variable	nl
+	 = 
+string	'
+char.escape	\\n
+string	'
+	;\n    
+keyword	let
+	 
+variable	quote
+	 = 
+string	'
+char.escape	\\'
+string	'
+	;\n    
+keyword	let
+	 
+variable	hex
+	 = 
+string	'
+char.escape	\\x
+string	41'
+	;\n    
+keyword	let
+	 
+variable	uni
+	 = 
+string	'A'
+	;\n    
+keyword	let
+	 
+variable	byte
+	 = 
+string	b'A'
+	;\n\n    
+keyword	let
+	 
+variable	b
+	 = 
+number	0b1010_1010u8
+	;\n    
+keyword	let
+	 
+variable	o
+	 = 
+number	0o777i32
+	;\n    
+keyword	let
+	 
+variable	h
+	 = 
+number	0xFF_FFu16
+	;\n    
+keyword	let
+	 
+variable	n
+	 = 
+number	1_000_000usize
+	;\n    
+keyword	let
+	 
+variable	neg
+	 = 
+number	1i128
+	;\n    
+keyword	let
+	 
+variable	f
+	 = 
+number	3.14f64
+	;\n    
+keyword	let
+	 
+variable	e
+	 = 
+number	1.5e-9f32
+	;\n    
+keyword	let
+	 
+variable	plain
+	 = 
+number	42
+	;\n\n    
+keyword	let
+	 
+keyword	mut 
+variable	total
+	 = 
+number	0usize
+	;\n    
+keyword	let
+	 
+variable	boxed
+	: 
+type	Box
+	<
+type	Option
+	<
+type	Result
+	<
+type	String
+	, ()>>> = 
+type	Box
+	::
+title.function.invoke	new
+	(
+literal	None
+	);\n}\n\n
+built_in	macro_rules!
+	 twice {\n    ($e:expr) => {\n        $e + $e\n    };\n}\n\n
+keyword	impl
+	<
+symbol	'a
+	> 
+built_in	Iterator
+	 
+keyword	for
+	 
+title.class	Holder
+	<
+symbol	'a
+	> {\n    
+keyword	type
+	 
+title.class	Item
+	 = 
+type	u8
+	;\n\n    
+keyword	fn
+	 
+title.function	next
+	(&
+keyword	mut
+	 
+keyword	self
+	) 
+punctuation	->
+	 
+type	Option
+	<
+keyword	Self
+	::Item> {\n        
+literal	None
+	\n    }\n}\n\n
+keyword	fn
+	 
+title.function	control_flow
+	(xs: &[
+type	i32
+	]) {\n    
+keyword	if
+	 (xs.
+title.function.invoke	len
+	() > 
+number	0
+	) {\n        
+keyword	while
+	 (
+title.function.invoke	total
+	(xs) < 
+number	10
+	) {}\n    }\n    
+keyword	match
+	 (xs.
+title.function.invoke	first
+	()) {\n        
+title.function.invoke	Some
+	(x) => 
+title.function.invoke	drop
+	(x),\n        
+literal	None
+	 => 
+built_in	unreachable!
+	(),\n    }\n    
+keyword	for
+	 
+variable	i
+	 
+keyword	in
+	 
+number	0
+	..xs.
+title.function.invoke	len
+	() {\n        
+built_in	assert_eq!
+	(xs[i], xs[i]);\n    }\n}\n\n
+keyword	fn
+	 
+title.function	total
+	(xs: &[
+type	i32
+	]) 
+punctuation	->
+	 
+type	i32
+	 {\n    xs.
+title.function.invoke	iter
+	().
+title.function.invoke	sum
+	()\n}\n

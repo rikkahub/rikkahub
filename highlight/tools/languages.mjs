@@ -32,4 +32,5 @@ export const LANGUAGES = [
   { name: 'sql', module: 'sql', aliases: [] },
   { name: 'diff', module: 'diff', aliases: ['patch'] },
   { name: 'markdown', module: 'markdown', aliases: ['md', 'mkdown', 'mkd'] },
+  { name: 'rust', module: 'rust', aliases: ['rs'] },
 ]

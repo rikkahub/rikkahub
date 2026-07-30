@@ -61,4 +61,7 @@ class LanguageFixtureTest {
 
     @Test
     fun markdown() = HljsFixtures.assertLanguageMatches("markdown")
+
+    @Test
+    fun rust() = HljsFixtures.assertLanguageMatches("rust")
 }

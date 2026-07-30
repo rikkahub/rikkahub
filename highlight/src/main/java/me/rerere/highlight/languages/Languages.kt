@@ -16,6 +16,7 @@ import me.rerere.highlight.languages.json.json
 import me.rerere.highlight.languages.kotlin.kotlin
 import me.rerere.highlight.languages.markdown.markdown
 import me.rerere.highlight.languages.python.python
+import me.rerere.highlight.languages.rust.rust
 import me.rerere.highlight.languages.sql.sql
 import me.rerere.highlight.languages.typescript.typescript
 import me.rerere.highlight.languages.xml.xml
@@ -46,4 +47,5 @@ internal fun builtinLanguages(): List<Language> = listOf(
     sql(),
     diff(),
     markdown(),
+    rust(),
 )

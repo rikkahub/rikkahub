@@ -286,6 +286,21 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
             """.trimIndent(),
         ),
         HighlightPreviewSample(
+            language = "rust",
+            code = """
+                #[derive(Debug)]
+                struct User {
+                    name: String,
+                    age: u8,
+                }
+
+                fn main() {
+                    let user = User { name: "Rikka".to_string(), age: 18 };
+                    println!("Hello, {}!", user.name);
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
             language = "sql",
             code = """
                 SELECT name, age
