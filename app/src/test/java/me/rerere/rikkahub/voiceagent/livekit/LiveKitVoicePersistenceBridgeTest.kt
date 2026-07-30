@@ -259,6 +259,43 @@ class LiveKitVoicePersistenceBridgeTest {
     }
 
     @Test
+    fun `prior session grounded turn cannot authorize delivery when store session provider is null`() = runTest {
+        val store = RecordingVoiceConversationStore()
+        bridge(store).handle(
+            AGENT_IDENTITY,
+            succeededEventJson(answer = "Hermes answer"),
+        )
+        store.update { conversation ->
+            VoiceTranscriptPersister().upsertAssistantTranscriptTurn(
+                conversation = conversation,
+                text = "prior session presentation",
+                interrupted = false,
+                turnId = "prior_session_turn",
+                sessionId = "prior_session",
+                groundedJobId = "hj_1",
+                groundedResultHash = RESULT_HASH,
+            )
+        }
+        val evidence = RecordingEvidenceSink()
+        val bridgeWithoutStoreSession = bridge(
+            store = store,
+            evidence = evidence,
+            queuePersistenceSessionId = null,
+        )
+
+        val failure = runCatching {
+            bridgeWithoutStoreSession.handle(
+                AGENT_IDENTITY,
+                deliveryAnnouncedJson(assistantTurnId = "prior_session_turn"),
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+        assertFalse(store.conversation.value.hermesQueueRecords().single().resultAnnounced)
+        assertTrue(evidence.events.isEmpty())
+    }
+
+    @Test
     fun `conflicting terminal events are rejected without replacing the first terminal record`() = runTest {
         data class TerminalConflict(
             val first: String,
@@ -409,6 +446,7 @@ class LiveKitVoicePersistenceBridgeTest {
     private fun bridge(
         store: VoiceConversationStore,
         evidence: VoiceExperienceEvidenceSink = RecordingEvidenceSink(),
+        queuePersistenceSessionId: String? = VOICE_SESSION_ID,
     ): LiveKitVoicePersistenceBridge {
         val transcriptPersister = VoiceTranscriptPersister()
         return LiveKitVoicePersistenceBridge(
@@ -418,7 +456,7 @@ class LiveKitVoicePersistenceBridgeTest {
                 conversationStore = store,
                 writer = HermesToolRecordWriter(nowIso = { PERSISTED_AT }),
                 transcriptPersister = transcriptPersister,
-                persistenceSessionId = { VOICE_SESSION_ID },
+                persistenceSessionId = { queuePersistenceSessionId },
             ),
             transcriptPersister = transcriptPersister,
             conversationStore = store,

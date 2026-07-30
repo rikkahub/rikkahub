@@ -178,15 +178,26 @@ class HermesQueueStore(
         callId: String,
         jobId: String,
         assistantTurnId: String,
+        voiceSessionId: String,
     ): HermesQueuePersistenceResult {
-        val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
-            val record = conversation.hermesQueueRecords()
-                .lastOrNull { it.matchesIdentity(callId = callId, jobId = jobId) }
+            val recordPart = conversation.currentMessages
+                .flatMap { it.parts }
+                .filterIsInstance<UIMessagePart.Tool>()
+                .mapNotNull { part ->
+                    HermesQueueRecord.fromToolPart(part)?.let { record -> part to record }
+                }
+                .lastOrNull { (_, record) ->
+                    record.matchesIdentity(callId = callId, jobId = jobId)
+                }
+            val record = recordPart?.second
+            val recordSessionId =
+                recordPart?.first?.metadata?.stringOrNull(VOICE_SESSION_ID_KEY)
             val resultHash = record?.resultHash
             val hasGroundedAssistantTurn =
                 record?.status == HermesQueueStatus.Complete &&
                     resultHash != null &&
+                    recordSessionId == voiceSessionId &&
                     conversation.currentMessages.any { message ->
                         message.role == MessageRole.ASSISTANT &&
                             message.parts.filterIsInstance<UIMessagePart.Text>().any textPart@{ part ->
@@ -194,8 +205,7 @@ class HermesQueueStore(
                                 metadata.stringOrNull(VOICE_EVENT_ID_KEY) == assistantTurnId &&
                                     metadata.stringOrNull(VOICE_GROUNDED_JOB_ID_KEY) == jobId &&
                                     metadata.stringOrNull(VOICE_GROUNDED_RESULT_HASH_KEY) == resultHash &&
-                                    (sessionId == null ||
-                                        metadata.stringOrNull(VOICE_SESSION_ID_KEY) == sessionId)
+                                    metadata.stringOrNull(VOICE_SESSION_ID_KEY) == voiceSessionId
                             }
                     }
             if (!hasGroundedAssistantTurn) {

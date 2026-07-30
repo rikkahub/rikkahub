@@ -98,6 +98,7 @@ internal class LiveKitVoicePersistenceBridge(
                         callId = event.toolCallId,
                         jobId = event.jobId,
                         assistantTurnId = requireNotNull(event.assistantTurnId),
+                        voiceSessionId = voiceSessionId,
                     ).requireNonConflicting(
                         "LiveKit delivery announcement has no matching grounded assistant turn"
                     )
