@@ -1,0 +1,23 @@
+-- Seed the chat history tables.
+CREATE TABLE conversation (
+    id          INTEGER PRIMARY KEY,
+    assistant   VARCHAR(64) NOT NULL,
+    title       VARCHAR(255),
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    pinned      BOOLEAN DEFAULT false
+);
+
+INSERT INTO conversation (id, assistant, title)
+VALUES (1, 'rikka', 'Hello, world!'), (2, 'rikka', 'It''s fine');
+
+SELECT c.id,
+       COUNT(*) AS total,
+       MAX(m.created_at) AS last_seen
+  FROM conversation c
+  JOIN message m ON m.conversation_id = c.id
+ WHERE c.pinned IS NOT NULL
+   AND m.role <> 'system'
+ GROUP BY c.id
+HAVING COUNT(*) > 3
+ ORDER BY last_seen DESC
+ LIMIT 10;

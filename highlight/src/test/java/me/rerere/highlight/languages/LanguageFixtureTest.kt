@@ -52,4 +52,13 @@ class LanguageFixtureTest {
 
     @Test
     fun cpp() = HljsFixtures.assertLanguageMatches("cpp")
+
+    @Test
+    fun sql() = HljsFixtures.assertLanguageMatches("sql")
+
+    @Test
+    fun diff() = HljsFixtures.assertLanguageMatches("diff")
+
+    @Test
+    fun markdown() = HljsFixtures.assertLanguageMatches("markdown")
 }

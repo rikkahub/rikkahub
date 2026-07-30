@@ -286,6 +286,39 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
             """.trimIndent(),
         ),
         HighlightPreviewSample(
+            language = "sql",
+            code = """
+                SELECT name, age
+                  FROM users
+                 WHERE active = true
+                 ORDER BY age DESC
+                 LIMIT 10;
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "diff",
+            code = """
+                --- a/greeter.kt
+                +++ b/greeter.kt
+                @@ -1,3 +1,3 @@
+                 fun greet(name: String) {
+                -    println("Hi, " + name)
+                +    println("Hello, " + name)
+                 }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "markdown",
+            code = """
+                # RikkaHub
+
+                A native **Android** LLM chat client.
+
+                - [Docs](https://example.com)
+                - Inline `code`
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
             language = "cmake",
             code = """
                 cmake_minimum_required(VERSION 3.22)

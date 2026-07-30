@@ -33,6 +33,9 @@ class KotlinHighlighterTest {
             "python", "py", "gyp", "ipython",
             "c", "h",
             "cpp", "cc", "c++", "h++", "hpp", "hh", "hxx", "cxx",
+            "sql",
+            "diff", "patch",
+            "markdown", "md", "mkdown", "mkd",
         ).forEach { assertTrue(it, highlighter.supports(it)) }
     }
 
@@ -55,10 +58,10 @@ class KotlinHighlighterTest {
 
     @Test
     fun `an unsupported language stays plain text`() {
-        val code = "SELECT name FROM users"
+        val code = "fn main() { println!(\"hi\") }"
 
-        assertFalse(highlighter.supports("sql"))
-        assertEquals(listOf(HighlightToken.Plain(code)), highlighter.highlight(code, "sql"))
+        assertFalse(highlighter.supports("rust"))
+        assertEquals(listOf(HighlightToken.Plain(code)), highlighter.highlight(code, "rust"))
     }
 
     @Test

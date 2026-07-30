@@ -70,11 +70,14 @@ name (`ini` ships as `toml`).
 ## Currently bundled
 
 json · ini (toml) · cmake · go · yaml · bash · dockerfile · javascript · typescript · xml (html) ·
-css · java · kotlin · python · c · cpp
+css · java · kotlin · python · c · cpp · sql · diff · markdown
 
-Everything else — rust, sql — is **not ported yet** and renders as plain text.
+Everything else — rust, swift, csharp, php, ruby — is **not ported yet** and renders as plain text.
 JavaScript's `gql` tagged templates and JSX name sub-languages name grammars we do not ship, so
 their bodies stay plain, upstream included.
+
+`shell` is an alias of `bash` here, whereas upstream ships it as a separate grammar for terminal
+*sessions*. Both sides agree, so fixtures do not notice, but a pasted `$ ` prompt is read as bash.
 
 ## Tests
 
