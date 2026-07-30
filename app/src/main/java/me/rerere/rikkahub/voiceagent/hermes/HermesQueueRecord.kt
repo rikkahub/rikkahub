@@ -17,6 +17,12 @@ const val HERMES_TOOL_JOB_ID_KEY = "voice_tool_job_id"
 const val HERMES_TOOL_CREATED_AT_KEY = "voice_tool_created_at"
 const val HERMES_TOOL_UPDATED_AT_KEY = "voice_tool_updated_at"
 const val HERMES_TOOL_ANNOUNCEMENT_KEY = "voice_tool_announcement"
+const val HERMES_ORIGINATING_USER_TURN_ID_KEY = "voice_originating_user_turn_id"
+const val HERMES_REQUEST_HASH_KEY = "voice_request_hash"
+const val HERMES_ARGUMENT_HASH_KEY = "voice_argument_hash"
+const val HERMES_RESULT_HASH_KEY = "voice_result_hash"
+const val HERMES_PRODUCER_KEY = "voice_producer"
+const val HERMES_PRODUCER = "hermes"
 
 enum class HermesQueueStatus(val wireName: String) {
     Pending("pending"),
@@ -75,6 +81,11 @@ data class HermesQueueRecord(
     val announcement: HermesAnnouncementState,
     val createdAt: String?,
     val updatedAt: String?,
+    val originatingUserTurnId: String? = null,
+    val requestHash: String? = null,
+    val argumentHash: String? = null,
+    val resultHash: String? = null,
+    val producer: String? = null,
 ) {
     val resultAnnounced: Boolean
         get() = announcement == HermesAnnouncementState.Announced
@@ -131,6 +142,11 @@ data class HermesQueueRecord(
         jobId?.let { put(HERMES_TOOL_JOB_ID_KEY, it) }
         put(HERMES_TOOL_CREATED_AT_KEY, createdAt ?: nowIso)
         put(HERMES_TOOL_UPDATED_AT_KEY, nowIso)
+        originatingUserTurnId?.let { put(HERMES_ORIGINATING_USER_TURN_ID_KEY, it) }
+        requestHash?.let { put(HERMES_REQUEST_HASH_KEY, it) }
+        argumentHash?.let { put(HERMES_ARGUMENT_HASH_KEY, it) }
+        resultHash?.let { put(HERMES_RESULT_HASH_KEY, it) }
+        producer?.let { put(HERMES_PRODUCER_KEY, it) }
     }
 
     companion object {
@@ -163,6 +179,11 @@ data class HermesQueueRecord(
                 announcement = announcement,
                 createdAt = metadata.stringOrNull(HERMES_TOOL_CREATED_AT_KEY),
                 updatedAt = metadata.stringOrNull(HERMES_TOOL_UPDATED_AT_KEY),
+                originatingUserTurnId = metadata.stringOrNull(HERMES_ORIGINATING_USER_TURN_ID_KEY),
+                requestHash = metadata.stringOrNull(HERMES_REQUEST_HASH_KEY),
+                argumentHash = metadata.stringOrNull(HERMES_ARGUMENT_HASH_KEY),
+                resultHash = metadata.stringOrNull(HERMES_RESULT_HASH_KEY),
+                producer = metadata.stringOrNull(HERMES_PRODUCER_KEY),
             )
         }
 

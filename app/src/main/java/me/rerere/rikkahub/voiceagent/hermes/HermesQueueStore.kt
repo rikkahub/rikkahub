@@ -65,6 +65,10 @@ class HermesQueueStore(
         prompt: String,
         status: VoiceToolRecordStatus,
         jobId: String,
+        originatingUserTurnId: String? = null,
+        requestHash: String? = null,
+        argumentHash: String? = null,
+        producer: String? = null,
     ): Boolean {
         val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
@@ -75,6 +79,10 @@ class HermesQueueStore(
                 status = status,
                 sessionId = sessionId,
                 jobId = jobId,
+                originatingUserTurnId = originatingUserTurnId,
+                requestHash = requestHash,
+                argumentHash = argumentHash,
+                producer = producer,
             )
             updated to (updated !== conversation)
         }
@@ -123,6 +131,11 @@ class HermesQueueStore(
         status: VoiceToolRecordStatus,
         jobId: String?,
         announced: Boolean?,
+        originatingUserTurnId: String? = null,
+        requestHash: String? = null,
+        argumentHash: String? = null,
+        resultHash: String? = null,
+        producer: String? = null,
     ): Boolean {
         val sessionId = persistenceSessionId()
         return updateWithResult { conversation ->
@@ -134,6 +147,11 @@ class HermesQueueStore(
                 sessionId = sessionId,
                 jobId = jobId,
                 announceOnWrite = announced == true,
+                originatingUserTurnId = originatingUserTurnId,
+                requestHash = requestHash,
+                argumentHash = argumentHash,
+                resultHash = resultHash,
+                producer = producer,
             )
             updated to (updated !== conversation)
         }

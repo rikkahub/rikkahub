@@ -69,6 +69,11 @@ class HermesToolRecordWriter(
         sessionId: String? = null,
         jobId: String? = null,
         announceOnWrite: Boolean = false,
+        originatingUserTurnId: String? = null,
+        requestHash: String? = null,
+        argumentHash: String? = null,
+        resultHash: String? = null,
+        producer: String? = null,
     ): Conversation {
         val newStatus = status.queueStatus
         // Terminal freeze: a terminal record with this exact identity is immutable.
@@ -101,6 +106,11 @@ class HermesToolRecordWriter(
             },
             createdAt = existingRecord?.createdAt,
             updatedAt = now,
+            originatingUserTurnId = originatingUserTurnId ?: existingRecord?.originatingUserTurnId,
+            requestHash = requestHash ?: existingRecord?.requestHash,
+            argumentHash = argumentHash ?: existingRecord?.argumentHash,
+            resultHash = resultHash ?: existingRecord?.resultHash,
+            producer = producer ?: existingRecord?.producer,
         )
         val tool = UIMessagePart.Tool(
             toolCallId = callId,
