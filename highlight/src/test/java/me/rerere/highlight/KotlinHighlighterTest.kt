@@ -24,6 +24,10 @@ class KotlinHighlighterTest {
             "yaml", "yml",
             "bash", "sh", "zsh", "shell",
             "dockerfile", "docker",
+            "javascript", "js", "jsx", "mjs", "cjs",
+            "typescript", "ts", "tsx", "mts", "cts",
+            "xml", "html", "xhtml", "rss", "atom", "xjb", "xsd", "xsl", "plist", "wsf", "svg",
+            "css",
         ).forEach { assertTrue(it, highlighter.supports(it)) }
     }
 

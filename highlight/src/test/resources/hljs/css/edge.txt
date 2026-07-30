@@ -1,0 +1,36 @@
+/* TODO: 校对一遍这些边界情况 */
+@font-face {
+  font-family: "Rikka";
+  src: url(data:font/woff2;base64,d09GMgABAAAAAA) format("woff2");
+  unicode-range: U+0000-00FF;
+}
+
+@supports (display: grid) and (not (display: inline-grid)) {
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+}
+
+a:not(.external):focus-visible,
+input[type="checkbox" i]:checked + label::before {
+  outline: 2px dashed currentColor;
+  -webkit-appearance: none;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: #61afef33;
+}
+
+.util {
+  margin: -0.5em auto 1.25rem 2vw;
+  width: calc(100% - 2 * var(--spacing, 8px));
+  animation: fade 300ms cubic-bezier(0.4, 0, 0.2, 1) 1 both;
+}
+
+svg > g[fill] circle,
+table tbody td:first-of-type {
+  stroke-width: 1.5;
+  z-index: 10;
+}

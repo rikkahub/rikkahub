@@ -25,4 +25,16 @@ class LanguageFixtureTest {
 
     @Test
     fun dockerfile() = HljsFixtures.assertLanguageMatches("dockerfile")
+
+    @Test
+    fun javascript() = HljsFixtures.assertLanguageMatches("javascript")
+
+    @Test
+    fun typescript() = HljsFixtures.assertLanguageMatches("typescript")
+
+    @Test
+    fun xml() = HljsFixtures.assertLanguageMatches("xml")
+
+    @Test
+    fun css() = HljsFixtures.assertLanguageMatches("css")
 }

@@ -85,8 +85,9 @@ internal class HighlightEngine(languages: List<Language>) {
                 scan()
                 emitter.finalize()
                 Result(emitter.build(), relevance, top)
-            } catch (error: IllegalLexemeException) {
-                if (highlightDebugMode) throw error
+            } catch (_: IllegalLexemeException) {
+                // Upstream reports illegal input as a zero relevance result rather than as a
+                // failure, even in debug mode: that is how auto detection rules a candidate out.
                 Result(plainTokens(code), 0.0, top)
             } catch (error: RuntimeException) {
                 // Upstream runs in "safe mode" by default: a broken grammar degrades to plain text
@@ -133,7 +134,12 @@ internal class HighlightEngine(languages: List<Language>) {
         // ---- buffer handling ------------------------------------------------------------------
 
         private fun processBuffer() {
-            if (top.mode.subLanguage != null) processSubLanguage() else processKeywords()
+            val mode = top.mode
+            if (mode.subLanguage != null || mode.subLanguageList != null) {
+                processSubLanguage()
+            } else {
+                processKeywords()
+            }
             modeBuffer = StringBuilder()
         }
 
@@ -179,22 +185,52 @@ internal class HighlightEngine(languages: List<Language>) {
 
         private fun processSubLanguage() {
             if (modeBuffer.isEmpty()) return
+            val buffer = modeBuffer.toString()
+            val name = top.mode.subLanguage
 
-            val name = top.mode.subLanguage!!
-            val definition = languagesByAlias[name.lowercase()]
-            if (definition == null) {
-                emitter.addText(modeBuffer.toString())
-                return
+            val result: Result
+            if (name != null) {
+                val definition = languagesByAlias[name.lowercase()]
+                if (definition == null) {
+                    emitter.addText(buffer)
+                    return
+                }
+                result = Run(definition).highlight(
+                    code = buffer,
+                    ignoreIllegals = true,
+                    continuation = continuations[name],
+                )
+                continuations[name] = result.top
+            } else {
+                // A list of candidates carries no continuation upstream either: every chunk is
+                // detected on its own.
+                result = highlightAuto(buffer, top.mode.subLanguageList!!)
             }
 
-            val result = Run(definition).highlight(
-                code = modeBuffer.toString(),
-                ignoreIllegals = true,
-                continuation = continuations[name],
-            )
-            continuations[name] = result.top
+            // Zeroing the relevance of the containing mode is how a grammar opts out of counting
+            // the embedded language towards its own score.
             if ((top.mode.relevance ?: 0.0) > 0) relevance += result.relevance
             emitter.addSublanguage(result.tokens)
+        }
+
+        /**
+         * Highlights [code] with the best scoring language of [subset], mirroring `highlightAuto()`.
+         *
+         * Upstream puts a plain text result in front of the candidates and sorts them stably by
+         * relevance, so a tie — the usual case being that nothing scored at all — is won by plain
+         * text. Illegal input scores zero and can therefore never win.
+         */
+        private fun highlightAuto(code: String, subset: List<String>): Result {
+            val best = subset
+                .mapNotNull { languagesByAlias[it.lowercase()] }
+                .map { Run(it).highlight(code, ignoreIllegals = false, continuation = null) }
+                .maxByOrNull { it.relevance }
+
+            return if (best != null && best.relevance > 0.0) {
+                best
+            } else {
+                Result(plainTokens(code), 0.0, top)
+            }
         }
 
         private fun emitKeyword(keyword: String, scope: String) {
@@ -328,7 +364,10 @@ internal class HighlightEngine(languages: List<Language>) {
             do {
                 val frame = current ?: break
                 if (frame.mode.scope != null) emitter.endScope()
-                if (!frame.mode.skip && frame.mode.subLanguage == null) {
+                if (!frame.mode.skip &&
+                    frame.mode.subLanguage == null &&
+                    frame.mode.subLanguageList == null
+                ) {
                     relevance += frame.mode.relevance ?: 0.0
                 }
                 current = frame.parent

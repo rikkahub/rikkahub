@@ -40,6 +40,14 @@ tools/                     Node script that captures golden fixtures from highli
   `literal`, because `beginKeywords` opens a nested scope inside the mode's `literal` one.
 - Anything the engine can't handle degrades to plain text. Set `highlightDebugMode = true` (tests do)
   to make failures throw instead.
+- `typescript` extends the `javascript` mode tree the way upstream does, by patching the modes it
+  gets back — `Mode.label` is what it finds them by. The one deviation: upstream mutates the shared
+  keyword object in place, which Kotlin cannot, so `javascriptGrammar()` takes the keywords as a
+  parameter instead. Fixtures are the source of truth that the two stay equivalent.
+- `Mode.subLanguageList` is `subLanguage: ['css', 'xml']` upstream, and it means **auto detection**,
+  not "try in order": every candidate is highlighted and the highest relevance wins, with a plain
+  text result winning any tie. That makes `<style>` and `<script>` bodies sensitive to relevance
+  parity — a scoring bug shows up as the wrong language being picked.
 
 ## Adding a language
 
@@ -55,10 +63,12 @@ name (`ini` ships as `toml`).
 
 ## Currently bundled
 
-json · ini (toml) · cmake · go · yaml · bash · dockerfile
+json · ini (toml) · cmake · go · yaml · bash · dockerfile · javascript · typescript · xml (html) ·
+css
 
-Everything else — javascript, typescript, python, java, kotlin, rust, c, cpp, sql, css — is **not
-ported yet** and renders as plain text.
+Everything else — python, java, kotlin, rust, c, cpp, sql — is **not ported yet** and renders as
+plain text. JavaScript's `gql` tagged templates and JSX name sub-languages name grammars we do not
+ship, so their bodies stay plain, upstream included.
 
 ## Tests
 

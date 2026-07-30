@@ -81,6 +81,20 @@ internal class Mode {
     /** Highlight the content of this mode with another language instead of with [keywords]. */
     var subLanguage: String? = null
 
+    /**
+     * `subLanguage: ['css', 'xml']` upstream: the content is highlighted with whichever of the
+     * listed languages scores best, rather than with one fixed language.
+     */
+    var subLanguageList: List<String>? = null
+
+    /**
+     * Free form name a grammar can use to find one of its own modes again.
+     *
+     * Upstream only uses it for debugging and so that `typescript` can swap modes out of the
+     * `javascript` tree it extends.
+     */
+    var label: String? = null
+
     // ---- flags --------------------------------------------------------------------------------
 
     var relevance: Double? = null
@@ -160,6 +174,8 @@ internal class Mode {
         copy.starts = starts
         copy.variants = variants
         copy.subLanguage = subLanguage
+        copy.subLanguageList = subLanguageList
+        copy.label = label
         copy.relevance = relevance
         copy.excludeBegin = excludeBegin
         copy.excludeEnd = excludeEnd
@@ -206,6 +222,8 @@ internal class Mode {
         source.contains.takeIf { it.isNotEmpty() }?.let { contains = it }
         source.starts?.let { starts = it }
         source.subLanguage?.let { subLanguage = it }
+        source.subLanguageList?.let { subLanguageList = it }
+        source.label?.let { label = it }
         source.relevance?.let { relevance = it }
         source.onBegin?.let { onBegin = it }
         source.onEnd?.let { onEnd = it }
@@ -246,6 +264,8 @@ internal class Mode {
         starts = null
         variants = null
         subLanguage = null
+        subLanguageList = null
+        label = null
         relevance = null
         excludeBegin = false
         excludeEnd = false

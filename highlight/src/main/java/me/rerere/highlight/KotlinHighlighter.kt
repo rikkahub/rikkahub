@@ -178,6 +178,50 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
             """.trimIndent(),
         ),
         HighlightPreviewSample(
+            language = "javascript",
+            code = """
+                const user = "Rikka"
+
+                function greet(name) {
+                  console.log(`Hello, ${'$'}{name}!`)
+                }
+
+                greet(user)
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "typescript",
+            code = """
+                interface User {
+                  name: string
+                  age?: number
+                }
+
+                const greet = (user: User): void => {
+                  console.log(`Hello, ${'$'}{user.name}!`)
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "html",
+            code = """
+                <div class="chat">
+                  <p>Hello, Rikka!</p>
+                  <img src="logo.svg" alt="logo" />
+                </div>
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "css",
+            code = """
+                .chat {
+                  display: flex;
+                  color: #61afef;
+                  margin: 0 auto;
+                }
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
             language = "cmake",
             code = """
                 cmake_minimum_required(VERSION 3.22)

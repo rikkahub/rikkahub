@@ -12,4 +12,12 @@ export const LANGUAGES = [
   { name: 'yaml', module: 'yaml', aliases: [] },
   { name: 'bash', module: 'bash', aliases: ['shell'] },
   { name: 'dockerfile', module: 'dockerfile', aliases: [] },
+  { name: 'javascript', module: 'javascript', aliases: ['js', 'jsx', 'mjs', 'cjs'] },
+  { name: 'typescript', module: 'typescript', aliases: ['ts', 'tsx', 'mts', 'cts'] },
+  {
+    name: 'xml',
+    module: 'xml',
+    aliases: ['html', 'xhtml', 'rss', 'atom', 'xjb', 'xsd', 'xsl', 'plist', 'wsf', 'svg'],
+  },
+  { name: 'css', module: 'css', aliases: [] },
 ]

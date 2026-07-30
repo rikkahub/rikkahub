@@ -1,0 +1,251 @@
+keyword	declare
+	 
+variable.language	module
+	 
+string	'legacy-lib'
+	 {\n  
+keyword	export
+	 
+keyword	function
+	 
+title.function	init
+	(
+attr	config
+params	?: 
+title.class	Record
+params	<
+built_in	string
+params	, 
+built_in	unknown
+params	>
+	): 
+built_in	void
+	;\n}\n\n
+keyword	export
+	 
+keyword	type
+	 
+title.class	Modify
+	<T, R> = 
+title.class	Omit
+	<T, keyof R> & R;\n
+keyword	export
+	 
+keyword	type
+	 
+title.class	Pair
+	 = [
+attr	key
+	: 
+built_in	string
+	, 
+attr	value
+	: 
+built_in	number
+	];\n
+keyword	export
+	 
+keyword	type
+	 
+title.class	Mapped
+	<T> = { 
+keyword	readonly
+	 [K 
+keyword	in
+	 keyof T]-?: T[K] | 
+literal	null
+	 };\n\n
+keyword	const
+	 identity = <T = 
+built_in	any
+	>(
+attr	key
+	?: 
+built_in	string
+	): 
+title.class	Modify
+	<T, { 
+attr	key
+	: 
+built_in	string
+	 }> =>\n  ({ key }) 
+keyword	as
+	 
+built_in	unknown
+	 
+keyword	as
+	 
+title.class	Modify
+	<T, { 
+attr	key
+	: 
+built_in	string
+	 }>;\n\n
+keyword	export
+	 
+keyword	function
+	 
+title.function	overload
+	(
+attr	input
+params	: 
+built_in	string
+	): 
+built_in	number
+	;\n
+keyword	export
+	 
+keyword	function
+	 
+title.function	overload
+	(
+attr	input
+params	: 
+built_in	number
+	): 
+built_in	string
+	;\n
+keyword	export
+	 
+keyword	function
+	 
+title.function	overload
+	(
+attr	input
+params	: 
+built_in	string
+params	 | 
+built_in	number
+	): 
+built_in	string
+	 | 
+built_in	number
+	 {\n  
+keyword	return
+	 
+keyword	typeof
+	 input === 
+string	'string'
+	 ? input.
+property	length
+	 : 
+title.class	String
+	(input);\n}\n\n
+meta	@Component
+	({ 
+attr	selector
+	: 
+string	'app-root'
+	 })\n
+keyword	class
+	 
+title.class	AppComponent
+	 
+keyword	implements
+	 
+title.class	OnInit
+	, 
+title.class	OnDestroy
+	 {\n  
+meta	@Input
+	() title!: 
+built_in	string
+	;\n  
+meta	@Output
+	() 
+keyword	readonly
+	 changed = 
+keyword	new
+	 
+title.class	EventEmitter
+	<
+built_in	string
+	>();\n\n  
+title.function	constructor
+	(
+params	\n    
+keyword	private
+params	 
+keyword	readonly
+params	 
+attr	http
+params	: 
+title.class	HttpClient
+params	,\n    
+meta	@Inject
+params	(TOKEN) 
+keyword	protected
+params	 
+attr	token
+params	: 
+built_in	string
+params	,\n  
+	) {}\n\n  
+title.function	ngOnInit
+	(): 
+built_in	void
+	 {\n    
+variable.language	this
+	.
+property	http
+	\n      .
+property	get
+	<
+title.class	Array
+	<{ 
+attr	id
+	: 
+built_in	number
+	; 
+attr	name
+	?: 
+built_in	string
+	 }>>(
+string	'/api/items'
+	)\n      .
+title.function	subscribe
+	(
+function	(
+params	items
+function	) =>
+	 (
+variable.language	this
+	.
+property	title
+	 = items[
+number	0
+	]?.
+property	name
+	 ?? 
+string	'none'
+	));\n  }\n\n  
+title.function	ngOnDestroy
+	() {}\n}\n\n
+keyword	const
+	 
+keyword	enum
+	 
+title.class	Flag
+	 {\n  
+title.class	None
+	 = 
+number	0
+	,\n  
+title.class	All
+	 = ~
+number	0
+	,\n}\n\n
+keyword	let
+	 assertion = <
+built_in	string
+	>someValue;\n
+keyword	let
+	 widened = someValue 
+keyword	as
+	 
+keyword	const
+	 
+keyword	satisfies
+	 
+title.class	Flag
+	;\n

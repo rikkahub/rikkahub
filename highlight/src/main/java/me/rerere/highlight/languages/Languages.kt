@@ -3,10 +3,14 @@ package me.rerere.highlight.languages
 import me.rerere.highlight.core.Language
 import me.rerere.highlight.languages.bash.bash
 import me.rerere.highlight.languages.cmake.cmake
+import me.rerere.highlight.languages.css.css
 import me.rerere.highlight.languages.dockerfile.dockerfile
 import me.rerere.highlight.languages.go.go
 import me.rerere.highlight.languages.ini.ini
+import me.rerere.highlight.languages.javascript.javascript
 import me.rerere.highlight.languages.json.json
+import me.rerere.highlight.languages.typescript.typescript
+import me.rerere.highlight.languages.xml.xml
 import me.rerere.highlight.languages.yaml.yaml
 
 /**
@@ -22,4 +26,8 @@ internal fun builtinLanguages(): List<Language> = listOf(
     yaml(),
     bash(),
     dockerfile(),
+    javascript(),
+    typescript(),
+    xml(),
+    css(),
 )
