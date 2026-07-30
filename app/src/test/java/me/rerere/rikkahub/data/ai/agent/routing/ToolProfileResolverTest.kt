@@ -242,6 +242,8 @@ class ToolProfileResolverTest {
             reasonCode = "test_profile",
             resolvedToolNames = original.resolvedToolNames,
             permissionDigest = original.permissionDigest,
+            executionContextDigest =
+                "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             providerIdleTimeoutMillis = 60_000,
             toolTimeoutMillis = request.defaultToolTimeoutMillis,
             runTimeoutMillis = 600_000,

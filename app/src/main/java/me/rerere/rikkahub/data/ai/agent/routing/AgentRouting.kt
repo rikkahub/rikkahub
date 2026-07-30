@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 
 private val SAFE_REASON_CODE = Regex("[a-z0-9_]{1,64}")
 private val SAFE_PERMISSION_DIGEST = Regex("[A-Za-z0-9:_-]{1,256}")
+private val SAFE_EXECUTION_CONTEXT_DIGEST = Regex("sha256:[0-9a-f]{64}")
 
 @Serializable
 enum class AgentIntent {
@@ -28,6 +29,8 @@ data class AgentRoutingSnapshot(
     val reasonCode: String,
     val resolvedToolNames: List<String>,
     val permissionDigest: String,
+    /** Digest of execution-affecting settings only. Prompt, header and tool bodies are excluded. */
+    val executionContextDigest: String,
     val providerIdleTimeoutMillis: Long,
     val toolTimeoutMillis: Long,
     val runTimeoutMillis: Long,
@@ -39,6 +42,8 @@ data class AgentRoutingSnapshot(
     internal fun isValid(): Boolean =
         SAFE_REASON_CODE.matches(reasonCode) &&
             SAFE_PERMISSION_DIGEST.matches(permissionDigest) &&
+            SAFE_EXECUTION_CONTEXT_DIGEST.matches(executionContextDigest) &&
+            (intent != AgentIntent.EXECUTE || inputTrust == InputTrust.USER_DIRECT) &&
             providerIdleTimeoutMillis > 0 &&
             toolTimeoutMillis > 0 &&
             runTimeoutMillis > 0 &&
@@ -53,6 +58,7 @@ data class AgentRoutingSnapshot(
             reasonCode: String,
             resolvedToolNames: Iterable<String>,
             permissionDigest: String,
+            executionContextDigest: String,
             providerIdleTimeoutMillis: Long,
             toolTimeoutMillis: Long,
             runTimeoutMillis: Long,
@@ -62,6 +68,7 @@ data class AgentRoutingSnapshot(
             reasonCode = reasonCode,
             resolvedToolNames = canonicalToolNames(resolvedToolNames),
             permissionDigest = permissionDigest,
+            executionContextDigest = executionContextDigest,
             providerIdleTimeoutMillis = providerIdleTimeoutMillis,
             toolTimeoutMillis = toolTimeoutMillis,
             runTimeoutMillis = runTimeoutMillis,

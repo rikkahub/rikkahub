@@ -12,6 +12,7 @@ enum class AgentRoutingSnapshotError {
     CONFIG_TOO_LARGE,
     UNSUPPORTED_VERSION,
     INVALID_ROUTING,
+    INVALID_LEGACY_MODE,
 }
 
 sealed interface AgentRoutingSnapshotDecodeResult {
@@ -67,8 +68,10 @@ object AgentRoutingSnapshotCodec {
         if (routingElement == null || routingElement is JsonNull) {
             return if (declaresAutoPolicy) {
                 AgentRoutingSnapshotDecodeResult.Invalid(AgentRoutingSnapshotError.INVALID_ROUTING)
-            } else {
+            } else if (config.agentMode in LEGACY_AGENT_MODES) {
                 AgentRoutingSnapshotDecodeResult.Legacy(config)
+            } else {
+                AgentRoutingSnapshotDecodeResult.Invalid(AgentRoutingSnapshotError.INVALID_LEGACY_MODE)
             }
         }
         val routing = config.routing
@@ -83,4 +86,6 @@ object AgentRoutingSnapshotCodec {
             ?: return AgentRoutingSnapshotDecodeResult.Invalid(AgentRoutingSnapshotError.INVALID_ROUTING)
         return AgentRoutingSnapshotDecodeResult.Auto(config.copy(routing = normalized), normalized)
     }
+
+    private val LEGACY_AGENT_MODES = setOf("CHAT", "PLAN", "AGENT")
 }

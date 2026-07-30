@@ -248,6 +248,8 @@ class ToolRegistryTest {
             reasonCode = "registry_test",
             resolvedToolNames = original.resolvedToolNames,
             permissionDigest = original.permissionDigest,
+            executionContextDigest =
+                "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             providerIdleTimeoutMillis = 60_000,
             toolTimeoutMillis = 30_000,
             runTimeoutMillis = 600_000,

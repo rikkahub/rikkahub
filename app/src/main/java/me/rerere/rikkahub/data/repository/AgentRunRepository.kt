@@ -68,7 +68,7 @@ class AgentRunRepository(
     fun observeLatestRun(conversationId: String): Flow<AgentRunEntity?> = dao.observeLatestRun(conversationId)
 
     fun observeActiveRun(conversationId: String): Flow<AgentRunEntity?> =
-        dao.observeActiveRun(conversationId, AgentRunStatus.ACTIVE.runStatusNames())
+        dao.observeActiveRootRun(conversationId, AgentRunStatus.ACTIVE.runStatusNames())
 
     fun observeActiveRuns(): Flow<List<AgentRunEntity>> = dao.observeActiveRuns(AgentRunStatus.ACTIVE.runStatusNames())
 
@@ -106,7 +106,7 @@ class AgentRunRepository(
     suspend fun getApproval(id: String): AgentApprovalEntity? = dao.getApproval(id)
 
     suspend fun getActiveRun(conversationId: String): AgentRunEntity? =
-        dao.getActiveRun(conversationId, AgentRunStatus.ACTIVE.runStatusNames())
+        dao.getActiveRootRun(conversationId, AgentRunStatus.ACTIVE.runStatusNames())
 
     suspend fun getSteps(runId: String): List<AgentStepEntity> = dao.getSteps(runId)
 
@@ -323,7 +323,7 @@ class AgentRunRepository(
     ): AgentRunEntity {
         val run = database.withTransaction {
             val now = timeSource.nowMillis()
-            dao.getActiveRunsForConversation(conversationId, AgentRunStatus.ACTIVE.runStatusNames()).forEach {
+            dao.getActiveRootRunsForConversation(conversationId, AgentRunStatus.ACTIVE.runStatusNames()).forEach {
                 convergeRun(it.id, AgentRunStatus.CANCELLED, AgentStepStatus.CANCELLED, ToolExecutionStatus.CANCELLED, now)
             }
             val newRun = AgentRunEntity(
@@ -590,7 +590,8 @@ class AgentRunRepository(
 
     suspend fun cancelActiveRun(conversationId: String): Boolean {
         return database.withTransaction {
-            val run = dao.getActiveRun(conversationId, AgentRunStatus.ACTIVE.runStatusNames()) ?: return@withTransaction false
+            val run = dao.getActiveRootRun(conversationId, AgentRunStatus.ACTIVE.runStatusNames())
+                ?: return@withTransaction false
             convergeRun(run.id, AgentRunStatus.CANCELLED, AgentStepStatus.CANCELLED, ToolExecutionStatus.CANCELLED, timeSource.nowMillis())
         }
     }

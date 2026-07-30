@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.ai.agent.routing
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import me.rerere.rikkahub.data.model.AgentRunConfigSnapshot
 import me.rerere.rikkahub.utils.JsonInstant
 import org.junit.Assert.assertEquals
@@ -28,6 +30,7 @@ class AgentRoutingSnapshotTest {
         assertEquals("model", decoded.config.modelId)
         assertEquals(listOf("artifact_read", "workspace_write_file"), decoded.routing.resolvedToolNames)
         assertEquals(45_000, decoded.routing.providerIdleTimeoutMillis)
+        assertEquals(EXECUTION_CONTEXT_DIGEST, decoded.routing.executionContextDigest)
         assertEquals(routing, decoded.routing)
     }
 
@@ -41,6 +44,23 @@ class AgentRoutingSnapshotTest {
         decoded as AgentRoutingSnapshotDecodeResult.Legacy
         assertEquals("legacy-model", decoded.config.modelId)
         assertEquals("PLAN", decoded.config.agentMode)
+    }
+
+    @Test
+    fun `only explicit historical modes are classified as legacy`() {
+        listOf("CHAT", "PLAN", "AGENT").forEach { mode ->
+            assertTrue(
+                AgentRoutingSnapshotCodec.decode("""{"agentMode":"$mode"}""") is
+                    AgentRoutingSnapshotDecodeResult.Legacy,
+            )
+        }
+
+        listOf("{}", """{"agentMode":null}""", """{"agentMode":""}""", """{"agentMode":"AUTO"}""").forEach {
+            assertInvalid(
+                AgentRoutingSnapshotCodec.decode(it),
+                AgentRoutingSnapshotError.INVALID_LEGACY_MODE,
+            )
+        }
     }
 
     @Test
@@ -90,6 +110,31 @@ class AgentRoutingSnapshotTest {
             AgentRoutingSnapshotCodec.decode(encoded),
             AgentRoutingSnapshotError.INVALID_ROUTING,
         )
+    }
+
+    @Test
+    fun `execution context digest is required and accepts only canonical sha256`() {
+        val config = AgentRunConfigSnapshot(routing = routingSnapshot())
+        val root = JsonInstant.parseToJsonElement(JsonInstant.encodeToString(config)).jsonObject
+        val routing = root.getValue("routing").jsonObject
+        val withoutDigest = JsonObject(
+            root.toMutableMap().apply {
+                put("routing", JsonObject(routing.toMutableMap().apply { remove("executionContextDigest") }))
+            },
+        ).toString()
+        val rawContext = JsonInstant.encodeToString(
+            config.copy(routing = config.routing?.copy(executionContextDigest = "system prompt body")),
+        )
+        val uppercaseHash = JsonInstant.encodeToString(
+            config.copy(routing = config.routing?.copy(executionContextDigest = EXECUTION_CONTEXT_DIGEST.uppercase())),
+        )
+
+        listOf(withoutDigest, rawContext, uppercaseHash).forEach { encoded ->
+            assertInvalid(
+                AgentRoutingSnapshotCodec.decode(encoded),
+                AgentRoutingSnapshotError.INVALID_ROUTING,
+            )
+        }
     }
 
     @Test
@@ -176,6 +221,7 @@ class AgentRoutingSnapshotTest {
         reasonCode = "explicit_mutation",
         resolvedToolNames = resolvedToolNames,
         permissionDigest = "sha256:test-policy",
+        executionContextDigest = EXECUTION_CONTEXT_DIGEST,
         providerIdleTimeoutMillis = 45_000,
         toolTimeoutMillis = 30_000,
         runTimeoutMillis = 30 * 60_000,
@@ -192,5 +238,10 @@ class AgentRoutingSnapshotTest {
         assertTrue(result is AgentRoutingSnapshotDecodeResult.Invalid)
         result as AgentRoutingSnapshotDecodeResult.Invalid
         assertEquals(expectedError, result.error)
+    }
+
+    private companion object {
+        const val EXECUTION_CONTEXT_DIGEST =
+            "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     }
 }

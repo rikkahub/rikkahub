@@ -47,21 +47,21 @@ interface AgentRunDAO {
 
     @Query(
         "SELECT * FROM agent_runs WHERE conversation_id = :conversationId " +
-            "AND status IN (:statuses) ORDER BY updated_at DESC LIMIT 1"
+            "AND parent_run_id IS NULL AND status IN (:statuses) ORDER BY updated_at DESC LIMIT 1"
     )
-    suspend fun getActiveRun(conversationId: String, statuses: List<String>): AgentRunEntity?
+    suspend fun getActiveRootRun(conversationId: String, statuses: List<String>): AgentRunEntity?
 
     @Query(
         "SELECT * FROM agent_runs WHERE conversation_id = :conversationId " +
-            "AND status IN (:statuses) ORDER BY updated_at DESC"
+            "AND parent_run_id IS NULL AND status IN (:statuses) ORDER BY updated_at DESC"
     )
-    suspend fun getActiveRunsForConversation(conversationId: String, statuses: List<String>): List<AgentRunEntity>
+    suspend fun getActiveRootRunsForConversation(conversationId: String, statuses: List<String>): List<AgentRunEntity>
 
     @Query(
         "SELECT * FROM agent_runs WHERE conversation_id = :conversationId " +
-            "AND status IN (:statuses) ORDER BY updated_at DESC LIMIT 1"
+            "AND parent_run_id IS NULL AND status IN (:statuses) ORDER BY updated_at DESC LIMIT 1"
     )
-    fun observeActiveRun(conversationId: String, statuses: List<String>): Flow<AgentRunEntity?>
+    fun observeActiveRootRun(conversationId: String, statuses: List<String>): Flow<AgentRunEntity?>
 
     @Query("SELECT * FROM agent_runs WHERE status IN (:statuses) ORDER BY updated_at DESC")
     fun observeActiveRuns(statuses: List<String>): Flow<List<AgentRunEntity>>

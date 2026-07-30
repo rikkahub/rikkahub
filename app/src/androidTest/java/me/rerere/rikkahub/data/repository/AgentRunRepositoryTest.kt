@@ -133,6 +133,57 @@ class AgentRunRepositoryTest {
     }
 
     @Test
+    fun conversationActiveRunApisSelectOnlyTheRootWhileGlobalRecoveryStillSeesChildren() = runBlocking {
+        repository.createRun("root", "conversation", "assistant", AgentRunConfigSnapshot())
+        repository.transitionRun("root", setOf(AgentRunStatus.QUEUED), AgentRunStatus.PREFLIGHT)
+        repository.transitionRun("root", setOf(AgentRunStatus.PREFLIGHT), AgentRunStatus.RUNNING)
+        time.now = 200
+        repository.createRun(
+            "child",
+            "conversation",
+            "assistant",
+            AgentRunConfigSnapshot(),
+            parentRunId = "root",
+        )
+        repository.transitionRun("child", setOf(AgentRunStatus.QUEUED), AgentRunStatus.PREFLIGHT)
+        repository.transitionRun("child", setOf(AgentRunStatus.PREFLIGHT), AgentRunStatus.RUNNING)
+
+        assertEquals("root", repository.getActiveRun("conversation")?.id)
+        assertEquals("root", repository.observeActiveRun("conversation").first()?.id)
+        assertEquals(setOf("root", "child"), repository.observeActiveRuns().first().map { it.id }.toSet())
+
+        time.now = 300
+        repository.replaceActiveRun("replacement", "conversation", "assistant", AgentRunConfigSnapshot())
+
+        assertEquals(AgentRunStatus.CANCELLED.name, repository.getRun("root")?.status)
+        assertEquals(AgentRunStatus.CANCELLED.name, repository.getRun("child")?.status)
+        assertEquals("replacement", repository.getActiveRun("conversation")?.id)
+    }
+
+    @Test
+    fun cancellingTheConversationActiveRunTargetsTheRootAndConvergesItsChild() = runBlocking {
+        repository.createRun("root", "conversation", "assistant", AgentRunConfigSnapshot())
+        repository.transitionRun("root", setOf(AgentRunStatus.QUEUED), AgentRunStatus.PREFLIGHT)
+        repository.transitionRun("root", setOf(AgentRunStatus.PREFLIGHT), AgentRunStatus.RUNNING)
+        time.now = 200
+        repository.createRun(
+            "child",
+            "conversation",
+            "assistant",
+            AgentRunConfigSnapshot(),
+            parentRunId = "root",
+        )
+        repository.transitionRun("child", setOf(AgentRunStatus.QUEUED), AgentRunStatus.PREFLIGHT)
+        repository.transitionRun("child", setOf(AgentRunStatus.PREFLIGHT), AgentRunStatus.RUNNING)
+
+        assertTrue(repository.cancelActiveRun("conversation"))
+
+        assertEquals(AgentRunStatus.CANCELLED.name, repository.getRun("root")?.status)
+        assertEquals(AgentRunStatus.CANCELLED.name, repository.getRun("child")?.status)
+        assertNull(repository.getActiveRun("conversation"))
+    }
+
+    @Test
     fun cancellingAnOldRunNeverCancelsTheReplacementRun() = runBlocking {
         repository.createRun("old", "conversation", "assistant", AgentRunConfigSnapshot())
         repository.transitionRun("old", setOf(AgentRunStatus.QUEUED), AgentRunStatus.PREFLIGHT)
