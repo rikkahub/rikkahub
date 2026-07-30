@@ -26,11 +26,13 @@ import me.rerere.highlight.buildHighlightText
 import me.rerere.highlight.kotlin.engine.GrammarEngine
 import me.rerere.highlight.kotlin.languages.bash.BashLanguage
 import me.rerere.highlight.kotlin.languages.css.CssLanguage
+import me.rerere.highlight.kotlin.languages.go.GoLanguage
 import me.rerere.highlight.kotlin.languages.java.JavaLanguage
 import me.rerere.highlight.kotlin.languages.javascript.JavaScriptLanguage
 import me.rerere.highlight.kotlin.languages.javascript.TypeScriptLanguage
 import me.rerere.highlight.kotlin.languages.json.JsonLanguage
 import me.rerere.highlight.kotlin.languages.kotlin.KotlinLanguage
+import me.rerere.highlight.kotlin.languages.python.PythonLanguage
 import me.rerere.highlight.kotlin.languages.sql.SqlLanguage
 import me.rerere.highlight.kotlin.languages.toml.TomlLanguage
 
@@ -55,6 +57,8 @@ class KotlinHighlighter {
             CssLanguage.definition,
             JavaLanguage.definition,
             KotlinLanguage.definition,
+            PythonLanguage.definition,
+            GoLanguage.definition,
         ),
     )
 
