@@ -87,6 +87,18 @@ internal sealed interface LiveKitVoiceExperienceEvent {
         val userSpeaking: Boolean? = null,
         val agentSpeaking: Boolean? = null,
     ) : LiveKitVoiceExperienceEvent
+
+    @Serializable
+    data class FollowUpCorrelation(
+        override val version: Int,
+        override val voiceSessionId: String,
+        override val eventId: String,
+        override val kind: String,
+        override val observedAt: String,
+        val followUpTurnId: String,
+        val assistantTurnId: String,
+        val resultHash: String,
+    ) : LiveKitVoiceExperienceEvent
 }
 
 @Serializable
@@ -163,6 +175,12 @@ internal fun parseLiveKitVoiceExperienceEvent(payload: String): LiveKitVoiceExpe
             requiredKeys = BASE_EVENT_KEYS + DELIVERY_KEYS + "assistantTurnId",
         )
 
+        "follow_up_correlation" -> decodeExact<LiveKitVoiceExperienceEvent.FollowUpCorrelation>(
+            payload = payload,
+            objectValue = objectValue,
+            requiredKeys = BASE_EVENT_KEYS + FOLLOW_UP_CORRELATION_KEYS,
+        )
+
         else -> null
     } ?: return null
     return event.takeIf { it.isValid() }
@@ -192,6 +210,7 @@ internal fun LiveKitVoiceExperienceEvent.canonicalJson(): String = when (this) {
     is LiveKitVoiceExperienceEvent.JobState -> LIVEKIT_EXPERIENCE_JSON.encodeToString(this)
     is LiveKitVoiceExperienceEvent.Transcript -> LIVEKIT_EXPERIENCE_JSON.encodeToString(this)
     is LiveKitVoiceExperienceEvent.Delivery -> LIVEKIT_EXPERIENCE_JSON.encodeToString(this)
+    is LiveKitVoiceExperienceEvent.FollowUpCorrelation -> LIVEKIT_EXPERIENCE_JSON.encodeToString(this)
 }
 
 internal fun voiceSha256(text: String): String =
@@ -281,6 +300,12 @@ private fun LiveKitVoiceExperienceEvent.isValid(): Boolean {
 
                     else -> false
                 }
+
+        is LiveKitVoiceExperienceEvent.FollowUpCorrelation ->
+            kind == "follow_up_correlation" &&
+                followUpTurnId.isLiveKitExperienceIdentifier() &&
+                assistantTurnId.isLiveKitExperienceIdentifier() &&
+                resultHash.isLiveKitExperienceHash()
     }
 }
 
@@ -339,5 +364,7 @@ private val BASE_EVENT_KEYS =
 private val JOB_CORRELATION_KEYS =
     setOf("userTurnId", "requestHash", "toolCallId", "argumentHash", "jobId")
 private val DELIVERY_KEYS = setOf("toolCallId", "jobId")
+private val FOLLOW_UP_CORRELATION_KEYS =
+    setOf("followUpTurnId", "assistantTurnId", "resultHash")
 private val ACK_KEYS =
     setOf("version", "voiceSessionId", "eventId", "status", "persistedAt")

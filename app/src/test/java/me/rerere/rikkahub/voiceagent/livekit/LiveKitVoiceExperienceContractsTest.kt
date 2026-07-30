@@ -112,6 +112,28 @@ class LiveKitVoiceExperienceContractsTest {
     }
 
     @Test
+    fun `follow up correlation accepts only exact turn assistant and result identifiers`() {
+        val canonical = followUpCorrelationJson()
+        val event = parseLiveKitVoiceExperienceEvent(canonical)
+
+        event as LiveKitVoiceExperienceEvent.FollowUpCorrelation
+        assertEquals("turn_2", event.followUpTurnId)
+        assertEquals("assistant_2", event.assistantTurnId)
+        assertEquals("sha256:${"3".repeat(64)}", event.resultHash)
+        assertEquals(canonical, event.canonicalJson())
+
+        listOf(
+            canonical.replace("\"turn_2\"", "\"bad turn\""),
+            canonical.replace("\"assistant_2\"", "\"bad/assistant\""),
+            canonical.replace("sha256:${"3".repeat(64)}", "sha256:abcd"),
+            canonical.replace("}", ""","transcript":"private surrounding text"}"""),
+            canonical.replace("}", ""","marker":"VOICE-E2E-MARKER-42"}"""),
+        ).forEach { payload ->
+            assertNull(payload, parseLiveKitVoiceExperienceEvent(payload))
+        }
+    }
+
+    @Test
     fun `event parser rejects noncanonical JSON unsafe identifiers timestamps hashes and versions`() {
         val canonical = acceptedEventJson()
         listOf(
@@ -174,3 +196,6 @@ private fun transcriptJson(
 
 private fun deliveryJson(kind: String, assistantTurn: String = ""): String =
     """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_delivery","kind":"$kind","observedAt":"2026-07-30T12:00:04Z","toolCallId":"call_1","jobId":"hj_1"$assistantTurn}"""
+
+private fun followUpCorrelationJson(): String =
+    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_follow_up","kind":"follow_up_correlation","observedAt":"2026-07-30T12:00:05Z","followUpTurnId":"turn_2","assistantTurnId":"assistant_2","resultHash":"sha256:${"3".repeat(64)}"}"""

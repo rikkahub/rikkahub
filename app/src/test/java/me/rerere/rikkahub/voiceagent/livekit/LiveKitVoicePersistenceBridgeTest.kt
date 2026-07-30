@@ -165,6 +165,23 @@ class LiveKitVoicePersistenceBridgeTest {
     }
 
     @Test
+    fun `follow up correlation is acknowledged into evidence without mutating conversation or queue`() = runTest {
+        val store = RecordingVoiceConversationStore()
+        val evidence = RecordingEvidenceSink()
+        val bridge = bridge(store, evidence)
+
+        val ack = bridge.handle(AGENT_IDENTITY, followUpCorrelationJson())
+
+        assertEquals("persisted", parseLiveKitPersistenceAck(ack)!!.status)
+        assertTrue(store.conversation.value.currentMessages.isEmpty())
+        assertTrue(store.conversation.value.hermesQueueRecords().isEmpty())
+        val event = evidence.events.single() as LiveKitVoiceExperienceEvent.FollowUpCorrelation
+        assertEquals("turn_2", event.followUpTurnId)
+        assertEquals("assistant_2", event.assistantTurnId)
+        assertEquals(RESULT_HASH, event.resultHash)
+    }
+
+    @Test
     fun `job state cannot overwrite accepted immutable correlation`() = runTest {
         val store = RecordingVoiceConversationStore()
         val bridge = bridge(store)
@@ -559,6 +576,9 @@ private fun deliveryAnnouncedJson(
     eventId: String = "evt_announced",
 ): String =
     """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"delivery_announced","observedAt":"2026-07-30T12:00:04Z","toolCallId":"call_1","jobId":"hj_1","assistantTurnId":"$assistantTurnId"}"""
+
+private fun followUpCorrelationJson(): String =
+    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"evt_follow_up","kind":"follow_up_correlation","observedAt":"2026-07-30T12:00:04Z","followUpTurnId":"turn_2","assistantTurnId":"assistant_2","resultHash":"$RESULT_HASH"}"""
 
 private const val VOICE_SESSION_ID = "lvs_1"
 private const val AGENT_IDENTITY = "agent_1"

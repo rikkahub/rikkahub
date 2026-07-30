@@ -92,6 +92,7 @@ internal class LiveKitVoicePersistenceBridge(
 
             is LiveKitVoiceExperienceEvent.JobState -> persistJobState(event)
             is LiveKitVoiceExperienceEvent.Transcript -> persistTranscript(event)
+            is LiveKitVoiceExperienceEvent.FollowUpCorrelation -> Unit
             is LiveKitVoiceExperienceEvent.Delivery -> when (event.kind) {
                 "delivery_announced" ->
                     queueStore.markLiveKitResultAnnounced(

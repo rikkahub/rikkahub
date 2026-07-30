@@ -110,6 +110,51 @@ class VoiceExperienceEvidenceWriterTest {
             root.deleteRecursively()
         }
     }
+
+    @Test
+    fun `follow up evidence contains identifiers and result hash without transcript answer or marker text`() = runBlocking {
+        val root = Files.createTempDirectory("voice-experience-follow-up").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val artifactWriter = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                scope = scope,
+            )
+            val raw = followUpCorrelationEventJson()
+
+            VoiceExperienceEvidenceWriter(artifactWriter).append(
+                requireNotNull(parseLiveKitVoiceExperienceEvent(raw))
+            )
+            artifactWriter.drain()
+
+            val sanitizedFile = File(root, "voice-e2e/voice-experience-events.ndjson")
+            val sanitized = Json.parseToJsonElement(sanitizedFile.readLines().single()).jsonObject
+            assertEquals(
+                setOf(
+                    "version",
+                    "voiceSessionId",
+                    "eventId",
+                    "kind",
+                    "observedAt",
+                    "eventHash",
+                    "followUpTurnId",
+                    "assistantTurnId",
+                    "resultHash",
+                ),
+                sanitized.keys,
+            )
+            assertEquals("turn_2", sanitized.getValue("followUpTurnId").jsonPrimitive.content)
+            assertEquals("assistant_2", sanitized.getValue("assistantTurnId").jsonPrimitive.content)
+            val artifactText = sanitizedFile.readText()
+            assertFalse(artifactText.contains("private surrounding transcript"))
+            assertFalse(artifactText.contains("private Hermes answer"))
+            assertFalse(artifactText.contains("VOICE-E2E-MARKER-42"))
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
 }
 
 private val OWNER_READ_WRITE = setOf(
@@ -128,3 +173,6 @@ private fun succeededEventJson(answer: String): String =
 
 private fun failedEventJson(reason: String): String =
     """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_failed","kind":"job_failed","observedAt":"2026-07-30T12:00:03Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1","failureReason":"$reason"}"""
+
+private fun followUpCorrelationEventJson(): String =
+    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_follow_up","kind":"follow_up_correlation","observedAt":"2026-07-30T12:00:04Z","followUpTurnId":"turn_2","assistantTurnId":"assistant_2","resultHash":"sha256:${"3".repeat(64)}"}"""

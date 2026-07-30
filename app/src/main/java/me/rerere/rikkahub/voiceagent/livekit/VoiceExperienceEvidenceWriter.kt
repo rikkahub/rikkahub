@@ -63,5 +63,11 @@ private fun LiveKitVoiceExperienceEvent.sanitizedJson(rawEvent: String): String 
                 userSpeaking?.let { put("userSpeaking", it) }
                 agentSpeaking?.let { put("agentSpeaking", it) }
             }
+
+            is LiveKitVoiceExperienceEvent.FollowUpCorrelation -> {
+                put("followUpTurnId", followUpTurnId)
+                put("assistantTurnId", assistantTurnId)
+                put("resultHash", resultHash)
+            }
         }
     }.toString()
