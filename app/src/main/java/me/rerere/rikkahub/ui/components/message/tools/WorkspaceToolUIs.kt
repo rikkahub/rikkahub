@@ -31,7 +31,7 @@ import kotlinx.serialization.json.longOrNull
 import me.rerere.ai.ui.DiffMetadata
 import me.rerere.ai.ui.metadataAs
 import me.rerere.common.http.jsonObjectOrNull
-import me.rerere.highlight.HighlightText
+import me.rerere.highlight.kotlin.KotlinHighlightText
 import androidx.compose.ui.res.stringResource
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ComputerTerminal01
@@ -248,7 +248,7 @@ private fun FileContentSummary(text: String, path: String?, loading: Boolean) {
             .padding(horizontal = 8.dp, vertical = 6.dp)
             .shimmer(isLoading = loading),
     ) {
-        HighlightText(
+        KotlinHighlightText(
             code = preview,
             language = languageOf(path),
             fontSize = 11.sp,

@@ -190,19 +190,12 @@ class KotlinHighlighterTest {
     }
 
     private val HighlightToken.text: String
-        get() = when (this) {
-            is HighlightToken.Plain -> this.content
-            is HighlightToken.Token.StringContent -> this.content
-            is HighlightToken.Token.StringListContent -> this.content.joinToString(separator = "")
-            is HighlightToken.Token.Nested -> this.content.joinToString(separator = "") { it.text }
-        }
+        get() = content
 
     private val HighlightToken.tokenType: String?
         get() = when (this) {
             is HighlightToken.Plain -> null
-            is HighlightToken.Token.StringContent -> this.type
-            is HighlightToken.Token.StringListContent -> this.type
-            is HighlightToken.Token.Nested -> this.type
+            is HighlightToken.Styled -> type
         }
 
     private fun List<HighlightToken>.describe(): String {

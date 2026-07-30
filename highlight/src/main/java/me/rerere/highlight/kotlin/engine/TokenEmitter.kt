@@ -8,13 +8,7 @@ internal class TokenEmitter {
     fun append(token: HighlightToken) {
         when (token) {
             is HighlightToken.Plain -> plain(token.content)
-            is HighlightToken.Token.StringContent -> token(token.content, token.type)
-            is HighlightToken.Token.StringListContent -> token(
-                content = token.content.joinToString(separator = ""),
-                type = token.type,
-            )
-
-            is HighlightToken.Token.Nested -> token.content.forEach(::append)
+            is HighlightToken.Styled -> token(token.content, token.type)
         }
     }
 
@@ -37,17 +31,13 @@ internal class TokenEmitter {
         if (content.isEmpty()) return
 
         val previous = tokens.lastOrNull()
-        if (previous is HighlightToken.Token.StringContent && previous.type == type) {
+        if (previous is HighlightToken.Styled && previous.type == type) {
             val merged = previous.content + content
-            tokens[tokens.lastIndex] = previous.copy(
-                content = merged,
-                length = merged.length,
-            )
+            tokens[tokens.lastIndex] = previous.copy(content = merged)
         } else {
-            tokens += HighlightToken.Token.StringContent(
+            tokens += HighlightToken.Styled(
                 content = content,
                 type = type,
-                length = content.length,
             )
         }
     }

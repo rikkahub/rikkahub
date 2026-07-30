@@ -165,10 +165,9 @@ internal object ShellExpansionParser {
         scope: String,
     ): me.rerere.highlight.HighlightToken {
         val content = source.substring(startIndex, endIndex)
-        return me.rerere.highlight.HighlightToken.Token.StringContent(
+        return me.rerere.highlight.HighlightToken.Styled(
             content = content,
             type = scope,
-            length = content.length,
         )
     }
 }

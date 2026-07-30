@@ -39,10 +39,9 @@ internal class MatchContext(
         val token = if (scope == null) {
             HighlightToken.Plain(content)
         } else {
-            HighlightToken.Token.StringContent(
+            HighlightToken.Styled(
                 content = content,
                 type = scope,
-                length = content.length,
             )
         }
         return RuleMatch(

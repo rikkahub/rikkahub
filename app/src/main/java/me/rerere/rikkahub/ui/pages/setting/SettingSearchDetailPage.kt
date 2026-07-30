@@ -46,7 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import me.rerere.highlight.LocalHighlighter
+import me.rerere.highlight.kotlin.LocalKotlinHighlighter
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeVisualTransformation
@@ -936,7 +936,7 @@ internal fun CustomJsOptions(
         )
     }
 
-    val highlighter = LocalHighlighter.current
+    val highlighter = LocalKotlinHighlighter.current
     val darkMode = LocalDarkMode.current
 
     FormItem(

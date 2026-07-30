@@ -61,18 +61,11 @@ class GrammarEngineTest {
     }
 
     private val HighlightToken.text: String
-        get() = when (this) {
-            is HighlightToken.Plain -> content
-            is HighlightToken.Token.StringContent -> content
-            is HighlightToken.Token.StringListContent -> content.joinToString(separator = "")
-            is HighlightToken.Token.Nested -> content.joinToString(separator = "") { it.text }
-        }
+        get() = content
 
     private val HighlightToken.tokenType: String?
         get() = when (this) {
             is HighlightToken.Plain -> null
-            is HighlightToken.Token.StringContent -> this.type
-            is HighlightToken.Token.StringListContent -> this.type
-            is HighlightToken.Token.Nested -> this.type
+            is HighlightToken.Styled -> type
         }
 }

@@ -5,6 +5,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
@@ -34,6 +35,8 @@ import me.rerere.highlight.kotlin.languages.sql.SqlLanguage
 import me.rerere.highlight.kotlin.languages.toml.TomlLanguage
 
 private const val MAX_CODE_LENGTH = 4096
+
+val LocalKotlinHighlighter = staticCompositionLocalOf { KotlinHighlighter() }
 
 /**
  * A pure Kotlin syntax highlighter
@@ -81,8 +84,8 @@ fun KotlinHighlightText(
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
 ) {
-    val highlighter = remember { KotlinHighlighter() }
-    val annotatedString = remember(code, language, colors) {
+    val highlighter = LocalKotlinHighlighter.current
+    val annotatedString = remember(code, language, colors, highlighter) {
         if (code.length > MAX_CODE_LENGTH) {
             AnnotatedString(code)
         } else {

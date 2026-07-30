@@ -31,19 +31,12 @@ internal fun assertTokenContaining(
 }
 
 private val HighlightToken.text: String
-    get() = when (this) {
-        is HighlightToken.Plain -> content
-        is HighlightToken.Token.StringContent -> content
-        is HighlightToken.Token.StringListContent -> content.joinToString(separator = "")
-        is HighlightToken.Token.Nested -> content.joinToString(separator = "") { it.text }
-    }
+    get() = content
 
 private val HighlightToken.tokenType: String?
     get() = when (this) {
         is HighlightToken.Plain -> null
-        is HighlightToken.Token.StringContent -> type
-        is HighlightToken.Token.StringListContent -> type
-        is HighlightToken.Token.Nested -> type
+        is HighlightToken.Styled -> type
     }
 
 private fun List<HighlightToken>.describe(): String {
