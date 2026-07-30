@@ -225,5 +225,3 @@ private fun SectionCard(
         content()
     }
 }
-
-@Composable

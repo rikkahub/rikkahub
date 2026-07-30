@@ -33,7 +33,6 @@ import me.rerere.rikkahub.data.model.ChildRunReport
 import me.rerere.rikkahub.data.model.toSnapshotSummary
 import me.rerere.rikkahub.data.repository.AgentRunRepository
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
-import me.rerere.rikkahub.data.db.entity.toWorkspace
 import kotlin.uuid.Uuid
 
 private const val TAG = "DefaultSubagentRunner"
@@ -80,7 +79,7 @@ class DefaultSubagentRunner(
             runtimeVersion = "controlled-explore-v1",
             conversationId = request.conversation.id.toString(),
             assistantId = request.assistant.id.toString(),
-            modelId = model.id,
+            modelId = model.id.toString(),
             agentMode = AgentMode.PLAN.name,
             maxSteps = maxSteps,
             toolPolicyVersion = "controlled-explore-v1",

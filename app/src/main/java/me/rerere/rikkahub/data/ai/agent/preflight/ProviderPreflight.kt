@@ -67,10 +67,11 @@ object ProviderPreflight {
         val outputTokens = request.requestedOutputTokens?.let { requestedOutput ->
             profile.maxOutputTokens?.let(requestedOutput::coerceAtMost) ?: requestedOutput
         } ?: outputReserveTokens.takeIf { it != request.outputReserveTokens }
+        val contextWindowTokens = profile.contextWindowTokens
         val blockCodes = buildList {
             if (profile.validationError() != null) add(ProviderPreflightCode.INVALID_CAPABILITY_PROFILE)
             if (outputReserveTokens <= 0 ||
-                (profile.contextWindowTokens != null && outputReserveTokens >= profile.contextWindowTokens)
+                (contextWindowTokens != null && outputReserveTokens >= contextWindowTokens)
             ) {
                 add(ProviderPreflightCode.OUTPUT_RESERVE_EXCEEDS_CONTEXT)
             }

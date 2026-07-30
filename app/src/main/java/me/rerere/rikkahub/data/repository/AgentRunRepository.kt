@@ -224,7 +224,7 @@ class AgentRunRepository(
                     "Child run must belong to its parent conversation and assistant"
                 }
             }
-            AgentRunEntity(
+            val newRun = AgentRunEntity(
                 id = id,
                 conversationId = conversationId,
                 assistantId = assistantId,
@@ -233,7 +233,9 @@ class AgentRunRepository(
                 configSnapshotJson = encodeConfig(configSnapshot),
                 createdAt = now,
                 updatedAt = now,
-            ).also(dao::insertRun)
+            )
+            dao.insertRun(newRun)
+            newRun
         }
         recordTrace(run.id, AgentTraceEventType.RUN_STARTED, AgentTraceStatus.STARTED)
         parentRunId?.let { parentId ->
@@ -284,7 +286,7 @@ class AgentRunRepository(
                 "CHILD_DURATION_BUDGET_EXCEEDED"
             }
             val now = timeSource.nowMillis()
-            AgentRunEntity(
+            val newRun = AgentRunEntity(
                 id = id,
                 conversationId = conversationId,
                 assistantId = assistantId,
@@ -293,7 +295,9 @@ class AgentRunRepository(
                 configSnapshotJson = encodeConfig(configSnapshot),
                 createdAt = now,
                 updatedAt = now,
-            ).also(dao::insertRun)
+            )
+            dao.insertRun(newRun)
+            newRun
         }
         recordTrace(run.id, AgentTraceEventType.RUN_STARTED, AgentTraceStatus.STARTED)
         recordTrace(
@@ -321,7 +325,7 @@ class AgentRunRepository(
             dao.getActiveRunsForConversation(conversationId, AgentRunStatus.ACTIVE.runStatusNames()).forEach {
                 convergeRun(it.id, AgentRunStatus.CANCELLED, AgentStepStatus.CANCELLED, ToolExecutionStatus.CANCELLED, now)
             }
-            AgentRunEntity(
+            val newRun = AgentRunEntity(
                 id = id,
                 conversationId = conversationId,
                 assistantId = assistantId,
@@ -329,7 +333,9 @@ class AgentRunRepository(
                 configSnapshotJson = encodeConfig(configSnapshot),
                 createdAt = now,
                 updatedAt = now,
-            ).also(dao::insertRun)
+            )
+            dao.insertRun(newRun)
+            newRun
         }
         // This occurs after the state transaction: trace loss must not roll back a new run.
         recordTrace(run.id, AgentTraceEventType.RUN_STARTED, AgentTraceStatus.STARTED)
