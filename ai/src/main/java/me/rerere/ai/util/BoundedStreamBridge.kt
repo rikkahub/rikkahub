@@ -82,6 +82,7 @@ class BoundedStreamBridge<T>(
             if (queue.trySend(value).isSuccess) return true
 
             queued -= 1
+            peakQueueSize = minOf(peakQueueSize, queued)
             val error = ProviderStreamException(
                 code = ProviderStreamErrorCode.STREAM_BACKPRESSURE_EXCEEDED,
                 message = "Provider stream queue reached its capacity of $capacity",
