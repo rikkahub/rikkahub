@@ -24,6 +24,17 @@ class RegexesTest {
     }
 
     @Test
+    fun `unicode mode keeps javascript predefined character class semantics`() {
+        val word = compilePattern("""\w""", unicode = true)
+        val digit = compilePattern("""\d""", unicode = true)
+
+        assertTrue(word.matcher("a").matches())
+        assertFalse(word.matcher("中").matches())
+        assertTrue(digit.matcher("1").matches())
+        assertFalse(digit.matcher("١").matches())
+    }
+
+    @Test
     fun `counts capture groups the way highlight_js does`() {
         assertEquals(0, countMatchGroups("""\s+"""))
         assertEquals(0, countMatchGroups("""(?:a|b)"""))

@@ -113,6 +113,11 @@ internal fun startsWith(pattern: Pattern?, lexeme: String): Boolean =
  *
  * `highlight.js` always compiles with the `m` flag, optionally adding `i` and `u`; the `g` flag has
  * no equivalent in Java and is instead expressed by the caller passing an explicit start index.
+ *
+ * JavaScript's `u` flag must not be mapped to [Pattern.UNICODE_CHARACTER_CLASS]. Besides being
+ * unsupported on Android, that Java flag changes `\w`, `\d`, and `\s` to Unicode character
+ * classes, which JavaScript's `u` flag does not do. Unicode syntax differences are handled by
+ * [translateJsRegex] instead.
  */
 internal fun compilePattern(
     source: String,
@@ -121,7 +126,6 @@ internal fun compilePattern(
 ): Pattern {
     var flags = Pattern.MULTILINE
     if (caseInsensitive) flags = flags or Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE
-    if (unicode) flags = flags or Pattern.UNICODE_CHARACTER_CLASS
     return Pattern.compile(translateJsRegex(source), flags)
 }
 
