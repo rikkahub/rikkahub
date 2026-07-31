@@ -93,6 +93,7 @@ internal fun FilesPicker(
     assistant: Assistant,
     state: ChatInputState,
     mcpManager: McpManager,
+    agentOnly: Boolean = false,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateConversation: (Conversation) -> Unit,
@@ -118,27 +119,39 @@ internal fun FilesPicker(
             .fillMaxWidth()
             .padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
-            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.Start),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            TakePicButton(onLaunchCamera = onTakePic)
+        if (agentOnly) {
+            Text(
+                text = stringResource(R.string.chat_page_agent_title),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = stringResource(R.string.chat_page_agent_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
+                horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.Start),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                TakePicButton(onLaunchCamera = onTakePic)
 
-            ImagePickButton(onClick = onPickImage)
+                ImagePickButton(onClick = onPickImage)
 
-            if (provider != null && provider is ProviderSetting.Google) {
-                VideoPickButton(onClick = onPickVideo)
+                if (provider != null && provider is ProviderSetting.Google) {
+                    VideoPickButton(onClick = onPickVideo)
 
-                AudioPickButton(onClick = onPickAudio)
+                    AudioPickButton(onClick = onPickAudio)
+                }
+
+                FilePickButton(onClick = onPickFile)
             }
 
-            FilePickButton(onClick = onPickFile)
+            HorizontalDivider(
+                modifier = Modifier.fillMaxWidth()
+            )
         }
-
-        HorizontalDivider(
-            modifier = Modifier.fillMaxWidth()
-        )
 
         WorkspacePickerListItem(
             assistant = assistant,

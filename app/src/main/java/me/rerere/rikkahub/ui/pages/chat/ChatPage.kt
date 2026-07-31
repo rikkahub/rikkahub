@@ -371,6 +371,7 @@ private fun ChatPageContent(
     val hazeState = rememberHazeState()
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
+    var showAgentSheet by remember { mutableStateOf(false) }
     val approvalSnackbarHostState = remember { SnackbarHostState() }
     val activeRunPresentation = remember(activeRun, activeRunDetail) {
         selectActiveRunPresentation(activeRun, activeRunDetail)
@@ -419,6 +420,7 @@ private fun ChatPageContent(
                     activeRouting = activeRunPresentation?.routing,
                     latestRun = latestRun,
                     onOpenRun = onOpenRun,
+                    onOpenAgent = { showAgentSheet = true },
                 )
             },
             bottomBar = {
@@ -641,6 +643,18 @@ private fun ChatPageContent(
                 onDismiss = { showFilesSheet = false },
             )
         }
+
+        if (showAgentSheet) {
+            ChatFilesPickerSheet(
+                inputState = inputState,
+                setting = setting,
+                conversation = conversation,
+                assistant = assistant,
+                vm = vm,
+                agentOnly = true,
+                onDismiss = { showAgentSheet = false },
+            )
+        }
     }
 }
 
@@ -651,6 +665,7 @@ private fun ChatFilesPickerSheet(
     conversation: Conversation,
     assistant: Assistant,
     vm: ChatVM,
+    agentOnly: Boolean = false,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -814,6 +829,7 @@ private fun ChatFilesPickerSheet(
             conversation = conversation,
             state = inputState,
             assistant = assistant,
+            agentOnly = agentOnly,
             mcpManager = vm.mcpManager,
             onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages ->
                 vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
@@ -862,6 +878,7 @@ private fun TopBar(
     activeRouting: AgentRunRoutingPresentation? = null,
     latestRun: AgentRunPresentation? = null,
     onOpenRun: (String) -> Unit = {},
+    onOpenAgent: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -921,6 +938,12 @@ private fun TopBar(
             }
         },
         actions = {
+            IconButton(onClick = onOpenAgent) {
+                Icon(
+                    imageVector = HugeIcons.Cpu,
+                    contentDescription = stringResource(R.string.chat_page_open_agent),
+                )
+            }
             AnimatedVisibility(
                 visible = latestRun != null,
                 enter = expandHorizontally(expandFrom = Alignment.End) + fadeIn(),

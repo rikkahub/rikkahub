@@ -1174,6 +1174,9 @@
   <string name="agent_permission_mode_confirm_critical">Confirm critical actions</string>
   <string name="agent_permission_mode_confirm_critical_desc">Run normal workspace edits directly and ask before critical or sensitive actions</string>
   <string name="agent_mode_auto" tools:ignore="MissingTranslation">Auto</string>
+  <string name="chat_page_open_agent">Open Agent controls</string>
+  <string name="chat_page_agent_title">Agent</string>
+  <string name="chat_page_agent_desc">Bind a workspace, choose permissions, and enable MCP tools. The Agent runs automatically when your request needs tools.</string>
   <string name="agent_run_stopping">Stopping Agent run…</string>
   <string name="agent_run_entry_pending">Agent run is preparing. Open details</string>
   <string name="agent_run_entry_working">Agent run is running. Open details</string>
