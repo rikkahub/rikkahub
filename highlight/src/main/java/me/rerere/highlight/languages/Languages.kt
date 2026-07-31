@@ -21,6 +21,8 @@ import me.rerere.highlight.languages.latex.latex
 import me.rerere.highlight.languages.lua.lua
 import me.rerere.highlight.languages.markdown.markdown
 import me.rerere.highlight.languages.php.php
+import me.rerere.highlight.languages.powershell.powershell
+import me.rerere.highlight.languages.properties.properties
 import me.rerere.highlight.languages.python.python
 import me.rerere.highlight.languages.rust.rust
 import me.rerere.highlight.languages.ruby.ruby
@@ -53,6 +55,8 @@ internal fun builtinLanguages(): List<Language> = listOf(
     kotlin(),
     latex(),
     lua(),
+    powershell(),
+    properties(),
     python(),
     c(),
     cpp(),

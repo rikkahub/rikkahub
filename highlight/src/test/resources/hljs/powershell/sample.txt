@@ -1,0 +1,49 @@
+<#
+.SYNOPSIS
+    Collects service information.
+.PARAMETER Name
+    The service name to look for.
+#>
+
+using namespace System.Collections.Generic
+
+class ServiceReport {
+    [string]$Name
+    [int]$Count = 0
+
+    [void] Refresh([string]$filter) {
+        $this.Count = (Get-Service -Name $filter).Count
+    }
+}
+
+function Get-ServiceReport {
+    param(
+        [string]$Name = "*",
+        [switch]$Detailed
+    )
+
+    # Skip anything that is not running.
+    $services = Get-Service | Where-Object { $_.Status -eq 'Running' }
+
+    $summary = @{
+        Total   = $services.Count
+        Machine = $env:COMPUTERNAME
+        Ratio   = 0.75
+    }
+
+    if ($Detailed -and $services.Count -gt 100) {
+        $text = @"
+Found $($services.Count) services on $($summary.Machine)
+"@
+        Write-Host $text `
+            -ForegroundColor Green
+    }
+    else {
+        Write-Output 'No details requested'
+    }
+
+    return [PSCustomObject]$summary
+}
+
+$result = Get-ServiceReport -Name 'win*' -Detailed
+$result | Format-Table -AutoSize

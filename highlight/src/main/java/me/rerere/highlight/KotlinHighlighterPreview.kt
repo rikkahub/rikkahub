@@ -79,6 +79,16 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
             """.trimIndent(),
         ),
         HighlightPreviewSample(
+            language = "properties",
+            code = """
+                # Application settings
+                app.name = RikkaHub
+                app.version=1.4.0
+                app.locale : zh-CN
+                app.debug false
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
             language = "yaml",
             code = """
                 user:
@@ -203,6 +213,22 @@ private class HighlightPreviewProvider : PreviewParameterProvider<HighlightPrevi
                 function User:greet()
                   print("Hello, " .. self.name .. "!")
                 end
+            """.trimIndent(),
+        ),
+        HighlightPreviewSample(
+            language = "powershell",
+            code = """
+                function Get-Greeting {
+                    param(
+                        [string]${'$'}Name = "Rikka",
+                        [int]${'$'}Age = 18
+                    )
+
+                    # Nothing to do without a name.
+                    if (${'$'}Name -eq '') { return }
+
+                    Write-Output "Hello, ${'$'}Name!"
+                }
             """.trimIndent(),
         ),
         HighlightPreviewSample(

@@ -70,8 +70,8 @@ name (`ini` ships as `toml`).
 ## Currently bundled
 
 json · ini (toml) · cmake · go · glsl · yaml · bash · dockerfile · javascript · typescript ·
-xml (html) · css · dart · java · kotlin · latex · lua · python · c · cpp · csharp · sql · diff ·
-markdown · rust · php · swift · ruby
+xml (html) · css · dart · java · kotlin · latex · lua · powershell · properties · python · c ·
+cpp · csharp · sql · diff · markdown · rust · php · swift · ruby
 
 Unbundled grammars render as plain text.
 JavaScript's `gql` tagged templates and JSX name sub-languages name grammars we do not ship, so

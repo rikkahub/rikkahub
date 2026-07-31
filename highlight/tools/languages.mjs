@@ -27,6 +27,8 @@ export const LANGUAGES = [
   { name: 'latex', module: 'latex', aliases: ['tex'] },
   { name: 'lua', module: 'lua', aliases: ['pluto'] },
   { name: 'ruby', module: 'ruby', aliases: ['rb', 'gemspec', 'podspec', 'thor', 'irb'] },
+  { name: 'powershell', module: 'powershell', aliases: ['pwsh', 'ps', 'ps1'] },
+  { name: 'properties', module: 'properties', aliases: [] },
   { name: 'python', module: 'python', aliases: ['py', 'gyp', 'ipython'] },
   { name: 'c', module: 'c', aliases: ['h'] },
   {

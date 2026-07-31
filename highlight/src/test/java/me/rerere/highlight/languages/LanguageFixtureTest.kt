@@ -57,6 +57,12 @@ class LanguageFixtureTest {
     fun lua() = HljsFixtures.assertLanguageMatches("lua")
 
     @Test
+    fun powershell() = HljsFixtures.assertLanguageMatches("powershell")
+
+    @Test
+    fun properties() = HljsFixtures.assertLanguageMatches("properties")
+
+    @Test
     fun python() = HljsFixtures.assertLanguageMatches("python")
 
     @Test
