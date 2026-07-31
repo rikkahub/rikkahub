@@ -6,8 +6,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Response
 
 /** A structured error from an externally-callback-driven provider stream. */
@@ -54,16 +52,9 @@ fun providerStreamFailure(
  * [providerStreamFailure]; non-stream fallbacks must do the same.
  */
 fun providerRequestFailure(response: Response): RuntimeException {
-    val rawBody = response.body.stringSafe().orEmpty()
+    val rawBody = response.body.string()
     val detail = rawBody.takeIf(String::isNotBlank)?.let { body ->
-        runCatching {
-            Json.parseToJsonElement(body)
-                .jsonObject["error"]
-                ?.jsonObject
-                ?.get("message")
-                ?.jsonPrimitive
-                ?.content
-        }.getOrNull()
+        runCatching { Json.parseToJsonElement(body).parseErrorDetail().message }.getOrNull()
             ?: body.replace(Regex("\\s+"), " ").take(MAX_PROVIDER_ERROR_BODY_LENGTH)
     }
     val status = buildString {
