@@ -45,6 +45,7 @@ import me.rerere.ai.util.BoundedStreamBridge
 import me.rerere.ai.util.ProviderStreamErrorCode
 import me.rerere.ai.util.ProviderStreamException
 import me.rerere.ai.util.providerStreamFailure
+import me.rerere.ai.util.providerRequestFailure
 import me.rerere.ai.util.ProviderStreamTerminationReason
 import me.rerere.ai.util.boundedStreamFlow
 import me.rerere.ai.util.configureReferHeaders
@@ -139,7 +140,7 @@ class ClaudeProvider(
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: status=${response.code}")
+            throw providerRequestFailure(response)
         }
 
         val bodyStr = response.body?.string() ?: ""

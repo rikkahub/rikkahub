@@ -462,8 +462,6 @@
   <string name="placeholder_battery_level">Уровень заряда</string>
   <string name="placeholder_char">Имя ассистента</string>
   <string name="placeholder_current_date">Дата</string>
-  <string name="placeholder_current_datetime">Дата и время</string>
-  <string name="placeholder_current_time">Время</string>
   <string name="placeholder_device_info">Информация об устройстве</string>
   <string name="placeholder_locale">Язык</string>
   <string name="placeholder_model_id">ID модели</string>
@@ -1277,4 +1275,10 @@
   <string name="chat_page_delete_folder_generating">Некоторые беседы в этой папке все еще генерируются. Пожалуйста, остановите их перед удалением.</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS не читает текст в скобках</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">Если включено, TTS не будет читать содержимое в скобках</string>
+  <string name="assistant_page_context_message_limit">Лимит контекстных сообщений</string>
+  <string name="assistant_page_context_message_limit_desc">Ограничивает количество последних сообщений, отправляемых модели. Когда лимит превышен, контекст сокращается примерно вдвое за один шаг, вместо удаления одного сообщения за каждый оборот, благодаря чему префикс запроса остаётся стабильным, и кэширование промптов продолжает работать на протяжении многих оборотов.</string>
+  <string name="assistant_page_context_message_limit_count">Лимит сообщений контекста: %d</string>
+  <string name="assistant_page_context_message_limit_unlimited">Неограниченные сообщения контекста</string>
+  <string name="assistant_page_context_message_limit_warning">Ограничение контекста аннулирует кэш промпта каждый раз, когда контекст усекается. Больший лимит усекает реже; безлимитный не усекает никогда и сохраняет кэш полностью нетронутым.</string>
 </resources>
+

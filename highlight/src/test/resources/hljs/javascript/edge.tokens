@@ -1,0 +1,178 @@
+comment	// JSX, generics and other places where a `<` is ambiguous.
+	\n
+keyword	const
+	 el = 
+tag	<
+name	Foo.Bar
+tag	 
+attr	bar
+tag	=
+string	"1"
+tag	 />
+	;\n
+keyword	const
+	 list = 
+tag	<>
+	{items.map((item) => 
+tag	<
+name	li
+tag	 
+attr	key
+tag	=
+string	{item.id}
+tag	>
+	{item.name}
+tag	</
+name	li
+tag	>
+	)}
+tag	</>
+	;\n
+keyword	const
+	 compare = a < b && c > d;\n
+keyword	const
+	 registry = 
+keyword	new
+	 
+title.class	Map
+	<string, number>();\n\n
+comment	// Tagged templates hand their body to another grammar.
+	\n
+keyword	const
+	 view = html`
+tag	<
+name	div
+tag	 
+attr	class
+tag	=
+string	"
+subst	${cls}
+string	"
+tag	>
+subst	${body}
+tag	</
+name	div
+tag	>
+	`;\n
+keyword	const
+	 styles = css`
+attribute	color
+	: 
+subst	${color}
+	;`;\n
+keyword	const
+	 query = gql`{ user { id } }`;\n\n
+comment	// Regular expressions versus division.
+	\n
+keyword	const
+	 slug = 
+regexp	/^[a-z]+\\/(\\d{2,})$/gu
+	;\n
+keyword	const
+	 half = 
+number	10
+	 / 
+number	2
+	 / 
+number	1
+	;\n\n$(
+string	'#app'
+	).
+title.function	on
+	(
+string	'click'
+	, $.noop);\n
+keyword	const
+	 value = obj?.
+property	prop
+	 ?? fallback;\n\n
+attr	outer
+	: 
+keyword	for
+	 (
+keyword	const
+	 [key, entry] 
+keyword	of
+	 
+title.class	Object
+	.
+title.function	entries
+	(registry)) {\n  
+keyword	if
+	 (!entry) 
+keyword	continue
+	 outer;\n  
+keyword	switch
+	 (
+keyword	typeof
+	 entry) {\n    
+keyword	case
+	 
+string	'string'
+	:\n      
+keyword	break
+	;\n    
+attr	default
+	:\n      
+keyword	delete
+	 registry[key];\n  }\n}\n\n
+keyword	function
+	* 
+title.function	walk
+	(
+params	node
+	) {\n  
+keyword	yield
+	 node;\n  
+keyword	yield
+	* node.
+property	children
+	.
+title.function	flatMap
+	(walk);\n}\n\n
+keyword	const
+	 
+title.function	load
+	 = 
+keyword	async
+	 (
+params	name
+	) => {\n  
+keyword	const
+	 mod = 
+keyword	await
+	 
+keyword	import
+	(
+string	`./plugins/
+subst	${name}
+string	.mjs`
+	);\n  
+keyword	return
+	 
+built_in	require
+	(
+string	'path'
+	).
+title.function	join
+	(mod.
+property	dir
+	, name);\n};\n\n
+keyword	const
+	 big = 
+number	9_007_199_254_740_991n
+	;\n
+keyword	const
+	 legacy = 
+number	0755
+	;\n
+keyword	const
+	 nested = 
+string	`outer 
+subst	${
+string	`inner 
+subst	${depth}
+string	`
+subst	}
+string	 done`
+	;\n

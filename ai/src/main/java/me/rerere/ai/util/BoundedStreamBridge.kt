@@ -5,6 +5,10 @@ import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.Response
 
 /** A structured error from an externally-callback-driven provider stream. */
 enum class ProviderStreamErrorCode {
@@ -43,6 +47,37 @@ fun providerStreamFailure(
         resolvedCause,
     )
 }
+
+/**
+ * Keeps enough of a non-stream HTTP failure to diagnose incompatible tool declarations without
+ * exposing an unbounded gateway response. Stream requests already preserve this through
+ * [providerStreamFailure]; non-stream fallbacks must do the same.
+ */
+fun providerRequestFailure(response: Response): RuntimeException {
+    val rawBody = response.body.stringSafe().orEmpty()
+    val detail = rawBody.takeIf(String::isNotBlank)?.let { body ->
+        runCatching {
+            Json.parseToJsonElement(body)
+                .jsonObject["error"]
+                ?.jsonObject
+                ?.get("message")
+                ?.jsonPrimitive
+                ?.content
+        }.getOrNull()
+            ?: body.replace(Regex("\\s+"), " ").take(MAX_PROVIDER_ERROR_BODY_LENGTH)
+    }
+    val status = buildString {
+        append("HTTP ").append(response.code)
+        response.message.takeIf(String::isNotBlank)?.let { append(' ').append(it) }
+    }
+    return RuntimeException(
+        listOf("Provider request failed", status, detail)
+            .filterNotNull()
+            .joinToString(": "),
+    )
+}
+
+private const val MAX_PROVIDER_ERROR_BODY_LENGTH = 600
 
 enum class ProviderStreamTerminationReason {
     DONE,

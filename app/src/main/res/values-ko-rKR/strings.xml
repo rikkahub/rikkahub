@@ -462,8 +462,6 @@
   <string name="placeholder_battery_level">배터리 잔량</string>
   <string name="placeholder_char">어시스턴트명</string>
   <string name="placeholder_current_date">날짜</string>
-  <string name="placeholder_current_datetime">날짜와 시간</string>
-  <string name="placeholder_current_time">시간</string>
   <string name="placeholder_device_info">기기 정보</string>
   <string name="placeholder_locale">로케일</string>
   <string name="placeholder_model_id">모델 ID</string>
@@ -1277,4 +1275,10 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_page_delete_folder_generating">이 폴더의 일부 대화가 아직 생성 중입니다. 삭제하기 전에 중지해 주세요.</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 괄호 안 내용 읽지 않기</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">활성화하면 TTS가 괄호 안의 내용을 읽지 않습니다</string>
+  <string name="assistant_page_context_message_limit">컨텍스트 메시지 제한</string>
+  <string name="assistant_page_context_message_limit_desc">모델로 전송되는 최근 메시지 수를 제한합니다. 제한을 초과하면 한 번에 하나씩 메시지를 삭제하는 대신 컨텍스트가 한 번에 약 절반으로 줄어들어 요청 접두사가 안정적으로 유지되고 프롬프트 캐싱이 여러 턴 동안 계속 작동합니다.</string>
+  <string name="assistant_page_context_message_limit_count">컨텍스트 메시지 한도: %d</string>
+  <string name="assistant_page_context_message_limit_unlimited">무제한 컨텍스트 메시지</string>
+  <string name="assistant_page_context_message_limit_warning">컨텍스트 제한 시 컨텍스트가 정리될 때마다 프롬프트 캐시가 무효화됩니다. 제한이 클수록 정리 빈도가 낮아지며, 무제한일 경우 정리되지 않아 캐시가 완전히 보존됩니다.</string>
 </resources>
+

@@ -1,0 +1,17 @@
+---
+name: rikkahub
+version: 2
+enabled: true
+"quoted key": value
+tags:
+  - chat
+  - llm
+anchor: &base
+ref: *base
+timestamp: 2024-05-27T10:00:00Z
+block: |
+  first line
+  second line
+inline: { a: 1, b: [2, 3] }
+tagged: !!str 1234
+# trailing comment

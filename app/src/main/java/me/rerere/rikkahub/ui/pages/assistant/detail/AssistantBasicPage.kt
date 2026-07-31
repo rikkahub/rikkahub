@@ -335,6 +335,47 @@ internal fun AssistantBasicContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
+                    Text(stringResource(R.string.assistant_page_context_message_limit))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_context_message_limit_desc))
+                }
+            ) {
+                Slider(
+                    value = assistant.contextMessageLimit.toFloat(),
+                    onValueChange = { value ->
+                        onUpdate(assistant.copy(contextMessageLimit = snapContextMessageLimit(value)))
+                    },
+                    valueRange = 0f..512f,
+                    steps = 0,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Text(
+                    text = if (assistant.contextMessageLimit > 0) {
+                        stringResource(
+                            R.string.assistant_page_context_message_limit_count,
+                            assistant.contextMessageLimit,
+                        )
+                    } else {
+                        stringResource(R.string.assistant_page_context_message_limit_unlimited)
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
+                )
+
+                if (assistant.contextMessageLimit > 0) {
+                    Text(
+                        text = stringResource(R.string.assistant_page_context_message_limit_warning),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
                     Text(stringResource(R.string.assistant_page_top_p))
                 },
                 description = {
@@ -576,4 +617,15 @@ private fun permissionModeDescription(mode: AgentPermissionMode): String = when 
     AgentPermissionMode.AUTO_REVIEW -> stringResource(R.string.agent_permission_mode_auto_review_desc)
     AgentPermissionMode.FULL_ACCESS -> stringResource(R.string.agent_permission_mode_full_access_desc)
     AgentPermissionMode.CONFIRM_CRITICAL -> stringResource(R.string.agent_permission_mode_confirm_critical_desc)
+}
+
+private const val MIN_CONTEXT_MESSAGE_LIMIT = 20
+
+private fun snapContextMessageLimit(value: Float): Int {
+    val raw = value.roundToInt()
+    return when {
+        raw < MIN_CONTEXT_MESSAGE_LIMIT / 2 -> 0
+        raw < MIN_CONTEXT_MESSAGE_LIMIT -> MIN_CONTEXT_MESSAGE_LIMIT
+        else -> raw
+    }
 }

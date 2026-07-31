@@ -462,8 +462,6 @@
   <string name="placeholder_battery_level">電池電量</string>
   <string name="placeholder_char">助手名稱</string>
   <string name="placeholder_current_date">日期</string>
-  <string name="placeholder_current_datetime">日期和時間</string>
-  <string name="placeholder_current_time">時間</string>
   <string name="placeholder_device_info">設備資訊</string>
   <string name="placeholder_locale">語言環境</string>
   <string name="placeholder_model_id">模型ID</string>
@@ -1275,4 +1273,10 @@
   <string name="chat_page_delete_folder_generating">此資料夾中的部分對話仍在生成中。請先停止它們再刪除。</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 不朗讀括號內的內容</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">啟用後，TTS 將不朗讀括號內的內容</string>
+  <string name="assistant_page_context_message_limit">上下文訊息限制</string>
+  <string name="assistant_page_context_message_limit_desc">限制發送給模型的最近訊息數量。當超出限制時，上下文會一次性修剪到大約一半，而不是每次輪次刪除一條訊息，這樣請求前綴保持穩定，提示詞緩存可以在多次輪次中繼續運作。</string>
+  <string name="assistant_page_context_message_limit_count">上下文訊息限制：%d</string>
+  <string name="assistant_page_context_message_limit_unlimited">無限上下文訊息</string>
+  <string name="assistant_page_context_message_limit_warning">限制上下文會在每次上下文被裁減時使提示詞快取失效。較大的限制裁減頻率較低；無限則永不裁減並保持快取完整。</string>
 </resources>
+

@@ -1,0 +1,55 @@
+punctuation	{
+	\n  
+attr	"name"
+punctuation	:
+	 
+string	"rikkahub"
+punctuation	,
+	\n  
+attr	"version"
+punctuation	:
+	 
+number	2
+punctuation	,
+	\n  
+attr	"active"
+punctuation	:
+	 
+keyword	true
+punctuation	,
+	\n  
+attr	"tags"
+punctuation	:
+	 
+punctuation	[
+string	"chat"
+punctuation	,
+	 
+string	"llm"
+punctuation	],
+	\n  
+attr	"nested"
+punctuation	:
+	 
+punctuation	{
+	 
+attr	"ratio"
+punctuation	:
+	 
+number	-1.5e3
+punctuation	,
+	 
+attr	"missing"
+punctuation	:
+	 
+keyword	null
+	 
+punctuation	},
+	\n  
+attr	"escaped"
+punctuation	:
+	 
+string	"quote \\" and \\\\ backslash"
+	\n
+punctuation	}
+	\n

@@ -1,0 +1,30 @@
+using System;
+using System.Collections.Generic;
+
+namespace RikkaHub.Domain;
+
+/// <summary>Represents an application user.</summary>
+[Serializable]
+public sealed record User<T>(string Name, T Value)
+    where T : class
+{
+    public const int DefaultAge = 18;
+    private readonly List<T> values = new();
+
+    public async Task<string> GreetAsync(int count = 1)
+    {
+        var total = 1_024.5e-2;
+        var path = @"C:\Users\Rikka";
+        var message = $"Hello, {Name}! {{count}} = {count}";
+        var multiline = """
+            raw "content"
+            """;
+
+        await Task.Delay(10);
+        return message;
+    }
+}
+
+#if DEBUG
+Console.WriteLine(new User<string>("Rikka", "active").GreetAsync());
+#endif

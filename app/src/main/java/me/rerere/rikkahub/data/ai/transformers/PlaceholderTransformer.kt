@@ -13,8 +13,6 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.temporal.Temporal
@@ -61,14 +59,6 @@ object DefaultPlaceholderProvider : PlaceholderProvider {
             LocalDate.now().toDateString()
         }
 
-        placeholder("cur_time", { Text(stringResource(R.string.placeholder_current_time)) }) {
-            LocalTime.now().toTimeString()
-        }
-
-        placeholder("cur_datetime", { Text(stringResource(R.string.placeholder_current_datetime)) }) {
-            LocalDateTime.now().toDateTimeString()
-        }
-
         placeholder("model_id", { Text(stringResource(R.string.placeholder_model_id)) }) {
             it.model.modelId
         }
@@ -112,16 +102,6 @@ object DefaultPlaceholderProvider : PlaceholderProvider {
 
     private fun Temporal.toDateString() = DateTimeFormatter
         .ofLocalizedDate(FormatStyle.MEDIUM)
-        .withLocale(Locale.getDefault())
-        .format(this)
-
-    private fun Temporal.toTimeString() = DateTimeFormatter
-        .ofLocalizedTime(FormatStyle.MEDIUM)
-        .withLocale(Locale.getDefault())
-        .format(this)
-
-    private fun Temporal.toDateTimeString() = DateTimeFormatter
-        .ofLocalizedDateTime(FormatStyle.MEDIUM)
         .withLocale(Locale.getDefault())
         .format(this)
 

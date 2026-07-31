@@ -1,0 +1,41 @@
+// JSX, generics and other places where a `<` is ambiguous.
+const el = <Foo.Bar bar="1" />;
+const list = <>{items.map((item) => <li key={item.id}>{item.name}</li>)}</>;
+const compare = a < b && c > d;
+const registry = new Map<string, number>();
+
+// Tagged templates hand their body to another grammar.
+const view = html`<div class="${cls}">${body}</div>`;
+const styles = css`color: ${color};`;
+const query = gql`{ user { id } }`;
+
+// Regular expressions versus division.
+const slug = /^[a-z]+\/(\d{2,})$/gu;
+const half = 10 / 2 / 1;
+
+$('#app').on('click', $.noop);
+const value = obj?.prop ?? fallback;
+
+outer: for (const [key, entry] of Object.entries(registry)) {
+  if (!entry) continue outer;
+  switch (typeof entry) {
+    case 'string':
+      break;
+    default:
+      delete registry[key];
+  }
+}
+
+function* walk(node) {
+  yield node;
+  yield* node.children.flatMap(walk);
+}
+
+const load = async (name) => {
+  const mod = await import(`./plugins/${name}.mjs`);
+  return require('path').join(mod.dir, name);
+};
+
+const big = 9_007_199_254_740_991n;
+const legacy = 0755;
+const nested = `outer ${`inner ${depth}`} done`;

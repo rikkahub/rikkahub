@@ -1,0 +1,63 @@
+meta	---
+	\n
+attr	name:
+	 
+string	rikkahub
+	\n
+attr	version:
+	 
+number	2
+	\n
+attr	enabled:
+	 
+literal	true
+	\n
+attr	"quoted key":
+	 
+string	value
+	\n
+attr	tags:
+	\n  
+bullet	-
+	 
+string	chat
+	\n  
+bullet	-
+	 
+string	llm
+	\n
+attr	anchor:
+	 
+meta	&base
+	\n
+attr	ref:
+	 
+meta	*base
+	\n
+attr	timestamp:
+	 
+number	2024-05-27T10:00:00Z
+	\n
+attr	block:
+	 
+string	|\n  first line\n  second line\n
+attr	inline:
+	 { 
+attr	a:
+	 
+number	1
+	, 
+attr	b:
+	 [
+number	2
+	, 
+number	3
+	] }\n
+attr	tagged:
+	 
+type	!!str
+	 
+number	1234
+	\n
+comment	# trailing comment
+	\n

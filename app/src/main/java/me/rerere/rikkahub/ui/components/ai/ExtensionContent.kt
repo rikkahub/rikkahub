@@ -121,7 +121,7 @@ fun SkillsContent(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        items(skills, key = { it.name }) { skill ->
+        items(skills, key = { it.skillDir.absolutePath }) { skill ->
             ListItem(
                 headlineContent = { Text(skill.name) },
                 supportingContent = if (skill.description.isNotBlank()) {

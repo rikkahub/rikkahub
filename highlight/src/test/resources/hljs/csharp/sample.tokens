@@ -1,0 +1,103 @@
+keyword	using
+	 System;\n
+keyword	using
+	 System.Collections.Generic;\n\n
+keyword	namespace
+	 
+title	RikkaHub.Domain
+	;\n\n
+doctag	///
+comment	 
+doctag	<summary>
+comment	Represents an application user.
+doctag	</summary>
+	\n[
+meta	Serializable
+	]\n
+keyword	public
+function	 
+keyword	sealed
+function	 
+keyword	record
+function	 
+title	User
+function	<
+title	T
+function	>(
+built_in	string
+params	 Name, T Value
+function	)\n    
+keyword	where
+function	 T : 
+keyword	class
+	\n{\n    
+keyword	public
+	 
+keyword	const
+	 
+built_in	int
+	 DefaultAge = 
+number	18
+	;\n    
+keyword	private
+	 
+keyword	readonly
+	 List<T> values = 
+keyword	new
+	();\n\n    
+keyword	public
+function	 
+keyword	async
+function	 Task<
+built_in	string
+function	> 
+title	GreetAsync
+function	(
+built_in	int
+params	 count = 
+number	1
+function	)
+	\n    {\n        
+keyword	var
+	 total = 
+number	1
+	_024
+number	.5e-2
+	;\n        
+keyword	var
+	 path = 
+string	@"C:\\Users\\Rikka"
+	;\n        
+keyword	var
+	 message = 
+string	$"Hello, 
+subst	{Name}
+string	! {{count}} = 
+subst	{count}
+string	"
+	;\n        
+keyword	var
+	 multiline = 
+string	"""\n            raw "content"\n            """
+	;\n\n        
+keyword	await
+	 Task.Delay(
+number	10
+	);\n        
+keyword	return
+	 message;\n    }\n}\n\n
+meta	#
+keyword	if
+meta	 DEBUG
+	\nConsole.WriteLine(
+keyword	new
+	 User<
+built_in	string
+	>(
+string	"Rikka"
+	, 
+string	"active"
+	).GreetAsync());\n
+meta	#
+keyword	endif
+	\n

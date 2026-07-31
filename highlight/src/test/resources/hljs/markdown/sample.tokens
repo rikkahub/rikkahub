@@ -1,0 +1,60 @@
+section	# RikkaHub
+	\n\nA native 
+strong	**Android**
+	 LLM chat client, built with 
+emphasis	*Jetpack Compose*
+	.\n\n
+section	## Features
+	\n\n
+bullet	-
+	 Switch between [
+string	providers
+	](
+link	https://example.com/providers
+	) freely\n
+bullet	-
+	 Message branching\n
+bullet	*
+	 Assistant presets\n
+bullet	1.
+	 Install\n
+bullet	2.
+	 Configure\n\n
+quote	> Quotes carry 
+strong	**bold**
+quote	 and 
+emphasis	*italic*
+quote	 too.
+	\n\nInline 
+code	`code`
+	 and a fenced block:\n\n
+code	```kotlin\nfun greet(name: String) = "Hello, $name!"\n```
+	\n\n
+tag	<
+name	div
+tag	 
+attr	class
+tag	=
+string	"note"
+tag	>
+	\n  
+tag	<
+name	p
+tag	>
+	Inline HTML is highlighted as XML.
+tag	</
+name	p
+tag	>
+	\n
+tag	</
+name	div
+tag	>
+	\n\n---\n\nSee the [
+string	docs
+	][
+symbol	docs
+	] for more.\n\n[
+symbol	docs
+	]: 
+link	https://example.com/docs
+	\n

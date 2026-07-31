@@ -1,0 +1,312 @@
+meta	#
+keyword	pragma
+meta	 once
+	\n
+meta	#
+keyword	ifndef
+meta	 EDGE_H
+	\n
+meta	#
+keyword	define
+meta	 EDGE_H
+	\n\n
+meta	#
+keyword	include
+meta	 
+string	"local.h"
+	\n
+meta	#
+keyword	include
+meta	 
+string	<stdatomic.h>
+	\n
+meta	#
+keyword	include
+meta	 
+string	<stdint.h>
+	\n\n
+meta	#
+keyword	define
+meta	 GROW(x) \\\n    do {        \\\n        (x) *= 2; \\\n    } while (0)
+	\n\n
+meta	#
+keyword	if
+meta	 defined(__STDC_VERSION__)
+	\n
+meta	#  
+keyword	define
+meta	 HAS_C11 1
+	\n
+meta	#
+keyword	elif
+meta	 defined(_MSC_VER)
+	\n
+meta	#  
+keyword	define
+meta	 HAS_C11 0
+	\n
+meta	#
+keyword	else
+	\n
+meta	#  
+keyword	warning
+meta	 unknown compiler
+	\n
+meta	#
+keyword	endif
+	\n\n
+comment	// A line comment continued with a backslash \\\n   and this is still the very same comment
+	\n\n
+comment	/* 
+doctag	TODO:
+comment	 a doctag inside a block comment */
+	\n\n
+type	static
+	 
+type	atomic_int
+	 counter;\n
+type	static
+	 
+keyword	_Atomic
+	 
+type	long
+	 total;\n
+type	static
+	 
+type	uint32_t
+	 mask;\n
+type	static
+	 
+keyword	_Thread_local
+	 
+type	int
+	 depth;\n\n
+type	static
+	 
+type	const
+	 
+type	int
+	 BINARY = 
+number	0b1010
+	;\n
+type	static
+	 
+type	const
+	 
+type	unsigned
+	 HEX = 
+number	0xDEADBEEF
+	;\n
+type	static
+	 
+type	const
+	 
+type	long
+	 BIG = 
+number	1000000L
+	;\n
+type	static
+	 
+type	const
+	 
+type	unsigned
+	 
+type	long
+	 
+type	long
+	 HUGE_ONE = 
+number	42ULL
+	;\n
+type	static
+	 
+type	const
+	 
+type	float
+	 RATIO = 
+number	3.14f
+	;\n
+type	static
+	 
+type	const
+	 
+type	double
+	 HALF = .
+number	5
+	;\n
+type	static
+	 
+type	const
+	 
+type	double
+	 TINY = 
+number	1e-3
+	;\n
+type	static
+	 
+type	const
+	 
+type	double
+	 HEXFLOAT = 
+number	0x1.8p3
+	;\n\n
+type	static
+	 
+type	const
+	 
+type	char
+	 PLAIN = 
+string	'a'
+	;\n
+type	static
+	 
+type	const
+	 
+type	char
+	 ESCAPED = 
+string	'\\n'
+	;\n
+type	static
+	 
+type	const
+	 
+type	char
+	 HEX_CHAR = 
+string	'\\x41'
+	;\n
+type	static
+	 
+type	const
+	 
+type	char
+	 OCT_CHAR = 
+string	'\\101'
+	;\n
+type	static
+	 
+type	const
+	 
+type	char
+	 UNI_CHAR = 
+string	'A'
+	;\n\n
+type	static
+	 
+type	const
+	 
+type	char
+	 *UTF8 = 
+string	u8"utf-8"
+	;\n
+type	static
+	 
+type	const
+	 
+type	char
+	 *UTF16 = 
+string	u"utf-16"
+	;\n
+type	static
+	 
+type	const
+	 
+type	char
+	 *UTF32 = 
+string	U"utf-32"
+	;\n
+type	static
+	 
+type	const
+	 
+type	char
+	 *WIDE = 
+string	L"wide"
+	;\n
+type	static
+	 
+type	const
+	 
+type	char
+	 *RAW = 
+string	R"(no \\n escapes here)"
+	;\n
+type	static
+	 
+type	const
+	 
+type	char
+	 *DELIMITED = 
+string	R"sql(SELECT )" FROM t)sql"
+	;\n\n
+keyword	_Static_assert
+	(
+keyword	sizeof
+	(
+type	int
+	) >= 
+number	4
+	, 
+string	"int is too narrow"
+	);\n\n
+keyword	alignas
+	(
+number	16
+	) 
+type	static
+	 
+type	char
+	 scratch[
+number	64
+	];\n\n
+keyword	extern
+	 
+type	void
+	 
+title.function	declare_one
+params	(
+type	int
+params	)
+	, 
+title.function	declare_two
+params	(
+type	char
+params	)
+	;\n\n
+type	static
+	 
+keyword	inline
+	 
+type	uint32_t
+	 
+title.function	rotate
+params	(
+type	uint32_t
+params	 value, 
+type	unsigned
+params	 shift)
+	\n{\n    
+keyword	return
+	 (value << shift) | (value >> (
+number	32
+	 - shift));\n}\n\n
+type	int
+	 
+title.function	main
+params	(
+type	void
+params	)
+	\n{\n    counter = 
+number	0
+	;\n    total = BIG;\n    mask = HEX;\n    depth = BINARY;\n    GROW(mask);\n    
+keyword	return
+	 rotate(mask, 
+number	3
+	) == 
+number	0
+	 ? 
+number	0
+	 : 
+number	1
+	;\n}\n\n
+meta	#
+keyword	endif
+	\n

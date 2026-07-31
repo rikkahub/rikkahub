@@ -1,0 +1,40 @@
+comment	# syntax comment
+	\n
+keyword	FROM
+	 eclipse-temurin:
+number	21
+	-jdk AS build\n
+keyword	MAINTAINER
+	 rikka\n
+keyword	ARG
+	 VERSION=
+number	2
+	\n
+keyword	ENV
+	 GRADLE_OPTS=
+string	"-Xmx2g"
+	\n
+keyword	WORKDIR
+	 /workspace\n
+keyword	COPY
+	 . .\n
+keyword	RUN
+	 ./gradlew --no-daemon assembleRelease && \\\n    
+built_in	rm
+	 -rf ~/.gradle/caches\n
+keyword	EXPOSE
+	 
+number	8080
+	\n
+keyword	USER
+	 
+number	1000
+	\n
+keyword	CMD
+	 [
+string	"java"
+	, 
+string	"-jar"
+	, 
+string	"app.jar"
+	]\n

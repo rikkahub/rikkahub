@@ -1,0 +1,43 @@
+@charset "utf-8";
+@import url("theme.css");
+
+:root {
+  --brand-color: #61afef;
+  --spacing: 8px;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font: 14px/1.5 "Helvetica Neue", Arial, sans-serif;
+  color: var(--brand-color);
+}
+
+.card[data-state="open"] > .card-body::after {
+  content: "";
+  display: flex;
+  transform: translateX(-50%) rotate(45deg);
+  transition: all 0.3s ease-in-out;
+  background-image: linear-gradient(to right, #fff 0%, rgba(0, 0, 0, .5) 100%);
+}
+
+#app .list li:nth-child(2n + 1):hover {
+  opacity: 0.75 !important;
+}
+
+@media screen and (min-width: 768px) and (prefers-color-scheme: dark) {
+  .card {
+    box-shadow: 0 2px 4px rgb(0 0 0 / 20%);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}

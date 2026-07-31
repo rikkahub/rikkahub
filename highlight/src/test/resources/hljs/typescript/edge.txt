@@ -1,0 +1,43 @@
+declare module 'legacy-lib' {
+  export function init(config?: Record<string, unknown>): void;
+}
+
+export type Modify<T, R> = Omit<T, keyof R> & R;
+export type Pair = [key: string, value: number];
+export type Mapped<T> = { readonly [K in keyof T]-?: T[K] | null };
+
+const identity = <T = any>(key?: string): Modify<T, { key: string }> =>
+  ({ key }) as unknown as Modify<T, { key: string }>;
+
+export function overload(input: string): number;
+export function overload(input: number): string;
+export function overload(input: string | number): string | number {
+  return typeof input === 'string' ? input.length : String(input);
+}
+
+@Component({ selector: 'app-root' })
+class AppComponent implements OnInit, OnDestroy {
+  @Input() title!: string;
+  @Output() readonly changed = new EventEmitter<string>();
+
+  constructor(
+    private readonly http: HttpClient,
+    @Inject(TOKEN) protected token: string,
+  ) {}
+
+  ngOnInit(): void {
+    this.http
+      .get<Array<{ id: number; name?: string }>>('/api/items')
+      .subscribe((items) => (this.title = items[0]?.name ?? 'none'));
+  }
+
+  ngOnDestroy() {}
+}
+
+const enum Flag {
+  None = 0,
+  All = ~0,
+}
+
+let assertion = <string>someValue;
+let widened = someValue as const satisfies Flag;

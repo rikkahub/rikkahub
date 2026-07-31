@@ -1,0 +1,25 @@
+% !TeX program = lualatex
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{hyperref}
+
+\newcommand{\greet}[1]{Hello, #1!}
+
+\begin{document}
+\section{RikkaHub}
+\label{sec:intro}
+
+\greet{Rikka}
+\[
+  E = mc^2,\qquad
+  \sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}.
+\]
+
+\href[page=1]{https://example.com}
+\verb|inline { text }|
+
+\begin{verbatim}
+\notHighlighted{value}
+\end{verbatim}
+
+\end{document}

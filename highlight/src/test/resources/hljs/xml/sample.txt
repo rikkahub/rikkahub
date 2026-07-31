@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RikkaHub</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <style>
+    body {
+      margin: 0;
+      font-family: "Noto Sans", sans-serif;
+      background: #282c34;
+    }
+
+    .chat > .message:hover {
+      color: rgba(255, 255, 255, 0.8);
+    }
+  </style>
+</head>
+<body>
+  <!-- 会话列表 -->
+  <div id="root" class="app dark" data-theme='dark'>
+    <img src="logo.svg" alt="logo" width=48 height=48 />
+    <p>Hello &amp; welcome &#128512; &#x1f600;</p>
+    <input type="checkbox" checked disabled>
+    <br>
+  </div>
+  <script type="module">
+    import { createApp } from './app.js'
+
+    const app = createApp({ locale: 'zh-CN', debug: false })
+    app.mount('#root')
+  </script>
+</body>
+</html>

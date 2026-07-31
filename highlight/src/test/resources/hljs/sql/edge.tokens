@@ -1,0 +1,154 @@
+comment	/* Multi-word types and keyword combos, plus the odd corners of the grammar. */
+	\n
+keyword	ALTER TABLE
+	 metrics\n    
+keyword	ADD CONSTRAINT
+	 metrics_pk 
+keyword	PRIMARY KEY
+	 (id),\n    
+keyword	ADD
+	 score 
+type	DOUBLE PRECISION
+	,\n    
+keyword	ADD
+	 payload 
+type	CHARACTER
+	 
+type	LARGE OBJECT
+	,\n    
+keyword	ADD
+	 seen 
+type	TIMESTAMP
+	 
+type	WITH TIMEZONE
+	,\n    
+keyword	ADD
+	 gone 
+type	TIMESTAMP
+	 
+type	WITHOUT TIMEZONE
+	;\n\n
+keyword	SELECT
+	 "select" 
+keyword	AS
+	 "quoted ""identifier""",\n       
+variable	@cutoff
+	,\n       
+variable	@user_id_1
+	,\n       
+built_in	CAST
+	(score 
+keyword	AS
+	 
+type	DECIMAL
+	(
+number	10
+	, 
+number	4
+	)),\n       
+built_in	ROW_NUMBER
+	() 
+keyword	OVER
+	 (
+keyword	PARTITION
+	 
+keyword	BY
+	 bucket 
+keyword	ORDER
+	 
+keyword	BY
+	 score 
+keyword	DESC
+	 
+keyword	NULLS LAST
+	),\n       
+built_in	PERCENTILE_CONT
+	(
+number	0.5
+	) 
+keyword	WITHIN
+	 
+keyword	GROUP
+	 (
+keyword	ORDER
+	 
+keyword	BY
+	 score),\n       
+built_in	COALESCE
+	(label, 
+string	'n/a'
+	),\n       
+built_in	CURRENT_DATE
+	,\n       
+built_in	CURRENT_TIMESTAMP
+	,\n       
+built_in	SESSION_USER
+	,\n       
+number	0x1f
+	, 
+number	42
+	, 
+number	-7
+	, 
+number	3.14
+	, 
+number	1.5e-9
+	,\n       a 
+operator	+
+	 b 
+operator	-
+	 c 
+operator	*
+	 d 
+operator	/
+	 e 
+operator	%
+	 f 
+operator	^
+	 g 
+operator	~
+	 h,\n       x 
+operator	&&
+	 y, x 
+operator	||
+	 y, x 
+operator	!=
+	 y, x 
+operator	<>
+	 y, x 
+operator	<=
+	 y, x 
+operator	>=
+	 y, x 
+operator	<<
+	 
+number	2
+	, x 
+operator	>>
+	 
+number	2
+	, x 
+operator	<=>
+	 y\n  
+keyword	FROM
+	 metrics\n 
+keyword	WHERE
+	 label 
+keyword	LIKE
+	 
+string	'a%'
+	\n   
+keyword	AND
+	 is_ok 
+operator	=
+	 
+literal	unknown
+	 
+comment	-- trailing line comment
+	\n 
+keyword	GROUP
+	 
+keyword	BY
+	 
+keyword	GROUPING SETS
+	 ((a), (b));\n

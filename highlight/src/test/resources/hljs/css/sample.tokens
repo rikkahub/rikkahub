@@ -1,0 +1,155 @@
+keyword	@charset
+	 
+string	"utf-8"
+	;\n
+keyword	@import
+	 url(
+string	"theme.css"
+	);\n\n
+selector-pseudo	:root
+	 {\n  
+attr	--brand-color
+	: 
+number	#61afef
+	;\n  
+attr	--spacing
+	: 
+number	8px
+	;\n}\n\n
+selector-tag	html
+	,\n
+selector-tag	body
+	 {\n  
+attribute	margin
+	: 
+number	0
+	;\n  
+attribute	padding
+	: 
+number	0
+	;\n  
+attribute	font
+	: 
+number	14px
+	/
+number	1.5
+	 
+string	"Helvetica Neue"
+	, Arial, sans-serif;\n  
+attribute	color
+	: 
+built_in	var
+	(--brand-color);\n}\n\n
+selector-class	.card
+selector-attr	[data-state=
+string	"open"
+selector-attr	]
+	 > 
+selector-class	.card-body
+selector-pseudo	::after
+	 {\n  
+attribute	content
+	: 
+string	""
+	;\n  
+attribute	display
+	: flex;\n  
+attribute	transform
+	: 
+built_in	translateX
+	(-
+number	50%
+	) 
+built_in	rotate
+	(
+number	45deg
+	);\n  
+attribute	transition
+	: all 
+number	0.3s
+	 ease-in-out;\n  
+attribute	background-image
+	: 
+built_in	linear-gradient
+	(to right, 
+number	#fff
+	 
+number	0%
+	, 
+built_in	rgba
+	(
+number	0
+	, 
+number	0
+	, 
+number	0
+	, .
+number	5
+	) 
+number	100%
+	);\n}\n\n
+selector-id	#app
+	 
+selector-class	.list
+	 
+selector-tag	li
+selector-pseudo	:nth-child
+	(
+number	2
+	n + 
+number	1
+	)
+selector-pseudo	:hover
+	 {\n  
+attribute	opacity
+	: 
+number	0.75
+	 
+meta	!important
+	;\n}\n\n
+keyword	@media
+	 screen 
+keyword	and
+	 (
+attribute	min-width
+	: 
+number	768px
+	) 
+keyword	and
+	 (
+attribute	prefers-color-scheme
+	: dark) {\n  
+selector-class	.card
+	 {\n    
+attribute	box-shadow
+	: 
+number	0
+	 
+number	2px
+	 
+number	4px
+	 
+built_in	rgb
+	(
+number	0
+	 
+number	0
+	 
+number	0
+	 / 
+number	20%
+	);\n  }\n}\n\n
+keyword	@keyframes
+	 fade {\n  
+selector-tag	from
+	 {\n    
+attribute	opacity
+	: 
+number	0
+	;\n  }\n\n  
+selector-tag	to
+	 {\n    
+attribute	opacity
+	: 
+number	1
+	;\n  }\n}\n

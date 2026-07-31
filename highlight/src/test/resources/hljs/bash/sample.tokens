@@ -1,0 +1,76 @@
+meta	#!/usr/bin/env bash
+	\n
+built_in	set
+	 -euo pipefail\n\n
+comment	# build helper
+	\nNAME=
+string	"rikka"
+	\n
+built_in	readonly
+	 ROOT=/usr/local/share\n\n
+title	greet
+	() {\n    
+built_in	local
+	 
+built_in	who
+	=
+string	"
+variable	${1:-world}
+string	"
+	\n    
+built_in	echo
+	 
+string	"hello, 
+variable	$who
+string	 from 
+variable	${NAME}
+string	"
+	\n    
+built_in	printf
+	 
+string	'%s\\n'
+	 
+string	'single quoted'
+	\n}\n\n
+keyword	if
+	 [ -d 
+string	"
+variable	$ROOT
+string	"
+	 ]; 
+keyword	then
+	\n    
+keyword	for
+	 f 
+keyword	in
+	 $(
+built_in	ls
+	 
+string	"
+variable	$ROOT
+string	"
+	); 
+keyword	do
+	\n        
+built_in	echo
+	 
+string	"
+variable	$f
+string	"
+	 | 
+built_in	tr
+	 a-z A-Z\n    
+keyword	done
+	\n
+keyword	fi
+	\n\ncount=$(( 
+number	2
+	 + 
+number	3
+	 * 
+number	4
+	 ))\n
+built_in	cat
+	 <<-
+string	EOF\n\there doc body $NAME\nEOF
+	\n

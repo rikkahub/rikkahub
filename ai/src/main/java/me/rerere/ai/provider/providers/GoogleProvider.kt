@@ -48,6 +48,7 @@ import me.rerere.ai.util.BoundedStreamBridge
 import me.rerere.ai.util.ProviderStreamErrorCode
 import me.rerere.ai.util.ProviderStreamException
 import me.rerere.ai.util.providerStreamFailure
+import me.rerere.ai.util.providerRequestFailure
 import me.rerere.ai.util.ProviderStreamTerminationReason
 import me.rerere.ai.util.boundedStreamFlow
 import me.rerere.ai.util.configureReferHeaders
@@ -205,7 +206,7 @@ class GoogleProvider(
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: status=${response.code}")
+            throw providerRequestFailure(response)
         }
 
         val bodyStr = response.body?.string() ?: ""
@@ -484,7 +485,7 @@ class GoogleProvider(
         }
         // Model BuiltIn Tools
         // 目前不能和工具调用兼容
-        if (params.model.tools.isNotEmpty()) {
+        if (params.tools.isEmpty() && params.model.tools.isNotEmpty()) {
             put("tools", buildJsonArray {
                 params.model.tools.forEach { builtInTool ->
                     when (builtInTool) {

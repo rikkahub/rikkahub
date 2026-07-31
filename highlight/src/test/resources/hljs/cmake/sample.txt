@@ -1,0 +1,12 @@
+cmake_minimum_required(VERSION 3.22)
+project(rikka LANGUAGES CXX)
+
+# a plain comment
+#[[ bracket
+comment ]]
+set(SOURCES main.cpp util.cpp)
+add_executable(${PROJECT_NAME} ${SOURCES})
+if(NOT DEFINED CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
+endif()
+target_link_libraries(rikka PRIVATE fmt::fmt)

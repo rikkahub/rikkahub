@@ -1,0 +1,34 @@
+<?php
+
+namespace App\Domain;
+
+use RuntimeException as BaseException;
+
+#[Route('/users', methods: ['GET'])]
+final readonly class UserService implements Service
+{
+    public const DEFAULT_LIMIT = 25;
+
+    public function find(
+        private Repository $repository,
+        int $limit = self::DEFAULT_LIMIT,
+    ): array {
+        /** @var list<User> $users */
+        $users = $this->repository->all(limit: $limit);
+        $message = "Found {$limit} users";
+        $hex = 0xCA_FE;
+
+        return array_map(
+            fn (User $user) => $user->name,
+            $users,
+        );
+    }
+}
+
+$query = <<<SQL
+SELECT * FROM users WHERE active = {$active}
+SQL;
+
+$literal = <<<'TEXT'
+$this is not interpolated
+TEXT;

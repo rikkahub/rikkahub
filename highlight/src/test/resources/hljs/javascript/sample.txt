@@ -1,0 +1,54 @@
+#!/usr/bin/env node
+'use strict';
+
+import { readFile } from 'node:fs/promises';
+
+/**
+ * Greets a user.
+ * @param {string} name - the name to greet
+ */
+export default class Greeter extends Base.Component {
+  static VERSION = '1.0.0';
+  #secret = 0b1010;
+
+  constructor(name = 'world', { loud = false } = {}) {
+    super(name);
+    this.name = name;
+    this.count = 0xCA_FE;
+    this.ratio = .5e3;
+  }
+
+  get label() {
+    return `Hello, ${this.name.toUpperCase()}!`;
+  }
+
+  set label(value) {
+    this.name = value;
+  }
+
+  async greet(times = 3n) {
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    for (let i = 0; i < times; i++) {
+      await delay(1_000);
+      console.log(this.label.replace(/l+o/gi, '-'));
+    }
+    return [1, 2, 3].map((x) => x * 2).filter(Boolean);
+  }
+}
+
+function parse(input) {
+  try {
+    return JSON.parse(input);
+  } catch (error) {
+    if (error instanceof SyntaxError) return null;
+    throw error;
+  }
+}
+
+const MAX_RETRIES = 5;
+let total = 0o755,
+  flag = true;
+const template = `sum: ${total + MAX_RETRIES}`;
+const render = () => <div className="row">{template}</div>;
+
+module.exports = { Greeter, parse, render, MAX_RETRIES, flag };
