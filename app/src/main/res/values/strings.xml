@@ -1170,7 +1170,7 @@
   <string name="agent_permission_mode_auto_review">Automatic review</string>
   <string name="agent_permission_mode_auto_review_desc">Automatically request confirmation based on tool risk and side effects</string>
   <string name="agent_permission_mode_full_access">Full access</string>
-  <string name="agent_permission_mode_full_access_desc">Run tools without approval prompts; structural restrictions still apply</string>
+  <string name="agent_permission_mode_full_access_desc">Run every available tool without approval. Workspace tools stay inside the path/PRoot sandbox; MCP and external tools use their own security boundaries.</string>
   <string name="agent_permission_mode_confirm_critical">Confirm critical actions</string>
   <string name="agent_permission_mode_confirm_critical_desc">Run normal workspace edits directly and ask before critical or sensitive actions</string>
   <string name="agent_mode_auto" tools:ignore="MissingTranslation">Auto</string>

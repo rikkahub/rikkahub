@@ -3,22 +3,16 @@ package me.rerere.rikkahub.data.repository
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.data.db.AppDatabase
+import me.rerere.rikkahub.data.db.entity.AgentTraceEvent
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.model.AgentRunConfigSnapshot
-import me.rerere.rikkahub.data.model.AgentRunStatus
-import me.rerere.rikkahub.data.model.AgentTraceAttributes
 import me.rerere.rikkahub.data.model.AgentTraceEventType
 import me.rerere.rikkahub.data.model.AgentTraceStatus
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -44,55 +38,29 @@ class AgentTraceRepositoryTest {
     fun tearDown() = database.close()
 
     @Test
-    fun traceSequencesAreUniqueMonotonicAndBoundedUnderConcurrentWrites() = runBlocking {
-        coroutineScope {
-            (0 until 600).map { index -> async(Dispatchers.Default) {
-                repository.recordTrace(
-                    "run",
-                    AgentTraceEventType.CHECKPOINT,
-                    AgentTraceStatus.FINISHED,
-                    AgentTraceAttributes(stepIndex = index),
-                )
-            } }.awaitAll()
-        }
-        val events = repository.getTraceEvents("run")
-        assertEquals(512, events.size)
-        assertTrue(events.zipWithNext().all { (before, after) -> after.sequence > before.sequence })
-        assertTrue(events.any { it.type == AgentTraceEventType.RUN_STARTED.name })
-        assertTrue(events.any { it.type == AgentTraceEventType.TRACE_TRUNCATED.name })
-    }
+    fun newTraceWritesAreDisabledWhileExistingRowsRemainReadable() = runBlocking {
+        database.agentTraceEventDao().insert(
+            AgentTraceEvent(
+                id = "historical",
+                runId = "run",
+                sequence = 1,
+                type = AgentTraceEventType.RUN_STARTED.name,
+                status = AgentTraceStatus.STARTED.name,
+                timestampMillis = 1,
+                errorCategory = "NONE",
+                attributesJson = "{}",
+                createdAt = 1,
+            ),
+        )
 
-    @Test
-    fun retentionKeepsLifecycleAnchorsWhenATerminalTraceIsRecordedAfterTruncation() = runBlocking {
-        repeat(600) {
-            repository.recordTrace("run", AgentTraceEventType.CHECKPOINT, AgentTraceStatus.FINISHED)
-        }
-        repository.recordTrace("run", AgentTraceEventType.RUN_FINISHED, AgentTraceStatus.SUCCEEDED)
-
-        val events = repository.getTraceEvents("run")
-        assertTrue(events.any { it.type == AgentTraceEventType.RUN_STARTED.name })
-        assertTrue(events.any { it.type == AgentTraceEventType.TRACE_TRUNCATED.name })
-        assertTrue(events.any { it.type == AgentTraceEventType.RUN_FINISHED.name })
-    }
-
-    @Test
-    fun invalidTraceIsRedactedAndCannotBreakRunState() = runBlocking {
-        assertFalse(repository.recordTrace(
-            "run", AgentTraceEventType.TOOL_FINISHED, AgentTraceStatus.SUCCEEDED,
-            AgentTraceAttributes(toolNameHash = "Authorization: Bearer secret"),
-        ))
-        assertTrue(repository.transitionRun("run", setOf(AgentRunStatus.QUEUED), AgentRunStatus.PREFLIGHT))
-        assertTrue(repository.transitionRun("run", setOf(AgentRunStatus.PREFLIGHT), AgentRunStatus.RUNNING))
-        assertEquals(AgentRunStatus.RUNNING.name, repository.getRun("run")?.status)
-        assertFalse(repository.getTraceEvents("run").any { it.attributesJson.contains("secret") })
-    }
-
-    @Test
-    fun conversationDeletionCascadesTraceEvents() = runBlocking {
-        assertTrue(repository.recordTrace("run", AgentTraceEventType.CHECKPOINT, AgentTraceStatus.FINISHED))
-        database.conversationDao().deleteById("conversation")
-        assertNull(repository.getRun("run"))
-        assertTrue(repository.getTraceEvents("run").isEmpty())
+        assertFalse(
+            repository.recordTrace(
+                "run",
+                AgentTraceEventType.CHECKPOINT,
+                AgentTraceStatus.FINISHED,
+            ),
+        )
+        assertEquals(listOf("historical"), repository.getTraceEvents("run").map { it.id })
     }
 
     @Test
@@ -108,15 +76,5 @@ class AgentTraceRepositoryTest {
         assertTrue(repository.isAuthorizedParentArtifactRun("child", "run", "assistant", "conversation"))
         assertFalse(repository.isAuthorizedParentArtifactRun("child", "other", "assistant", "conversation"))
         assertFalse(repository.isAuthorizedParentArtifactRun("child", "run", "other-assistant", "conversation"))
-    }
-
-    @Test
-    fun retentionRemovesEventsOlderThanThirtyDays() = runBlocking {
-        repository.recordTrace("run", AgentTraceEventType.CHECKPOINT, AgentTraceStatus.FINISHED, timestampMillis = 1)
-        repository.recordTrace(
-            "run", AgentTraceEventType.CHECKPOINT, AgentTraceStatus.FINISHED,
-            timestampMillis = 31L * 24 * 60 * 60 * 1000,
-        )
-        assertFalse(repository.getTraceEvents("run").any { it.timestampMillis == 1L })
     }
 }

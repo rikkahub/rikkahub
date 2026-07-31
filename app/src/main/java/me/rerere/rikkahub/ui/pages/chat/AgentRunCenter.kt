@@ -1356,6 +1356,34 @@ private fun AgentRunDetailContent(
 ) {
     val presentation = remember(detail) { detail.toPresentation() }
     val pendingApproval = detail.approvals.firstOrNull { it.status == "PENDING" }
+    val detailNowMillis = rememberAgentRunClock(
+        key = "${presentation.runId}:detail",
+        enabled = presentation.visualState.isLive(),
+    )
+    AgentRunDetailHeader(
+        presentation = presentation,
+        canNavigateBack = canNavigateBack,
+        onNavigateBack = onNavigateBack,
+        onOpenApproval = pendingApproval?.let { approval -> { onOpenApproval(approval) } },
+        onStop = onStop,
+        isStopping = isStopping,
+        nowMillis = detailNowMillis,
+    )
+}
+
+@Suppress("unused")
+@Composable
+private fun AgentRunDetailTelemetryContent(
+    detail: AgentRunDetail,
+    canNavigateBack: Boolean,
+    onNavigateBack: () -> Unit,
+    onOpenApproval: (AgentApprovalEntity) -> Unit,
+    onOpenChildRun: (String) -> Unit,
+    onStop: (() -> Unit)?,
+    isStopping: Boolean,
+) {
+    val presentation = remember(detail) { detail.toPresentation() }
+    val pendingApproval = detail.approvals.firstOrNull { it.status == "PENDING" }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val activityKeys = remember(presentation.children, presentation.timeline) {
@@ -1666,12 +1694,7 @@ internal fun AgentRunTimelineCard(
     val details = item.timelineDetails()
     val hasDetails = details != null
     var expanded by rememberSaveable(item.stableKey) {
-        mutableStateOf(item.visualState.expandsTimelineByDefault())
-    }
-    LaunchedEffect(item.visualState, hasDetails) {
-        if (hasDetails && item.visualState.expandsTimelineByDefault()) {
-            expanded = true
-        }
+        mutableStateOf(false)
     }
     val expandLabel = stringResource(R.string.agent_run_timeline_expand)
     val collapseLabel = stringResource(R.string.agent_run_timeline_collapse)
@@ -1840,15 +1863,4 @@ internal fun AgentRunTimelineCard(
             }
         }
     }
-}
-
-private fun AgentRunVisualState.expandsTimelineByDefault(): Boolean = when (this) {
-    AgentRunVisualState.WORKING,
-    AgentRunVisualState.NEEDS_ATTENTION,
-    AgentRunVisualState.FAILED,
-    -> true
-    AgentRunVisualState.PENDING,
-    AgentRunVisualState.SUCCEEDED,
-    AgentRunVisualState.STOPPED,
-    -> false
 }

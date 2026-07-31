@@ -20,6 +20,30 @@ class ProviderStreamException(
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
 
+fun providerStreamFailure(
+    cause: Throwable?,
+    httpStatus: Int? = null,
+    httpStatusMessage: String? = null,
+): ProviderStreamException {
+    val resolvedCause = when {
+        httpStatus != null -> RuntimeException(
+            buildString {
+                append("HTTP ")
+                append(httpStatus)
+                httpStatusMessage?.takeIf(String::isNotBlank)?.let { append(" ").append(it) }
+            },
+            cause,
+        )
+        cause != null -> cause
+        else -> RuntimeException("Provider stream ended without an error detail")
+    }
+    return ProviderStreamException(
+        ProviderStreamErrorCode.STREAM_UPSTREAM_FAILURE,
+        "Provider stream failed",
+        resolvedCause,
+    )
+}
+
 enum class ProviderStreamTerminationReason {
     DONE,
     UPSTREAM_FAILURE,

@@ -15,6 +15,9 @@ import me.rerere.rikkahub.data.model.AgentRunStatus
 import me.rerere.rikkahub.data.model.AgentStepSummary
 import me.rerere.rikkahub.data.model.ToolExecutionStatus
 import me.rerere.rikkahub.data.ai.agent.PersistedAgentRunRuntime
+import me.rerere.rikkahub.data.ai.agent.MinimalAgentRunRuntime
+import me.rerere.rikkahub.data.ai.agent.canonicalJson
+import me.rerere.rikkahub.data.ai.agent.digest
 import me.rerere.rikkahub.data.ai.agent.permission.PolicyCode
 import me.rerere.rikkahub.data.ai.agent.permission.PolicyDecision
 import me.rerere.rikkahub.data.ai.agent.permission.ToolDescriptorRegistry
@@ -396,6 +399,77 @@ class AgentRunRepositoryTest {
         assertEquals(ToolExecutionStatus.SUCCEEDED.name, persisted?.status)
         assertFalse(persisted?.summaryJson.orEmpty().contains("a.txt"))
         assertFalse(persisted?.summaryJson.orEmpty().contains("secret output"))
+    }
+
+    @Test
+    fun minimalRuntimeDoesNotPersistAutomaticStepsToolsOrTraces() = runBlocking {
+        repository.createRun("minimal", "conversation", "assistant", AgentRunConfigSnapshot())
+        repository.transitionRun("minimal", setOf(AgentRunStatus.QUEUED), AgentRunStatus.PREFLIGHT)
+        repository.transitionRun("minimal", setOf(AgentRunStatus.PREFLIGHT), AgentRunStatus.RUNNING)
+        val runtime = MinimalAgentRunRuntime(repository, "minimal")
+        val step = runtime.stepStarted(0)
+        val tool = UIMessagePart.Tool("call", "workspace_read_file", "{\"path\":\"a.txt\"}")
+        val execution = runtime.toolObserved(step, tool, ToolDescriptorRegistry.descriptorFor(tool.toolName))
+
+        assertTrue(runtime.toolStarted(execution))
+        assertTrue(runtime.toolFinished(execution, ToolExecutionStatus.SUCCEEDED, listOf(UIMessagePart.Text("ok"))))
+        runtime.stepFinished(step, me.rerere.rikkahub.data.model.AgentStepStatus.SUCCEEDED)
+        runtime.finished("no_tools")
+
+        assertTrue(repository.getSteps("minimal").isEmpty())
+        assertTrue(repository.getToolExecutions("minimal").isEmpty())
+        assertTrue(repository.getApprovals("minimal").isEmpty())
+        assertTrue(repository.getTraceEvents("minimal").isEmpty())
+        assertEquals(AgentRunStatus.SUCCEEDED.name, repository.getRun("minimal")?.status)
+    }
+
+    @Test
+    fun minimalRuntimePersistsOnlyTheApprovalBindingAndResumesIt() = runBlocking {
+        repository.createRun("approval-minimal", "conversation", "assistant", AgentRunConfigSnapshot())
+        repository.transitionRun("approval-minimal", setOf(AgentRunStatus.QUEUED), AgentRunStatus.PREFLIGHT)
+        repository.transitionRun("approval-minimal", setOf(AgentRunStatus.PREFLIGHT), AgentRunStatus.RUNNING)
+        val runtime = MinimalAgentRunRuntime(repository, "approval-minimal")
+        val step = runtime.stepStarted(0)
+        val tool = UIMessagePart.Tool("call", "workspace_write_file", "{\"path\":\"a.txt\"}")
+        val execution = runtime.toolObserved(step, tool, ToolDescriptorRegistry.descriptorFor(tool.toolName))!!
+        val binding = AgentApprovalSummary(
+            stepId = step,
+            toolName = tool.toolName,
+            toolCallId = tool.toolCallId,
+            inputSha256 = tool.input.canonicalJson().digest(),
+            assistantId = "assistant",
+            mode = "AGENT",
+            policyDigest = "policy",
+            expiresAt = 10_000,
+        )
+
+        assertTrue(runtime.approvalRequested(
+            execution,
+            tool,
+            PolicyDecision.Ask(PolicyCode.DEFAULT_ASK, "ask"),
+            binding,
+        ) != null)
+        runtime.stepFinished(step, me.rerere.rikkahub.data.model.AgentStepStatus.SUCCEEDED)
+        runtime.waitingForApproval()
+
+        assertEquals(1, repository.getSteps("approval-minimal").size)
+        assertEquals(1, repository.getToolExecutions("approval-minimal").size)
+        assertEquals(1, repository.getApprovals("approval-minimal").size)
+        assertTrue(repository.getTraceEvents("approval-minimal").isEmpty())
+
+        assertTrue(runtime.approvalResolved(pendingApprovalId(execution), execution, true))
+        assertTrue(repository.resumeRunAfterApproval("approval-minimal"))
+        val continuation = MinimalAgentRunRuntime(repository, "approval-minimal")
+        val continuationStep = continuation.stepStarted(1)
+        val resumedExecution = continuation.toolObserved(
+            continuationStep,
+            tool,
+            ToolDescriptorRegistry.descriptorFor(tool.toolName),
+        )
+        assertEquals(execution, resumedExecution)
+        assertTrue(continuation.approvedFor(resumedExecution, tool, binding))
+        assertTrue(continuation.toolStarted(resumedExecution))
+        assertTrue(continuation.toolFinished(resumedExecution, ToolExecutionStatus.SUCCEEDED))
     }
 
     @Test

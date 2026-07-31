@@ -56,6 +56,15 @@ class CapabilityPolicyTest {
         )
 
         assertTrue(evaluate("workspace_shell", policy = policy) is PolicyDecision.Allow)
+        assertTrue(evaluate("workspace_write_file", policy = policy) is PolicyDecision.Allow)
+        assertTrue(evaluate("memory_tool", policy = policy) is PolicyDecision.Allow)
+        assertTrue(
+            evaluate(
+                "mcp__demo__write",
+                policy = policy,
+                mcpServer = McpServerPolicyContext(needsApproval = true),
+            ) is PolicyDecision.Allow,
+        )
         assertTrue(evaluate("future_tool", policy = policy) is PolicyDecision.Allow)
     }
 

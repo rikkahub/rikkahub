@@ -14,6 +14,19 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class BoundedStreamBridgeTest {
     @Test
+    fun `provider stream failure keeps HTTP status and cause`() {
+        val error = providerStreamFailure(
+            cause = IllegalStateException("upstream detail"),
+            httpStatus = 503,
+            httpStatusMessage = "Service Unavailable",
+        )
+
+        assertEquals(ProviderStreamErrorCode.STREAM_UPSTREAM_FAILURE, error.code)
+        assertEquals("HTTP 503 Service Unavailable", error.cause?.message)
+        assertEquals("upstream detail", error.cause?.cause?.message)
+    }
+
+    @Test
     fun `slow consumer receives all ordered chunks after DONE`() = runBlocking {
         val diagnostics = mutableListOf<ProviderStreamDiagnostics>()
         val bridge = BoundedStreamBridge<String>(capacity = 1_024, onTerminated = diagnostics::add)

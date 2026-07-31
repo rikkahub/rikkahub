@@ -38,6 +38,7 @@ import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.BoundedStreamBridge
 import me.rerere.ai.util.ProviderStreamErrorCode
 import me.rerere.ai.util.ProviderStreamException
+import me.rerere.ai.util.providerStreamFailure
 import me.rerere.ai.util.ProviderStreamTerminationReason
 import me.rerere.ai.util.boundedStreamFlow
 import me.rerere.ai.util.configureReferHeaders
@@ -194,13 +195,7 @@ class ResponseAPI(
                 } catch (e: Throwable) {
                     if (t == null) exception = e
                 } finally {
-                    bridge.fail(
-                        ProviderStreamException(
-                            ProviderStreamErrorCode.STREAM_UPSTREAM_FAILURE,
-                            "Provider stream failed",
-                            exception,
-                        )
-                    )
+                    bridge.fail(providerStreamFailure(exception, response?.code, response?.message))
                 }
             }
 

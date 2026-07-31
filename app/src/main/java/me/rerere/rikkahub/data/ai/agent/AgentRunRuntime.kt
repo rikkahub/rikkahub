@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.ai.agent
 
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -98,6 +99,221 @@ object NoOpAgentRunRuntime : AgentRunRuntime {
     override suspend fun finished(reason: String) = Unit
     override suspend fun failed(error: Throwable) = Unit
     override suspend fun cancelled() = Unit
+}
+
+/**
+ * Persists only lifecycle state and the minimum durable binding required for a user approval.
+ * Normal steps and automatically executed tools intentionally remain in memory.
+ */
+class MinimalAgentRunRuntime(
+    private val repository: AgentRunRepository,
+    private val runId: String,
+) : AgentRunRuntime {
+    private data class ObservedTool(
+        val stepId: String,
+        val toolName: String,
+        val toolCallId: String,
+        val inputSha256: String,
+    )
+
+    private val persisted = PersistedAgentRunRuntime(repository, runId)
+    private val observedTools = ConcurrentHashMap<String, ObservedTool>()
+    private val executionByStepAndCall = ConcurrentHashMap<Pair<String, String>, String>()
+    private val persistedStepIds = ConcurrentHashMap.newKeySet<String>()
+
+    override suspend fun stepStarted(index: Int): String = Uuid.random().toString()
+
+    override suspend fun stepFinished(stepId: String?, status: AgentStepStatus) {
+        if (stepId == null) return
+        if (stepId in persistedStepIds || repository.getSteps(runId).any { it.id == stepId }) {
+            persisted.stepFinished(stepId, status)
+        }
+        observedTools.entries.removeAll { (_, observed) -> observed.stepId == stepId }
+        executionByStepAndCall.keys.removeAll { (observedStepId, _) -> observedStepId == stepId }
+    }
+
+    override suspend fun toolObserved(
+        stepId: String?,
+        tool: UIMessagePart.Tool,
+        descriptor: ToolDescriptor,
+    ): String? {
+        val resolvedStepId = stepId ?: return null
+        val digest = tool.input.canonicalJson().digest()
+        repository.getLatestToolExecutionByCall(runId, tool.toolName, tool.toolCallId, digest)
+            ?.let { return it.id }
+        val callKey = resolvedStepId to tool.toolCallId
+        executionByStepAndCall[callKey]?.let { existingId ->
+            val existing = observedTools.getValue(existingId)
+            require(existing.toolName == tool.toolName && existing.inputSha256 == digest) {
+                "Duplicate toolCallId '${tool.toolCallId}' in the same model turn"
+            }
+            return existingId
+        }
+        val executionId = Uuid.random().toString()
+        observedTools[executionId] = ObservedTool(
+            stepId = resolvedStepId,
+            toolName = tool.toolName,
+            toolCallId = tool.toolCallId,
+            inputSha256 = digest,
+        )
+        executionByStepAndCall[callKey] = executionId
+        return executionId
+    }
+
+    override suspend fun approvalRequested(
+        executionId: String?,
+        tool: UIMessagePart.Tool,
+        decision: PolicyDecision,
+        binding: AgentApprovalSummary,
+    ): String? {
+        val resolvedExecutionId = executionId ?: return null
+        if (repository.getToolExecution(resolvedExecutionId) == null) {
+            val observed = observedTools[resolvedExecutionId] ?: return null
+            if (
+                observed.toolName != tool.toolName ||
+                observed.toolCallId != tool.toolCallId ||
+                observed.inputSha256 != tool.input.canonicalJson().digest()
+            ) return null
+            if (repository.getSteps(runId).none { it.id == observed.stepId }) {
+                repository.recordStep(
+                    id = observed.stepId,
+                    runId = runId,
+                    kind = "approval",
+                    status = AgentStepStatus.RUNNING,
+                    summary = null,
+                )
+            }
+            persistedStepIds += observed.stepId
+            repository.recordToolExecution(
+                id = resolvedExecutionId,
+                runId = runId,
+                stepId = observed.stepId,
+                toolName = observed.toolName,
+                toolCallId = observed.toolCallId,
+                inputSha256 = observed.inputSha256,
+                summary = ToolExecutionSummary(
+                    toolCallId = observed.toolCallId,
+                    inputSha256 = observed.inputSha256,
+                ),
+            )
+        }
+        return persisted.approvalRequested(resolvedExecutionId, tool, decision, binding)
+    }
+
+    override suspend fun approvalResolved(
+        approvalId: String,
+        executionId: String,
+        approved: Boolean,
+    ): Boolean = persisted.approvalResolved(approvalId, executionId, approved)
+
+    override suspend fun approvalResolution(
+        approvalId: String,
+        executionId: String,
+        approved: Boolean,
+    ): ApprovalResolution = persisted.approvalResolution(approvalId, executionId, approved)
+
+    override suspend fun approvedFor(
+        executionId: String?,
+        tool: UIMessagePart.Tool,
+        binding: AgentApprovalSummary,
+    ): Boolean = persisted.approvedFor(executionId, tool, binding)
+
+    override suspend fun toolStarted(executionId: String?): Boolean =
+        if (executionId != null && repository.getToolExecution(executionId) != null) {
+            persisted.toolStarted(executionId)
+        } else {
+            true
+        }
+
+    override suspend fun toolFinished(
+        executionId: String?,
+        status: ToolExecutionStatus,
+        output: List<UIMessagePart>,
+        error: String?,
+        artifact: ToolArtifactReference?,
+    ): Boolean {
+        val resolvedExecutionId = executionId ?: return false
+        val execution = repository.getToolExecution(resolvedExecutionId)
+        if (execution == null) {
+            observedTools.remove(resolvedExecutionId)?.let { observed ->
+                executionByStepAndCall.remove(observed.stepId to observed.toolCallId)
+            }
+            return true
+        }
+        val summary = execution.summaryJson?.let {
+            runCatching { JsonInstant.decodeFromString<ToolExecutionSummary>(it) }.getOrNull()
+        }
+        return repository.transitionToolExecution(
+            resolvedExecutionId,
+            toolFinishSourceStatuses(status),
+            status,
+            error?.let { AgentRunError(it, category = "tool") },
+            summary,
+        )
+    }
+
+    override suspend fun contextPlanned(plan: ContextPlan) = Unit
+
+    override suspend fun contextBlocked(plan: ContextPlan) {
+        repository.blockRun(
+            runId,
+            plan.errorCode?.name ?: "CONTEXT_BUDGET_EXCEEDED",
+            "context_budget",
+        )
+    }
+
+    override suspend fun modelCallStarted(stepId: String?) = Unit
+
+    override suspend fun modelCallFinished(
+        stepId: String?,
+        succeeded: Boolean,
+        inputTokens: Int?,
+        outputTokens: Int?,
+    ) = Unit
+
+    override suspend fun policyDecision(tool: UIMessagePart.Tool, decision: PolicyDecision) = Unit
+
+    override suspend fun waitingForApproval() {
+        repository.transitionRun(runId, setOf(AgentRunStatus.RUNNING), AgentRunStatus.WAITING_APPROVAL)
+    }
+
+    override suspend fun finished(reason: String) {
+        if (reason == "max_steps") {
+            repository.failRun(runId, "MAX_STEPS", "runtime")
+        } else {
+            repository.transitionRun(
+                runId,
+                setOf(AgentRunStatus.RUNNING),
+                AgentRunStatus.SUCCEEDED,
+                summary = AgentRunSummary(outcome = reason),
+            )
+        }
+    }
+
+    override suspend fun failed(error: Throwable) {
+        repository.failRun(runId, error.javaClass.simpleName, "runtime")
+    }
+
+    override suspend fun cancelled() {
+        repository.cancelRun(runId)
+    }
+}
+
+internal fun toolFinishSourceStatuses(status: ToolExecutionStatus): Set<ToolExecutionStatus> = when (status) {
+    ToolExecutionStatus.SUCCEEDED,
+    ToolExecutionStatus.UNKNOWN_AFTER_INTERRUPT,
+    -> setOf(ToolExecutionStatus.AUTHORIZED, ToolExecutionStatus.RUNNING)
+
+    ToolExecutionStatus.DENIED -> setOf(ToolExecutionStatus.PENDING)
+    ToolExecutionStatus.FAILED,
+    ToolExecutionStatus.CANCELLED,
+    -> setOf(ToolExecutionStatus.PENDING, ToolExecutionStatus.AUTHORIZED, ToolExecutionStatus.RUNNING)
+
+    ToolExecutionStatus.PENDING,
+    ToolExecutionStatus.WAITING_APPROVAL,
+    ToolExecutionStatus.AUTHORIZED,
+    ToolExecutionStatus.RUNNING,
+    -> throw IllegalArgumentException("Tool finish status must be terminal: $status")
 }
 
 class PersistedAgentRunRuntime(
@@ -235,7 +451,7 @@ class PersistedAgentRunRuntime(
         } ?: ToolExecutionSummary()
         val transitioned = repository.transitionToolExecution(
             executionId,
-            setOf(ToolExecutionStatus.PENDING, ToolExecutionStatus.AUTHORIZED, ToolExecutionStatus.RUNNING),
+            toolFinishSourceStatuses(status),
             status,
             error?.let { AgentRunError(it, category = "tool") },
             summary.copy(

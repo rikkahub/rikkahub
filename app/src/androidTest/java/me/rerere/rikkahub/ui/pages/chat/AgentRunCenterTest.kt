@@ -901,7 +901,7 @@ class AgentRunCenterTest {
     }
 
     @Test
-    fun liveTimelineCardKeepsDetailsVisibleWhenItCompletes() {
+    fun liveTimelineCardKeepsUserExpandedDetailsVisibleWhenItCompletes() {
         var item by mutableStateOf(
             timelineItem(
                 status = "运行中",
@@ -916,6 +916,14 @@ class AgentRunCenterTest {
 
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val safeSummary = context.getString(R.string.agent_run_timeline_summary, "Safe summary")
+        composeRule.onNodeWithText(safeSummary).assertDoesNotExist()
+        composeRule.onNode(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.agent_run_timeline_collapsed),
+            )
+        ).assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithText(safeSummary).assertIsDisplayed()
         composeRule.onNode(
             SemanticsMatcher.expectValue(
@@ -961,6 +969,13 @@ class AgentRunCenterTest {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val safeSummary = context.getString(R.string.agent_run_timeline_summary, "Safe summary")
         val expandedDescription = context.getString(R.string.agent_run_timeline_expanded)
+        composeRule.onNode(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.StateDescription,
+                context.getString(R.string.agent_run_timeline_collapsed),
+            )
+        ).assertIsDisplayed().performClick()
+        composeRule.mainClock.advanceTimeByFrame()
         composeRule.onNodeWithText(safeSummary).assertIsDisplayed()
         composeRule.onNode(
             SemanticsMatcher.expectValue(
@@ -1027,7 +1042,7 @@ class AgentRunCenterTest {
     }
 
     @Test
-    fun timelineCardAutoExpandsWhenAttentionIsNeeded() {
+    fun timelineCardStaysCompactWhenAttentionIsNeeded() {
         var item by mutableStateOf(
             timelineItem(
                 status = "等待中",
@@ -1058,7 +1073,7 @@ class AgentRunCenterTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText(safeSummary).assertIsDisplayed()
+        composeRule.onNodeWithText(safeSummary).assertDoesNotExist()
         composeRule.onNode(
             SemanticsMatcher.expectValue(
                 SemanticsProperties.ProgressBarRangeInfo,
@@ -1068,7 +1083,7 @@ class AgentRunCenterTest {
         composeRule.onNode(
             SemanticsMatcher.expectValue(
                 SemanticsProperties.StateDescription,
-                context.getString(R.string.agent_run_timeline_expanded),
+                context.getString(R.string.agent_run_timeline_collapsed),
             )
         ).assertIsDisplayed()
     }

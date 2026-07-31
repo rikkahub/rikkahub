@@ -1165,7 +1165,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="agent_permission_mode_auto_review">自动审核</string>
   <string name="agent_permission_mode_auto_review_desc">根据工具风险与副作用自动判断是否需要确认</string>
   <string name="agent_permission_mode_full_access">完全访问</string>
-  <string name="agent_permission_mode_full_access_desc">工具无需审批即可执行，仍保留结构性限制</string>
+  <string name="agent_permission_mode_full_access_desc">所有可用工具无需审批即可执行。工作区工具仍受路径和 PRoot 沙盒约束；MCP 与外部工具使用各自的安全边界。</string>
   <string name="agent_permission_mode_confirm_critical">关键行为确认</string>
   <string name="agent_permission_mode_confirm_critical_desc">普通工作区编辑直接执行，关键或敏感操作前询问</string>
   <string name="agent_mode_auto">自动</string>

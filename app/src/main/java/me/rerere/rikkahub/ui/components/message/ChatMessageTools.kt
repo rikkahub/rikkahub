@@ -237,9 +237,9 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
 
     var showResult by remember { mutableStateOf(false) }
     var showDenyDialog by remember { mutableStateOf(false) }
-    var expanded by remember { mutableStateOf(true) }
     val isPending = tool.approvalState is ToolApprovalState.Pending
     val isDenied = tool.approvalState is ToolApprovalState.Denied
+    var expanded by remember(tool.toolCallId) { mutableStateOf(isPending) }
     val images = tool.output.filterIsInstance<UIMessagePart.Image>()
     val approvalSubmission = remember(
         tool.approvalId,

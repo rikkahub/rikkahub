@@ -156,38 +156,7 @@ class AgentRunRepository(
         errorCategory: AgentTraceErrorCategory = AgentTraceErrorCategory.NONE,
         timestampMillis: Long = timeSource.nowMillis(),
         durationMillis: Long? = null,
-    ): Boolean = try {
-        require(timestampMillis >= 0)
-        require(durationMillis == null || durationMillis >= 0)
-        val encodedAttributes = AgentTraceRedactor.encodeAttributes(attributes)
-        require(encodedAttributes.toByteArray(Charsets.UTF_8).size <= MAX_TRACE_ATTRIBUTES_BYTES)
-        val recorded = database.withTransaction {
-            val traceDao = database.agentTraceEventDao()
-            if (dao.getRun(runId) == null) return@withTransaction false
-            val sequence = traceDao.nextSequence(runId)
-            traceDao.insert(
-                AgentTraceEvent(
-                    id = java.util.UUID.randomUUID().toString(),
-                    runId = runId,
-                    sequence = sequence,
-                    type = type.name,
-                    status = status.name,
-                    timestampMillis = timestampMillis,
-                    durationMillis = durationMillis,
-                    errorCategory = errorCategory.name,
-                    attributesJson = encodedAttributes,
-                    createdAt = timestampMillis,
-                ),
-            )
-            trimRunTrace(traceDao, runId, sequence, timestampMillis)
-            true
-        }
-        if (recorded) cleanupTraceRetention(timestampMillis)
-        recorded
-    } catch (error: Throwable) {
-        if (error is kotlinx.coroutines.CancellationException) throw error
-        false
-    }
+    ): Boolean = false
 
     suspend fun getApprovalForExecution(
         toolExecutionId: String,

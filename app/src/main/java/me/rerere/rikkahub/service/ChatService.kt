@@ -52,7 +52,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.agent.AgentMode
-import me.rerere.rikkahub.data.ai.agent.PersistedAgentRunRuntime
+import me.rerere.rikkahub.data.ai.agent.MinimalAgentRunRuntime
 import me.rerere.rikkahub.data.ai.agent.canonicalJson
 import me.rerere.rikkahub.data.ai.agent.digest
 import me.rerere.rikkahub.data.ai.agent.compact.CompactPolicy
@@ -863,7 +863,7 @@ class ChatService(
                         return@withLock
                     }
 
-                    val resolution = PersistedAgentRunRuntime(agentRunRepository, target.runId)
+                    val resolution = MinimalAgentRunRuntime(agentRunRepository, target.runId)
                         .approvalResolution(target.approvalId, target.executionId, approved || answer != null)
                     if (!resolution.resolved && resolution.replacementApprovalId == null) return@withLock
                     if (resolution.replacementApprovalId != null) {
@@ -1544,7 +1544,7 @@ class ChatService(
                                 emptyList()
                             },
                             workspace = frozenContext.workspace,
-                            runRuntime = PersistedAgentRunRuntime(agentRunRepository, runId),
+                            runRuntime = MinimalAgentRunRuntime(agentRunRepository, runId),
                             artifactRunScope = me.rerere.rikkahub.data.artifacts.ToolArtifactRunScope(
                                 assistantId = frozenContext.identity.assistantId,
                                 conversationId = conversationId.toString(),

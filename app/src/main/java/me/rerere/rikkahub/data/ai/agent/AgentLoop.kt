@@ -34,11 +34,14 @@ import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.effectiveCapabilityProfile
+import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.ui.mergeSystemMessages
+import me.rerere.ai.util.ProviderStreamErrorCode
+import me.rerere.ai.util.ProviderStreamException
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.agent.hooks.AgentHook
 import me.rerere.rikkahub.data.ai.agent.hooks.NoOpAgentHook
@@ -1048,26 +1051,41 @@ class AgentLoop(
         runRuntime.modelCallStarted(stepId)
         var modelCallSucceeded = false
         var modelUsage: TokenUsage? = null
+        suspend fun acceptProviderChunk(chunk: MessageChunk) {
+            messages = messages.handleMessageChunk(chunk = chunk, model = model)
+            chunk.usage?.let { usage ->
+                modelUsage = modelUsage.merge(usage)
+                messages = messages.mapIndexed { index, message ->
+                    if (index == messages.lastIndex) {
+                        message.copy(usage = message.usage.merge(usage))
+                    } else {
+                        message
+                    }
+                }
+            }
+            onUpdateMessages(messages)
+        }
         try {
             if (stream) {
-                providerImpl.streamText(
-                    providerSetting = provider,
-                    messages = contextResult.messages.mergeSystemMessages(),
-                    params = params
-                ).withProviderIdleWatchdog(providerIdleTimeoutMillis).collect {
-                    messages = messages.handleMessageChunk(chunk = it, model = model)
-                    it.usage?.let { usage ->
-                        modelUsage = modelUsage.merge(usage)
-                        messages = messages.mapIndexed { index, message ->
-                            if (index == messages.lastIndex) {
-                                message.copy(usage = message.usage.merge(usage))
-                            } else {
-                                message
-                            }
+                collectProviderWithFallback(
+                    stream = {
+                        providerImpl.streamText(
+                            providerSetting = provider,
+                            messages = contextResult.messages.mergeSystemMessages(),
+                            params = params
+                        ).withProviderIdleWatchdog(providerIdleTimeoutMillis)
+                    },
+                    fallback = {
+                        awaitProviderWithIdleWatchdog(providerIdleTimeoutMillis) {
+                            providerImpl.generateText(
+                                providerSetting = provider,
+                                messages = contextResult.messages.mergeSystemMessages(),
+                                params = params,
+                            )
                         }
-                    }
-                    onUpdateMessages(messages)
-                }
+                    },
+                    onChunk = ::acceptProviderChunk,
+                )
             } else {
                 val chunk = awaitProviderWithIdleWatchdog(providerIdleTimeoutMillis) {
                     providerImpl.generateText(
@@ -1076,18 +1094,7 @@ class AgentLoop(
                         params = params,
                     )
                 }
-                messages = messages.handleMessageChunk(chunk = chunk, model = model)
-                chunk.usage?.let { usage ->
-                    modelUsage = modelUsage.merge(usage)
-                    messages = messages.mapIndexed { index, message ->
-                        if (index == messages.lastIndex) {
-                            message.copy(usage = message.usage.merge(usage))
-                        } else {
-                            message
-                        }
-                    }
-                }
-                onUpdateMessages(messages)
+                acceptProviderChunk(chunk)
             }
             modelCallSucceeded = true
         } finally {
@@ -1101,6 +1108,78 @@ class AgentLoop(
     }
 
 }
+
+internal suspend fun collectProviderWithFallback(
+    stream: suspend () -> Flow<MessageChunk>,
+    fallback: suspend () -> MessageChunk,
+    onChunk: suspend (MessageChunk) -> Unit,
+) {
+    var meaningfulProgress = false
+    try {
+        stream().collect { chunk ->
+            meaningfulProgress = meaningfulProgress || chunk.hasMeaningfulProviderProgress()
+            onChunk(chunk)
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        if (!error.canFallbackFromEmptyStream(meaningfulProgress)) {
+            throw error.asUserFacingProviderFailure("Provider stream failed")
+        }
+        val fallbackChunk = try {
+            fallback()
+        } catch (fallbackError: CancellationException) {
+            throw fallbackError
+        } catch (fallbackError: Throwable) {
+            throw fallbackError.asUserFacingProviderFailure(
+                "Provider request failed after stream fallback",
+            )
+        }
+        onChunk(fallbackChunk)
+    }
+}
+
+internal fun MessageChunk.hasMeaningfulProviderProgress(): Boolean = choices.any { choice ->
+    (!choice.finishReason.isNullOrBlank() && choice.finishReason != "unknown") ||
+        sequenceOf(choice.delta, choice.message).filterNotNull().any { message ->
+            message.parts.any { part ->
+                when (part) {
+                    is UIMessagePart.Text -> part.text.isNotBlank()
+                    is UIMessagePart.Reasoning -> part.reasoning.isNotBlank()
+                    is UIMessagePart.Tool -> true
+                    else -> false
+                }
+            }
+        }
+}
+
+internal fun Throwable.canFallbackFromEmptyStream(hasMeaningfulProgress: Boolean): Boolean {
+    if (hasMeaningfulProgress) return false
+    val streamError = this as? ProviderStreamException ?: return false
+    return streamError.code == ProviderStreamErrorCode.STREAM_UPSTREAM_FAILURE ||
+        streamError.code == ProviderStreamErrorCode.STREAM_INCOMPLETE
+}
+
+internal fun Throwable.asUserFacingProviderFailure(prefix: String): RuntimeException {
+    val detail = generateSequence(this) { it.cause }
+        .mapNotNull { it.message?.trim()?.takeIf(String::isNotBlank) }
+        .distinct()
+        .joinToString(" | ")
+        .ifBlank { javaClass.simpleName }
+        .replace(PROVIDER_AUTH_HEADER_PATTERN) { match -> "${match.groupValues[1]} [redacted]" }
+        .replace(PROVIDER_SECRET_PATTERN) { match -> "${match.groupValues[1]} [redacted]" }
+        .replace(Regex("\\s+"), " ")
+        .take(MAX_PROVIDER_ERROR_LENGTH)
+    return RuntimeException("$prefix: $detail", this)
+}
+
+private val PROVIDER_SECRET_PATTERN = Regex(
+    "(?i)\\b(api[-_ ]?key|bearer|token|secret)\\b\\s*[:=]?\\s*[^\\s,;]+",
+)
+private val PROVIDER_AUTH_HEADER_PATTERN = Regex(
+    "(?i)\\b(authorization)\\b\\s*[:=]?\\s*(?:bearer\\s+)?[^\\s,;]+",
+)
+private const val MAX_PROVIDER_ERROR_LENGTH = 600
 
 internal sealed interface ToolWatchdogOutcome<out T> {
     data class Completed<T>(val value: T) : ToolWatchdogOutcome<T>

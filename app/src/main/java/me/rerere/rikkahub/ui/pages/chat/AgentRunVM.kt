@@ -15,9 +15,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import me.rerere.rikkahub.data.db.entity.AgentApprovalEntity
 import me.rerere.rikkahub.data.db.entity.AgentRunEntity
-import me.rerere.rikkahub.data.db.entity.AgentStepEntity
-import me.rerere.rikkahub.data.db.entity.AgentTraceEvent
-import me.rerere.rikkahub.data.db.entity.ToolExecutionEntity
 import me.rerere.rikkahub.data.repository.AgentRunRepository
 
 sealed interface AgentRunDetailState {
@@ -80,19 +77,7 @@ internal data class AgentRunNavigation(
     fun close(): AgentRunNavigation = AgentRunNavigation()
 }
 
-private data class AgentRunDetailPrimary(
-    val run: AgentRunEntity?,
-    val steps: List<AgentStepEntity>,
-    val tools: List<ToolExecutionEntity>,
-)
-
-private data class AgentRunDetailSecondary(
-    val approvals: List<AgentApprovalEntity>,
-    val children: List<AgentRunEntity>,
-    val traceEvents: List<AgentTraceEvent>,
-)
-
-/** Keeps the Run Center backed directly by Room flows so telemetry updates are reflected without polling. */
+/** Keeps the compact Run Center backed directly by lifecycle and approval Room flows. */
 class AgentRunVM(
     private val conversationId: String,
     private val repository: AgentRunRepository,
@@ -164,29 +149,17 @@ class AgentRunVM(
         navigation.update(AgentRunNavigation::close)
     }
 
-    /** Content-free trace feed for Run Center consumers; presentation remains intentionally separate. */
-    fun observeTraceEvents(runId: String): Flow<List<AgentTraceEvent>> = repository.observeTraceEvents(runId)
-
     private fun observeDetail(repository: AgentRunRepository, runId: String): Flow<AgentRunDetail?> {
-        val primary = combine(
+        return combine(
             repository.observeRun(runId),
-            repository.observeSteps(runId),
-            repository.observeToolExecutions(runId),
-        ) { run, steps, tools -> AgentRunDetailPrimary(run, steps, tools) }
-        val secondary = combine(
             repository.observeApprovals(runId),
-            repository.observeChildRuns(runId),
-            repository.observeTraceEvents(runId),
-        ) { approvals, children, traceEvents -> AgentRunDetailSecondary(approvals, children, traceEvents) }
-        return combine(primary, secondary) { first, second ->
-            first.run?.let {
+        ) { run, approvals ->
+            run?.let {
                 AgentRunDetail(
                     it,
-                    first.steps,
-                    first.tools,
-                    second.approvals,
-                    second.children,
-                    second.traceEvents,
+                    steps = emptyList(),
+                    tools = emptyList(),
+                    approvals = approvals,
                 )
             }
         }

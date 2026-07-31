@@ -15,7 +15,7 @@ import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.agent.AgentLoop
 import me.rerere.rikkahub.data.ai.agent.AgentMode
 import me.rerere.rikkahub.data.ai.agent.AgentRunRuntime
-import me.rerere.rikkahub.data.ai.agent.PersistedAgentRunRuntime
+import me.rerere.rikkahub.data.ai.agent.MinimalAgentRunRuntime
 import me.rerere.rikkahub.data.ai.agent.canonicalJson
 import me.rerere.rikkahub.data.ai.agent.permission.PermissionPolicy
 import me.rerere.rikkahub.data.ai.agent.preflight.ProviderPreflight
@@ -209,7 +209,7 @@ class DefaultSubagentRunner(
                     tools = if (preflight.allowFunctionTools) tools else emptyList(),
                     workspace = request.workspace,
                     runRuntime = BudgetedChildRuntime(
-                        PersistedAgentRunRuntime(agentRunRepository, childRunId),
+                        MinimalAgentRunRuntime(agentRunRepository, childRunId),
                         budget.maxToolCalls,
                     ),
                     artifactRunScope = ToolArtifactRunScope(
