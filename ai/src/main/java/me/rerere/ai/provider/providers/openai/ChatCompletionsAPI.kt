@@ -454,7 +454,14 @@ class ChatCompletionsAPI(
     }
 
     private fun isModelAllowTemperature(model: Model): Boolean {
-        return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && !ModelRegistry.GPT_5.match(model.modelId)
+        if (ModelRegistry.OPENAI_O_MODELS.match(model.modelId) || ModelRegistry.GPT_5.match(model.modelId)) {
+            return false
+        }
+        val id = model.modelId.lowercase()
+        if (id.startsWith("kimi-k2.5") || id.startsWith("kimi-k2.6") || id.startsWith("kimi-k2.7") || id.startsWith("kimi-k3") || id == "k3") {
+            return false
+        }
+        return true
     }
 
     private fun buildMessages(
