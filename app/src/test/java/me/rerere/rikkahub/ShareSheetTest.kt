@@ -12,7 +12,7 @@ import kotlin.uuid.Uuid
 
 class ShareSheetTest {
     @Test
-    fun `decode should restore OpenAI provider correctly`() {
+    fun `share round trip should restore OpenAI settings without models`() {
         val originalId = Uuid.random()
         val original = ProviderSetting.OpenAI(
             id = originalId,
@@ -40,8 +40,7 @@ class ShareSheetTest {
         assertEquals("Test OpenAI", decodedOpenAI.name)
         assertEquals("sk-test-key", decodedOpenAI.apiKey)
         assertEquals("https://api.openai.com/v1", decodedOpenAI.baseUrl)
-        assertEquals(1, decodedOpenAI.models.size)
-        assertEquals("gpt-4", decodedOpenAI.models[0].displayName)
+        assertTrue(decodedOpenAI.models.isEmpty())
     }
 
     @Test
