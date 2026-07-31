@@ -1,6 +1,7 @@
 [versions]
 agp = "9.3.1"
 barcodeScanning = "17.3.0"
+textRecognition = "16.0.1"
 cameraCore = "1.6.1"
 dom4j = "2.2.0"
 jlatexmath = "1.5"
@@ -74,6 +75,8 @@ androidx-media3-common = { module = "androidx.media3:media3-common", version.ref
 androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
 barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version.ref = "barcodeScanning" }
+text-recognition-chinese = { module = "com.google.mlkit:text-recognition-chinese", version.ref = "textRecognition" }
+text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "textRecognition" }
 dom4j = { module = "org.dom4j:dom4j", version.ref = "dom4j" }
 jlatexmath = { module = "com.github.rikkahub.jlatexmath-android:jlatexmath", version.ref = "jlatexmath" }
 jlatexmath-font-greek = { module = "com.github.rikkahub.jlatexmath-android:jlatexmath-font-greek", version.ref = "jlatexmath" }

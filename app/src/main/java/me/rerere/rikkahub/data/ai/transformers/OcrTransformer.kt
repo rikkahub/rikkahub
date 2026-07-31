@@ -1,8 +1,15 @@
 package me.rerere.rikkahub.data.ai.transformers
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
+import androidx.core.net.toUri
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -86,6 +93,21 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
             return cachedResult
         }
 
+        // Local ML Kit OCR first: offline, free, stable. Falls back to AI OCR when empty.
+        val localResult = performLocalOcr(part.url)
+        if (!localResult.isNullOrBlank()) {
+            Log.i(TAG, "performOcr: using local ML Kit result")
+            val localOcrResult = """
+                <image_file_ocr>
+                   $localResult
+                </image_file_ocr>
+                * The image_file_ocr tag contains a description of an image that the user uploaded to you, not the user's prompt.
+            """.trimIndent()
+            cache.put(part.url, localOcrResult)
+            return localOcrResult
+        }
+        Log.i(TAG, "performOcr: local OCR empty, falling back to AI OCR")
+
         val settings = get<SettingsStore>().settingsFlow.value
         val model = settings.findModelById(settings.ocrModelId) ?: return "[Image]"
         val providerSetting = model.findProvider(settings.providers) ?: return "[Image]"
@@ -119,5 +141,40 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
         return ocrResult
     }.getOrElse {
         "[ERROR, OCR failed: $it]"
+    }
+
+    /**
+     * Local OCR via ML Kit. Chinese model + Latin model both run, results merged
+     * line-by-line (covers mixed CJK + Latin content). Returns null when nothing
+     * was recognized (e.g. model not downloaded yet or image decode failure),
+     * letting the caller fall back to the configured AI OCR model.
+     */
+    private suspend fun performLocalOcr(url: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val context = get<Context>()
+            val image: InputImage = when {
+                url.startsWith("file://") -> InputImage.fromFilePath(context, Uri.parse(url))
+                else -> return@runCatching null
+            }
+
+            val chinese = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
+            val latin = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+            try {
+                val chineseText = runCatching { chinese.process(image).await() }.getOrNull()?.text?.trim()
+                val latinText = runCatching { latin.process(image).await() }.getOrNull()?.text?.trim()
+
+                val combined = LinkedHashSet<String>()
+                listOfNotNull(chineseText, latinText).forEach { text ->
+                    text.lines().forEach { line ->
+                        val trimmed = line.trim()
+                        if (trimmed.isNotBlank()) combined.add(trimmed)
+                    }
+                }
+                combined.joinToString("\n").takeIf { it.isNotBlank() }
+            } finally {
+                chinese.close()
+                latin.close()
+            }
+        }.getOrNull()
     }
 }
