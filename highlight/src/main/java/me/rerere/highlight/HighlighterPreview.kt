@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.dp
 
 @Preview
 @Composable
-private fun KotlinHighlightTextPreview(
+private fun HighlightTextPreview(
     @PreviewParameter(HighlightPreviewProvider::class)
     sample: HighlightPreviewSample,
 ) {
@@ -20,7 +20,7 @@ private fun KotlinHighlightTextPreview(
         color = Color(0xFF282C34),
         contentColor = Color(0xFFABB2BF),
     ) {
-        KotlinHighlightText(
+        CodeHighlightText(
             code = sample.code,
             language = sample.language,
             modifier = Modifier.padding(16.dp),

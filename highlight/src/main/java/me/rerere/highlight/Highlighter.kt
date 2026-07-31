@@ -18,7 +18,7 @@ import me.rerere.highlight.languages.builtinLanguages
 
 private const val MAX_CODE_LENGTH = 4096
 
-val LocalKotlinHighlighter = staticCompositionLocalOf { KotlinHighlighter() }
+val LocalCodeHighlighter = staticCompositionLocalOf { CodeHighlighter() }
 
 /**
  * A pure Kotlin syntax highlighter.
@@ -26,7 +26,7 @@ val LocalKotlinHighlighter = staticCompositionLocalOf { KotlinHighlighter() }
  * Grammars are ported from highlight.js 11.11.1 and run on [HighlightEngine], a port of its mode
  * stack parser. An unsupported language is returned unhighlighted.
  */
-class KotlinHighlighter {
+class CodeHighlighter {
     private val engine = HighlightEngine(builtinLanguages())
 
     fun highlight(code: String, language: String): List<HighlightToken> {
@@ -40,7 +40,7 @@ class KotlinHighlighter {
 }
 
 @Composable
-fun KotlinHighlightText(
+fun CodeHighlightText(
     code: String,
     language: String,
     modifier: Modifier = Modifier,
@@ -55,7 +55,7 @@ fun KotlinHighlightText(
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
 ) {
-    val highlighter = LocalKotlinHighlighter.current
+    val highlighter = LocalCodeHighlighter.current
     val annotatedString = remember(code, language, colors, highlighter) {
         if (code.length > MAX_CODE_LENGTH) {
             AnnotatedString(code)

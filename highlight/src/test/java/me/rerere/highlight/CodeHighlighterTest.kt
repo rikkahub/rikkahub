@@ -11,8 +11,8 @@ import org.junit.Test
  * Per language behaviour is pinned against `highlight.js` by the fixture tests; this covers the
  * surface the app touches.
  */
-class KotlinHighlighterTest {
-    private val highlighter = KotlinHighlighter()
+class CodeHighlighterTest {
+    private val highlighter = CodeHighlighter()
 
     @Test
     fun `supports the aliases of every bundled language`() {

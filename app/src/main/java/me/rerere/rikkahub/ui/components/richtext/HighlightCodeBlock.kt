@@ -9,7 +9,6 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,8 +55,8 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import me.rerere.highlight.HighlightTextColorPalette
 import me.rerere.highlight.buildHighlightText
-import me.rerere.highlight.KotlinHighlightText
-import me.rerere.highlight.KotlinHighlighter
+import me.rerere.highlight.CodeHighlightText
+import me.rerere.highlight.CodeHighlighter
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
@@ -275,7 +274,7 @@ private fun CodeBlockWithLineNumbersWrapped(
                         softWrap = false,
                         modifier = Modifier.padding(end = 8.dp)
                     )
-                    KotlinHighlightText(
+                    CodeHighlightText(
                         code = line,
                         language = language,
                         fontSize = textStyle.fontSize,
@@ -335,7 +334,7 @@ private fun CodeBlockDefault(
 
         // 代码列
         SelectionContainer {
-            KotlinHighlightText(
+            CodeHighlightText(
                 code = displayCode,
                 language = language,
                 modifier = Modifier.animateContentSize(),
@@ -505,7 +504,7 @@ private fun buildCodePreviewHtml(code: String, language: String): String {
 
 class HighlightCodeVisualTransformation(
     val language: String,
-    val highlighter: KotlinHighlighter,
+    val highlighter: CodeHighlighter,
     val darkMode: Boolean
 ) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
