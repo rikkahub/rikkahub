@@ -1,0 +1,139 @@
+comment	<#\n
+doctag	.SYNOPSIS
+comment	\n    Collects service information.\n
+doctag	.PARAMETER Name
+comment	\n    The service name to look for.\n#>
+	\n\n
+keyword	using
+	 
+keyword	namespace
+	 System.Collections.Generic\n\n
+keyword	class
+class	 
+title	ServiceReport
+	 {\n    [
+built_in	string
+	]
+variable	$Name
+	\n    [
+built_in	int
+	]
+variable	$Count
+	 = 
+number	0
+	\n\n    
+function	[
+built_in	void
+function	] 
+title	Refresh
+	([
+built_in	string
+	]
+variable	$filter
+	) {\n        
+keyword	$this
+	.Count = (
+built_in	Get-Service
+	 
+literal	-Name
+	 
+variable	$filter
+	).Count\n    }\n}\n\n
+keyword	function
+function	 
+title	Get-ServiceReport
+	 {\n    
+keyword	param
+	(\n        [
+built_in	string
+	]
+variable	$Name
+	 = 
+string	"*"
+	,\n        [
+type	switch
+	]
+variable	$Detailed
+	\n    )\n\n    
+comment	# Skip anything that is not running.
+	\n    
+variable	$services
+	 = 
+built_in	Get-Service
+	 | 
+built_in	Where-Object
+	 { 
+variable	$_
+	.Status 
+operator	-eq
+	 
+string	'Running'
+	 }\n\n    
+variable	$summary
+	 = 
+selector-tag	@
+	{\n        Total   = 
+variable	$services
+	.Count\n        Machine = 
+variable	$env:COMPUTERNAME
+	\n        Ratio   = 
+number	0.75
+	\n    }\n\n    
+keyword	if
+	 (
+variable	$Detailed
+	 
+operator	-and
+	 
+variable	$services
+	.Count 
+operator	-gt
+	 
+number	100
+	) {\n        
+variable	$text
+	 = 
+string	@"\nFound 
+variable	$
+string	(
+variable	$services
+string	.Count) services on 
+variable	$
+string	(
+variable	$summary
+string	.Machine)\n"@
+	\n        
+built_in	Write-Host
+	 
+variable	$text
+	 `\n            
+literal	-ForegroundColor
+	 Green\n    }\n    
+keyword	else
+	 {\n        
+built_in	Write-Output
+	 
+string	'No details requested'
+	\n    }\n\n    
+keyword	return
+	 [
+type	PSCustomObject
+	]
+variable	$summary
+	\n}\n\n
+variable	$result
+	 = 
+built_in	Get-ServiceReport
+	 
+literal	-Name
+	 
+string	'win*'
+	 
+literal	-Detailed
+	\n
+variable	$result
+	 | 
+built_in	Format-Table
+	 
+literal	-AutoSize
+	\n

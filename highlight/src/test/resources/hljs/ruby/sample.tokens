@@ -1,0 +1,80 @@
+meta	#!/usr/bin/env ruby
+	\n\n
+comment	# 
+doctag	@param
+comment	 name [String]
+	\n
+keyword	module
+	 
+title.class	RikkaHub
+	\n  
+keyword	class
+	 
+title.class	User
+	 < 
+title.class.inherited	ApplicationRecord
+	\n    
+keyword	include
+	 
+title.class	Comparable
+	\n\n    
+variable.constant	DEFAULT_AGE
+	 = 
+number	18
+	\n    
+built_in	attr_reader
+	 
+symbol	:name
+	, 
+symbol	:age
+	\n\n    
+keyword	def
+	 
+title.function	initialize
+	(
+params	name, 
+symbol	age:
+params	 
+variable.constant	DEFAULT_AGE
+	)\n      
+variable	@name
+	 = name\n      
+variable	@age
+	 = age\n    
+keyword	end
+	\n\n    
+keyword	def
+	 
+title.function	greet
+	(
+params	prefix = 
+string	"Hello"
+	)\n      message = 
+string	"
+subst	#{prefix}
+string	, 
+subst	#{name}
+string	!"
+	\n      pattern = 
+regexp	%r{\\A[A-Z][a-z]+\\z}
+	\n      payload = 
+string	<<~TEXT\n        user: 
+subst	#{name}
+string	\n        age: 
+subst	#{age}
+string	\n      TEXT
+	\n\n      puts payload 
+keyword	if
+	 pattern.match?(name)\n      message\n    
+keyword	end
+	\n  
+keyword	end
+	\n
+keyword	end
+	\n\nusers = [
+title.class	RikkaHub::User
+	.new(
+string	"Rikka"
+	)]\nusers.each { |
+params	user
+	| puts user.greet }\n

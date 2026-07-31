@@ -1,0 +1,12 @@
+# syntax comment
+FROM eclipse-temurin:21-jdk AS build
+MAINTAINER rikka
+ARG VERSION=2
+ENV GRADLE_OPTS="-Xmx2g"
+WORKDIR /workspace
+COPY . .
+RUN ./gradlew --no-daemon assembleRelease && \
+    rm -rf ~/.gradle/caches
+EXPOSE 8080
+USER 1000
+CMD ["java", "-jar", "app.jar"]

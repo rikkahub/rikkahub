@@ -1,0 +1,78 @@
+keyword	package
+	 me.rerere.demo\n\n
+keyword	import
+	 kotlinx.coroutines.delay\n\n
+comment	/**\n * A tiny chat session.\n *\n * 
+doctag	@author
+comment	 Rikka\n */
+	\n
+keyword	class
+	 
+title.class	ChatSession
+	(
+keyword	private
+	 
+keyword	val
+	 model: String) {\n    
+keyword	var
+	 history: MutableList<String> = mutableListOf()\n        
+keyword	private
+	 
+keyword	set
+	\n\n    
+keyword	suspend
+	 
+keyword	fun
+function	 
+title	send
+params	(prompt: 
+type	String
+params	, retries: 
+type	Int
+params	 = 
+number	3
+params	)
+	: String {\n        require(prompt.isNotBlank()) { 
+string	"empty prompt"
+	 }\n        repeat(retries) { attempt ->\n            delay(
+number	100L
+	 * attempt)\n        }\n        history += prompt\n        
+keyword	return
+	 
+string	"
+variable	$model
+string	: 
+variable	$prompt
+string	"
+	\n    }\n\n    
+keyword	companion
+	 
+keyword	object
+	 {\n        
+keyword	const
+	 
+keyword	val
+	 MAX_TOKENS = 
+number	4_096
+	\n        
+keyword	private
+	 
+keyword	const
+	 
+keyword	val
+	 TEMPERATURE = 
+number	0.7
+	\n    }\n}\n\n
+keyword	fun
+function	 
+title	main
+params	()
+	 {\n    
+keyword	val
+	 session = ChatSession(
+string	"opus"
+	)\n    println(
+string	"hello, 
+subst	${session.model}
+string	"
+	)\n}\n

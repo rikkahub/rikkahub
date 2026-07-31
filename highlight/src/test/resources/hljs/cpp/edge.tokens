@@ -1,0 +1,329 @@
+meta	#
+keyword	pragma
+meta	 once
+	\n\n
+meta	#
+keyword	include
+meta	 
+string	<cstdint>
+	\n
+meta	#
+keyword	include
+meta	 
+string	<optional>
+	\n
+meta	#
+keyword	include
+meta	 
+string	<unordered_map>
+	\n
+meta	#
+keyword	include
+meta	 
+string	<vector>
+	\n\n
+keyword	template
+	 <
+keyword	typename
+	 T, 
+keyword	typename
+	 U = std::
+type	uint32_t
+	>\n
+keyword	struct
+	 Pair {\n    T first;\n    U second;\n};\n\n
+keyword	enum class
+	 
+title.class	Color
+	 : std::
+type	uint8_t
+	 { Red, Green, Blue };\n\n
+keyword	enum
+	 
+title.class	Legacy
+	 { LEGACY_A, LEGACY_B };\n\n
+keyword	union
+	 
+title.class	Value
+	 {\n    std::
+type	int64_t
+	 i;\n    
+type	double
+	 d;\n};\n\n
+keyword	constexpr
+	 
+keyword	auto
+	 kMask = 
+number	0xDEAD'BEEFu
+	;\n
+keyword	constexpr
+	 
+keyword	auto
+	 kBinary = 
+number	0b1010'1010
+	;\n
+keyword	constexpr
+	 
+keyword	auto
+	 kOctal = 
+number	0755
+	;\n
+keyword	constexpr
+	 
+keyword	auto
+	 kBig = 
+number	1'000'000LL
+	;\n
+keyword	constexpr
+	 
+keyword	auto
+	 kUnsigned = 
+number	42ULL
+	;\n
+keyword	constexpr
+	 
+keyword	auto
+	 kSize = 
+number	7uz
+	;\n
+keyword	constexpr
+	 
+keyword	auto
+	 kFloat = 
+number	3.14f
+	;\n
+keyword	constexpr
+	 
+keyword	auto
+	 kHalf = 
+number	.5
+	;\n
+keyword	constexpr
+	 
+keyword	auto
+	 kExp = 
+number	1e-3
+	;\n
+keyword	constexpr
+	 
+keyword	auto
+	 kHexFloat = 
+number	0x1.8p3
+	;\n
+keyword	constexpr
+	 
+keyword	auto
+	 kFloat128 = 
+number	1.0f128
+	;\n
+keyword	constexpr
+	 
+keyword	auto
+	 kBrainFloat = 
+number	1.0bf16
+	;\n\n
+type	const
+	 
+type	char
+	 kChar = 
+string	'a'
+	;\n
+type	const
+	 
+type	char
+	 kEscape = 
+string	'\\n'
+	;\n
+type	const
+	 
+type	char
+	 kHexChar = 
+string	'\\x41'
+	;\n
+type	const
+	 
+type	char
+	 kOctChar = 
+string	'\\101'
+	;\n
+type	const
+	 
+type	wchar_t
+	 kWide = 
+string	L'w'
+	;\n\n
+type	const
+	 
+type	char
+	 *kUtf8 = 
+string	u8"utf-8"
+	;\n
+type	const
+	 
+type	char16_t
+	 *kUtf16 = 
+string	u"utf-16"
+	;\n
+type	const
+	 
+type	char32_t
+	 *kUtf32 = 
+string	U"utf-32"
+	;\n
+type	const
+	 
+type	wchar_t
+	 *kWideStr = 
+string	L"wide"
+	;\n
+type	const
+	 
+type	char
+	 *kRaw = 
+string	R"(no \\n escapes here)"
+	;\n
+type	const
+	 
+type	char
+	 *kDelimited = 
+string	R"sql(SELECT )" FROM t)sql"
+	;\n\nstd::unordered_map<
+type	int
+	, std::string> lookup;\n
+function	std::vector<
+type	int
+function	> 
+title	rooms
+function	 
+params	(
+number	9
+params	)
+	;\n\n
+keyword	decltype
+function	(
+keyword	auto
+function	) 
+title	identity
+params	(
+type	int
+params	 &value)
+function	 
+	{ 
+keyword	return
+	 (value); }\n\n
+keyword	template
+	 <
+keyword	typename
+	... Args>\n
+keyword	constexpr
+function	 
+keyword	auto
+function	 
+title	sum
+params	(Args... args)
+function	 
+	{\n    
+keyword	return
+	 (args + ... + 
+number	0
+	);\n}\n\n
+keyword	class
+	 
+title.class	Widget
+	 
+keyword	final
+	 : 
+keyword	public
+	 Pair<
+type	int
+	, 
+type	int
+	> {\n
+keyword	public
+	:\n    
+built_in	Widget
+	() : Pair<
+type	int
+	, 
+type	int
+	>{
+number	0
+	, 
+number	0
+	}, 
+built_in	name_
+	(
+string	"widget"
+	) {}\n\n    
+keyword	virtual
+	 ~
+built_in	Widget
+	() = 
+keyword	default
+	;\n\n    [[nodiscard]] 
+type	const
+function	 std::string &
+title	name
+params	()
+function	 
+type	const
+function	 
+keyword	noexcept
+function	 
+	{ 
+keyword	return
+	 name_; }\n\n
+keyword	private
+	:\n    std::string name_;\n};\n\n
+type	int
+function	 
+title	main
+params	()
+function	 
+	{\n    
+keyword	auto
+	 doubler = [&](
+type	int
+	 x) 
+keyword	noexcept
+	 { 
+keyword	return
+	 x * 
+number	2
+	; };\n    
+built_in	static_assert
+	(
+built_in	sizeof
+	(std::
+type	int64_t
+	) == 
+number	8
+	, 
+string	"unexpected width"
+	);\n\n    std::optional<
+type	int
+	> maybe = std::
+literal	nullopt
+	;\n    
+keyword	if
+	 (!maybe.
+built_in	has_value
+	()) {\n        maybe = 
+built_in	doubler
+	(
+number	21
+	);\n    }\n\n    
+keyword	return
+	 
+built_in	sum
+	(
+number	1
+	, 
+number	2
+	, 
+number	3
+	) + maybe.
+built_in	value_or
+	(
+number	0
+	);\n}\n

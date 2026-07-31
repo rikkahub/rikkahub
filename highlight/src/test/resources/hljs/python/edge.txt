@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+# type: ignore
+"""Doctests, string prefixes and every numeric literal.
+
+>>> add(1, 2)
+3
+... still the same prompt
+"""
+
+import re
+
+
+def add(left, right):
+    # type: (int, int) -> int
+    return left + right
+
+
+def empty():
+    pass
+
+
+def 计算(值, 倍数=2):
+    """Names may be written in any script."""
+    return 值 * 倍数
+
+
+class Base:
+    pass
+
+
+class Derived(Base):
+    标记 = "ok"
+
+
+PLAIN = 'single'
+UNICODE = u"unicode"
+RAW = r"raw\nnot escaped"
+BYTES = b'bytes'
+RAW_BYTES = br'\x00'
+BYTES_RAW = rb"\x00"
+FSTRING = f"{PLAIN} and {{literal}}"
+FRAW = rf'{PLAIN}'
+FRAW2 = fr"{PLAIN}"
+BLOCK = '''triple
+single'''
+FBLOCK = f"""
+{PLAIN} {{brace}}
+"""
+
+DEC = 1_000_000
+ZEROS = 0000
+HEX = 0xCAFE_BABE
+OCT = 0o755
+BIN = 0b1010_1010
+LONG = 42L
+IMAG = 3.5j
+IMAG2 = 12j
+EXP = 1_0.5e-3
+POINT = .5
+TRAILING = 10.
+NEG = -0.5e+10
+
+
+def classify(value):
+    match value:
+        case 0:
+            return "zero"
+        case [first, *rest]:
+            return first
+        case _:
+            return value
+
+
+def counter():
+    total = 0
+
+    def bump(step=1):
+        nonlocal total
+        total += step
+        return total
+
+    return bump
+
+
+square = lambda n: n * n
+pairs = {name: len(name) for name in ("a", "bb")}
+matched = re.match("^a+", "aaa") is not None

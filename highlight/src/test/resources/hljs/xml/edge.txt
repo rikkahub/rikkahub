@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE note SYSTEM "note.dtd" [
+  <!ENTITY author "Rikka">
+  <!ELEMENT note (to, from, body)>
+  <!ATTLIST note id ID #REQUIRED>
+]>
+<?xml-stylesheet type="text/xsl" href="note.xsl"?>
+<rss xmlns:content="http://purl.org/rss/1.0/modules/content/" version="2.0">
+  <content:encoded><![CDATA[<p>raw & unescaped <b>markup</b></p>]]></content:encoded>
+  <note:标题 xml:lang="zh">中文标签名</note:标题>
+  <_private data-x=bare attr = "spaced" flag/>
+  <ns:item ns:key='single' />
+  <empty/>
+  <>fragment</>
+  <p>2 &lt; 3 &amp;&amp; 4 &gt; 1</p>
+  <!-- TODO: 补充更多字段 -->
+</rss>

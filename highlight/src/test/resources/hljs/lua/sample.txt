@@ -1,0 +1,26 @@
+local User = {}
+User.__index = User
+
+--[=[
+This is a long comment with [[nested brackets]].
+]=]
+
+function User:new(name, age)
+  local instance = {
+    name = name,
+    age = age or 18,
+    active = true,
+  }
+  return setmetatable(instance, self)
+end
+
+function User:greet()
+  local message = [==[
+Hello from a long string.
+]==]
+  print(message .. " " .. self.name)
+end
+
+for index, user in ipairs(users) do
+  print(index, user.name, 0xCAFE, 1.5e-2)
+end

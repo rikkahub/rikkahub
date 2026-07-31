@@ -1,0 +1,49 @@
+#!/usr/bin/env kotlin
+
+@file:JvmName("Edge")
+
+package me.rerere.edge
+
+import kotlin.reflect.KClass
+
+@Target(AnnotationTarget.CLASS)
+annotation class Marker(val name: String = "x")
+
+@Marker(name = "sealed")
+sealed interface Result<out T>
+
+data class Ok<T>(val value: T) : Result<T>
+
+object Empty : Result<Nothing>
+
+typealias Handler = (Result<String>) -> Unit
+
+inline fun <reified T : Any> parse(raw: String, noinline onError: (Throwable) -> Unit = {}): T? {
+    return try {
+        raw as? T
+    } catch (error: ClassCastException) {
+        onError(error)
+        null
+    } finally {
+        println("done")
+    }
+}
+
+val RAW = """
+    triple "quoted" with $notATemplate and ${'$'} escaped
+"""
+
+fun label() {
+    outer@ for (index in 0..10) {
+        if (index % 2 == 0) continue@outer
+        if (index > 7) break@outer
+    }
+}
+
+const val HEX = 0xFF
+const val BIN = 0b1010
+const val BIG = 1_000_000L
+const val LETTER = 'k'
+
+/* nested /* comment */ still a comment */
+val done = true

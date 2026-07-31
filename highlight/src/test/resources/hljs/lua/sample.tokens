@@ -1,0 +1,60 @@
+keyword	local
+	 User = {}\nUser.
+built_in	__index
+	 = User\n\n
+comment	--[=[\nThis is a long comment with [[nested brackets]].\n]=]
+	\n\n
+keyword	function
+function	 
+title	User:new
+params	(name, age)
+	\n  
+keyword	local
+	 instance = {\n    name = name,\n    age = age 
+keyword	or
+	 
+number	18
+	,\n    active = 
+literal	true
+	,\n  }\n  
+keyword	return
+	 
+built_in	setmetatable
+	(instance, 
+built_in	self
+	)\n
+keyword	end
+	\n\n
+keyword	function
+function	 
+title	User:greet
+params	()
+	\n  
+keyword	local
+	 message = 
+string	[==[\nHello from a long string.\n]==]
+	\n  
+built_in	print
+	(message .. 
+string	" "
+	 .. 
+built_in	self
+	.name)\n
+keyword	end
+	\n\n
+keyword	for
+	 index, user 
+keyword	in
+	 
+built_in	ipairs
+	(users) 
+keyword	do
+	\n  
+built_in	print
+	(index, user.name, 
+number	0xCAFE
+	, 
+number	1.5e-2
+	)\n
+keyword	end
+	\n

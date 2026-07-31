@@ -1,0 +1,32 @@
+comment	Index: src/main.c
+	\n
+comment	===================================================================
+	\n
+comment	*** src/main.c\t2024-01-01 00:00:00.000000000 +0000
+	\n
+comment	--- src/main.c\t2024-06-01 00:00:00.000000000 +0000
+	\n
+comment	***************
+	\n
+meta	*** 1,6 ****
+	\n  #include <stdio.h>\n\n
+addition	! int main(void)
+	\n  {\n
+deletion	-     puts("old");
+	\n      return 0;\n
+meta	--- 1,7 ----
+	\n  #include <stdio.h>\n\n
+addition	! int main(int argc, char **argv)
+	\n  {\n
+addition	+     puts("new");
+	\n      return 0;\n
+comment	=======
+	\n
+comment	+++ b/other.c
+	\n
+meta	@@ -10,3 +12,4 @@
+	 static void helper(void)\n context line\n
+deletion	-removed
+	\n
+addition	+added
+	\n

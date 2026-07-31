@@ -1,0 +1,117 @@
+meta	#
+keyword	include
+meta	 
+string	<iostream>
+	\n
+meta	#
+keyword	include
+meta	 
+string	<memory>
+	\n
+meta	#
+keyword	include
+meta	 
+string	<string>
+	\n
+meta	#
+keyword	include
+meta	 
+string	<vector>
+	\n\n
+keyword	namespace
+	 chat {\n\n
+keyword	class
+	 
+title.class	Session
+	 {\n
+keyword	public
+	:\n    
+keyword	explicit
+function	 
+title	Session
+params	(std::string model)
+function	 : model_(std::move(model)) {
+	}\n\n    
+type	void
+function	 
+title	append
+params	(
+type	const
+params	 std::string &role, 
+type	const
+params	 std::string &content)
+function	 
+	{\n        history_.
+built_in	emplace_back
+	(role + 
+string	": "
+	 + content);\n    }\n\n    
+function	std::
+type	size_t
+function	 
+title	size
+params	()
+function	 
+type	const
+function	 
+keyword	noexcept
+function	 
+	{ 
+keyword	return
+	 history_.
+built_in	size
+	(); }\n\n    
+type	const
+function	 std::vector<std::string> &
+title	history
+params	()
+function	 
+type	const
+function	 
+	{ 
+keyword	return
+	 history_; }\n\n
+keyword	private
+	:\n    std::string model_;\n    std::vector<std::string> history_;\n};\n\n}  
+comment	// namespace chat
+	\n\n
+type	int
+function	 
+title	main
+params	()
+function	 
+	{\n    
+keyword	auto
+	 session = std::
+built_in	make_unique
+	<chat::Session>(
+string	"claude-opus-5"
+	);\n    session->
+built_in	append
+	(
+string	"user"
+	, 
+string	"hello"
+	);\n    session->
+built_in	append
+	(
+string	"assistant"
+	, 
+string	"hi there"
+	);\n\n    
+keyword	for
+	 (
+type	const
+	 
+keyword	auto
+	 &line : session->
+built_in	history
+	()) {\n        std::cout << line << std::endl;\n    }\n\n    
+keyword	return
+	 
+built_in	static_cast
+	<
+type	int
+	>(session->
+built_in	size
+	());\n}\n

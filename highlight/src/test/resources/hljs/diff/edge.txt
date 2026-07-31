@@ -1,0 +1,25 @@
+Index: src/main.c
+===================================================================
+*** src/main.c	2024-01-01 00:00:00.000000000 +0000
+--- src/main.c	2024-06-01 00:00:00.000000000 +0000
+***************
+*** 1,6 ****
+  #include <stdio.h>
+
+! int main(void)
+  {
+-     puts("old");
+      return 0;
+--- 1,7 ----
+  #include <stdio.h>
+
+! int main(int argc, char **argv)
+  {
++     puts("new");
+      return 0;
+=======
++++ b/other.c
+@@ -10,3 +12,4 @@ static void helper(void)
+ context line
+-removed
++added

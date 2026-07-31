@@ -1,0 +1,65 @@
+keyword	import
+	 
+string	'dart:async'
+	;\n\n
+comment	/// A tiny [highlight.js] parity fixture.
+	\n
+meta	@immutable
+	\n
+keyword	class
+class	 
+title	Greeting
+class	 
+keyword	implements
+class	 
+title	Comparable
+class	<
+title	Greeting
+class	> 
+	{\n  
+keyword	final
+	 
+built_in	String?
+	 name;\n  
+keyword	const
+	 Greeting(
+keyword	this
+	.name);\n\n  
+meta	@override
+	\n  
+built_in	int
+	 compareTo(Greeting other) => (name ?? 
+string	''
+	).compareTo(other.name ?? 
+string	''
+	);\n\n  
+built_in	String
+	 render(
+built_in	int
+	 count) {\n    
+keyword	final
+	 hex = 
+number	0xCA_FE
+	;\n    
+keyword	final
+	 value = 
+number	1_024.5e-2
+	;\n    
+keyword	final
+	 raw = 
+string	r'$name stays raw'
+	;\n    
+keyword	return
+	 
+string	'''Hello 
+subst	${name ?? 
+string	'world'
+subst	}
+string	!\ncount: 
+subst	$count
+string	, value: 
+subst	$value
+string	, hex: 
+subst	$hex
+string	'''
+	;\n  }\n}\n

@@ -1,0 +1,20 @@
+comment	diff --git a/highlight/README.md b/highlight/README.md
+	\n
+comment	index 1a2b3c4..5d6e7f8 100644
+	\n
+comment	--- a/highlight/README.md
+	\n
+comment	+++ b/highlight/README.md
+	\n
+meta	@@ -1,7 +1,8 @@
+	\n # highlight\n\n
+deletion	-A Prism based highlighter.
+	\n
+addition	+A pure Kotlin highlighter.
+	\n
+addition	+Grammars are ported from highlight.js.
+	\n\n ## Usage\n\n
+deletion	-    KotlinHighlightText(code, "kotlin")
+	\n
+addition	+    KotlinHighlightText(code = code, language = "kotlin")
+	\n

@@ -1,0 +1,131 @@
+keyword	package
+	 com.example.chat;\n\n
+keyword	import
+	 java.util.List;\n
+keyword	import
+	 java.util.Map;\n\n
+comment	/**\n * A tiny chat session.\n *\n * 
+doctag	TODO:
+comment	 support streaming replies.\n * Questions go to rikka@example.com, not to the tracker.\n *\n * 
+doctag	@author
+comment	 Rikka\n * 
+doctag	@since
+comment	 1.0\n */
+	\n
+keyword	public
+	 
+keyword	final
+	 
+keyword	class
+	 
+title.class	ChatSession
+	 
+keyword	implements
+	 
+title.class	AutoCloseable
+	 {\n    
+keyword	private
+	 
+keyword	static
+	 
+keyword	final
+	 
+type	int
+	 
+variable	MAX_TOKENS
+	 
+operator	=
+	 
+number	4_096
+	;\n    
+keyword	private
+	 
+keyword	static
+	 
+keyword	final
+	 
+type	double
+	 
+variable	TEMPERATURE
+	 
+operator	=
+	 
+number	0.7
+	;\n\n    
+keyword	private
+	 
+keyword	final
+	 String model;\n    
+keyword	private
+	 
+keyword	final
+	 List<Map<String, String>> history;\n\n    
+keyword	public
+	 
+title.function	ChatSession
+params	(String model, List<Map<String, String>> history)
+	 {\n        
+built_in	this
+	.model = model;\n        
+built_in	this
+	.history = history;\n    }\n\n    
+meta	@Override
+	\n    
+keyword	public
+	 
+keyword	void
+	 
+title.function	close
+params	()
+	 {\n        history.clear();\n    }\n\n    
+comment	// Sends one message and returns the reply.
+	\n    
+keyword	public
+	 String 
+title.function	send
+params	(String prompt)
+	 
+keyword	throws
+	 IllegalStateException {\n        
+keyword	if
+	 (prompt == 
+literal	null
+	 || prompt.isBlank()) {\n            
+keyword	throw
+	 
+keyword	new
+	 
+title.class	IllegalStateException
+	(
+string	"empty prompt"
+	);\n        }\n        
+type	char
+	 
+variable	marker
+	 
+operator	=
+	 
+string	':'
+	;\n        
+type	boolean
+	 
+variable	shout
+	 
+operator	=
+	 marker == 
+string	'!'
+	;\n        
+type	long
+	 
+variable	started
+	 
+operator	=
+	 System.nanoTime();\n        
+keyword	for
+	 (Map<String, String> turn : history) {\n            System.out.println(turn.get(
+string	"content"
+	));\n        }\n        
+keyword	return
+	 
+string	"%s%c %s"
+	.formatted(model, marker, prompt);\n    }\n}\n

@@ -1,0 +1,20 @@
+#version 450 core
+
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec2 texCoord;
+layout(binding = 0) uniform sampler2D albedo;
+
+out vec4 fragmentColor;
+
+void main()
+{
+    vec3 normal = normalize(cross(dFdx(position), dFdy(position)));
+    vec4 color = texture(albedo, texCoord);
+
+    if (color.a < 0.01) {
+        discard;
+    }
+
+    fragmentColor = vec4(color.rgb * abs(normal.z), 1.0);
+    gl_Position = vec4(position, 1.0);
+}

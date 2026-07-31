@@ -1,0 +1,60 @@
+"""Small chat session helper."""
+
+from __future__ import annotations
+
+import asyncio
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+DEFAULT_MODEL = "claude-opus-5"
+MAX_TOKENS = 4_096
+TEMPERATURE = 0.7
+
+
+@dataclass
+class ChatSession:
+    """A single conversation with one assistant."""
+
+    model: str = DEFAULT_MODEL
+    history: List[Dict[str, str]] = field(default_factory=list)
+    _closed: bool = False
+
+    def append(self, role: str, content: str) -> None:
+        if not content:
+            return
+        self.history.append({"role": role, "content": content})
+
+    async def ask(self, prompt: str, retries: int = 3) -> Optional[str]:
+        self.append("user", prompt)
+        for attempt in range(retries):
+            try:
+                reply = await self._send(prompt)
+            except TimeoutError:
+                await asyncio.sleep(0.5 * attempt)
+                continue
+            else:
+                self.append("assistant", reply)
+                return reply
+        return None
+
+    async def _send(self, prompt: str) -> str:
+        await asyncio.sleep(0)
+        return f"{self.model}: {prompt}"
+
+    def summary(self) -> str:
+        roles = [message["role"] for message in self.history]
+        return ", ".join(roles) or "empty"
+
+    @staticmethod
+    def describe(payload: Any) -> str:
+        # A plain comment, and a TODO: doctag inside it.
+        return repr(payload)
+
+
+def main() -> None:
+    session = ChatSession(model=DEFAULT_MODEL)
+    print(session.summary())
+
+
+if __name__ == "__main__":
+    main()

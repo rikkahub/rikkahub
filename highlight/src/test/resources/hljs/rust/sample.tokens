@@ -1,0 +1,179 @@
+keyword	use
+	 std::collections::HashMap;\n
+keyword	use
+	 std::fmt;\n\n
+comment	/// A chat participant.
+	\n
+meta	#[derive(Debug, Clone, PartialEq)]
+	\n
+keyword	pub
+	 
+keyword	struct
+	 
+title.class	User
+	 {\n    
+keyword	pub
+	 name: 
+type	String
+	,\n    
+keyword	pub
+	 age: 
+type	u8
+	,\n}\n\n
+keyword	impl
+	 
+title.class	User
+	 {\n    
+keyword	pub
+	 
+keyword	fn
+	 
+title.function	new
+	(name: &
+type	str
+	, age: 
+type	u8
+	) 
+punctuation	->
+	 
+keyword	Self
+	 {\n        
+keyword	Self
+	 {\n            name: name.
+title.function.invoke	to_string
+	(),\n            age,\n        }\n    }\n\n    
+keyword	pub
+	 
+keyword	fn
+	 
+title.function	greet
+	(&
+keyword	self
+	) 
+punctuation	->
+	 
+type	String
+	 {\n        
+built_in	format!
+	(
+string	"Hello, {}!"
+	, 
+keyword	self
+	.name)\n    }\n}\n\n
+keyword	impl
+	 
+title.class	fmt
+	::Display 
+keyword	for
+	 
+title.class	User
+	 {\n    
+keyword	fn
+	 
+title.function	fmt
+	(&
+keyword	self
+	, f: &
+keyword	mut
+	 fmt::Formatter) 
+punctuation	->
+	 fmt::
+type	Result
+	 {\n        
+built_in	write!
+	(f, 
+string	"{} ({})"
+	, 
+keyword	self
+	.name, 
+keyword	self
+	.age)\n    }\n}\n\n
+keyword	trait
+	 
+title.class	Greeter
+	 {\n    
+keyword	fn
+	 
+title.function	greeting
+	(&
+keyword	self
+	) 
+punctuation	->
+	 
+type	String
+	;\n}\n\n
+keyword	enum
+	 
+title.class	Role
+	 {\n    User,\n    Assistant,\n}\n\n
+keyword	fn
+	 
+title.function	main
+	() {\n    
+keyword	let
+	 
+keyword	mut 
+variable	counts
+	: HashMap<
+type	String
+	, 
+type	usize
+	> = HashMap::
+title.function.invoke	new
+	();\n    
+keyword	let
+	 
+variable	users
+	 = 
+built_in	vec!
+	[User::
+title.function.invoke	new
+	(
+string	"Rikka"
+	, 
+number	18
+	), User::
+title.function.invoke	new
+	(
+string	"Rerere"
+	, 
+number	20
+	)];\n\n    
+keyword	for
+	 
+variable	user
+	 
+keyword	in
+	 &users {\n        *counts.
+title.function.invoke	entry
+	(user.name.
+title.function.invoke	clone
+	()).
+title.function.invoke	or_insert
+	(
+number	0
+	) += 
+number	1
+	;\n        
+built_in	println!
+	(
+string	"{}"
+	, user.
+title.function.invoke	greet
+	());\n    }\n\n    
+keyword	match
+	 users.
+title.function.invoke	first
+	() {\n        
+title.function.invoke	Some
+	(first) => 
+built_in	println!
+	(
+string	"first = {}"
+	, first),\n        
+literal	None
+	 => 
+built_in	eprintln!
+	(
+string	"nobody here"
+	),\n    }\n}\n

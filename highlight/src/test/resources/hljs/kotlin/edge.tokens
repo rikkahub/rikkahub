@@ -1,0 +1,154 @@
+meta	#!/usr/bin/env kotlin
+	\n\n
+meta	@file:JvmName
+	(
+string	"Edge"
+	)\n\n
+keyword	package
+	 me.rerere.edge\n\n
+keyword	import
+	 kotlin.reflect.KClass\n\n
+meta	@Target(AnnotationTarget.CLASS)
+	\n
+keyword	annotation
+	 
+keyword	class
+	 
+title.class	Marker
+	(
+keyword	val
+	 name: String = 
+string	"x"
+	)\n\n
+meta	@Marker(name = 
+string	"sealed"
+meta	)
+	\n
+keyword	sealed
+	 
+keyword	interface
+	 
+title.class	Result
+	<
+type	out T
+	>\n\n
+keyword	data
+	 
+keyword	class
+	 
+title.class	Ok
+	<
+type	T
+	>(
+keyword	val
+	 value: T) : Result<T>\n\n
+keyword	object
+	 Empty : Result<
+built_in	Nothing
+	>\n\n
+keyword	typealias
+	 Handler = (Result<String>) -> 
+built_in	Unit
+	\n\n
+keyword	inline
+	 
+keyword	fun
+function	 
+type	<
+keyword	reified
+type	 T : Any>
+function	 
+title	parse
+params	(raw: 
+type	String
+params	, 
+keyword	noinline
+params	 onError: (
+type	Throwable
+params	) -> 
+type	Unit
+params	 = {})
+	: T? {\n    
+keyword	return
+	 
+keyword	try
+	 {\n        raw 
+keyword	as
+	? T\n    } 
+keyword	catch
+	 (error: ClassCastException) {\n        onError(error)\n        
+literal	null
+	\n    } 
+keyword	finally
+	 {\n        println(
+string	"done"
+	)\n    }\n}\n\n
+keyword	val
+	 RAW = 
+string	"""\n    triple "quoted" with 
+variable	$notATemplate
+string	 and 
+subst	${
+string	'$'
+subst	}
+string	 escaped\n"""
+	\n\n
+keyword	fun
+function	 
+title	label
+params	()
+	 {\n    
+symbol	outer@
+	 
+keyword	for
+	 (index 
+keyword	in
+	 
+number	0..10
+	) {\n        
+keyword	if
+	 (index % 
+number	2
+	 == 
+number	0
+	) 
+keyword	continue
+symbol	@outer
+	\n        
+keyword	if
+	 (index > 
+number	7
+	) 
+keyword	break
+symbol	@outer
+	\n    }\n}\n\n
+keyword	const
+	 
+keyword	val
+	 HEX = 
+number	0xFF
+	\n
+keyword	const
+	 
+keyword	val
+	 BIN = 
+number	0b1010
+	\n
+keyword	const
+	 
+keyword	val
+	 BIG = 
+number	1_000_000L
+	\n
+keyword	const
+	 
+keyword	val
+	 LETTER = 
+string	'k'
+	\n\n
+comment	/* nested /* comment */ still a comment */
+	\n
+keyword	val
+	 done = 
+literal	true
+	\n
