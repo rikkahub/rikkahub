@@ -1,17 +1,16 @@
 package me.rerere.rikkahub.data.ai.transformers
 
-import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
-import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceShellStatus
 
 /**
- * Workspace 系统提示注入转换器
+ * Workspace 上下文注入转换器
  *
- * 当助手绑定了一个 shell 已就绪的 workspace 时, 在系统提示词中追加一段引导,
+ * 当助手绑定了一个 shell 已就绪的 workspace 时，在用户消息体中注入一段引导，
  * 让模型了解 workspace 环境与 workspace_* 工具的使用方式。
+ * 注入到用户消息末尾而非系统提示，以保持系统前缀字节稳定，命中 DeepSeek 前缀缓存。
  */
 class WorkspaceReminderTransformer(
     private val workspaceRepository: WorkspaceRepository,
@@ -27,15 +26,12 @@ class WorkspaceReminderTransformer(
 
         val prompt = buildWorkspacePrompt(workspace, ctx.workspaceCwd)
 
-        // 追加到第一条 system 消息; 若不存在则插入一条
-        val systemIndex = messages.indexOfFirst { it.role == MessageRole.SYSTEM }
-        return if (systemIndex >= 0) {
-            messages.toMutableList().apply {
-                this[systemIndex] = this[systemIndex].appendText("\n\n$prompt")
-            }
-        } else {
-            listOf(UIMessage.system(prompt)) + messages
-        }
+        // 注入到用户消息体末尾（而非系统提示），保持系统前缀字节稳定以命中 DeepSeek 前缀缓存
+        // 参考 Reasonix 的 "turn-tail injection" 模式：动态上下文通过用户消息传递
+        val workspaceReminder = UIMessage.user("<workspace_reminder>\n$prompt\n</workspace_reminder>")
+        
+        // 找到最后一条现有消息之后的位置插入
+        return messages + workspaceReminder
     }
 }
 
@@ -55,16 +51,4 @@ private fun buildWorkspacePrompt(workspace: WorkspaceEntity, cwd: String? = null
         appendLine("- Current working directory: `$cwd`. Use this as the default context for file operations and shell commands.")
     }
     append("</workspace>")
-}
-
-private fun UIMessage.appendText(extra: String): UIMessage {
-    val updatedParts = parts.toMutableList()
-    val firstTextIndex = updatedParts.indexOfFirst { it is UIMessagePart.Text }
-    if (firstTextIndex >= 0) {
-        val text = updatedParts[firstTextIndex] as UIMessagePart.Text
-        updatedParts[firstTextIndex] = text.copy(text = text.text + extra)
-    } else {
-        updatedParts.add(UIMessagePart.Text(extra))
-    }
-    return copy(parts = updatedParts)
 }

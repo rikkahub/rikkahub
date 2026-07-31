@@ -50,6 +50,12 @@ data class Assistant(
     val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
+    // ---- 自动上下文压缩 ----
+    val autoCompactEnabled: Boolean = false,              // 启用自动上下文压缩
+    val softCompactTokenRatio: Float = 0.5f,              // 软阈值：提示词占比超过此值时空闲时触发压缩
+    val forceCompactTokenRatio: Float = 0.8f,             // 强制阈值：超过此值时立即强制压缩
+    val idleCompactDelaySeconds: Int = 30,                // 空闲延迟秒数：用户停止输入后等待N秒触发软压缩
+    val compactModelId: Uuid? = null,                     // 压缩使用的模型 ID，为 null 时回退到聊天模型
 )
 
 @Serializable

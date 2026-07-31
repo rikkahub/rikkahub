@@ -36,6 +36,7 @@ import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.files.FileFolders
 import java.io.File
+import java.security.MessageDigest
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
@@ -52,13 +53,16 @@ import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
 private const val TAG = "GenerationHandler"
+private const val CACHE_TAG = "CacheTracker"
 private const val MAX_TOOL_OUTPUT_CHARS = 32 * 1024
 private const val TOOL_OUTPUT_PREVIEW_CHARS = 4 * 1024
 
 @Serializable
 sealed interface GenerationChunk {
     data class Messages(
-        val messages: List<UIMessage>
+        val messages: List<UIMessage>,
+        val compactionLevel: CompactionLevel = CompactionLevel.NONE,
+        val transitionMessage: String? = null,
     ) : GenerationChunk
 }
 
@@ -68,6 +72,21 @@ class GenerationHandler(
     private val json: Json,
     private val memoryRepo: MemoryRepository,
 ) {
+    // 会话级系统提示哈希缓存：避免每轮重建导致 DeepSeek 前缀缓存失效
+    private var lastSystemHash: String? = null
+    // 会话级缓存命中追踪
+    private var sessionCacheHitTokens: Long = 0
+    private var sessionCacheMissTokens: Long = 0
+    // 过渡语缓存：避免每次 generateText() 调用重建 ContextCompactor 时重新生成
+    // keyed by sha256(systemPrompt) 防止跨对话角色扮演泄露
+    private var cachedTransitionMessage: String? = null
+    private var cachedTransitionKey: String? = null
+
+    private fun sha256(text: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        return digest.digest(text.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }.take(16)
+    }
     fun generateText(
         settings: Settings,
         model: Model,
@@ -83,9 +102,43 @@ class GenerationHandler(
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
+        contextWindow: Int = 0, // 模型 context window 大小（token数），用于自动压缩阈值计算
     ): Flow<GenerationChunk> = flow {
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
+
+        // 初始化上下文压缩器（若启用）
+        val compactor = if (assistant.autoCompactEnabled && contextWindow > 0) {
+            ContextCompactor(contextWindow, assistant).also { comp ->
+                // 首轮预生成压缩过渡语（会话级缓存，按 systemPrompt 哈希隔离跨对话泄露）
+                val systemPrompt = conversationSystemPrompt ?: assistant.systemPrompt
+                val promptKey = if (systemPrompt.isNotBlank()) sha256(systemPrompt) else null
+                if (promptKey != null && promptKey == cachedTransitionKey && cachedTransitionMessage != null) {
+                    comp.transitionMessage = cachedTransitionMessage
+                    Log.d(TAG, "[$CACHE_TAG] using cached transition message")
+                } else if (systemPrompt.isNotBlank()) {
+                    comp.generateTransitionMessage(systemPrompt) { prompt ->
+                        try {
+                            val chunk = providerImpl.generateText(
+                                providerSetting = provider,
+                                messages = listOf(UIMessage.user(prompt)),
+                                params = TextGenerationParams(
+                                    model = model,
+                                    temperature = 0.7f,
+                                    maxTokens = 128,
+                                ),
+                            )
+                            chunk.choices.firstOrNull()?.message?.toText()?.trim()
+                        } catch (e: Exception) {
+                            Log.w(TAG, "[$CACHE_TAG] transition message generation failed: ${e.message}")
+                            null
+                        }
+                    }
+                    cachedTransitionMessage = comp.transitionMessage
+                    cachedTransitionKey = promptKey
+                }
+            }
+        } else null
 
         var messages: List<UIMessage> = messages
 
@@ -181,6 +234,20 @@ class GenerationHandler(
                         .toLocalDateTime(TimeZone.currentSystemDefault())
                 )
                 emit(GenerationChunk.Messages(messages))
+
+                // 自动压缩评估：检查本轮 prompt token 使用量
+                val lastUsage = messages.lastOrNull()?.usage
+                if (compactor != null && lastUsage != null && lastUsage.promptTokens > 0) {
+                    val level = compactor.assess(lastUsage.promptTokens)
+                    if (level != CompactionLevel.NONE) {
+                        Log.i(TAG, "[$CACHE_TAG] compaction needed: level=$level promptTokens=${lastUsage.promptTokens} contextWindow=$contextWindow")
+                        emit(GenerationChunk.Messages(
+                            messages = messages,
+                            compactionLevel = level,
+                            transitionMessage = if (level == CompactionLevel.FORCE) compactor.transitionMessage else null
+                        ))
+                    }
+                }
 
                 val tools = messages.last().getTools().filter { !it.isExecuted }
                 if (tools.isEmpty()) {
@@ -385,6 +452,14 @@ class GenerationHandler(
                 }
             }
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
+
+            // 检测系统提示是否变化，变化会导致 DeepSeek 前缀缓存失效
+            val systemHash = sha256(system)
+            if (systemHash != lastSystemHash) {
+                val prev = if (lastSystemHash == null) "(initial)" else lastSystemHash
+                Log.i(TAG, "[$CACHE_TAG] system prompt changed: $prev -> $systemHash")
+                lastSystemHash = systemHash
+            }
             addAll(messages.limitContext(assistant.contextMessageLimit))
         }.transforms(
             transformers = transformers,
@@ -423,6 +498,7 @@ class GenerationHandler(
             ).collect {
                 messages = messages.handleMessageChunk(chunk = it, model = model)
                 it.usage?.let { usage ->
+                    trackCacheUsage(usage.promptTokens, usage.cachedTokens)
                     messages = messages.mapIndexed { index, message ->
                         if (index == messages.lastIndex) {
                             message.copy(usage = message.usage.merge(usage))
@@ -441,6 +517,7 @@ class GenerationHandler(
             )
             messages = messages.handleMessageChunk(chunk = chunk, model = model)
             chunk.usage?.let { usage ->
+                trackCacheUsage(usage.promptTokens, usage.cachedTokens)
                 messages = messages.mapIndexed { index, message ->
                     if (index == messages.lastIndex) {
                         message.copy(
@@ -453,6 +530,19 @@ class GenerationHandler(
             }
             onUpdateMessages(messages)
         }
+    }
+
+    /**
+     * 追踪会话级缓存命中/未命中，输出日志供诊断。
+     * DeepSeek 通过 prompt_cache_hit_tokens 汇报命中量。
+     */
+    private fun trackCacheUsage(promptTokens: Int, cachedTokens: Int) {
+        if (promptTokens <= 0) return
+        sessionCacheHitTokens += cachedTokens
+        sessionCacheMissTokens += (promptTokens - cachedTokens).coerceAtLeast(0)
+        val total = sessionCacheHitTokens + sessionCacheMissTokens
+        val rate = if (total > 0) (sessionCacheHitTokens.toDouble() / total * 100) else 0.0
+        Log.i(TAG, "[$CACHE_TAG] turn: hit=$cachedTokens miss=${promptTokens - cachedTokens} | session: hit=$sessionCacheHitTokens miss=$sessionCacheMissTokens rate=${String.format("%.1f", rate)}%")
     }
 
     private fun maybeTruncateToolOutput(

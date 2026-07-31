@@ -45,6 +45,7 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.CompactionLevel
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.createConversationTools
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
@@ -480,6 +481,10 @@ class ChatService(
             model.displayName
         }
 
+        // 自动压缩标记：collect 中检测到 FORCE 信号后，在 onSuccess 中执行
+        var pendingForceCompaction = false
+        var pendingTransition: String? = null
+
         runCatching {
 
             // reset suggestions
@@ -518,6 +523,7 @@ class ChatService(
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
                 workspaceCwd = conversation.workspaceCwd,
+                contextWindow = estimateContextWindow(model),
                 memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {
@@ -603,6 +609,16 @@ class ChatService(
                             .updateCurrentMessages(chunk.messages)
                         updateConversation(conversationId, updatedConversation)
 
+                        // 自动压缩处理
+                        if (chunk.compactionLevel != CompactionLevel.NONE) {
+                            Log.i("ChatService", "[CacheTracker] compaction signal: level=${chunk.compactionLevel}")
+                            if (chunk.compactionLevel == CompactionLevel.FORCE) {
+                                pendingForceCompaction = true
+                                pendingTransition = chunk.transitionMessage
+                                Log.i("ChatService", "[CacheTracker] force compaction scheduled with transition message")
+                            }
+                        }
+
                         // 通知等边缘副作用由 ChatNotificationManager 消费；
                         // tryEmit 不挂起，事件丢失只影响单次通知更新，不能反压生成链
                         chunk.messages.lastOrNull()?.let { lastMessage ->
@@ -624,6 +640,20 @@ class ChatService(
         }.onSuccess {
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
+
+            // 执行挂起的强制压缩（生成完成后安全执行）
+            if (pendingForceCompaction) {
+                Log.i(TAG, "[CacheTracker] executing force compaction post-generation")
+                val targetTokens = (estimateContextWindow(model) * 0.3).toInt().coerceIn(500, 4000)
+                val keepRecent = 16
+                compressConversation(
+                    conversationId = conversationId,
+                    conversation = finalConversation,
+                    additionalPrompt = pendingTransition ?: "",
+                    targetTokens = targetTokens,
+                    keepRecentMessages = keepRecent,
+                )
+            }
 
             launchWithConversationReference(conversationId) {
                 generateTitle(conversationId, finalConversation)
@@ -1258,5 +1288,41 @@ class ChatService(
         job.cancel()
         runCatching { job.join() }
         finishInterruptedPendingTools(conversationId)
+    }
+
+    /**
+     * 根据模型 ID 估算上下文窗口大小（token 数）。
+     * 用于自动压缩阈值计算。返回 0 表示未知/不限制。
+     */
+    private fun estimateContextWindow(model: Model): Int {
+        val id = model.modelId.lowercase()
+        return when {
+            // DeepSeek 系列
+            "deepseek" in id -> when {
+                "v4" in id || "v3.1" in id || "v3.2" in id || "r1" in id -> 128_000
+                "v3" in id -> 64_000
+                else -> 64_000
+            }
+            // OpenAI 系列
+            "gpt-4" in id -> when {
+                "turbo" in id || "o" in id -> 128_000
+                else -> 8_192
+            }
+            "gpt-4o" in id || "gpt-5" in id -> 128_000
+            "o1" in id || "o3" in id || "o4" in id -> 200_000
+            // Claude 系列
+            "claude" in id -> 200_000
+            // Gemini 系列
+            "gemini" in id -> when {
+                "2.5" in id || "2.0" in id -> 1_048_576
+                else -> 32_000
+            }
+            // 通义千问 系列
+            "qwen" in id -> 128_000
+            // Moonshot/Kimi
+            "kimi" in id || "moonshot" in id -> 128_000
+            // 默认：保守估计
+            else -> 32_000
+        }
     }
 }
