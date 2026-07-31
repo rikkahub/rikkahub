@@ -112,7 +112,7 @@ object BraveSearchService : SearchService<SearchServiceOptions.BraveOptions> {
 
     @Serializable
     data class WebResult(
-        val type: String,
+        val type: String? = null,
         val title: String,
         val url: String,
         val description: String? = null,
