@@ -17,13 +17,14 @@ class AgentPermissionPromptTest {
     }
 
     @Test
-    fun `plan mode always injects plan constraints even when inject flag false`() {
+    fun `plan mode instructs the assistant to plan before execution`() {
         val text = AgentPermissionPrompt.build(
             AgentMode.PLAN,
             PermissionPolicy.compatibleDefault(injectPromptForWorkspace = false),
         )
         assertTrue(text.contains("PLAN mode", ignoreCase = true))
-        assertTrue(text.contains("read-only", ignoreCase = true) || text.contains("Do not write"))
+        assertTrue(text.contains("first present a concise plan", ignoreCase = true))
+        assertTrue(text.contains("execute necessary tools", ignoreCase = true))
     }
 
     @Test

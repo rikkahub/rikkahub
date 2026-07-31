@@ -44,7 +44,7 @@ class PermissionPolicyTest {
     }
 
     @Test
-    fun `full access does not turn plan mode into execution mode`() {
+    fun `full access applies to plan mode after its plan is presented`() {
         val policy = PermissionPolicy.compatibleDefault(
             permissionMode = AgentPermissionMode.FULL_ACCESS,
         )
@@ -55,7 +55,7 @@ class PermissionPolicyTest {
             execute = { listOf(UIMessagePart.Text("ok")) },
         )
 
-        assertTrue(policy.requiresApproval(shell, buildJsonObject { }, AgentMode.PLAN))
+        assertFalse(policy.requiresApproval(shell, buildJsonObject { }, AgentMode.PLAN))
     }
 
     @Test
@@ -67,7 +67,7 @@ class PermissionPolicyTest {
     }
 
     @Test
-    fun `plan mode blocks tools outside its read-only allowlist`() {
+    fun `plan mode uses the same approval policy as execution mode`() {
         val policy = PermissionPolicy.compatibleDefault()
         val shell = Tool(
             name = "workspace_shell",
@@ -75,15 +75,8 @@ class PermissionPolicyTest {
             needsApproval = { false },
             execute = { listOf(UIMessagePart.Text("ok")) },
         )
-        assertTrue(policy.requiresApproval(shell, buildJsonObject { }, AgentMode.PLAN))
+        assertFalse(policy.requiresApproval(shell, buildJsonObject { }, AgentMode.PLAN))
         assertFalse(policy.requiresApproval(shell, buildJsonObject { }, AgentMode.AGENT))
-        assertTrue(isPlanModeBlockedTool("clipboard_tool"))
-        assertTrue(isPlanModeBlockedTool("calendar_create"))
-        assertTrue(isPlanModeBlockedTool("memory_tool"))
-        assertTrue(isPlanModeBlockedTool("eval_javascript"))
-        assertTrue(isPlanModeBlockedTool("get_screen_time"))
-        assertFalse(isPlanModeBlockedTool("calendar_query"))
-        assertTrue(isPlanModeBlockedTool("unknown_future_tool"))
     }
 
     @Test

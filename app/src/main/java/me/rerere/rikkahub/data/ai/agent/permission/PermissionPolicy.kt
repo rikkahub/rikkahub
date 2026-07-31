@@ -4,7 +4,6 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.Tool
 import me.rerere.rikkahub.data.ai.agent.AgentMode
-import me.rerere.rikkahub.data.ai.agent.isPlanModeBlockedTool
 
 enum class ApprovalAction {
     /** 自动执行（仍尊重 Tool.needsApproval） */
@@ -45,9 +44,6 @@ data class PermissionPolicy(
      * - 否则回落到 tool.needsApproval
      */
     fun requiresApproval(tool: Tool, args: JsonElement, mode: AgentMode): Boolean {
-        if (mode == AgentMode.PLAN && isPlanModeBlockedTool(tool.name)) {
-            return true
-        }
         if (permissionMode == AgentPermissionMode.FULL_ACCESS) {
             return false
         }
@@ -65,9 +61,8 @@ data class PermissionPolicy(
             appendLine("User permission mode: ${permissionMode.name}.")
             when (mode) {
                 AgentMode.PLAN -> {
-                    appendLine("PLAN mode is active: you may explore with read-only tools.")
-                    appendLine("Only explicitly registered read-only tools are available; all other tools are blocked.")
-                    appendLine("Produce a clear plan for the user; they can switch to AGENT mode to execute.")
+                    appendLine("PLAN mode is active: present a concise plan before acting.")
+                    appendLine("After the plan, workspace tools and shell commands may run under the current permission mode.")
                 }
                 AgentMode.AGENT -> {
                     appendLine("AGENT mode: full tool access subject to per-tool approval rules.")

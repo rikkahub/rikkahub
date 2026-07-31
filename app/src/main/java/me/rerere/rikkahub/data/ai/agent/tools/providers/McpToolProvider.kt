@@ -6,7 +6,6 @@ import me.rerere.ai.core.Tool
 import me.rerere.rikkahub.data.ai.agent.tools.ToolProvider
 import me.rerere.rikkahub.data.ai.agent.tools.ToolProviderOrder
 import me.rerere.rikkahub.data.ai.agent.tools.ToolResolveContext
-import me.rerere.rikkahub.data.ai.agent.AgentMode
 import me.rerere.rikkahub.data.ai.mcp.McpToolExecutor
 import me.rerere.rikkahub.data.ai.agent.permission.DescribedTool
 import me.rerere.rikkahub.data.ai.agent.permission.McpServerPolicyContext
@@ -21,8 +20,7 @@ class McpToolProvider(
 ) : ToolProvider {
     override val order: Int = ToolProviderOrder.MCP
 
-    // MCP metadata has no reliable read-only declaration, so PLAN never exposes it.
-    override fun isEnabled(ctx: ToolResolveContext): Boolean = ctx.mode != AgentMode.PLAN
+    override fun isEnabled(ctx: ToolResolveContext): Boolean = true
 
     override suspend fun provide(ctx: ToolResolveContext): List<Tool> {
         return provideWithDescriptors(ctx).map(DescribedTool::tool)

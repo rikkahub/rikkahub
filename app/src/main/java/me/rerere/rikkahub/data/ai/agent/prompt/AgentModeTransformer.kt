@@ -16,8 +16,8 @@ object AgentPermissionPrompt {
             AgentMode.CHAT -> ""
             AgentMode.PLAN -> """
                 <agent_permissions>
-                PLAN mode: read-only exploration. Do not write files or run shell.
-                Deliver a concrete plan; user may switch to AGENT to execute.
+                PLAN mode: first present a concise plan, then execute necessary tools and commands.
+                Keep all workspace operations inside the workspace sandbox and follow the current permission mode.
                 </agent_permissions>
             """.trimIndent()
             AgentMode.AGENT -> """

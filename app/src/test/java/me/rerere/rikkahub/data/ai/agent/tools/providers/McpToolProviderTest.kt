@@ -77,11 +77,11 @@ class McpToolProviderTest {
     }
 
     @Test
-    fun `PLAN does not expose MCP tools`() = runBlocking {
+    fun `PLAN exposes MCP tools after planning`() = runBlocking {
         val provider = McpToolProvider(RecordingMcpToolExecutor())
         val assistant = Assistant(id = Uuid.random())
 
-        assertFalse(provider.isEnabled(context(assistant, AgentMode.PLAN)))
+        assertTrue(provider.isEnabled(context(assistant, AgentMode.PLAN)))
     }
 
     @Test

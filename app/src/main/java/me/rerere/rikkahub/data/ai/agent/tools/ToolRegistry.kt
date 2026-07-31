@@ -2,7 +2,6 @@ package me.rerere.rikkahub.data.ai.agent.tools
 
 import me.rerere.ai.core.Tool
 import me.rerere.rikkahub.data.ai.agent.AgentMode
-import me.rerere.rikkahub.data.ai.agent.isPlanModeBlockedTool
 import me.rerere.rikkahub.data.ai.agent.permission.DescribedTool
 import me.rerere.rikkahub.data.ai.agent.routing.AgentIntent
 import me.rerere.rikkahub.data.ai.agent.routing.AgentRoutingSnapshot
@@ -15,10 +14,7 @@ class ToolRegistry(
     private val providers: List<ToolProvider>,
     private val profileResolver: ToolProfileResolver = ToolProfileResolver(),
 ) {
-    /**
-     * 按 [ToolProvider.order] 解析并合并工具列表。
-     * Plan 模式下仅保留 [me.rerere.rikkahub.data.ai.agent.PlanModeAllowedTools]。
-     */
+    /** 按 [ToolProvider.order] 解析并合并工具列表。 */
     suspend fun resolve(ctx: ToolResolveContext): List<Tool> {
         return resolveWithDescriptors(ctx).map(DescribedTool::tool)
     }
@@ -28,10 +24,7 @@ class ToolRegistry(
         val tools = discoverWithDescriptors(ctx)
         profileResolver.validateCandidates(tools)
 
-        return when (ctx.mode) {
-            AgentMode.PLAN -> tools.filterNot { isPlanModeBlockedTool(it.tool.name) }
-            AgentMode.CHAT, AgentMode.AGENT -> tools
-        }
+        return tools
     }
 
     /** Provider discovery without legacy mode filtering; AUTO profiles are resolved afterwards. */

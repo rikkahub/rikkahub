@@ -69,12 +69,12 @@ class CapabilityPolicyTest {
     }
 
     @Test
-    fun `full access cannot bypass structural denies`() {
+    fun `full access preserves workspace structural denies in plan mode`() {
         val policy = PermissionPolicy.compatibleDefault(
             permissionMode = AgentPermissionMode.FULL_ACCESS,
         )
 
-        assertTrue(evaluate("workspace_shell", mode = AgentMode.PLAN, policy = policy) is PolicyDecision.Deny)
+        assertTrue(evaluate("workspace_shell", mode = AgentMode.PLAN, policy = policy) is PolicyDecision.Allow)
         assertTrue(evaluate("workspace_write_file", workspace = null, policy = policy) is PolicyDecision.Deny)
     }
 
@@ -95,11 +95,11 @@ class CapabilityPolicyTest {
     }
 
     @Test
-    fun `PLAN hard denies tools outside allowlist`() {
+    fun `PLAN applies normal approval policy to shell`() {
         val decision = evaluate("workspace_shell", mode = AgentMode.PLAN)
 
-        assertTrue(decision is PolicyDecision.Deny)
-        assertEquals(PolicyCode.PLAN_TOOL_NOT_ALLOWED, decision.code)
+        assertTrue(decision is PolicyDecision.Ask)
+        assertEquals(PolicyCode.HIGH_RISK_OR_UNKNOWN, decision.code)
     }
 
     @Test
@@ -150,15 +150,15 @@ class CapabilityPolicyTest {
     }
 
     @Test
-    fun `legacy override cannot bypass a hard PLAN deny`() {
+    fun `PLAN keeps legacy category approval rules`() {
         val decision = evaluate(
             toolName = "memory_tool",
             mode = AgentMode.PLAN,
             policy = PermissionPolicy(byCategory = mapOf(ToolCategory.MEMORY to ApprovalAction.AUTO)),
         )
 
-        assertTrue(decision is PolicyDecision.Deny)
-        assertEquals(PolicyCode.PLAN_TOOL_NOT_ALLOWED, decision.code)
+        assertTrue(decision is PolicyDecision.Ask)
+        assertEquals(PolicyCode.HIGH_RISK_OR_UNKNOWN, decision.code)
     }
 
     @Test

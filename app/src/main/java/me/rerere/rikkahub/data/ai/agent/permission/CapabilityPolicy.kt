@@ -2,7 +2,6 @@ package me.rerere.rikkahub.data.ai.agent.permission
 
 import kotlinx.serialization.Serializable
 import me.rerere.rikkahub.data.ai.agent.AgentMode
-import me.rerere.rikkahub.data.ai.agent.isPlanModeBlockedTool
 import me.rerere.rikkahub.data.ai.agent.subagent.ExploreToolAllowlist
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.workspace.Workspace
@@ -78,9 +77,6 @@ object CapabilityPolicy {
             return deny(PolicyCode.SUBAGENT_TOOL_NOT_ALLOWED, "Controlled Explore runs permit repository reads only.")
         }
 
-        if (context.mode == AgentMode.PLAN && isPlanModeBlockedTool(descriptor.toolName)) {
-            return deny(PolicyCode.PLAN_TOOL_NOT_ALLOWED, "PLAN only permits its fixed read-only allowlist.")
-        }
         if (descriptor.capability in workspaceCapabilities && context.workspace == null) {
             return deny(PolicyCode.WORKSPACE_UNAVAILABLE, "This tool requires an attached workspace.")
         }
