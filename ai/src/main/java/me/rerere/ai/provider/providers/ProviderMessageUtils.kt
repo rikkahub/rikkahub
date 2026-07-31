@@ -1,5 +1,7 @@
 package me.rerere.ai.provider.providers
 
+import me.rerere.ai.core.MessageRole
+import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 
 /**
@@ -55,4 +57,32 @@ internal fun groupPartsByToolBoundary(parts: List<UIMessagePart>): List<PartGrou
     flushContent()
     flushTools()
     return groups
+}
+
+/**
+ * Makes old or malformed tool history acceptable to strict gateways. A [UIMessagePart.Tool]
+ * contains both the call and its result, so rewriting its ID keeps the pair consistent.
+ */
+internal fun List<UIMessage>.withUniqueToolCallIds(): List<UIMessage> {
+    val usedIds = mutableSetOf<String>()
+    return mapIndexed { messageIndex, message ->
+        if (message.role != MessageRole.ASSISTANT) return@mapIndexed message
+        var changed = false
+        val parts = message.parts.mapIndexed { partIndex, part ->
+            if (part !is UIMessagePart.Tool || part.toolCallId.isBlank() || usedIds.add(part.toolCallId)) {
+                part
+            } else {
+                val base = "${part.toolCallId}-history-$messageIndex-$partIndex"
+                var candidate = base
+                var attempt = 1
+                while (!usedIds.add(candidate)) {
+                    candidate = "$base-$attempt"
+                    attempt += 1
+                }
+                changed = true
+                part.copy(toolCallId = candidate)
+            }
+        }
+        if (changed) message.copy(parts = parts) else message
+    }
 }

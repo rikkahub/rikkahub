@@ -650,7 +650,7 @@ class GoogleProvider(
 
     private fun buildContents(messages: List<UIMessage>): JsonArray {
         return buildJsonArray {
-            messages
+            messages.withUniqueToolCallIds()
                 .filter { it.role != MessageRole.SYSTEM && it.isValidToUpload() }
                 .forEach { message ->
                     if (message.role == MessageRole.ASSISTANT) {

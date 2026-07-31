@@ -26,6 +26,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
+import me.rerere.ai.provider.providers.withUniqueToolCallIds
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.OpenAIReasoningMetadata
@@ -305,7 +306,7 @@ class ResponseAPI(
     }
 
     internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
-        messages
+        messages.withUniqueToolCallIds()
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
                 if (message.role == MessageRole.ASSISTANT) {

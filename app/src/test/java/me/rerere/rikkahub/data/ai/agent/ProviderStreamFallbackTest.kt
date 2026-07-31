@@ -12,11 +12,20 @@ import me.rerere.ai.util.ProviderStreamErrorCode
 import me.rerere.ai.util.ProviderStreamException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 
 class ProviderStreamFallbackTest {
+    @Test
+    fun `client generated tool identities are unique across agent runs`() {
+        assertNotEquals(
+            clientToolExecutionIdentity("run-one", stepIndex = 0, ordinal = 0),
+            clientToolExecutionIdentity("run-two", stepIndex = 0, ordinal = 0),
+        )
+    }
+
     @Test
     fun `empty failed stream falls back exactly once`() = runBlocking {
         var fallbackCalls = 0

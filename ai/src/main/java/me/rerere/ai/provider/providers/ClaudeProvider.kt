@@ -378,7 +378,7 @@ class ClaudeProvider(
         promptCaching: Boolean,
         promptCacheTtl: ClaudePromptCacheTtl
     ) = buildJsonArray {
-        messages
+        messages.withUniqueToolCallIds()
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
                 if (message.role == MessageRole.ASSISTANT) {

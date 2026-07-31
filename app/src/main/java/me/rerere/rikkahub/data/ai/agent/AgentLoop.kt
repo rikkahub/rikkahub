@@ -137,6 +137,9 @@ class AgentLoop(
         // Memory tools 已由 ToolRegistry 注入，此处不再重复添加
         val describedToolsInternal = describedTools
         val toolsInternal = describedToolsInternal.map(DescribedTool::tool)
+        // Step indexes restart at zero for every Agent run. Scope generated IDs to this run so
+        // earlier tool history cannot collide with a later run in the same conversation.
+        val clientToolCallScope = Uuid.random().toString()
         var loopFinished = false
         try {
             for (stepIndex in 0 until maxSteps) {
@@ -220,7 +223,7 @@ class AgentLoop(
                     var tools = messages.last().getTools().filter { !it.isExecuted }
                     if (useClientGeneratedToolExecutionIdentity && tools.isNotEmpty()) {
                         tools = tools.mapIndexed { ordinal, tool ->
-                            tool.copy(toolCallId = clientToolExecutionIdentity(stepIndex, ordinal))
+                            tool.copy(toolCallId = clientToolExecutionIdentity(clientToolCallScope, stepIndex, ordinal))
                         }
                         val identities = tools.iterator()
                         val lastMessage = messages.last()
@@ -1320,5 +1323,6 @@ private fun String.digestForLog(): String = MessageDigest.getInstance("SHA-256")
 
 private const val APPROVAL_TTL_MILLIS = 5 * 60 * 1000L
 
-/** Provider call IDs with UNKNOWN stability are never treated as durable execution identities. */
-private fun clientToolExecutionIdentity(stepIndex: Int, ordinal: Int): String = "client-$stepIndex-$ordinal"
+/** Provider call IDs with UNKNOWN stability are scoped to a run, never reused by a later turn. */
+internal fun clientToolExecutionIdentity(runScope: String, stepIndex: Int, ordinal: Int): String =
+    "client-$runScope-$stepIndex-$ordinal"
