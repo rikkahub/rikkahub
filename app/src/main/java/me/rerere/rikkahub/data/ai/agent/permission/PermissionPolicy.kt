@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.ai.agent.permission
 
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.Serializable
 import me.rerere.ai.core.Tool
 import me.rerere.rikkahub.data.ai.agent.AgentMode
 import me.rerere.rikkahub.data.ai.agent.isPlanModeBlockedTool
@@ -13,6 +14,13 @@ enum class ApprovalAction {
     ASK,
 }
 
+@Serializable
+enum class AgentPermissionMode {
+    AUTO_REVIEW,
+    FULL_ACCESS,
+    CONFIRM_CRITICAL,
+}
+
 /**
  * 权限策略。
  *
@@ -22,6 +30,7 @@ enum class ApprovalAction {
 data class PermissionPolicy(
     val byCategory: Map<ToolCategory, ApprovalAction> = emptyMap(),
     val injectPromptSummary: Boolean = false,
+    val permissionMode: AgentPermissionMode = AgentPermissionMode.AUTO_REVIEW,
 ) {
     fun actionFor(category: ToolCategory): ApprovalAction =
         byCategory[category] ?: ApprovalAction.AUTO
@@ -39,6 +48,9 @@ data class PermissionPolicy(
         if (mode == AgentMode.PLAN && isPlanModeBlockedTool(tool.name)) {
             return true
         }
+        if (permissionMode == AgentPermissionMode.FULL_ACCESS) {
+            return false
+        }
         if (actionForTool(tool.name) == ApprovalAction.ASK) {
             return true
         }
@@ -50,6 +62,7 @@ data class PermissionPolicy(
         return buildString {
             appendLine("<agent_permissions>")
             appendLine("Runtime mode: ${mode.name}.")
+            appendLine("User permission mode: ${permissionMode.name}.")
             when (mode) {
                 AgentMode.PLAN -> {
                     appendLine("PLAN mode is active: you may explore with read-only tools.")
@@ -72,10 +85,14 @@ data class PermissionPolicy(
 
     companion object {
         /** 默认兼容策略：行为 = 改造前 */
-        fun compatibleDefault(injectPromptForWorkspace: Boolean = false): PermissionPolicy =
+        fun compatibleDefault(
+            injectPromptForWorkspace: Boolean = false,
+            permissionMode: AgentPermissionMode = AgentPermissionMode.AUTO_REVIEW,
+        ): PermissionPolicy =
             PermissionPolicy(
                 byCategory = emptyMap(),
                 injectPromptSummary = injectPromptForWorkspace,
+                permissionMode = permissionMode,
             )
     }
 }

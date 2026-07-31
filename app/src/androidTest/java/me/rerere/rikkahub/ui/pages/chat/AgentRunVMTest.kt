@@ -15,6 +15,8 @@ import me.rerere.rikkahub.data.model.AgentStepStatus
 import me.rerere.rikkahub.data.repository.AgentRunRepository
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -61,6 +63,7 @@ class AgentRunVMTest {
         val detail = viewModel.detail.filter { it is AgentRunDetailState.Content }.first()
             as AgentRunDetailState.Content
         assertEquals("run", detail.detail.run.id)
+        assertEquals("run", detail.runId)
         assertEquals(1, detail.detail.steps.size)
         assertEquals(AgentRunStatus.QUEUED.name, viewModel.activeRun.filterNotNull().first().status)
         assertEquals(1, viewModel.activeDetail.filterNotNull().first().steps.size)
@@ -76,8 +79,8 @@ class AgentRunVMTest {
         database.conversationDao().deleteById("conversation")
 
         assertEquals(
-            AgentRunDetailState.Missing,
-            viewModel.detail.filter { it == AgentRunDetailState.Missing }.first(),
+            AgentRunDetailState.Missing("run"),
+            viewModel.detail.filter { it == AgentRunDetailState.Missing("run") }.first(),
         )
     }
 
@@ -92,5 +95,34 @@ class AgentRunVMTest {
 
         assertEquals("run-b", viewModel.activeRun.filterNotNull().first { it.id == "run-b" }.id)
         assertEquals("run-b", viewModel.activeDetail.filterNotNull().first { it.run.id == "run-b" }.run.id)
+    }
+
+    @Test
+    fun childDetailCarriesBackNavigationUntilReturningToParent() = runBlocking {
+        repository.createRun("root", "conversation", "assistant", AgentRunConfigSnapshot())
+        repository.createRun(
+            "child",
+            "conversation",
+            "assistant",
+            AgentRunConfigSnapshot(),
+            parentRunId = "root",
+        )
+        val viewModel = AgentRunVM("conversation", repository)
+
+        viewModel.openRun("root")
+        viewModel.detail.filter { it.runId == "root" && it is AgentRunDetailState.Content }.first()
+        viewModel.openChildRun("child")
+        val child = viewModel.detail.filter {
+            it.runId == "child" && it is AgentRunDetailState.Content
+        }.first()
+
+        assertTrue(child.canNavigateBack)
+        assertEquals(2, child.navigationDepth)
+        viewModel.navigateBack()
+        val parent = viewModel.detail.filter {
+            it.runId == "root" && it is AgentRunDetailState.Content
+        }.first()
+        assertFalse(parent.canNavigateBack)
+        assertEquals(1, parent.navigationDepth)
     }
 }

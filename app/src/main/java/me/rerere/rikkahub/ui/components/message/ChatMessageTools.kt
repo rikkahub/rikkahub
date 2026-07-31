@@ -1,5 +1,14 @@
 package me.rerere.rikkahub.ui.components.message
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -13,6 +22,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
@@ -26,16 +36,29 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -59,14 +82,135 @@ import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.utils.JsonInstant
 
 private const val ASK_USER_TOOL_NAME = "ask_user"
+internal const val MAX_SAVED_ASK_USER_DRAFT_BYTES = 32 * 1024
+
+typealias ToolApprovalHandler = (
+    tool: UIMessagePart.Tool,
+    approved: Boolean,
+    reason: String,
+) -> Job
+
+typealias ToolAnswerHandler = (
+    tool: UIMessagePart.Tool,
+    answer: String,
+) -> Job
+
+internal class ToolApprovalSubmissionState {
+    var isSubmitting by mutableStateOf(false)
+        private set
+
+    fun tryStart(): Boolean {
+        if (isSubmitting) return false
+        isSubmitting = true
+        return true
+    }
+
+    fun finish() {
+        isSubmitting = false
+    }
+}
+
+internal class ApprovalStatusFeedbackState(initialMessage: String?) {
+    private var previousMessage = initialMessage
+
+    fun update(message: String?): Boolean {
+        val shouldReject = message != null && message != previousMessage
+        previousMessage = message
+        return shouldReject
+    }
+}
+
+@Serializable
+internal data class AskUserAnswerDraft(
+    val answers: Map<String, String> = emptyMap(),
+    val multiAnswers: Map<String, Set<String>> = emptyMap(),
+) {
+    fun withAnswer(questionId: String, answer: String): AskUserAnswerDraft = copy(
+        answers = answers + (questionId to answer),
+    )
+
+    fun toggleMultiAnswer(questionId: String, option: String): AskUserAnswerDraft {
+        val updatedOptions = multiAnswers[questionId].orEmpty().toMutableSet().apply {
+            if (!add(option)) remove(option)
+        }
+        val updatedAnswers = multiAnswers.toMutableMap().apply {
+            if (updatedOptions.isEmpty()) remove(questionId) else put(questionId, updatedOptions)
+        }
+        return copy(multiAnswers = updatedAnswers)
+    }
+}
+
+internal enum class AskUserResponseMode {
+    Editing,
+    Answered,
+    ReadOnly,
+}
+
+internal data class AskUserResponseFrame(
+    val mode: AskUserResponseMode,
+    val answer: String? = null,
+)
+
+internal fun askUserResponseMode(
+    approvalState: ToolApprovalState,
+    hasAnswerHandler: Boolean,
+): AskUserResponseMode = when {
+    approvalState is ToolApprovalState.Pending && hasAnswerHandler -> AskUserResponseMode.Editing
+    approvalState is ToolApprovalState.Answered -> AskUserResponseMode.Answered
+    else -> AskUserResponseMode.ReadOnly
+}
+
+internal fun encodeAskUserAnswerDraft(draft: AskUserAnswerDraft): String =
+    JsonInstant.encodeToString(draft)
+
+internal fun decodeAskUserAnswerDraft(encoded: String): AskUserAnswerDraft = runCatching {
+    JsonInstant.decodeFromString<AskUserAnswerDraft>(encoded)
+}.getOrDefault(AskUserAnswerDraft())
+
+internal fun encodeAskUserAnswerDraftForSave(draft: AskUserAnswerDraft): String? {
+    val encoded = encodeAskUserAnswerDraft(draft)
+    return encoded.takeIf { it.toByteArray().size <= MAX_SAVED_ASK_USER_DRAFT_BYTES }
+}
+
+private val AskUserAnswerDraftSaver = Saver<AskUserAnswerDraft, String>(
+    save = { draft -> encodeAskUserAnswerDraftForSave(draft) },
+    restore = { encoded -> decodeAskUserAnswerDraft(encoded) },
+)
+
+@Composable
+internal fun rememberAskUserAnswerDraft(tool: UIMessagePart.Tool): MutableState<AskUserAnswerDraft> =
+    rememberSaveable(
+        tool.toolExecutionId,
+        tool.toolCallId,
+        tool.toolName,
+        tool.input,
+        stateSaver = AskUserAnswerDraftSaver,
+    ) {
+        mutableStateOf(AskUserAnswerDraft())
+    }
 
 @Composable
 fun ChainOfThoughtScope.ChatMessageToolStep(
     tool: UIMessagePart.Tool,
     loading: Boolean = false,
-    onToolApproval: ((tool: UIMessagePart.Tool, approved: Boolean, reason: String) -> Unit)? = null,
-    onToolAnswer: ((tool: UIMessagePart.Tool, answer: String) -> Unit)? = null,
+    onToolApproval: ToolApprovalHandler? = null,
+    onToolAnswer: ToolAnswerHandler? = null,
 ) {
+    val hapticFeedback = LocalHapticFeedback.current
+    val approvalStatusFeedback = remember(
+        tool.toolExecutionId,
+        tool.toolCallId,
+        tool.toolName,
+        tool.input,
+    ) {
+        ApprovalStatusFeedbackState(tool.approvalStatusMessage)
+    }
+    LaunchedEffect(tool.approvalStatusMessage) {
+        if (approvalStatusFeedback.update(tool.approvalStatusMessage)) {
+            hapticFeedback.performHapticFeedback(HapticFeedbackType.Reject)
+        }
+    }
+
     // ask_user 是交互式问答流程, 不走注册式渲染框架
     if (tool.toolName == ASK_USER_TOOL_NAME) {
         AskUserToolStep(tool = tool, loading = loading, onToolAnswer = onToolAnswer)
@@ -97,9 +241,36 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     val isPending = tool.approvalState is ToolApprovalState.Pending
     val isDenied = tool.approvalState is ToolApprovalState.Denied
     val images = tool.output.filterIsInstance<UIMessagePart.Image>()
+    val approvalSubmission = remember(
+        tool.approvalId,
+        tool.toolExecutionId,
+        tool.toolCallId,
+        tool.approvalState,
+    ) {
+        ToolApprovalSubmissionState()
+    }
+    val approvalScope = rememberCoroutineScope()
+
+    fun submitApproval(approved: Boolean, reason: String) {
+        val handler = onToolApproval ?: return
+        if (!approvalSubmission.tryStart()) return
+        val job = try {
+            handler(tool, approved, reason)
+        } catch (error: Throwable) {
+            approvalSubmission.finish()
+            throw error
+        }
+        approvalScope.launch {
+            try {
+                job.join()
+            } finally {
+                approvalSubmission.finish()
+            }
+        }
+    }
 
     // 摘要由注册的渲染器决定; 图片输出与拒绝原因为所有工具通用
-    val hasExtraContent = renderer.hasSummary(context) || isDenied || images.isNotEmpty() || tool.approvalStatusMessage != null
+    val hasExtraContent = renderer.hasSummary(context) || isDenied || images.isNotEmpty()
 
     ControlledChainOfThoughtStep(
         expanded = expanded,
@@ -130,30 +301,11 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         },
         extra = if (isPending && onToolApproval != null) {
             {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    FilledTonalIconButton(
-                        onClick = { showDenyDialog = true },
-                        modifier = Modifier.size(28.dp),
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.Cancel01,
-                            contentDescription = stringResource(R.string.chat_message_tool_deny),
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                    FilledTonalIconButton(
-                        onClick = { onToolApproval(tool, true, "") },
-                        modifier = Modifier.size(28.dp),
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.Tick01,
-                            contentDescription = stringResource(R.string.chat_message_tool_approve),
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
+                ToolApprovalActions(
+                    isSubmitting = approvalSubmission.isSubmitting,
+                    onDeny = { showDenyDialog = true },
+                    onApprove = { submitApproval(approved = true, reason = "") },
+                )
             }
         } else {
             null
@@ -192,18 +344,17 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    tool.approvalStatusMessage?.let { message ->
-                        Text(
-                            text = message,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                        )
-                    }
                 }
             }
         } else {
             null
         },
+    )
+    ToolStatusMessage(
+        message = tool.approvalStatusMessage,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 32.dp, top = 4.dp, bottom = 8.dp),
     )
 
     if (showDenyDialog && onToolApproval != null) {
@@ -211,7 +362,8 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
             onDismiss = { showDenyDialog = false },
             onConfirm = { reason ->
                 showDenyDialog = false
-                onToolApproval(tool, false, reason)
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                submitApproval(approved = false, reason = reason)
             }
         )
     }
@@ -233,16 +385,199 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     }
 }
 
+@Composable
+internal fun ToolApprovalActions(
+    isSubmitting: Boolean,
+    onDeny: () -> Unit,
+    onApprove: () -> Unit,
+) {
+    val hapticFeedback = LocalHapticFeedback.current
+    val submittingLabel = stringResource(R.string.chat_message_tool_approval_submitting)
+    AnimatedContent(
+        targetState = isSubmitting,
+        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        transitionSpec = { fadeIn() togetherWith fadeOut() },
+        label = "tool_approval_actions",
+    ) { submitting ->
+        if (submitting) {
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .size(28.dp)
+                    .semantics { contentDescription = submittingLabel },
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilledTonalIconButton(
+                    onClick = {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.ContextClick)
+                        onDeny()
+                    },
+                    enabled = !isSubmitting,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Cancel01,
+                        contentDescription = stringResource(R.string.chat_message_tool_deny),
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+                FilledTonalIconButton(
+                    onClick = {
+                        hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                        onApprove()
+                    },
+                    enabled = !isSubmitting,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Tick01,
+                        contentDescription = stringResource(R.string.chat_message_tool_approve),
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ToolAnswerSubmitButton(
+    enabled: Boolean,
+    isSubmitting: Boolean,
+    onSubmit: () -> Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val hapticFeedback = LocalHapticFeedback.current
+    val submittingLabel = stringResource(R.string.chat_message_tool_answer_submitting)
+    FilledTonalButton(
+        onClick = {
+            if (onSubmit()) {
+                hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+            }
+        },
+        enabled = enabled && !isSubmitting,
+        modifier = modifier,
+    ) {
+        AnimatedContent(
+            targetState = isSubmitting,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            label = "tool_answer_submit",
+        ) { submitting ->
+            if (submitting) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(18.dp)
+                        .semantics { contentDescription = submittingLabel },
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = HugeIcons.Tick01,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.chat_message_tool_submit),
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AskUserResponseTransition(
+    targetFrame: AskUserResponseFrame,
+    isSubmitting: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable (frame: AskUserResponseFrame, interactionEnabled: Boolean) -> Unit,
+) {
+    AnimatedContent(
+        targetState = targetFrame,
+        modifier = modifier,
+        transitionSpec = {
+            when {
+                initialState.mode == AskUserResponseMode.Editing &&
+                    targetState.mode == AskUserResponseMode.Answered -> {
+                    (slideInVertically { height -> height / 3 } + fadeIn()).togetherWith(
+                        slideOutVertically { height -> -height / 3 } + fadeOut(),
+                    )
+                }
+                initialState.mode == AskUserResponseMode.Answered &&
+                    targetState.mode == AskUserResponseMode.Editing -> {
+                    (slideInVertically { height -> -height / 3 } + fadeIn()).togetherWith(
+                        slideOutVertically { height -> height / 3 } + fadeOut(),
+                    )
+                }
+                else -> fadeIn() togetherWith fadeOut()
+            }
+        },
+        label = "ask_user_response",
+    ) { frame ->
+        val interactionEnabled = targetFrame.mode == AskUserResponseMode.Editing && !isSubmitting
+        content(frame, interactionEnabled)
+    }
+}
+
+@Composable
+internal fun ToolStatusMessage(
+    message: String?,
+    modifier: Modifier = Modifier,
+) {
+    AnimatedContent(
+        targetState = message,
+        modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        contentAlignment = Alignment.TopStart,
+        transitionSpec = {
+            when {
+                initialState == null && targetState != null -> {
+                    (expandVertically(expandFrom = Alignment.Top) + fadeIn()).togetherWith(fadeOut())
+                }
+                initialState != null && targetState == null -> {
+                    fadeIn().togetherWith(
+                        shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
+                    )
+                }
+                else -> fadeIn() togetherWith fadeOut()
+            }
+        },
+        label = "tool_status_message",
+    ) { frameMessage ->
+        if (frameMessage != null) {
+            Text(
+                text = frameMessage,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChainOfThoughtScope.AskUserToolStep(
     tool: UIMessagePart.Tool,
     loading: Boolean,
-    onToolAnswer: ((tool: UIMessagePart.Tool, answer: String) -> Unit)?,
+    onToolAnswer: ToolAnswerHandler?,
 ) {
-    val isPending = tool.approvalState is ToolApprovalState.Pending
-    val isAnswered = tool.approvalState is ToolApprovalState.Answered
     val arguments = tool.inputAsJson()
+    val responseMode = askUserResponseMode(
+        approvalState = tool.approvalState,
+        hasAnswerHandler = onToolAnswer != null,
+    )
+    val answeredState = tool.approvalState as? ToolApprovalState.Answered
+    val answeredValues = remember(answeredState?.answer) {
+        runCatching {
+            JsonInstant.parseToJsonElement(answeredState?.answer.orEmpty())
+                .jsonObject["answers"]
+                ?.jsonObject
+                ?.mapValues { (_, value) -> value.jsonPrimitive.content }
+        }.getOrNull()
+    }
 
     // Parse questions from arguments
     val questions = remember(arguments) {
@@ -259,10 +594,17 @@ private fun ChainOfThoughtScope.AskUserToolStep(
         }.getOrElse { emptyList() }
     }
 
-    // Track answers for text/single questions
-    val answers = remember { mutableStateMapOf<String, String>() }
-    // Track selected options for multi questions
-    val multiAnswers = remember { mutableStateMapOf<String, Set<String>>() }
+    var draft by rememberAskUserAnswerDraft(tool)
+    val answerSubmission = remember(
+        tool.toolExecutionId,
+        tool.toolCallId,
+        tool.toolName,
+        tool.input,
+        tool.approvalState,
+    ) {
+        ToolApprovalSubmissionState()
+    }
+    val answerScope = rememberCoroutineScope()
 
     val firstQuestion = questions.firstOrNull()?.question ?: "..."
 
@@ -309,147 +651,165 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                             color = MaterialTheme.colorScheme.onSurface,
                         )
 
-                        if (isPending && onToolAnswer != null) {
-                            when (q.selectionType) {
-                                "single" -> {
-                                    // Single select: chips only, no text input
-                                    if (q.options.isNotEmpty()) {
-                                        FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            q.options.forEach { option ->
-                                                FilterChip(
-                                                    selected = answers[q.id] == option,
-                                                    onClick = { answers[q.id] = option },
-                                                    label = {
-                                                        Text(
-                                                            text = option,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                        )
-                                                    },
-                                                )
+                        val responseFrame = AskUserResponseFrame(
+                            mode = responseMode,
+                            answer = answeredValues?.get(q.id) ?: answeredState?.answer,
+                        )
+                        AskUserResponseTransition(
+                            targetFrame = responseFrame,
+                            isSubmitting = answerSubmission.isSubmitting,
+                        ) { frame, interactionEnabled ->
+                            when (frame.mode) {
+                                AskUserResponseMode.Editing -> when (q.selectionType) {
+                                    "single" -> {
+                                        if (q.options.isNotEmpty()) {
+                                            FlowRow(
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                            ) {
+                                                q.options.forEach { option ->
+                                                    FilterChip(
+                                                        selected = draft.answers[q.id] == option,
+                                                        onClick = { draft = draft.withAnswer(q.id, option) },
+                                                        enabled = interactionEnabled,
+                                                        label = {
+                                                            Text(
+                                                                text = option,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                            )
+                                                        },
+                                                    )
+                                                }
                                             }
                                         }
                                     }
-                                }
-                                "multi" -> {
-                                    // Multi select: chips only, multiple can be selected
-                                    if (q.options.isNotEmpty()) {
-                                        FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            q.options.forEach { option ->
-                                                val selectedSet = multiAnswers[q.id] ?: emptySet()
-                                                FilterChip(
-                                                    selected = selectedSet.contains(option),
-                                                    onClick = {
-                                                        val current = selectedSet.toMutableSet()
-                                                        if (current.contains(option)) current.remove(option)
-                                                        else current.add(option)
-                                                        multiAnswers[q.id] = current
-                                                    },
-                                                    label = {
-                                                        Text(
-                                                            text = option,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                        )
-                                                    },
-                                                )
+                                    "multi" -> {
+                                        if (q.options.isNotEmpty()) {
+                                            FlowRow(
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                            ) {
+                                                q.options.forEach { option ->
+                                                    val selectedSet = draft.multiAnswers[q.id].orEmpty()
+                                                    FilterChip(
+                                                        selected = selectedSet.contains(option),
+                                                        onClick = { draft = draft.toggleMultiAnswer(q.id, option) },
+                                                        enabled = interactionEnabled,
+                                                        label = {
+                                                            Text(
+                                                                text = option,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                            )
+                                                        },
+                                                    )
+                                                }
                                             }
                                         }
                                     }
-                                }
-                                else -> {
-                                    // Text (default): optional option chips + free text input
-                                    if (q.options.isNotEmpty()) {
-                                        FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                                        ) {
-                                            q.options.forEach { option ->
-                                                FilterChip(
-                                                    selected = answers[q.id] == option,
-                                                    onClick = { answers[q.id] = option },
-                                                    label = {
-                                                        Text(
-                                                            text = option,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                        )
-                                                    },
-                                                )
+                                    else -> {
+                                        if (q.options.isNotEmpty()) {
+                                            FlowRow(
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                            ) {
+                                                q.options.forEach { option ->
+                                                    FilterChip(
+                                                        selected = draft.answers[q.id] == option,
+                                                        onClick = { draft = draft.withAnswer(q.id, option) },
+                                                        enabled = interactionEnabled,
+                                                        label = {
+                                                            Text(
+                                                                text = option,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                            )
+                                                        },
+                                                    )
+                                                }
                                             }
                                         }
+                                        OutlinedTextField(
+                                            value = draft.answers[q.id].orEmpty(),
+                                            onValueChange = { draft = draft.withAnswer(q.id, it) },
+                                            enabled = interactionEnabled,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            textStyle = MaterialTheme.typography.bodySmall,
+                                            singleLine = false,
+                                            minLines = 1,
+                                            maxLines = 3,
+                                        )
                                     }
-
-                                    // Free text input
-                                    OutlinedTextField(
-                                        value = answers[q.id] ?: "",
-                                        onValueChange = { answers[q.id] = it },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textStyle = MaterialTheme.typography.bodySmall,
-                                        singleLine = false,
-                                        minLines = 1,
-                                        maxLines = 3,
-                                    )
                                 }
+                                AskUserResponseMode.Answered -> Text(
+                                    text = frame.answer.orEmpty(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                AskUserResponseMode.ReadOnly -> Unit
                             }
-                        } else if (isAnswered) {
-                            // Show the user's answer
-                            val answeredState = tool.approvalState as ToolApprovalState.Answered
-                            val answerJson = runCatching {
-                                JsonInstant.parseToJsonElement(answeredState.answer)
-                            }.getOrNull()
-                            val answerText = answerJson?.jsonObject?.get("answers")
-                                ?.jsonObject?.get(q.id)?.jsonPrimitive?.contentOrNull
-                                ?: answeredState.answer
-                            Text(
-                                text = answerText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
                         }
                     }
                 }
 
                 // Submit button
-                if (isPending && onToolAnswer != null) {
-                    FilledTonalButton(
-                        onClick = {
+                val answersComplete = questions.all { q ->
+                    when (q.selectionType) {
+                        "multi" -> !draft.multiAnswers[q.id].isNullOrEmpty()
+                        else -> !draft.answers[q.id].isNullOrBlank()
+                    }
+                }
+                AnimatedVisibility(
+                    visible = responseMode == AskUserResponseMode.Editing,
+                    modifier = Modifier.align(Alignment.End),
+                    enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                    exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
+                    label = "ask_user_submit",
+                ) {
+                    ToolAnswerSubmitButton(
+                        onSubmit = submit@{
+                            val answerHandler = onToolAnswer ?: return@submit false
+                            if (!answerSubmission.tryStart()) return@submit false
                             val answerPayload = buildJsonObject {
                                 put("answers", buildJsonObject {
                                     questions.forEach { q ->
                                         when (q.selectionType) {
-                                            "multi" -> put(q.id, JsonPrimitive(multiAnswers[q.id]?.joinToString(", ") ?: ""))
-                                            else -> put(q.id, JsonPrimitive(answers[q.id] ?: ""))
+                                            "multi" -> put(
+                                                q.id,
+                                                JsonPrimitive(
+                                                    draft.multiAnswers[q.id]?.joinToString(", ").orEmpty(),
+                                                ),
+                                            )
+                                            else -> put(q.id, JsonPrimitive(draft.answers[q.id].orEmpty()))
                                         }
                                     }
                                 })
                             }
-                            onToolAnswer(tool, answerPayload.toString())
-                        },
-                        enabled = questions.all { q ->
-                            when (q.selectionType) {
-                                "multi" -> !multiAnswers[q.id].isNullOrEmpty()
-                                else -> !answers[q.id].isNullOrBlank()
+                            val job = try {
+                                answerHandler(tool, answerPayload.toString())
+                            } catch (error: Throwable) {
+                                answerSubmission.finish()
+                                throw error
                             }
+                            answerScope.launch {
+                                try {
+                                    job.join()
+                                } finally {
+                                    answerSubmission.finish()
+                                }
+                            }
+                            true
                         },
-                        modifier = Modifier.align(Alignment.End),
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.Tick01,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.chat_message_tool_submit),
-                            modifier = Modifier.padding(start = 4.dp),
-                        )
-                    }
+                        enabled = answersComplete && responseMode == AskUserResponseMode.Editing,
+                        isSubmitting = answerSubmission.isSubmitting,
+                    )
                 }
             }
         },
+    )
+    ToolStatusMessage(
+        message = tool.approvalStatusMessage,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 32.dp, top = 4.dp, bottom = 8.dp),
     )
 }
 

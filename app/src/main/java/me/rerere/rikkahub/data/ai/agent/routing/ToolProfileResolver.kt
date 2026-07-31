@@ -205,6 +205,7 @@ class ToolProfileResolver {
             workspaceId = request.workspaceId,
             isSubagentRun = request.isSubagentRun,
             injectPromptSummary = request.permissionPolicy.injectPromptSummary,
+            permissionMode = request.permissionPolicy.permissionMode.name,
             actions = actions,
             tools = canonicalTools,
         )
@@ -213,7 +214,7 @@ class ToolProfileResolver {
     }
 
     private companion object {
-        const val PERMISSION_DIGEST_VERSION = "tool-profile-v1"
+        const val PERMISSION_DIGEST_VERSION = "tool-profile-v2"
 
         val answerCapabilities = setOf(
             ToolCapability.LOCAL_READ,
@@ -244,6 +245,7 @@ private data class PermissionDigestPayload(
     val workspaceId: String?,
     val isSubagentRun: Boolean,
     val injectPromptSummary: Boolean,
+    val permissionMode: String,
     val actions: List<CanonicalCategoryAction>,
     val tools: List<CanonicalToolPermission>,
 )

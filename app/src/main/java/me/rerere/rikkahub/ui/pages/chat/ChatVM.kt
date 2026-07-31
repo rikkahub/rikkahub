@@ -12,10 +12,13 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.analytics.FirebaseAnalytics
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -70,6 +73,9 @@ class ChatVM(
     val conversationJob: StateFlow<Job?> = conversationSession.generationJob
 
     val processingStatus: StateFlow<String?> = conversationSession.processingStatus
+
+    private val _stoppingRunId = MutableStateFlow<String?>(null)
+    val stoppingRunId: StateFlow<String?> = _stoppingRunId.asStateFlow()
 
     val conversationJobs = chatService
         .getConversationJobs()
@@ -227,23 +233,35 @@ class ChatVM(
         tool: UIMessagePart.Tool,
         approved: Boolean,
         reason: String = ""
-    ) {
+    ): Job {
         analytics.logEvent("ai_tool_approval", null)
-        chatService.handleToolApproval(_conversationId, tool, approved, reason)
+        return chatService.handleToolApproval(_conversationId, tool, approved, reason)
     }
 
     fun handleToolAnswer(
         tool: UIMessagePart.Tool,
         answer: String,
-    ) {
+    ): Job {
         analytics.logEvent("ai_tool_answer", null)
-        chatService.handleToolApproval(_conversationId, tool, approved = true, answer = answer)
+        return chatService.handleToolApproval(_conversationId, tool, approved = true, answer = answer)
     }
 
     fun stopGeneration(runId: String?) {
-        if (runId == null) return
+        if (runId == null || !_stoppingRunId.compareAndSet(expect = null, update = runId)) return
         viewModelScope.launch {
-            chatService.stopGeneration(_conversationId, runId)
+            try {
+                chatService.stopGeneration(_conversationId, runId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                chatService.addError(
+                    error = error,
+                    conversationId = _conversationId,
+                    title = context.getString(R.string.error_title_operation),
+                )
+            } finally {
+                _stoppingRunId.compareAndSet(expect = runId, update = null)
+            }
         }
     }
 

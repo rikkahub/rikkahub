@@ -42,6 +42,9 @@ enum class PolicyCode {
     SIDE_EFFECT_REQUIRES_APPROVAL,
     DEFAULT_ASK,
     LOW_RISK_READ_ONLY,
+    USER_FULL_ACCESS,
+    USER_MODE_AUTO_ALLOW,
+    CRITICAL_ACTION_REQUIRES_APPROVAL,
     SUBAGENT_TOOL_NOT_ALLOWED,
 }
 
@@ -83,6 +86,39 @@ object CapabilityPolicy {
         }
         if (descriptor.defaultApproval == ToolDefaultApproval.DENY) {
             return deny(PolicyCode.DESCRIPTOR_DENY, "This tool is disabled by its descriptor.")
+        }
+
+        if (context.permissionPolicy.permissionMode == AgentPermissionMode.FULL_ACCESS) {
+            return PolicyDecision.Allow(
+                PolicyCode.USER_FULL_ACCESS,
+                "The user enabled full access for this assistant.",
+            )
+        }
+
+        if (context.permissionPolicy.permissionMode == AgentPermissionMode.CONFIRM_CRITICAL) {
+            if (context.permissionPolicy.actionFor(descriptor.category) == ApprovalAction.ASK) {
+                return ask(PolicyCode.LEGACY_POLICY_ASK, "Approval is required by the configured permission policy.")
+            }
+            if (context.mcpServer?.needsApproval == true) {
+                return ask(PolicyCode.MCP_TOOL_APPROVAL_REQUIRED, "The MCP tool requests approval.")
+            }
+            if (
+                descriptor.riskLevel >= ToolRiskLevel.CRITICAL ||
+                descriptor.capability == ToolCapability.UNKNOWN ||
+                descriptor.sideEffect == ToolSideEffect.UNKNOWN ||
+                descriptor.sideEffect == ToolSideEffect.EXTERNAL ||
+                (descriptor.dataScope == ToolDataScope.LOCAL_SENSITIVE &&
+                    descriptor.riskLevel >= ToolRiskLevel.HIGH)
+            ) {
+                return ask(
+                    PolicyCode.CRITICAL_ACTION_REQUIRES_APPROVAL,
+                    "This action is critical, unknown, external, or accesses sensitive device data.",
+                )
+            }
+            return PolicyDecision.Allow(
+                PolicyCode.USER_MODE_AUTO_ALLOW,
+                "The user only requires confirmation for critical actions.",
+            )
         }
 
         // Legacy policies may demand approval, but AUTO is never a grant over this policy's baseline.

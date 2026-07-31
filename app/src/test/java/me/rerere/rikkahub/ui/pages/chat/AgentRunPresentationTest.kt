@@ -31,6 +31,25 @@ import org.junit.Test
 
 class AgentRunPresentationTest {
     @Test
+    fun runStatusesMapToStableVisualStates() {
+        val expectedStates = mapOf(
+            AgentRunStatus.QUEUED to AgentRunVisualState.PENDING,
+            AgentRunStatus.PREFLIGHT to AgentRunVisualState.PENDING,
+            AgentRunStatus.RUNNING to AgentRunVisualState.WORKING,
+            AgentRunStatus.WAITING_APPROVAL to AgentRunVisualState.NEEDS_ATTENTION,
+            AgentRunStatus.SUCCEEDED to AgentRunVisualState.SUCCEEDED,
+            AgentRunStatus.FAILED to AgentRunVisualState.FAILED,
+            AgentRunStatus.BLOCKED to AgentRunVisualState.FAILED,
+            AgentRunStatus.CANCELLED to AgentRunVisualState.STOPPED,
+            AgentRunStatus.INTERRUPTED to AgentRunVisualState.STOPPED,
+        )
+
+        expectedStates.forEach { (status, expected) ->
+            assertEquals(expected, run(status.name).toPresentation().visualState)
+        }
+    }
+
+    @Test
     fun waitingRunUsesStructuredConfigurationAndApprovalReason() {
         val detail = AgentRunDetail(
             run = run(
@@ -39,7 +58,15 @@ class AgentRunPresentationTest {
                 summary = AgentRunSummary(completedSteps = 3, outcome = "do not render this"),
             ),
             steps = listOf(
-                AgentStepEntity("step", "run", 3, "tool", AgentStepStatus.RUNNING.name, createdAt = 1_000, updatedAt = 2_500),
+                AgentStepEntity(
+                    "step",
+                    "run",
+                    3,
+                    "tool",
+                    AgentStepStatus.RUNNING.name,
+                    createdAt = 1_000,
+                    updatedAt = 2_500,
+                ),
             ),
             tools = listOf(
                 ToolExecutionEntity(
@@ -47,6 +74,7 @@ class AgentRunPresentationTest {
                     summaryJson = JsonInstant.encodeToString(
                         ToolExecutionSummary(category = "workspace", operation = "read", outputBytes = 256)
                     ),
+                    startedAt = 1_250,
                     createdAt = 1_000, updatedAt = 2_500,
                 ),
             ),
@@ -68,8 +96,14 @@ class AgentRunPresentationTest {
         assertEquals(3, presentation.completedSteps)
         assertEquals("步骤 4 · tool", presentation.currentStep)
         assertEquals("此操作需要你的批准", presentation.waitingReason)
-        assertEquals("workspace / read", presentation.timeline.single { it.label.startsWith("工具") }.summary)
-        assertEquals("输出已脱敏（256 B）", presentation.timeline.single { it.label.startsWith("工具") }.outputSummary)
+        val step = presentation.timeline.single { it.label.startsWith("步骤") }
+        val tool = presentation.timeline.single { it.label.startsWith("工具") }
+        assertEquals(AgentRunVisualState.WORKING, step.visualState)
+        assertEquals(AgentRunVisualState.NEEDS_ATTENTION, tool.visualState)
+        assertEquals(1_000, step.durationStartedAt)
+        assertEquals(1_250, tool.durationStartedAt)
+        assertEquals("workspace / read", tool.summary)
+        assertEquals("输出已脱敏（256 B）", tool.outputSummary)
         assertFalse(presentation.toString().contains("do not render this"))
     }
 
@@ -152,6 +186,71 @@ class AgentRunPresentationTest {
     }
 
     @Test
+    fun activeRunCardTransitionAcknowledgesMatchingTerminalSnapshot() {
+        val active = run(AgentRunStatus.RUNNING.name).toPresentation()
+        val terminal = run(AgentRunStatus.SUCCEEDED.name).toPresentation()
+
+        val transition = agentRunCardTransition(
+            activePresentation = null,
+            retainedPresentation = active,
+            latestPresentation = terminal,
+            eligibleRunId = active.runId,
+        )
+
+        assertEquals(AgentRunCardStage.TERMINAL, transition.stage)
+        assertEquals(AgentRunVisualState.SUCCEEDED, transition.presentation?.visualState)
+    }
+
+    @Test
+    fun activeRunCardTransitionWaitsInsteadOfAcceptingAnotherRun() {
+        val active = run(AgentRunStatus.RUNNING.name).toPresentation()
+        val unrelatedTerminal = run(AgentRunStatus.FAILED.name)
+            .copy(id = "another-run")
+            .toPresentation()
+
+        val transition = agentRunCardTransition(
+            activePresentation = null,
+            retainedPresentation = active,
+            latestPresentation = unrelatedTerminal,
+            eligibleRunId = active.runId,
+        )
+
+        assertEquals(AgentRunCardStage.AWAITING_TERMINAL, transition.stage)
+        assertEquals(active, transition.presentation)
+    }
+
+    @Test
+    fun activeRunCardTransitionNeverReplaysHistoricalTerminalSnapshot() {
+        val historicalTerminal = run(AgentRunStatus.SUCCEEDED.name).toPresentation()
+
+        val transition = agentRunCardTransition(
+            activePresentation = null,
+            retainedPresentation = null,
+            latestPresentation = historicalTerminal,
+            eligibleRunId = null,
+        )
+
+        assertEquals(AgentRunCardStage.HIDDEN, transition.stage)
+        assertNull(transition.presentation)
+    }
+
+    @Test
+    fun activeRunCardTransitionPrioritizesReplacementActiveRun() {
+        val retained = run(AgentRunStatus.RUNNING.name).copy(id = "old-run").toPresentation()
+        val replacement = run(AgentRunStatus.RUNNING.name).copy(id = "new-run").toPresentation()
+
+        val transition = agentRunCardTransition(
+            activePresentation = replacement,
+            retainedPresentation = retained,
+            latestPresentation = retained,
+            eligibleRunId = retained.runId,
+        )
+
+        assertEquals(AgentRunCardStage.ACTIVE, transition.stage)
+        assertEquals(replacement, transition.presentation)
+    }
+
+    @Test
     fun presentationMapsInternalFailureAndApprovalCodesToSafeText() {
         val presentation = AgentRunDetail(
             run = run(status = AgentRunStatus.FAILED.name).copy(
@@ -181,18 +280,150 @@ class AgentRunPresentationTest {
     }
 
     @Test
+    fun liveDurationUsesLocalClockOnlyForActiveRuns() {
+        val running = run(AgentRunStatus.RUNNING.name)
+            .copy(startedAt = 1_000, updatedAt = 1_500)
+            .toPresentation()
+
+        assertEquals(1_000, running.durationStartedAt)
+        assertEquals("2.50s", liveDurationLabel(running, nowMillis = 3_500))
+        assertEquals(
+            "2.50s",
+            liveDurationLabel(
+                running.copy(visualState = AgentRunVisualState.NEEDS_ATTENTION),
+                nowMillis = 3_500,
+            ),
+        )
+        assertEquals("0ms", liveDurationLabel(running, nowMillis = 500))
+        assertEquals(
+            "500ms",
+            liveDurationLabel(
+                running.copy(visualState = AgentRunVisualState.SUCCEEDED),
+                nowMillis = 20_000,
+            ),
+        )
+    }
+
+    @Test
+    fun nestedLiveDurationUsesSharedClockOnlyWhileActive() {
+        val workingChild = ChildRunPresentation(
+            runId = "child",
+            status = "running",
+            visualState = AgentRunVisualState.WORKING,
+            duration = "500ms",
+            durationStartedAt = 1_000,
+            findings = "",
+        )
+        val workingTool = AgentRunTimelineItem(
+            stableKey = "tool:1",
+            sequence = 1,
+            label = "tool",
+            status = "running",
+            visualState = AgentRunVisualState.WORKING,
+            duration = "500ms",
+            summary = null,
+            outputSummary = null,
+            failureCategory = null,
+            approval = null,
+            approvalReason = null,
+            timestampMillis = 900,
+            durationStartedAt = 1_000,
+        )
+
+        assertEquals(
+            "2.50s",
+            liveDurationLabel(
+                duration = workingChild.duration,
+                durationStartedAt = workingChild.durationStartedAt,
+                visualState = workingChild.visualState,
+                nowMillis = 3_500,
+            ),
+        )
+        assertEquals(
+            "2.50s",
+            liveDurationLabel(
+                duration = workingTool.duration,
+                durationStartedAt = workingTool.durationStartedAt,
+                visualState = AgentRunVisualState.NEEDS_ATTENTION,
+                nowMillis = 3_500,
+            ),
+        )
+        assertEquals(
+            "500ms",
+            liveDurationLabel(
+                duration = workingTool.duration,
+                durationStartedAt = workingTool.durationStartedAt,
+                visualState = AgentRunVisualState.SUCCEEDED,
+                nowMillis = 20_000,
+            ),
+        )
+    }
+
+    @Test
     fun timelineKeepsToolsDirectlyAfterTheirStepAndSortsOnlyOrphans() {
         val timeline = AgentRunDetail(
             run = run(AgentRunStatus.RUNNING.name),
             steps = listOf(
-                AgentStepEntity("first", "run", 0, "agent", AgentStepStatus.SUCCEEDED.name, createdAt = 0, updatedAt = 0),
-                AgentStepEntity("second", "run", 1, "agent", AgentStepStatus.RUNNING.name, createdAt = 0, updatedAt = 0),
+                AgentStepEntity(
+                    "first",
+                    "run",
+                    0,
+                    "agent",
+                    AgentStepStatus.SUCCEEDED.name,
+                    createdAt = 0,
+                    updatedAt = 0,
+                ),
+                AgentStepEntity(
+                    "second",
+                    "run",
+                    1,
+                    "agent",
+                    AgentStepStatus.RUNNING.name,
+                    createdAt = 0,
+                    updatedAt = 0,
+                ),
             ),
             tools = listOf(
-                ToolExecutionEntity("tool-second", "run", "second", 0, "second-tool", ToolExecutionStatus.PENDING.name, createdAt = 0, updatedAt = 0),
-                ToolExecutionEntity("tool-first", "run", "first", 1, "first-tool", ToolExecutionStatus.PENDING.name, createdAt = 0, updatedAt = 0),
-                ToolExecutionEntity("orphan-first", "run", "missing", 2, "orphan-first-tool", ToolExecutionStatus.PENDING.name, createdAt = 0, updatedAt = 0),
-                ToolExecutionEntity("orphan-second", "run", "missing", 3, "orphan-second-tool", ToolExecutionStatus.PENDING.name, createdAt = 0, updatedAt = 0),
+                ToolExecutionEntity(
+                    "tool-second",
+                    "run",
+                    "second",
+                    0,
+                    "second-tool",
+                    ToolExecutionStatus.PENDING.name,
+                    createdAt = 0,
+                    updatedAt = 0,
+                ),
+                ToolExecutionEntity(
+                    "tool-first",
+                    "run",
+                    "first",
+                    1,
+                    "first-tool",
+                    ToolExecutionStatus.PENDING.name,
+                    createdAt = 0,
+                    updatedAt = 0,
+                ),
+                ToolExecutionEntity(
+                    "orphan-first",
+                    "run",
+                    "missing",
+                    2,
+                    "orphan-first-tool",
+                    ToolExecutionStatus.PENDING.name,
+                    createdAt = 0,
+                    updatedAt = 0,
+                ),
+                ToolExecutionEntity(
+                    "orphan-second",
+                    "run",
+                    "missing",
+                    3,
+                    "orphan-second-tool",
+                    ToolExecutionStatus.PENDING.name,
+                    createdAt = 0,
+                    updatedAt = 0,
+                ),
             ),
             approvals = emptyList(),
         ).toPresentation().timeline
@@ -215,14 +446,23 @@ class AgentRunPresentationTest {
         val child = run(AgentRunStatus.SUCCEEDED.name).copy(
             id = "child",
             parentRunId = "run",
+            startedAt = 250,
             summaryJson = JsonInstant.encodeToString(
                 AgentRunSummary(childReport = ChildRunReport(findings = listOf("Safe finding")))
             ),
         )
-        val presentation = AgentRunDetail(run(AgentRunStatus.RUNNING.name), emptyList(), emptyList(), emptyList(), listOf(child))
-            .toPresentation()
+        val presentation = AgentRunDetail(
+            run(AgentRunStatus.RUNNING.name),
+            emptyList(),
+            emptyList(),
+            emptyList(),
+            listOf(child),
+        ).toPresentation()
 
         assertEquals("child", presentation.children.single().runId)
+        assertEquals(AgentRunVisualState.SUCCEEDED, presentation.children.single().visualState)
+        assertEquals("1.25s", presentation.children.single().duration)
+        assertEquals(250, presentation.children.single().durationStartedAt)
         assertEquals("Safe finding", presentation.children.single().findings)
     }
 
@@ -240,11 +480,17 @@ class AgentRunPresentationTest {
             createdAt = 100,
         )
 
-        val timeline = AgentRunDetail(run(AgentRunStatus.RUNNING.name), emptyList(), emptyList(), emptyList(), traceEvents = listOf(trace))
-            .toPresentation().timeline
+        val timeline = AgentRunDetail(
+            run(AgentRunStatus.RUNNING.name),
+            emptyList(),
+            emptyList(),
+            emptyList(),
+            traceEvents = listOf(trace),
+        ).toPresentation().timeline
 
         assertEquals("追踪 · POLICY DECISION", timeline.single().label)
         assertEquals("已拒绝", timeline.single().status)
+        assertEquals(AgentRunVisualState.FAILED, timeline.single().visualState)
         assertFalse(timeline.single().toString().contains("attributesJson"))
     }
 

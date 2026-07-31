@@ -63,9 +63,11 @@ import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.Package01
 import me.rerere.hugeicons.stroke.Settings02
+import me.rerere.hugeicons.stroke.Tick02
 import me.rerere.hugeicons.stroke.Video01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.ai.agent.permission.AgentPermissionMode
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -138,27 +140,30 @@ internal fun FilesPicker(
             modifier = Modifier.fillMaxWidth()
         )
 
-        if (workspaces.isNotEmpty()) {
-            WorkspacePickerListItem(
-                assistant = assistant,
-                conversation = conversation,
-                workspaces = workspaces,
-                onUpdateAssistant = onUpdateAssistant,
-                onUpdateConversation = onUpdateConversation,
-                onNavigateToDetail = { id ->
-                    onDismiss()
-                    navController.navigate(Screen.WorkspaceDetail(id))
-                },
-                onNavigateToTerminal = { id ->
-                    onDismiss()
-                    navController.navigate(Screen.WorkspaceTerminal(id))
-                },
-                onNavigateToManage = {
-                    onDismiss()
-                    navController.navigate(Screen.Workspaces)
-                },
-            )
-        }
+        WorkspacePickerListItem(
+            assistant = assistant,
+            conversation = conversation,
+            workspaces = workspaces,
+            onUpdateAssistant = onUpdateAssistant,
+            onUpdateConversation = onUpdateConversation,
+            onNavigateToDetail = { id ->
+                onDismiss()
+                navController.navigate(Screen.WorkspaceDetail(id))
+            },
+            onNavigateToTerminal = { id ->
+                onDismiss()
+                navController.navigate(Screen.WorkspaceTerminal(id))
+            },
+            onNavigateToManage = {
+                onDismiss()
+                navController.navigate(Screen.Workspaces)
+            },
+        )
+
+        AgentPermissionModePickerListItem(
+            assistant = assistant,
+            onUpdateAssistant = onUpdateAssistant,
+        )
 
         if (settings.mcpServers.isNotEmpty()) {
             McpPickerListItem(
@@ -300,6 +305,98 @@ internal fun FilesPicker(
 }
 
 @Composable
+private fun AgentPermissionModePickerListItem(
+    assistant: Assistant,
+    onUpdateAssistant: (Assistant) -> Unit,
+) {
+    var showSheet by remember { mutableStateOf(false) }
+
+    ListItem(
+        leadingContent = {
+            Icon(
+                imageVector = HugeIcons.Settings02,
+                contentDescription = stringResource(R.string.assistant_page_agent_permission_mode),
+            )
+        },
+        headlineContent = {
+            Text(stringResource(R.string.assistant_page_agent_permission_mode))
+        },
+        supportingContent = {
+            Text(agentPermissionModeLabel(assistant.agentPermissionMode))
+        },
+        colors = ListItemDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.large)
+            .clickable { showSheet = true },
+    )
+
+    if (showSheet) {
+        ModalBottomSheet(onDismissRequest = { showSheet = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.assistant_page_agent_permission_mode),
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+                AgentPermissionMode.entries.forEach { mode ->
+                    val selected = mode == assistant.agentPermissionMode
+                    ListItem(
+                        headlineContent = { Text(agentPermissionModeLabel(mode)) },
+                        supportingContent = { Text(agentPermissionModeDescription(mode)) },
+                        trailingContent = if (selected) {
+                            {
+                                Icon(
+                                    imageVector = HugeIcons.Tick02,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                        colors = ListItemDefaults.colors(
+                            containerColor = if (selected) {
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                            } else {
+                                Color.Transparent
+                            },
+                        ),
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.large)
+                            .clickable {
+                                onUpdateAssistant(assistant.copy(agentPermissionMode = mode))
+                                showSheet = false
+                            },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun agentPermissionModeLabel(mode: AgentPermissionMode): String = when (mode) {
+    AgentPermissionMode.AUTO_REVIEW -> stringResource(R.string.agent_permission_mode_auto_review)
+    AgentPermissionMode.FULL_ACCESS -> stringResource(R.string.agent_permission_mode_full_access)
+    AgentPermissionMode.CONFIRM_CRITICAL -> stringResource(R.string.agent_permission_mode_confirm_critical)
+}
+
+@Composable
+private fun agentPermissionModeDescription(mode: AgentPermissionMode): String = when (mode) {
+    AgentPermissionMode.AUTO_REVIEW -> stringResource(R.string.agent_permission_mode_auto_review_desc)
+    AgentPermissionMode.FULL_ACCESS -> stringResource(R.string.agent_permission_mode_full_access_desc)
+    AgentPermissionMode.CONFIRM_CRITICAL -> stringResource(R.string.agent_permission_mode_confirm_critical_desc)
+}
+
+@Composable
 private fun WorkspacePickerListItem(
     assistant: Assistant,
     conversation: Conversation,
@@ -379,6 +476,10 @@ private fun WorkspacePickerListItem(
             onManage = {
                 showSheet = false
                 onNavigateToManage()
+            },
+            onOpenDetails = { workspaceId ->
+                showSheet = false
+                onNavigateToDetail(workspaceId)
             },
             onDismiss = { showSheet = false },
         )

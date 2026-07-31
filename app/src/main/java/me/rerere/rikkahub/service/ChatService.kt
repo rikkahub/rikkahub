@@ -795,11 +795,11 @@ class ChatService(
         approved: Boolean,
         reason: String = "",
         answer: String? = null,
-    ) {
+    ): Job {
         val session = acquireSessionReference(conversationId)
         val expectedEpoch = session.epochToken()
 
-        appScope.launch {
+        return appScope.launch {
             try {
                 agentRunRepository.awaitStartupRecovery()
                 generationLocks.computeIfAbsent(conversationId) { Mutex() }.withLock {
@@ -1261,6 +1261,7 @@ class ChatService(
         }
         val permissionPolicy = PermissionPolicy.compatibleDefault(
             injectPromptForWorkspace = requestedCompatibilityMode != AgentMode.CHAT,
+            permissionMode = assistant.agentPermissionMode,
         )
         val privateProcessingStatus = MutableStateFlow<String?>(null)
         val profile = try {

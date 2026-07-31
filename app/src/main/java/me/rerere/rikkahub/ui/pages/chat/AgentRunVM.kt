@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import me.rerere.rikkahub.data.db.entity.AgentApprovalEntity
 import me.rerere.rikkahub.data.db.entity.AgentRunEntity
 import me.rerere.rikkahub.data.db.entity.AgentStepEntity
@@ -20,10 +21,63 @@ import me.rerere.rikkahub.data.db.entity.ToolExecutionEntity
 import me.rerere.rikkahub.data.repository.AgentRunRepository
 
 sealed interface AgentRunDetailState {
-    data object Closed : AgentRunDetailState
-    data object Loading : AgentRunDetailState
-    data object Missing : AgentRunDetailState
-    data class Content(val detail: AgentRunDetail) : AgentRunDetailState
+    val runId: String?
+    val canNavigateBack: Boolean
+    val navigationDepth: Int
+
+    data object Closed : AgentRunDetailState {
+        override val runId: String? = null
+        override val canNavigateBack: Boolean = false
+        override val navigationDepth: Int = 0
+    }
+
+    data class Loading(
+        override val runId: String,
+        override val canNavigateBack: Boolean = false,
+        override val navigationDepth: Int = 1,
+    ) : AgentRunDetailState
+
+    data class Missing(
+        override val runId: String,
+        override val canNavigateBack: Boolean = false,
+        override val navigationDepth: Int = 1,
+    ) : AgentRunDetailState
+
+    data class Content(
+        val detail: AgentRunDetail,
+        override val canNavigateBack: Boolean = false,
+        override val navigationDepth: Int = 1,
+    ) : AgentRunDetailState {
+        override val runId: String = detail.run.id
+    }
+}
+
+internal data class AgentRunNavigation(
+    private val path: List<String> = emptyList(),
+) {
+    val selectedRunId: String? get() = path.lastOrNull()
+    val canNavigateBack: Boolean get() = path.size > 1
+    val navigationDepth: Int get() = path.size
+
+    fun openRoot(runId: String): AgentRunNavigation = AgentRunNavigation(listOf(runId))
+
+    fun openChild(runId: String): AgentRunNavigation {
+        if (runId == selectedRunId) return this
+        val existingIndex = path.indexOf(runId)
+        return if (existingIndex >= 0) {
+            AgentRunNavigation(path.take(existingIndex + 1))
+        } else {
+            AgentRunNavigation(path + runId)
+        }
+    }
+
+    fun back(): AgentRunNavigation = if (canNavigateBack) {
+        AgentRunNavigation(path.dropLast(1))
+    } else {
+        this
+    }
+
+    fun close(): AgentRunNavigation = AgentRunNavigation()
 }
 
 private data class AgentRunDetailPrimary(
@@ -49,22 +103,43 @@ class AgentRunVM(
     val activeRun: StateFlow<AgentRunEntity?> = repository.observeActiveRun(conversationId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    private val selectedRunId = MutableStateFlow<String?>(null)
-    val selectedRun: StateFlow<String?> = selectedRunId
+    private val navigation = MutableStateFlow(AgentRunNavigation())
+    val selectedRun: StateFlow<String?> = navigation
+        .map { it.selectedRunId }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    val detail: StateFlow<AgentRunDetailState> = selectedRunId.flatMapLatest { runId ->
+    val detail: StateFlow<AgentRunDetailState> = navigation.flatMapLatest { destination ->
+        val runId = destination.selectedRunId
         if (runId == null) {
             flowOf(AgentRunDetailState.Closed)
         } else {
             observeDetail(repository, runId)
                 .map { detail ->
-                    detail?.let(AgentRunDetailState::Content) ?: AgentRunDetailState.Missing
+                    detail?.let {
+                        AgentRunDetailState.Content(
+                            detail = it,
+                            canNavigateBack = destination.canNavigateBack,
+                            navigationDepth = destination.navigationDepth,
+                        )
+                    } ?: AgentRunDetailState.Missing(
+                        runId = runId,
+                        canNavigateBack = destination.canNavigateBack,
+                        navigationDepth = destination.navigationDepth,
+                    )
                 }
-                .onStart { emit(AgentRunDetailState.Loading) }
+                .onStart {
+                    emit(
+                        AgentRunDetailState.Loading(
+                            runId = runId,
+                            canNavigateBack = destination.canNavigateBack,
+                            navigationDepth = destination.navigationDepth,
+                        ),
+                    )
+                }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AgentRunDetailState.Closed)
 
-    val activeDetail: StateFlow<AgentRunDetail?> = combine(activeRun, selectedRunId) { run, selectedId ->
+    val activeDetail: StateFlow<AgentRunDetail?> = combine(activeRun, selectedRun) { run, selectedId ->
         when {
             run == null -> flowOf(null)
             run.id == selectedId -> detail.map { (it as? AgentRunDetailState.Content)?.detail }
@@ -74,11 +149,19 @@ class AgentRunVM(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun openRun(id: String) {
-        selectedRunId.value = id
+        navigation.update { it.openRoot(id) }
+    }
+
+    fun openChildRun(id: String) {
+        navigation.update { it.openChild(id) }
+    }
+
+    fun navigateBack() {
+        navigation.update(AgentRunNavigation::back)
     }
 
     fun closeRun() {
-        selectedRunId.value = null
+        navigation.update(AgentRunNavigation::close)
     }
 
     /** Content-free trace feed for Run Center consumers; presentation remains intentionally separate. */
@@ -96,7 +179,16 @@ class AgentRunVM(
             repository.observeTraceEvents(runId),
         ) { approvals, children, traceEvents -> AgentRunDetailSecondary(approvals, children, traceEvents) }
         return combine(primary, secondary) { first, second ->
-            first.run?.let { AgentRunDetail(it, first.steps, first.tools, second.approvals, second.children, second.traceEvents) }
+            first.run?.let {
+                AgentRunDetail(
+                    it,
+                    first.steps,
+                    first.tools,
+                    second.approvals,
+                    second.children,
+                    second.traceEvents,
+                )
+            }
         }
     }
 }

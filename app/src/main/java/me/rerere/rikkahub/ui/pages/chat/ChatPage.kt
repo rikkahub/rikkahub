@@ -2,16 +2,23 @@ package me.rerere.rikkahub.ui.pages.chat
 
 import android.net.Uri
 import android.util.Log
+import androidx.annotation.StringRes
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
@@ -27,6 +34,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PermanentNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,14 +55,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -127,6 +133,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val conversation by vm.conversation.collectAsStateWithLifecycle()
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
     val processingStatus by vm.processingStatus.collectAsStateWithLifecycle()
+    val stoppingRunId by vm.stoppingRunId.collectAsStateWithLifecycle()
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
@@ -135,6 +142,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val latestRun by agentRunVm.latestRun.collectAsStateWithLifecycle()
     val selectedRunId by agentRunVm.selectedRun.collectAsStateWithLifecycle()
     val selectedRunDetail by agentRunVm.detail.collectAsStateWithLifecycle()
+    val latestRunPresentation = remember(latestRun) { latestRun?.toPresentation() }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
@@ -240,10 +248,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     onClearAllErrors = { vm.clearAllErrors() },
                     activeRun = activeRun,
                     activeRunDetail = activeRunDetail,
-                    latestRunId = latestRun?.id,
+                    stoppingRunId = stoppingRunId,
+                    latestRun = latestRunPresentation,
                     selectedRunId = selectedRunId,
                     selectedRunDetail = selectedRunDetail,
                     onOpenRun = agentRunVm::openRun,
+                    onOpenChildRun = agentRunVm::openChildRun,
+                    onNavigateBack = agentRunVm::navigateBack,
                     onCloseRun = agentRunVm::closeRun,
                     onStopRun = vm::stopGeneration,
                 )
@@ -280,10 +291,13 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     onClearAllErrors = { vm.clearAllErrors() },
                     activeRun = activeRun,
                     activeRunDetail = activeRunDetail,
-                    latestRunId = latestRun?.id,
+                    stoppingRunId = stoppingRunId,
+                    latestRun = latestRunPresentation,
                     selectedRunId = selectedRunId,
                     selectedRunDetail = selectedRunDetail,
                     onOpenRun = agentRunVm::openRun,
+                    onOpenChildRun = agentRunVm::openChildRun,
+                    onNavigateBack = agentRunVm::navigateBack,
                     onCloseRun = agentRunVm::closeRun,
                     onStopRun = vm::stopGeneration,
                 )
@@ -293,6 +307,31 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
             }
         }
     }
+}
+
+internal fun detailStopTarget(
+    selectedRunId: String?,
+    activeRootRunId: String?,
+): String? = selectedRunId?.takeIf { it == activeRootRunId }
+
+internal data class ApprovalLocationFeedback(
+    @param:StringRes val messageRes: Int,
+    val duration: SnackbarDuration,
+    val withDismissAction: Boolean,
+)
+
+internal fun approvalLocationFeedback(located: Boolean): ApprovalLocationFeedback = if (located) {
+    ApprovalLocationFeedback(
+        messageRes = R.string.agent_run_approval_location_success,
+        duration = SnackbarDuration.Short,
+        withDismissAction = false,
+    )
+} else {
+    ApprovalLocationFeedback(
+        messageRes = R.string.agent_run_approval_location_missing,
+        duration = SnackbarDuration.Long,
+        withDismissAction = true,
+    )
 }
 
 @Composable
@@ -314,27 +353,32 @@ private fun ChatPageContent(
     onClearAllErrors: () -> Unit,
     activeRun: me.rerere.rikkahub.data.db.entity.AgentRunEntity?,
     activeRunDetail: AgentRunDetail?,
-    latestRunId: String?,
+    stoppingRunId: String?,
+    latestRun: AgentRunPresentation?,
     selectedRunId: String?,
     selectedRunDetail: AgentRunDetailState,
     onOpenRun: (String) -> Unit,
+    onOpenChildRun: (String) -> Unit,
+    onNavigateBack: () -> Unit,
     onCloseRun: () -> Unit,
     onStopRun: (String?) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val toaster = LocalToaster.current
     val workspaceRepository: WorkspaceRepository = koinInject()
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
-    var approvalAnnouncement by remember { mutableStateOf<String?>(null) }
-    val approvalAnnouncementFocusRequester = remember { FocusRequester() }
+    val approvalSnackbarHostState = remember { SnackbarHostState() }
     val activeRunPresentation = remember(activeRun, activeRunDetail) {
         selectActiveRunPresentation(activeRun, activeRunDetail)
     }
     // Keep the run identity from this composition; an old click must not stop a later run.
     val stopRunId = activeRun?.id
+    val selectedDetailStopRunId = detailStopTarget(selectedRunId, stopRunId)
+    val isStoppingSelectedDetail = stoppingRunId != null && stoppingRunId == selectedRunId
 
     val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
         assistant.workspaceId?.let { workspaceId ->
@@ -349,10 +393,6 @@ private fun ChatPageContent(
     }
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
-
-    LaunchedEffect(approvalAnnouncement) {
-        if (approvalAnnouncement != null) approvalAnnouncementFocusRequester.requestFocus()
-    }
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -377,8 +417,8 @@ private fun ChatPageContent(
                         vm.updateTitle(it)
                     },
                     activeRouting = activeRunPresentation?.routing,
-                    showRunEntry = latestRunId != null,
-                    onOpenLatestRun = { latestRunId?.let(onOpenRun) },
+                    latestRun = latestRun,
+                    onOpenRun = onOpenRun,
                 )
             },
             bottomBar = {
@@ -466,6 +506,9 @@ private fun ChatPageContent(
                     },
                 )
             },
+            snackbarHost = {
+                SnackbarHost(hostState = approvalSnackbarHostState)
+            },
             containerColor = Color.Transparent,
         ) { innerPadding ->
             Box(modifier = Modifier.fillMaxSize()) {
@@ -540,27 +583,16 @@ private fun ChatPageContent(
                         vm.saveConversationAsync()
                     },
                 )
-                activeRunPresentation?.let { run ->
-                    AgentRunActiveCard(
-                        run = run,
-                        onOpen = { onOpenRun(run.runId) },
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(start = 16.dp, top = innerPadding.calculateTopPadding() + 8.dp, end = 16.dp),
-                    )
-                }
-                approvalAnnouncement?.let { announcement ->
-                    Text(
-                        text = announcement,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(16.dp)
-                            .focusRequester(approvalAnnouncementFocusRequester)
-                            .focusable()
-                            .semantics { contentDescription = announcement },
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
+                AgentRunActiveCardHost(
+                    activeRun = activeRunPresentation,
+                    latestRun = latestRun,
+                    stoppingRunId = stoppingRunId,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(start = 16.dp, top = innerPadding.calculateTopPadding() + 8.dp, end = 16.dp),
+                    onOpen = onOpenRun,
+                    onStop = { runId -> onStopRun(runId) },
+                )
             }
         }
 
@@ -571,24 +603,31 @@ private fun ChatPageContent(
                 onOpenApproval = { approval ->
                     onCloseRun()
                     previewMode = false
-                    if (conversation.messageNodes.isNotEmpty()) {
-                        val approvalIndex = conversation.messageNodes.indexOfLast { node ->
-                            node.currentMessage.parts.filterIsInstance<UIMessagePart.Tool>().any {
-                                it.approvalId == approval.id && it.toolExecutionId == approval.toolExecutionId &&
-                                    it.approvalState is ToolApprovalState.Pending
-                            }
-                        }
-                        scope.launch {
-                            if (approvalIndex >= 0) {
-                                chatListState.requestScrollToItem(approvalIndex)
-                                approvalAnnouncement = "已定位待审批工具卡，请在聊天中选择批准或拒绝。"
-                            } else {
-                                approvalAnnouncement = "未找到待审批工具卡，请检查聊天中的审批状态。"
-                            }
+                    val approvalIndex = conversation.messageNodes.indexOfLast { node ->
+                        node.currentMessage.parts.filterIsInstance<UIMessagePart.Tool>().any {
+                            it.approvalId == approval.id && it.toolExecutionId == approval.toolExecutionId &&
+                                it.approvalState is ToolApprovalState.Pending
                         }
                     }
+                    scope.launch {
+                        val located = approvalIndex >= 0
+                        if (located) {
+                            chatListState.requestScrollToItem(approvalIndex)
+                        }
+                        val feedback = approvalLocationFeedback(located)
+                        approvalSnackbarHostState.showSnackbar(
+                            message = context.getString(feedback.messageRes),
+                            withDismissAction = feedback.withDismissAction,
+                            duration = feedback.duration,
+                        )
+                    }
                 },
-                onOpenChildRun = onOpenRun,
+                onOpenChildRun = onOpenChildRun,
+                onNavigateBack = onNavigateBack,
+                onStop = selectedDetailStopRunId?.let { frozenRunId ->
+                    { onStopRun(frozenRunId) }
+                },
+                isStopping = isStoppingSelectedDetail,
             )
         }
 
@@ -821,8 +860,8 @@ private fun TopBar(
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit,
     activeRouting: AgentRunRoutingPresentation? = null,
-    showRunEntry: Boolean = false,
-    onOpenLatestRun: () -> Unit = {},
+    latestRun: AgentRunPresentation? = null,
+    onOpenRun: (String) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -865,8 +904,11 @@ private fun TopBar(
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (model != null && provider != null) {
+                        val assistantName = assistant.name.ifBlank {
+                            stringResource(R.string.assistant_page_default_assistant)
+                        }
                         Text(
-                            text = "${assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) }} / ${model.displayName} (${provider.name})",
+                            text = "$assistantName / ${model.displayName} (${provider.name})",
                             overflow = TextOverflow.Ellipsis,
                             maxLines = 1,
                             color = LocalContentColor.current.copy(0.65f),
@@ -879,9 +921,16 @@ private fun TopBar(
             }
         },
         actions = {
-            if (showRunEntry) {
-                IconButton(onClick = { onOpenLatestRun() }) {
-                    Icon(HugeIcons.Cpu, contentDescription = "运行详情")
+            AnimatedVisibility(
+                visible = latestRun != null,
+                enter = expandHorizontally(expandFrom = Alignment.End) + fadeIn(),
+                exit = shrinkHorizontally(shrinkTowards = Alignment.End) + fadeOut(),
+            ) {
+                latestRun?.let { run ->
+                    AgentRunEntry(
+                        run = run,
+                        onOpen = { onOpenRun(run.runId) },
+                    )
                 }
             }
             AgentAutoStatus(activeRouting)
@@ -953,11 +1002,17 @@ internal fun AgentAutoStatus(routing: AgentRunRoutingPresentation?) {
         color = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 1,
-        )
+        AnimatedContent(
+            targetState = label,
+            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            label = "agent_auto_status",
+        ) { statusLabel ->
+            Text(
+                text = statusLabel,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+            )
+        }
     }
 }

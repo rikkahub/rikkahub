@@ -39,6 +39,37 @@ class CapabilityPolicyTest {
     )
 
     @Test
+    fun `critical confirmation allows normal workspace edits but asks for shell`() {
+        val policy = PermissionPolicy.compatibleDefault(
+            permissionMode = AgentPermissionMode.CONFIRM_CRITICAL,
+        )
+
+        assertTrue(evaluate("workspace_write_file", policy = policy) is PolicyDecision.Allow)
+        assertTrue(evaluate("workspace_edit_file", policy = policy) is PolicyDecision.Allow)
+        assertTrue(evaluate("workspace_shell", policy = policy) is PolicyDecision.Ask)
+    }
+
+    @Test
+    fun `full access bypasses approval rules`() {
+        val policy = PermissionPolicy.compatibleDefault(
+            permissionMode = AgentPermissionMode.FULL_ACCESS,
+        )
+
+        assertTrue(evaluate("workspace_shell", policy = policy) is PolicyDecision.Allow)
+        assertTrue(evaluate("future_tool", policy = policy) is PolicyDecision.Allow)
+    }
+
+    @Test
+    fun `full access cannot bypass structural denies`() {
+        val policy = PermissionPolicy.compatibleDefault(
+            permissionMode = AgentPermissionMode.FULL_ACCESS,
+        )
+
+        assertTrue(evaluate("workspace_shell", mode = AgentMode.PLAN, policy = policy) is PolicyDecision.Deny)
+        assertTrue(evaluate("workspace_write_file", workspace = null, policy = policy) is PolicyDecision.Deny)
+    }
+
+    @Test
     fun `low risk read-only tools are allowed`() {
         val decision = evaluate("search_web")
 

@@ -17,6 +17,7 @@ import me.rerere.rikkahub.data.model.AgentRunError
 import me.rerere.rikkahub.data.model.AgentRunStatus
 import me.rerere.rikkahub.data.model.AgentRunSummary
 import me.rerere.rikkahub.data.model.AgentStepStatus
+import me.rerere.rikkahub.data.model.AgentTraceStatus
 import me.rerere.rikkahub.data.model.ToolExecutionStatus
 import me.rerere.rikkahub.data.model.ToolExecutionSummary
 import me.rerere.rikkahub.utils.JsonInstant
@@ -33,7 +34,10 @@ data class AgentRunDetail(
 data class ChildRunPresentation(
     val runId: String,
     val status: String,
+    val visualState: AgentRunVisualState,
+    val duration: String,
     val findings: String,
+    val durationStartedAt: Long = 0,
 )
 
 enum class AgentRunRoutingKind {
@@ -47,6 +51,16 @@ enum class AgentRunRoutingDegradedReason {
     TOO_LARGE,
     UNSUPPORTED,
     INVALID,
+}
+
+/** UI-only state used for color and motion; persisted status remains the source of truth. */
+enum class AgentRunVisualState {
+    PENDING,
+    WORKING,
+    NEEDS_ATTENTION,
+    SUCCEEDED,
+    FAILED,
+    STOPPED,
 }
 
 /** Content-free routing facts safe for the active card and Run Center. */
@@ -68,6 +82,7 @@ data class AgentRunRoutingPresentation(
 data class AgentRunPresentation(
     val runId: String,
     val status: String,
+    val visualState: AgentRunVisualState,
     val statusDescription: String?,
     val model: String?,
     val routing: AgentRunRoutingPresentation,
@@ -78,15 +93,18 @@ data class AgentRunPresentation(
     val waitingReason: String?,
     val createdAt: Long,
     val duration: String,
+    val durationStartedAt: Long = createdAt,
     val failureCategory: String?,
     val timeline: List<AgentRunTimelineItem>,
     val children: List<ChildRunPresentation> = emptyList(),
 )
 
 data class AgentRunTimelineItem(
+    val stableKey: String,
     val sequence: Int,
     val label: String,
     val status: String,
+    val visualState: AgentRunVisualState,
     val duration: String,
     val summary: String?,
     val outputSummary: String?,
@@ -94,9 +112,15 @@ data class AgentRunTimelineItem(
     val approval: String?,
     val approvalReason: String?,
     val timestampMillis: Long = 0,
+    val durationStartedAt: Long = timestampMillis,
 )
 
-fun AgentRunEntity.toPresentation(): AgentRunPresentation = AgentRunDetail(this, emptyList(), emptyList(), emptyList()).toPresentation()
+fun AgentRunEntity.toPresentation(): AgentRunPresentation = AgentRunDetail(
+    this,
+    emptyList(),
+    emptyList(),
+    emptyList(),
+).toPresentation()
 
 /** Never combines an old detail payload with a replacement active run. */
 internal fun selectActiveRunPresentation(
@@ -109,6 +133,39 @@ internal fun selectActiveRunPresentation(
         ?: current.toPresentation()
 }
 
+internal enum class AgentRunCardStage {
+    ACTIVE,
+    AWAITING_TERMINAL,
+    TERMINAL,
+    HIDDEN,
+}
+
+internal data class AgentRunCardTransition(
+    val stage: AgentRunCardStage,
+    val presentation: AgentRunPresentation?,
+)
+
+internal fun agentRunCardTransition(
+    activePresentation: AgentRunPresentation?,
+    retainedPresentation: AgentRunPresentation?,
+    latestPresentation: AgentRunPresentation?,
+    eligibleRunId: String?,
+): AgentRunCardTransition {
+    if (activePresentation != null) {
+        return AgentRunCardTransition(AgentRunCardStage.ACTIVE, activePresentation)
+    }
+    if (eligibleRunId == null || retainedPresentation?.runId != eligibleRunId) {
+        return AgentRunCardTransition(AgentRunCardStage.HIDDEN, retainedPresentation)
+    }
+    if (
+        latestPresentation?.runId == eligibleRunId &&
+        !latestPresentation.visualState.isLive()
+    ) {
+        return AgentRunCardTransition(AgentRunCardStage.TERMINAL, latestPresentation)
+    }
+    return AgentRunCardTransition(AgentRunCardStage.AWAITING_TERMINAL, retainedPresentation)
+}
+
 fun AgentRunDetail.toPresentation(): AgentRunPresentation {
     val config = run.configSnapshotJson.decodeOrNull<AgentRunConfigSnapshot>()
     val runSummary = run.summaryJson?.decodeOrNull<AgentRunSummary>()
@@ -116,12 +173,17 @@ fun AgentRunDetail.toPresentation(): AgentRunPresentation {
     val activeStep = steps.lastOrNull { it.status == AgentStepStatus.RUNNING.name } ?: steps.lastOrNull()
     val completedSteps = runSummary?.completedSteps ?: steps.count { it.status == AgentStepStatus.SUCCEEDED.name }
     val pendingApproval = approvals.firstOrNull { it.status == AgentApprovalStatus.PENDING.name }
-    val waitingReason = pendingApproval?.summaryJson?.decodeOrNull<AgentApprovalSummary>()?.reasonCode.userFacingApprovalReason()
+    val waitingReason = pendingApproval
+        ?.summaryJson
+        ?.decodeOrNull<AgentApprovalSummary>()
+        ?.reasonCode
+        .userFacingApprovalReason()
         ?: if (run.status == AgentRunStatus.WAITING_APPROVAL.name) "等待聊天中的工具审批" else null
 
     return AgentRunPresentation(
         runId = run.id,
         status = run.status.statusLabel(),
+        visualState = run.status.visualState(),
         statusDescription = run.status.statusDescription(),
         model = config?.modelId,
         routing = run.configSnapshotJson.toRoutingPresentation(),
@@ -132,6 +194,7 @@ fun AgentRunDetail.toPresentation(): AgentRunPresentation {
         waitingReason = waitingReason,
         createdAt = run.createdAt,
         duration = durationLabel(run.startedAt ?: run.createdAt, run.finishedAt ?: run.updatedAt),
+        durationStartedAt = run.startedAt ?: run.createdAt,
         failureCategory = runError.userFacingFailure(),
         timeline = timelineItems(),
         children = children.map { child ->
@@ -139,7 +202,13 @@ fun AgentRunDetail.toPresentation(): AgentRunPresentation {
             ChildRunPresentation(
                 runId = child.id,
                 status = child.status.statusLabel(),
+                visualState = child.status.visualState(),
+                duration = durationLabel(
+                    child.startedAt ?: child.createdAt,
+                    child.finishedAt ?: child.updatedAt,
+                ),
                 findings = report?.findings?.joinToString(" ")?.take(240).orEmpty(),
+                durationStartedAt = child.startedAt ?: child.createdAt,
             )
         },
     )
@@ -209,9 +278,11 @@ private fun AgentRunDetail.timelineItems(): List<AgentRunTimelineItem> {
         steps.forEach { step ->
             add(
                 AgentRunTimelineItem(
+                    stableKey = "step:${step.id}",
                     sequence = step.sequence * 10,
                     label = "步骤 ${step.sequence + 1} · ${step.kind}",
                     status = step.status.statusLabel(),
+                    visualState = step.status.timelineVisualState(),
                     duration = durationLabel(step.createdAt, step.finishedAt ?: step.updatedAt),
                     summary = null,
                     outputSummary = null,
@@ -219,6 +290,7 @@ private fun AgentRunDetail.timelineItems(): List<AgentRunTimelineItem> {
                     approval = null,
                     approvalReason = null,
                     timestampMillis = step.createdAt,
+                    durationStartedAt = step.createdAt,
                 )
             )
             toolsByStep[step.id].orEmpty().forEach { tool -> add(tool.toTimelineItem(approvalsByTool[tool.id])) }
@@ -239,9 +311,11 @@ private fun ToolExecutionEntity.toTimelineItem(approval: AgentApprovalEntity?): 
     val error = errorJson?.decodeOrNull<AgentRunError>()
     val approvalSummary = approval?.summaryJson?.decodeOrNull<AgentApprovalSummary>()
     return AgentRunTimelineItem(
+        stableKey = "tool:$id",
         sequence = sequence * 10 + 1,
         label = "工具 · $toolName",
         status = status.statusLabel(),
+        visualState = status.timelineVisualState(),
         duration = durationLabel(startedAt ?: createdAt, finishedAt ?: updatedAt),
         summary = summary,
         outputSummary = outputSummary,
@@ -249,13 +323,16 @@ private fun ToolExecutionEntity.toTimelineItem(approval: AgentApprovalEntity?): 
         approval = approval?.status?.statusLabel(),
         approvalReason = approvalSummary?.reasonCode.userFacingApprovalReason(),
         timestampMillis = createdAt,
+        durationStartedAt = startedAt ?: createdAt,
     )
 }
 
 private fun AgentTraceEvent.toTimelineItem(): AgentRunTimelineItem = AgentRunTimelineItem(
+    stableKey = "trace:$id",
     sequence = 1_000_000 + sequence,
     label = "追踪 · ${type.replace('_', ' ')}",
     status = status.statusLabel(),
+    visualState = status.timelineVisualState(),
     duration = durationLabel(0, durationMillis ?: 0),
     summary = "已脱敏运行事件",
     outputSummary = null,
@@ -263,6 +340,7 @@ private fun AgentTraceEvent.toTimelineItem(): AgentRunTimelineItem = AgentRunTim
     approval = null,
     approvalReason = null,
     timestampMillis = timestampMillis,
+    durationStartedAt = timestampMillis,
 )
 
 private fun String.traceFailureLabel(): String = when (this) {
@@ -299,6 +377,39 @@ internal fun durationLabel(start: Long, end: Long): String {
     }
 }
 
+internal fun AgentRunVisualState.isLive(): Boolean = when (this) {
+    AgentRunVisualState.PENDING,
+    AgentRunVisualState.WORKING,
+    AgentRunVisualState.NEEDS_ATTENTION,
+    -> true
+
+    AgentRunVisualState.SUCCEEDED,
+    AgentRunVisualState.FAILED,
+    AgentRunVisualState.STOPPED,
+    -> false
+}
+
+internal fun liveDurationLabel(
+    presentation: AgentRunPresentation,
+    nowMillis: Long,
+): String = liveDurationLabel(
+    duration = presentation.duration,
+    durationStartedAt = presentation.durationStartedAt,
+    visualState = presentation.visualState,
+    nowMillis = nowMillis,
+)
+
+internal fun liveDurationLabel(
+    duration: String,
+    durationStartedAt: Long,
+    visualState: AgentRunVisualState,
+    nowMillis: Long,
+): String = if (visualState.isLive()) {
+    durationLabel(durationStartedAt, nowMillis)
+} else {
+    duration
+}
+
 private fun String.statusLabel(): String = when (this) {
     AgentRunStatus.QUEUED.name -> "已排队"
     AgentRunStatus.PREFLIGHT.name -> "准备中"
@@ -317,6 +428,69 @@ private fun String.statusLabel(): String = when (this) {
     ToolExecutionStatus.DENIED.name, AgentApprovalStatus.DENIED.name -> "已拒绝"
     AgentStepStatus.SKIPPED.name -> "已跳过"
     else -> this.replace('_', ' ')
+}
+
+private fun String.visualState(): AgentRunVisualState = when (this) {
+    AgentRunStatus.QUEUED.name,
+    AgentRunStatus.PREFLIGHT.name,
+    -> AgentRunVisualState.PENDING
+
+    AgentRunStatus.RUNNING.name -> AgentRunVisualState.WORKING
+    AgentRunStatus.WAITING_APPROVAL.name -> AgentRunVisualState.NEEDS_ATTENTION
+    AgentRunStatus.SUCCEEDED.name -> AgentRunVisualState.SUCCEEDED
+    AgentRunStatus.FAILED.name,
+    AgentRunStatus.BLOCKED.name,
+    -> AgentRunVisualState.FAILED
+
+    AgentRunStatus.CANCELLED.name,
+    AgentRunStatus.INTERRUPTED.name,
+    -> AgentRunVisualState.STOPPED
+
+    else -> AgentRunVisualState.FAILED
+}
+
+private fun String.timelineVisualState(): AgentRunVisualState = when (this) {
+    AgentStepStatus.PENDING.name,
+    ToolExecutionStatus.PENDING.name,
+    ToolExecutionStatus.AUTHORIZED.name,
+    -> AgentRunVisualState.PENDING
+
+    AgentStepStatus.RUNNING.name,
+    ToolExecutionStatus.RUNNING.name,
+    AgentTraceStatus.STARTED.name,
+    -> AgentRunVisualState.WORKING
+
+    ToolExecutionStatus.WAITING_APPROVAL.name,
+    AgentTraceStatus.ASK.name,
+    -> AgentRunVisualState.NEEDS_ATTENTION
+
+    AgentStepStatus.SUCCEEDED.name,
+    ToolExecutionStatus.SUCCEEDED.name,
+    AgentTraceStatus.FINISHED.name,
+    AgentTraceStatus.ALLOWED.name,
+    AgentTraceStatus.APPROVED.name,
+    AgentTraceStatus.SUCCEEDED.name,
+    -> AgentRunVisualState.SUCCEEDED
+
+    AgentStepStatus.FAILED.name,
+    ToolExecutionStatus.FAILED.name,
+    ToolExecutionStatus.DENIED.name,
+    AgentTraceStatus.DENIED.name,
+    AgentTraceStatus.REJECTED.name,
+    AgentTraceStatus.FAILED.name,
+    AgentTraceStatus.BLOCKED.name,
+    -> AgentRunVisualState.FAILED
+
+    AgentStepStatus.SKIPPED.name,
+    AgentStepStatus.CANCELLED.name,
+    ToolExecutionStatus.CANCELLED.name,
+    ToolExecutionStatus.UNKNOWN_AFTER_INTERRUPT.name,
+    AgentTraceStatus.CANCELLED.name,
+    AgentTraceStatus.INTERRUPTED.name,
+    AgentTraceStatus.TRUNCATED.name,
+    -> AgentRunVisualState.STOPPED
+
+    else -> AgentRunVisualState.FAILED
 }
 
 private fun String.statusDescription(): String? = when (this) {

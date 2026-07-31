@@ -227,6 +227,10 @@
   <string name="cancel">Cancel</string>
   <string name="cancel_edit">Cancel Edit</string>
   <string name="chain_of_thought_collapse">Collapse</string>
+  <string name="chain_of_thought_collapse_step">Collapse step</string>
+  <string name="chain_of_thought_collapsed">Collapsed</string>
+  <string name="chain_of_thought_expand_step">Expand step</string>
+  <string name="chain_of_thought_expanded">Expanded</string>
   <string name="chain_of_thought_show_more_steps">Show %d more steps</string>
   <string name="chat_input_placeholder">Chat with AI</string>
   <string name="chat_input_unsupported_file_type">Unsupported file type: %s</string>
@@ -234,6 +238,8 @@
   <string name="chat_message_add_favorite">Add Favorite</string>
   <string name="chat_message_remove_favorite">Remove Favorite</string>
   <string name="chat_message_tool_approve">Approve</string>
+  <string name="chat_message_tool_approval_submitting">Submitting approval…</string>
+  <string name="chat_message_tool_answer_submitting">Submitting answer…</string>
   <string name="chat_message_tool_ask_questions">Ask %d questions</string>
   <string name="chat_message_tool_call_generic">Called tool %1$s</string>
   <string name="chat_message_tool_call_label">Called tool %1$s</string>
@@ -1160,7 +1166,49 @@
   <string name="assistant_page_workspace">Workspace</string>
   <string name="assistant_page_workspace_desc">After binding, the Agent can use this workspace\'s files and sandbox capabilities</string>
   <string name="assistant_page_workspace_unbound">Not bound</string>
+  <string name="assistant_page_agent_permission_mode">Agent permissions</string>
+  <string name="agent_permission_mode_auto_review">Automatic review</string>
+  <string name="agent_permission_mode_auto_review_desc">Automatically request confirmation based on tool risk and side effects</string>
+  <string name="agent_permission_mode_full_access">Full access</string>
+  <string name="agent_permission_mode_full_access_desc">Run tools without approval prompts; structural restrictions still apply</string>
+  <string name="agent_permission_mode_confirm_critical">Confirm critical actions</string>
+  <string name="agent_permission_mode_confirm_critical_desc">Run normal workspace edits directly and ask before critical or sensitive actions</string>
   <string name="agent_mode_auto" tools:ignore="MissingTranslation">Auto</string>
+  <string name="agent_run_stopping">Stopping Agent run…</string>
+  <string name="agent_run_entry_pending">Agent run is preparing. Open details</string>
+  <string name="agent_run_entry_working">Agent run is running. Open details</string>
+  <string name="agent_run_entry_attention">Agent run needs attention. Open details</string>
+  <string name="agent_run_entry_succeeded">Agent run succeeded. Open details</string>
+  <string name="agent_run_entry_failed">Agent run failed. Open details</string>
+  <string name="agent_run_entry_stopped">Agent run stopped. Open details</string>
+  <string name="agent_run_detail_back">Back to previous run</string>
+  <string name="agent_run_detail_loading">Loading run telemetry…</string>
+  <string name="agent_run_detail_missing">This run is no longer available. It may have been deleted with the conversation.</string>
+  <string name="agent_run_detail_title">Run details</string>
+  <string name="agent_run_detail_identity">Run %1$s · %2$s · %3$s</string>
+  <string name="agent_run_elapsed">Elapsed %1$s</string>
+  <string name="agent_run_detail_open_approval">Open the approval card in chat</string>
+  <string name="agent_run_approval_location_success">Approval card located. Approve or deny it in chat.</string>
+  <string name="agent_run_approval_location_missing">The pending approval card could not be found. Check its status in chat.</string>
+  <string name="agent_run_children_section">Child runs</string>
+  <string name="agent_run_child_duration">Duration: %1$s</string>
+  <string name="agent_run_child_open_details">Open child run %1$s: %2$s</string>
+  <string name="agent_run_timeline_section">Steps, tools, and trace</string>
+  <string name="agent_run_timeline_empty">No step or tool telemetry has been recorded yet.</string>
+  <string name="agent_run_timeline_duration">Duration: %1$s</string>
+  <string name="agent_run_timeline_summary">Summary: %1$s</string>
+  <string name="agent_run_timeline_output_summary">Output summary: %1$s</string>
+  <string name="agent_run_timeline_failure">Failure: %1$s</string>
+  <string name="agent_run_timeline_approval">Approval: %1$s</string>
+  <string name="agent_run_timeline_approval_reason">Approval reason: %1$s</string>
+  <string name="agent_run_timeline_expand">Show details</string>
+  <string name="agent_run_timeline_collapse">Hide details</string>
+  <string name="agent_run_timeline_expanded">Details expanded</string>
+  <string name="agent_run_timeline_collapsed">Details collapsed</string>
+  <plurals name="agent_run_new_activity">
+    <item quantity="one">%d new activity</item>
+    <item quantity="other">%d new activities</item>
+  </plurals>
   <string name="agent_intent_answer" tools:ignore="MissingTranslation">Answer</string>
   <string name="agent_intent_explore" tools:ignore="MissingTranslation">Explore</string>
   <string name="agent_intent_execute" tools:ignore="MissingTranslation">Execute</string>

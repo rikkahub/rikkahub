@@ -4,6 +4,7 @@ import kotlinx.serialization.json.buildJsonObject
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.agent.permission.ApprovalAction
+import me.rerere.rikkahub.data.ai.agent.permission.AgentPermissionMode
 import me.rerere.rikkahub.data.ai.agent.permission.PermissionPolicy
 import me.rerere.rikkahub.data.ai.agent.permission.ToolCategory
 import org.junit.Assert.assertEquals
@@ -31,6 +32,30 @@ class PermissionPolicyTest {
         val args = buildJsonObject { }
         assertFalse(policy.requiresApproval(autoTool, args, AgentMode.CHAT))
         assertTrue(policy.requiresApproval(askTool, args, AgentMode.CHAT))
+    }
+
+    @Test
+    fun `full access bypasses tool approval metadata`() {
+        val policy = PermissionPolicy.compatibleDefault(
+            permissionMode = AgentPermissionMode.FULL_ACCESS,
+        )
+
+        assertFalse(policy.requiresApproval(askTool, buildJsonObject { }, AgentMode.AGENT))
+    }
+
+    @Test
+    fun `full access does not turn plan mode into execution mode`() {
+        val policy = PermissionPolicy.compatibleDefault(
+            permissionMode = AgentPermissionMode.FULL_ACCESS,
+        )
+        val shell = Tool(
+            name = "workspace_shell",
+            description = "shell",
+            needsApproval = { false },
+            execute = { listOf(UIMessagePart.Text("ok")) },
+        )
+
+        assertTrue(policy.requiresApproval(shell, buildJsonObject { }, AgentMode.PLAN))
     }
 
     @Test

@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.ai.agent.routing
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.agent.permission.ApprovalAction
+import me.rerere.rikkahub.data.ai.agent.permission.AgentPermissionMode
 import me.rerere.rikkahub.data.ai.agent.permission.DescribedTool
 import me.rerere.rikkahub.data.ai.agent.permission.McpServerPolicyContext
 import me.rerere.rikkahub.data.ai.agent.permission.PermissionPolicy
@@ -229,6 +230,31 @@ class ToolProfileResolverTest {
         )
 
         assertEquals(implicit.permissionDigest, explicit.permissionDigest)
+    }
+
+    @Test
+    fun `permission mode changes the permission digest`() {
+        val candidates = listOf(described("workspace_write_file"))
+        val critical = resolver.resolve(
+            candidates,
+            request(
+                AgentIntent.EXECUTE,
+                policy = PermissionPolicy.compatibleDefault(
+                    permissionMode = AgentPermissionMode.CONFIRM_CRITICAL,
+                ),
+            ),
+        )
+        val fullAccess = resolver.resolve(
+            candidates,
+            request(
+                AgentIntent.EXECUTE,
+                policy = PermissionPolicy.compatibleDefault(
+                    permissionMode = AgentPermissionMode.FULL_ACCESS,
+                ),
+            ),
+        )
+
+        assertNotEquals(critical.permissionDigest, fullAccess.permissionDigest)
     }
 
     @Test
