@@ -133,16 +133,10 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val conversation by vm.conversation.collectAsStateWithLifecycle()
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
     val processingStatus by vm.processingStatus.collectAsStateWithLifecycle()
-    val stoppingRunId by vm.stoppingRunId.collectAsStateWithLifecycle()
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
     val activeRun by agentRunVm.activeRun.collectAsStateWithLifecycle()
-    val activeRunDetail by agentRunVm.activeDetail.collectAsStateWithLifecycle()
-    val latestRun by agentRunVm.latestRun.collectAsStateWithLifecycle()
-    val selectedRunId by agentRunVm.selectedRun.collectAsStateWithLifecycle()
-    val selectedRunDetail by agentRunVm.detail.collectAsStateWithLifecycle()
-    val latestRunPresentation = remember(latestRun) { latestRun?.toPresentation() }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
@@ -246,17 +240,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
-                    activeRun = activeRun,
-                    activeRunDetail = activeRunDetail,
-                    stoppingRunId = stoppingRunId,
-                    latestRun = latestRunPresentation,
-                    selectedRunId = selectedRunId,
-                    selectedRunDetail = selectedRunDetail,
-                    onOpenRun = agentRunVm::openRun,
-                    onOpenChildRun = agentRunVm::openChildRun,
-                    onNavigateBack = agentRunVm::navigateBack,
-                    onCloseRun = agentRunVm::closeRun,
-                    onStopRun = vm::stopGeneration,
+                    activeRunId = activeRun?.id,
                 )
             }
         }
@@ -289,17 +273,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
-                    activeRun = activeRun,
-                    activeRunDetail = activeRunDetail,
-                    stoppingRunId = stoppingRunId,
-                    latestRun = latestRunPresentation,
-                    selectedRunId = selectedRunId,
-                    selectedRunDetail = selectedRunDetail,
-                    onOpenRun = agentRunVm::openRun,
-                    onOpenChildRun = agentRunVm::openChildRun,
-                    onNavigateBack = agentRunVm::navigateBack,
-                    onCloseRun = agentRunVm::closeRun,
-                    onStopRun = vm::stopGeneration,
+                    activeRunId = activeRun?.id,
                 )
             }
             BackHandler(drawerState.isOpen) {
@@ -351,17 +325,7 @@ private fun ChatPageContent(
     errors: List<ChatError>,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
-    activeRun: me.rerere.rikkahub.data.db.entity.AgentRunEntity?,
-    activeRunDetail: AgentRunDetail?,
-    stoppingRunId: String?,
-    latestRun: AgentRunPresentation?,
-    selectedRunId: String?,
-    selectedRunDetail: AgentRunDetailState,
-    onOpenRun: (String) -> Unit,
-    onOpenChildRun: (String) -> Unit,
-    onNavigateBack: () -> Unit,
-    onCloseRun: () -> Unit,
-    onStopRun: (String?) -> Unit,
+    activeRunId: String?,
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -372,14 +336,6 @@ private fun ChatPageContent(
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
     var showAgentSheet by remember { mutableStateOf(false) }
-    val approvalSnackbarHostState = remember { SnackbarHostState() }
-    val activeRunPresentation = remember(activeRun, activeRunDetail) {
-        selectActiveRunPresentation(activeRun, activeRunDetail)
-    }
-    // Keep the run identity from this composition; an old click must not stop a later run.
-    val stopRunId = activeRun?.id
-    val selectedDetailStopRunId = detailStopTarget(selectedRunId, stopRunId)
-    val isStoppingSelectedDetail = stoppingRunId != null && stoppingRunId == selectedRunId
 
     val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
         assistant.workspaceId?.let { workspaceId ->
@@ -417,9 +373,6 @@ private fun ChatPageContent(
                     onUpdateTitle = {
                         vm.updateTitle(it)
                     },
-                    activeRouting = activeRunPresentation?.routing,
-                    latestRun = latestRun,
-                    onOpenRun = onOpenRun,
                     onOpenAgent = { showAgentSheet = true },
                 )
             },
@@ -431,7 +384,7 @@ private fun ChatPageContent(
                     hazeState = hazeState,
                     completionProviders = completionProviders,
                     onCancelClick = {
-                        stopRunId?.let(onStopRun)
+                        vm.stopGeneration(activeRunId)
                     },
                     enableSearch = enableWebSearch,
                     onToggleSearch = {
@@ -508,9 +461,6 @@ private fun ChatPageContent(
                     },
                 )
             },
-            snackbarHost = {
-                SnackbarHost(hostState = approvalSnackbarHostState)
-            },
             containerColor = Color.Transparent,
         ) { innerPadding ->
             Box(modifier = Modifier.fillMaxSize()) {
@@ -585,52 +535,7 @@ private fun ChatPageContent(
                         vm.saveConversationAsync()
                     },
                 )
-                AgentRunActiveCardHost(
-                    activeRun = activeRunPresentation,
-                    latestRun = latestRun,
-                    stoppingRunId = stoppingRunId,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(start = 16.dp, top = innerPadding.calculateTopPadding() + 8.dp, end = 16.dp),
-                    onOpen = onOpenRun,
-                    onStop = { runId -> onStopRun(runId) },
-                )
             }
-        }
-
-        if (selectedRunId != null) {
-            AgentRunDetailSheet(
-                state = selectedRunDetail,
-                onDismiss = onCloseRun,
-                onOpenApproval = { approval ->
-                    onCloseRun()
-                    previewMode = false
-                    val approvalIndex = conversation.messageNodes.indexOfLast { node ->
-                        node.currentMessage.parts.filterIsInstance<UIMessagePart.Tool>().any {
-                            it.approvalId == approval.id && it.toolExecutionId == approval.toolExecutionId &&
-                                it.approvalState is ToolApprovalState.Pending
-                        }
-                    }
-                    scope.launch {
-                        val located = approvalIndex >= 0
-                        if (located) {
-                            chatListState.requestScrollToItem(approvalIndex)
-                        }
-                        val feedback = approvalLocationFeedback(located)
-                        approvalSnackbarHostState.showSnackbar(
-                            message = context.getString(feedback.messageRes),
-                            withDismissAction = feedback.withDismissAction,
-                            duration = feedback.duration,
-                        )
-                    }
-                },
-                onOpenChildRun = onOpenChildRun,
-                onNavigateBack = onNavigateBack,
-                onStop = selectedDetailStopRunId?.let { frozenRunId ->
-                    { onStopRun(frozenRunId) }
-                },
-                isStopping = isStoppingSelectedDetail,
-            )
         }
 
         if (showFilesSheet) {
@@ -875,9 +780,6 @@ private fun TopBar(
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit,
-    activeRouting: AgentRunRoutingPresentation? = null,
-    latestRun: AgentRunPresentation? = null,
-    onOpenRun: (String) -> Unit = {},
     onOpenAgent: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
@@ -944,19 +846,6 @@ private fun TopBar(
                     contentDescription = stringResource(R.string.chat_page_open_agent),
                 )
             }
-            AnimatedVisibility(
-                visible = latestRun != null,
-                enter = expandHorizontally(expandFrom = Alignment.End) + fadeIn(),
-                exit = shrinkHorizontally(shrinkTowards = Alignment.End) + fadeOut(),
-            ) {
-                latestRun?.let { run ->
-                    AgentRunEntry(
-                        run = run,
-                        onOpen = { onOpenRun(run.runId) },
-                    )
-                }
-            }
-            AgentAutoStatus(activeRouting)
             IconButton(
                 onClick = {
                     onClickMenu()
