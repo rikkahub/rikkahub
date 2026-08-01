@@ -19,6 +19,8 @@ internal enum class VoiceAutomationEventName(val wireName: String) {
     @SerialName("prompt_ended") PROMPT_ENDED("prompt_ended"),
     @SerialName("capture_attested") CAPTURE_ATTESTED("capture_attested"),
     @SerialName("remote_audio_first_non_silent") REMOTE_AUDIO_FIRST_NON_SILENT("remote_audio_first_non_silent"),
+    @SerialName("remote_track_attached") REMOTE_TRACK_ATTACHED("remote_track_attached"),
+    @SerialName("remote_track_detached") REMOTE_TRACK_DETACHED("remote_track_detached"),
     @SerialName("playback_queued") PLAYBACK_QUEUED("playback_queued"),
     @SerialName("playback_active") PLAYBACK_ACTIVE("playback_active"),
     @SerialName("playback_stopped") PLAYBACK_STOPPED("playback_stopped"),
@@ -80,6 +82,8 @@ internal data class VoiceAutomationEvent(
     val lifecycle: VoiceAutomationLifecycle? = null,
     val playbackEpoch: Long? = null,
     val byteCount: Long? = null,
+    val rmsActive: Boolean? = null,
+    val audioWindowMicros: Long? = null,
     val succeeded: Boolean? = null,
     val correlationKind: VoiceAutomationCorrelationKind? = null,
     val correlationHash: String? = null,
@@ -108,6 +112,8 @@ internal data class VoiceAutomationEventInput(
     val lifecycle: VoiceAutomationLifecycle? = null,
     val playbackEpoch: Long? = null,
     val byteCount: Long? = null,
+    val rmsActive: Boolean? = null,
+    val audioWindowMicros: Long? = null,
     val succeeded: Boolean? = null,
     val correlationKind: VoiceAutomationCorrelationKind? = null,
     val correlationHash: String? = null,
@@ -140,6 +146,27 @@ internal object VoiceAutomationEventValidation {
             "playbackEpoch must be positive"
         }
         require(event.byteCount == null || event.byteCount >= 0) { "byteCount must not be negative" }
+        val isLiveKitPlaybackWritten =
+            event.requestedTransport == VoiceAgentTransport.LiveKitExperimental &&
+                event.name == VoiceAutomationEventName.PLAYBACK_WRITTEN
+        if (isLiveKitPlaybackWritten) {
+            require(event.byteCount != null && event.byteCount > 0) {
+                "LiveKit playback_written requires positive byteCount"
+            }
+            requireNotNull(event.rmsActive) {
+                "LiveKit playback_written requires rmsActive"
+            }
+            requireNotNull(event.audioWindowMicros) {
+                "LiveKit playback_written requires audioWindowMicros"
+            }
+            require(event.audioWindowMicros > 0) {
+                "audioWindowMicros must be positive"
+            }
+        } else {
+            require(event.rmsActive == null && event.audioWindowMicros == null) {
+                "RMS window fields are only allowed on LiveKit playback_written"
+            }
+        }
         require(event.micBytes == null || event.micBytes >= 0) { "micBytes must not be negative" }
         require(event.fixtureBytes == null || event.fixtureBytes >= 0) {
             "fixtureBytes must not be negative"

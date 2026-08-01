@@ -286,6 +286,8 @@ internal class DefaultVoiceAutomationRuntime(
         lifecycle = input.lifecycle,
         playbackEpoch = input.playbackEpoch,
         byteCount = input.byteCount,
+        rmsActive = input.rmsActive,
+        audioWindowMicros = input.audioWindowMicros,
         succeeded = input.succeeded,
         correlationKind = input.correlationKind,
         correlationHash = input.correlationHash,

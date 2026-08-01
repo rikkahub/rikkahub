@@ -32,12 +32,44 @@ class VoiceAutomationRuntimeTest {
                 VoiceAutomationEventName.PLAYBACK_WRITTEN,
                 playbackEpoch = 2,
                 byteCount = 3_200,
+                rmsActive = false,
+                audioWindowMicros = 10_000,
             ),
         ).forEach { runtime.record(it) }
 
         val artifact = runtime.finalizeRun().readText()
         assertFalse("handover_media_restored" in artifact)
         assertFalse("reconnect_media_restored" in artifact)
+    }
+
+    @Test
+    fun `runtime preserves LiveKit RMS window fields`() {
+        val runtime = DefaultVoiceAutomationRuntime(
+            Files.createTempDirectory("voice-automation-runtime-rms").toFile(),
+            FakeClock(),
+        )
+        runtime.prepare(
+            VoiceAutomationRunBinding(
+                RUN_HASH,
+                COMPARISON_HASH,
+                VoiceAgentTransport.LiveKitExperimental,
+            ),
+        )
+        runtime.record(
+            VoiceAutomationEventInput(
+                name = VoiceAutomationEventName.PLAYBACK_WRITTEN,
+                playbackEpoch = 1,
+                byteCount = 960,
+                rmsActive = true,
+                audioWindowMicros = 10_000,
+            ),
+        )
+
+        val written = runtime.finalizeRun().readLines().single {
+            "\"name\":\"playback_written\"" in it
+        }
+        assertTrue("\"rmsActive\":true" in written)
+        assertTrue("\"audioWindowMicros\":10000" in written)
     }
 
     @Test
@@ -143,6 +175,8 @@ class VoiceAutomationRuntimeTest {
                     VoiceAutomationEventName.PLAYBACK_WRITTEN,
                     playbackEpoch = 2,
                     byteCount = 3_200,
+                    rmsActive = false,
+                    audioWindowMicros = 10_000,
                 ),
             ),
         )
@@ -155,6 +189,8 @@ class VoiceAutomationRuntimeTest {
                 VoiceAutomationEventName.PLAYBACK_WRITTEN,
                 playbackEpoch = 3,
                 byteCount = 3_200,
+                rmsActive = false,
+                audioWindowMicros = 10_000,
             ),
         ).forEach { event -> assertTrue(runtime.recordIfActiveRun(RUN_HASH, event)) }
 
