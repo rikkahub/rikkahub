@@ -42,13 +42,65 @@ class LiveKitRemoteAudioProbeTest {
         assertEquals(0, first.position())
         assertEquals(
             listOf(
-                Written(byteCount = 2, nonSilent = true),
-                Written(byteCount = 6, nonSilent = true),
-                Written(byteCount = 2, nonSilent = false),
+                Written(2, true, false, 20),
+                Written(6, true, false, 60),
+                Written(2, false, false, 20),
             ),
             recording.written,
         )
         assertEquals(1, recording.silenceConfirmations)
+    }
+
+    @Test
+    fun `flush ORs RMS activity sums duration and resets every aggregate`() {
+        val clock = FakeClock()
+        val recording = RecordingAudioProbe()
+        val probe = LiveKitRemoteAudioProbe(recording, clock::nowMs)
+
+        probe.onData(pcm16(255, 480), 16, 48_000, 1, 480, 1)
+        clock.advanceBy(1)
+        probe.onData(pcm16(255, 480), 16, 48_000, 1, 480, 2)
+        clock.advanceBy(1)
+        probe.onData(pcm16(256, 480), 16, 48_000, 1, 480, 3)
+        clock.advanceBy(48)
+        probe.onData(pcm16(255, 480), 16, 48_000, 1, 480, 4)
+        clock.advanceBy(50)
+        probe.onData(pcm16(255, 480), 16, 48_000, 1, 480, 5)
+
+        assertEquals(
+            listOf(
+                Written(960, true, false, 10_000),
+                Written(2_880, true, true, 30_000),
+                Written(960, true, false, 10_000),
+            ),
+            recording.written,
+        )
+    }
+
+    @Test
+    fun `RMS 255 is inactive and RMS 256 is active`() {
+        val recording = RecordingAudioProbe()
+        val probe = LiveKitRemoteAudioProbe(recording, monotonicMs = { 1L })
+
+        probe.onData(pcm16(255, 1), 16, 48_000, 1, 1, 1)
+        probe.onData(pcm16(256, 1), 16, 48_000, 1, 1, 2)
+        probe.close()
+
+        assertEquals(listOf(false, true), recording.written.map(Written::rmsActive))
+    }
+
+    @Test
+    fun `invalid PCM metadata emits no RMS evidence`() {
+        val recording = RecordingAudioProbe()
+        val probe = LiveKitRemoteAudioProbe(recording, monotonicMs = { 1L })
+
+        probe.onData(ByteBuffer.allocate(0), 16, 48_000, 1, 0, 1)
+        probe.onData(pcm16(256, 1), 8, 48_000, 1, 1, 2)
+        probe.onData(pcm16(256, 1), 16, 0, 1, 1, 3)
+        probe.onData(pcm16(256, 1), 16, 48_000, 1, 0, 4)
+        probe.close()
+
+        assertEquals(emptyList<Written>(), recording.written)
     }
 
     @Test
@@ -179,16 +231,20 @@ class LiveKitRemoteAudioProbeTest {
     }
 
     @Test
-    fun `close drains once and rejects every later remote frame`() {
+    fun `close flushes one pending window drains once and rejects every later remote frame`() {
         val recording = RecordingAudioProbe()
         val probe = LiveKitRemoteAudioProbe(recording, monotonicMs = { 1L })
         probe.onData(ByteBuffer.wrap(byteArrayOf(1, 0)), 16, 48_000, 1, 1, 1)
+        probe.onData(ByteBuffer.wrap(byteArrayOf(2, 0)), 16, 48_000, 1, 1, 2)
+
+        assertEquals(1, recording.written.size)
 
         probe.close()
         val callsAfterClose = recording.totalCalls()
         probe.close()
         probe.onData(ByteBuffer.wrap(byteArrayOf(2, 0)), 16, 48_000, 1, 1, 2)
 
+        assertEquals(2, recording.written.size)
         assertEquals(1, recording.drained)
         assertEquals(callsAfterClose, recording.totalCalls())
     }
@@ -196,6 +252,8 @@ class LiveKitRemoteAudioProbeTest {
     private data class Written(
         val byteCount: Int,
         val nonSilent: Boolean,
+        val rmsActive: Boolean,
+        val audioWindowMicros: Long,
     )
 
     private class RecordingAudioProbe : VoiceAutomationAudioProbe {
@@ -210,7 +268,17 @@ class LiveKitRemoteAudioProbeTest {
         override fun captureLiveKitMediaOwner() = VoiceAutomationMediaOwner(RUN_HASH)
 
         override fun onOutputWritten(byteCount: Int, nonSilent: Boolean) {
-            written += Written(byteCount, nonSilent)
+            error("LiveKit probe must supply RMS window evidence")
+        }
+
+        override fun onLiveKitOutputWritten(
+            owner: VoiceAutomationMediaOwner,
+            byteCount: Int,
+            nonSilent: Boolean,
+            rmsActive: Boolean,
+            audioWindowMicros: Long,
+        ) {
+            written += Written(byteCount, nonSilent, rmsActive, audioWindowMicros)
         }
 
         override fun onOutputDrained() {
@@ -224,6 +292,15 @@ class LiveKitRemoteAudioProbeTest {
         }
 
         fun totalCalls(): Int = written.size + silenceConfirmations + drained
+    }
+
+    private fun pcm16(sample: Int, frames: Int): ByteBuffer {
+        val bytes = ByteArray(frames * 2)
+        repeat(frames) { index ->
+            bytes[index * 2] = sample.toByte()
+            bytes[index * 2 + 1] = (sample shr 8).toByte()
+        }
+        return ByteBuffer.wrap(bytes)
     }
 
     private class FakeClock {

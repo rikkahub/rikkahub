@@ -29,6 +29,8 @@ internal interface VoiceAutomationAudioProbe {
         owner: VoiceAutomationMediaOwner,
         byteCount: Int,
         nonSilent: Boolean,
+        rmsActive: Boolean,
+        audioWindowMicros: Long,
     ) {
         onOutputWritten(byteCount, nonSilent)
     }
@@ -193,10 +195,19 @@ internal class DefaultVoiceAutomationAudioProbe(
         owner: VoiceAutomationMediaOwner,
         byteCount: Int,
         nonSilent: Boolean,
+        rmsActive: Boolean,
+        audioWindowMicros: Long,
     ) {
         if (byteCount <= 0) return
         withActiveLiveKitOwner(owner) { runtime ->
-            recordOutputWritten(runtime, byteCount, nonSilent, mediaOwner = owner)
+            recordOutputWritten(
+                runtime,
+                byteCount,
+                nonSilent,
+                mediaOwner = owner,
+                rmsActive = rmsActive,
+                audioWindowMicros = audioWindowMicros,
+            )
         }
     }
 
@@ -312,6 +323,8 @@ internal class DefaultVoiceAutomationAudioProbe(
         byteCount: Int,
         nonSilent: Boolean,
         mediaOwner: VoiceAutomationMediaOwner?,
+        rmsActive: Boolean? = null,
+        audioWindowMicros: Long? = null,
     ) {
         prepareOutputEpoch()
         if (nonSilent) {
@@ -369,6 +382,8 @@ internal class DefaultVoiceAutomationAudioProbe(
                 name = VoiceAutomationEventName.PLAYBACK_WRITTEN,
                 playbackEpoch = playbackEpoch,
                 byteCount = byteCount.toLong(),
+                rmsActive = rmsActive,
+                audioWindowMicros = audioWindowMicros,
             ),
             mediaOwner,
         )
