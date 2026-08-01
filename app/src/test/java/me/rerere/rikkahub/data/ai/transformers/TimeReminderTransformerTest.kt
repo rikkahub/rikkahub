@@ -17,6 +17,12 @@ class TimeReminderTransformerTest {
         createdAt = createdAt,
     )
 
+    private fun assistantMessage(text: String, createdAt: LocalDateTime) = UIMessage(
+        role = MessageRole.ASSISTANT,
+        parts = listOf(UIMessagePart.Text(text)),
+        createdAt = createdAt,
+    )
+
     private fun getMessageText(msg: UIMessage): String =
         msg.parts.filterIsInstance<UIMessagePart.Text>().joinToString("") { it.text }
 
@@ -68,6 +74,21 @@ class TimeReminderTransformerTest {
     }
 
     @Test
+    fun `gap should still be measured from a normal assistant response`() {
+        val messages = listOf(
+            userMessage("Hello", LocalDateTime(2026, 2, 22, 10, 0, 0)),
+            assistantMessage("Hi", LocalDateTime(2026, 2, 22, 10, 0, 0)),
+            userMessage("World", LocalDateTime(2026, 2, 22, 12, 0, 0)),
+        )
+
+        val result = applyTimeReminder(messages)
+
+        assertEquals(5, result.size)
+        assertTrue(getMessageText(result[3]).contains("2 h since last message"))
+        assertEquals("World", getMessageText(result[4]))
+    }
+
+    @Test
     fun `injected message should contain day of week and gap in hours`() {
         val messages = listOf(
             userMessage("Hello", LocalDateTime(2026, 2, 22, 10, 0, 0)),
@@ -106,6 +127,25 @@ class TimeReminderTransformerTest {
         assertEquals("Msg 2", getMessageText(result[3]))
         assertTrue(getMessageText(result[4]).contains("<time_reminder>"))
         assertEquals("Msg 3", getMessageText(result[5]))
+    }
+
+    @Test
+    fun `preset messages should not create a time gap before first real user message`() {
+        val presetUser = userMessage("Preset user", LocalDateTime(2026, 1, 1, 10, 0, 0))
+        val presetAssistant = assistantMessage("Preset assistant", LocalDateTime(2026, 1, 1, 10, 1, 0))
+        val realUser = userMessage("Hello", LocalDateTime(2026, 2, 22, 10, 0, 0))
+
+        val result = applyTimeReminder(
+            messages = listOf(presetUser, presetAssistant, realUser),
+            presetMessageIds = setOf(presetUser.id, presetAssistant.id),
+        )
+
+        assertEquals(4, result.size)
+        assertEquals(presetUser, result[0])
+        assertEquals(presetAssistant, result[1])
+        assertTrue(getMessageText(result[2]).contains("<time_reminder>"))
+        assertFalse(getMessageText(result[2]).contains("since last message"))
+        assertEquals(realUser, result[3])
     }
 
     @Test
