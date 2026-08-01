@@ -83,6 +83,7 @@ else:
         "lifecycle": "foreground",
         "route": "speaker",
         "event_count": 0,
+        "event_time_ms": 0,
         "status_reads": 0,
         "events": [],
         "call_started": False,
@@ -106,14 +107,28 @@ else:
 def save():
     state_file.write_text(json.dumps(state, separators=(",", ":")))
 
-def emit(name, *, observed_transport=None, route=None, network=None, lifecycle=None,
-         playback_epoch=None, byte_count=None, succeeded=None, capture_source=None,
-         mic_bytes=None, fixture_bytes=None):
+def emit(
+    name,
+    *,
+    observed_transport=None,
+    route=None,
+    network=None,
+    lifecycle=None,
+    playback_epoch=None,
+    byte_count=None,
+    rms_active=None,
+    audio_window_micros=None,
+    succeeded=None,
+    capture_source=None,
+    mic_bytes=None,
+    fixture_bytes=None,
+):
     state["event_count"] += 1
+    state["event_time_ms"] += 10
     event = {
         "schemaVersion": 1,
-        "monotonicMs": state["event_count"] * 10,
-        "wallClockMs": 1_800_000_000_000 + state["event_count"] * 10,
+        "monotonicMs": state["event_time_ms"],
+        "wallClockMs": 1_800_000_000_000 + state["event_time_ms"],
         "runHash": state["run_hash"],
         "comparisonHash": state["comparison_hash"],
         "requestedTransport": state["transport"],
@@ -124,6 +139,8 @@ def emit(name, *, observed_transport=None, route=None, network=None, lifecycle=N
         "lifecycle": lifecycle,
         "playbackEpoch": playback_epoch,
         "byteCount": byte_count,
+        "rmsActive": rms_active,
+        "audioWindowMicros": audio_window_micros,
         "succeeded": succeeded,
         "correlationKind": None,
         "correlationHash": None,
@@ -132,6 +149,18 @@ def emit(name, *, observed_transport=None, route=None, network=None, lifecycle=N
         "fixtureBytes": fixture_bytes,
     }
     state["events"].append(json.dumps(event, separators=(",", ":")))
+
+def advance_event_time(duration_ms):
+    state["event_time_ms"] += duration_ms
+
+def emit_probe_audio(active, duration_micros=5_000):
+    emit(
+        "playback_written",
+        playback_epoch=1,
+        byte_count=480,
+        rms_active=active,
+        audio_window_micros=duration_micros,
+    )
 
 def completed(result, data):
     if os.environ.get("FAKE_ADB_BROADCAST_MULTILINE") == "1":
@@ -300,12 +329,34 @@ elif tail[:4] == ["shell", "am", "start-foreground-service", "-n"]:
         if os.environ.get("FAKE_ADB_FAIL_MODE") == "start":
             sys.exit(74)
         observed = os.environ.get("FAKE_ADB_OBSERVED_TRANSPORT", state["transport"])
+        startup_probe = os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") == "1"
+        probe_timeline = os.environ.get("FAKE_ADB_PROBE_TIMELINE", "clean")
+        if startup_probe:
+            emit("remote_track_attached", playback_epoch=1)
+            if probe_timeline == "duplicate_attach":
+                emit("remote_track_attached", playback_epoch=1)
         if os.environ.get("FAKE_ADB_SUPPRESS_EVENT") != "call_active":
             emit("call_active", observed_transport=observed)
+        if startup_probe and probe_timeline != "missing":
+            if probe_timeline == "malformed":
+                emit(
+                    "playback_written",
+                    playback_epoch=1,
+                    byte_count=480,
+                    audio_window_micros=5_000,
+                )
+            else:
+                emit_probe_audio(False)
+                if probe_timeline == "gap":
+                    advance_event_time(300)
+                    emit_probe_audio(False)
+                elif probe_timeline == "active":
+                    emit_probe_audio(True)
+            if probe_timeline == "detached":
+                emit("remote_track_detached", playback_epoch=1)
         if values.get("captureFixtureToken") == state.get("fixture_token"):
             state["injections"] = 1
             fixture_bytes = state["fixture_initial_bytes"]
-            startup_probe = os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") == "1"
             if startup_probe:
                 emit("remote_audio_first_non_silent", playback_epoch=1)
                 emit("playback_active", playback_epoch=1)
@@ -339,6 +390,7 @@ elif tail[:3] == ["shell", "am", "broadcast"]:
             "transport": values["transport"],
             "lifecycle": values["lifecycle"],
             "event_count": 0,
+            "event_time_ms": 0,
             "events": [],
             "injections": 0,
         })
@@ -430,6 +482,26 @@ elif tail[:3] == ["shell", "am", "broadcast"]:
         if state["run_state"] != "active":
             completed(1, "status=error\nerror=invalid_state")
         else:
+            probe_timeline = os.environ.get("FAKE_ADB_PROBE_TIMELINE", "clean")
+            if os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") == "1":
+                parsed_events = [json.loads(line) for line in state["events"]]
+                if probe_timeline == "missing_call_active":
+                    parsed_events = [
+                        event for event in parsed_events if event.get("name") != "call_active"
+                    ]
+                elif probe_timeline == "misordered_call_active":
+                    initial_start = next(
+                        event["monotonicMs"] for event in parsed_events
+                        if event.get("name") == "injection_started"
+                        and event.get("byteCount") == state["fixture_initial_bytes"]
+                    )
+                    for event in parsed_events:
+                        if event.get("name") == "call_active":
+                            event["monotonicMs"] = initial_start + 1
+                            event["wallClockMs"] = 1_800_000_000_000 + initial_start + 1
+                state["events"] = [
+                    json.dumps(event, separators=(",", ":")) for event in parsed_events
+                ]
             emit("run_finalized")
             state["run_state"] = "finalized"
             save()
@@ -460,12 +532,22 @@ elif tail[:3] == ["shell", "am", "broadcast"]:
                 sys.exit(0)
         staged_bytes = state["staged"].get("files/" + values.get("path", ""), 0)
         state["injections"] += 1
+        startup_probe = os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") == "1"
+        probe_timeline = os.environ.get("FAKE_ADB_PROBE_TIMELINE", "clean")
+        if startup_probe and probe_timeline != "missing":
+            emit_probe_audio(False)
         emit("injection_started", byte_count=staged_bytes)
+        if startup_probe and probe_timeline == "straddle":
+            emit_probe_audio(True, 15_000)
+        elif startup_probe and probe_timeline == "prompt_overlap":
+            emit_probe_audio(True)
         emit("injection_first_chunk", byte_count=staged_bytes)
         emit("injection_completed", byte_count=staged_bytes)
         emit("prompt_ended", byte_count=staged_bytes)
         emit("capture_attested", capture_source="fixture", mic_bytes=0, fixture_bytes=staged_bytes)
-        if os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") != "1":
+        if startup_probe and probe_timeline not in {"missing_response", "legacy_only"}:
+            emit_probe_audio(True)
+        if not startup_probe:
             emit("playback_stopped", playback_epoch=1)
         save()
         completed(0, "status=ok\naction=trigger\naccepted=true")
@@ -504,7 +586,13 @@ elif tail[:5] == ["exec-out", "run-as", "me.rerere.rikkahub.debug", "grep", "-F"
     if ("playback_written" in pattern and state.get("recovery_ready") and
             not state.get("recovery_emitted") and
             os.environ.get("FAKE_ADB_SUPPRESS_EVENT") != "playback_written"):
-        emit("playback_written", playback_epoch=1, byte_count=3200)
+        emit(
+            "playback_written",
+            playback_epoch=1,
+            byte_count=3200,
+            rms_active=False,
+            audio_window_micros=10_000,
+        )
         if state.get("handover_wifi_restored"):
             emit("handover_media_restored", playback_epoch=1)
         if state.get("reconnect_transport_restored"):
@@ -583,7 +671,7 @@ reset_fake() {
   unset FAKE_ADB_BACKGROUND_NETWORK_BLOCKED
   unset FAKE_ADB_STATUS_MALFORMED FAKE_ADB_STAGE_VISIBILITY_DELAY
   unset FAKE_ADB_ARM_MALFORMED FAKE_ADB_SUPPRESS_CAPTURE_ATTESTATION
-  unset FAKE_CLOCK_STEP
+  unset FAKE_ADB_PROBE_TIMELINE FAKE_CLOCK_STEP
 }
 
 command_lines() {
@@ -1170,7 +1258,8 @@ export VOICE_STAGE1_STARTUP_TRUTH_PROBE=1
 export VOICE_STAGE1_STARTUP_PCM_PATH="$STARTUP_PCM_PATH"
 export FAKE_CLOCK_STEP=1
 probe_output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20)"
-assert_equals 'stage1.run=complete' "$probe_output"
+assert_contains "$probe_output" 'stage1.startup_probe={"version":1,"classification":"startup-clean","promptOverlap":false,"activeIntervalsMs":[]}'
+assert_contains "$probe_output" 'stage1.run=complete'
 assert_common_success_contract livekit_experimental
 [[ "$(command_count "me.rerere.rikkahub.debug.voiceagent.TRIGGER_CAPTURE_FIXTURE")" == "1" ]] ||
   fail "startup probe prompt was not triggered exactly once"
@@ -1199,6 +1288,76 @@ if not post_prompt_attestations or post_prompt_attestations[0].get("fixtureBytes
 PY
 assert_private_path_absent "files/voice-stage1/startup.pcm"
 unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH FAKE_CLOCK_STEP
+
+while IFS='|' read -r timeline classification prompt_overlap expected_status; do
+  reset_fake
+  export VOICE_STAGE1_STARTUP_TRUTH_PROBE=1
+  export VOICE_STAGE1_STARTUP_PCM_PATH="$STARTUP_PCM_PATH"
+  export FAKE_CLOCK_STEP=1
+  export FAKE_ADB_PROBE_TIMELINE="$timeline"
+  set +e
+  timeline_output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+  timeline_status=$?
+  set -e
+  [[ "$timeline_status" == "$expected_status" ]] ||
+    fail "startup probe timeline $timeline returned $timeline_status, expected $expected_status"
+  assert_contains "$timeline_output" "stage1.startup_probe={\"version\":1,\"classification\":\"$classification\",\"promptOverlap\":$prompt_overlap,\"activeIntervalsMs\":"
+  if [[ "$classification" == "startup-audio-active" ]]; then
+    assert_not_contains "$timeline_output" '"activeIntervalsMs":[]'
+  fi
+  if [[ "$expected_status" == "0" ]]; then
+    assert_contains "$timeline_output" 'stage1.run=complete'
+  else
+    assert_not_contains "$timeline_output" 'stage1.run=complete'
+    assert_contains "$timeline_output" 'startup probe did not produce a valid vertical slice'
+    [[ -s "$TMP_DIR/automation-events.jsonl" ]] ||
+      fail "classified startup probe timeline $timeline did not preserve its artifact"
+    [[ "$(stat -c '%a' "$TMP_DIR/automation-events.jsonl")" == "600" ]] ||
+      fail "classified startup probe timeline $timeline artifact was not mode 0600"
+    assert_not_contains "$timeline_output" "$PCM_PATH"
+    assert_not_contains "$timeline_output" "$STARTUP_PCM_PATH"
+    assert_not_contains "$timeline_output" "$RUN_HASH"
+    assert_not_contains "$timeline_output" "$COMPARISON_HASH"
+    [[ "$(command_count "action.END")" == "1" ]] ||
+      fail "classified startup probe timeline $timeline did not end exactly once"
+    [[ "$(command_count "automation.FINALIZE")" == "1" ]] ||
+      fail "classified startup probe timeline $timeline did not finalize exactly once"
+  fi
+done <<'EOF'
+active|startup-audio-active|false|1
+missing|startup-indeterminate|false|1
+gap|startup-indeterminate|false|1
+detached|startup-indeterminate|false|1
+duplicate_attach|startup-indeterminate|false|1
+missing_call_active|startup-indeterminate|false|1
+misordered_call_active|startup-indeterminate|false|1
+malformed|startup-indeterminate|false|1
+straddle|startup-indeterminate|true|1
+prompt_overlap|startup-clean|true|1
+EOF
+unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH
+unset FAKE_CLOCK_STEP FAKE_ADB_PROBE_TIMELINE
+
+for timeline in missing_response legacy_only; do
+  reset_fake
+  export VOICE_STAGE1_STARTUP_TRUTH_PROBE=1
+  export VOICE_STAGE1_STARTUP_PCM_PATH="$STARTUP_PCM_PATH"
+  export FAKE_CLOCK_STEP=1
+  export FAKE_ADB_PROBE_TIMELINE="$timeline"
+  set +e
+  timeline_output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+  timeline_status=$?
+  set -e
+  [[ "$timeline_status" -ne 0 ]] || fail "startup probe timeline $timeline accepted missing RMS response evidence"
+  assert_contains "$timeline_output" 'stage1.startup_probe={"version":1,"classification":"startup-clean","promptOverlap":false,"activeIntervalsMs":[]}'
+  assert_not_contains "$timeline_output" 'stage1.run=complete'
+  [[ -s "$TMP_DIR/automation-events.jsonl" ]] ||
+    fail "startup probe timeline $timeline did not preserve its classified artifact"
+  [[ "$(stat -c '%a' "$TMP_DIR/automation-events.jsonl")" == "600" ]] ||
+    fail "startup probe timeline $timeline artifact was not mode 0600"
+done
+unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH
+unset FAKE_CLOCK_STEP FAKE_ADB_PROBE_TIMELINE
 
 reset_fake
 export VOICE_STAGE1_STARTUP_TRUTH_PROBE=1

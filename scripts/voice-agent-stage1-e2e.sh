@@ -960,7 +960,9 @@ finalize_and_fetch() {
   if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
     expected_startup_bytes="$(wc -c < "$VOICE_STAGE1_STARTUP_PCM_PATH" | tr -d '[:space:]')"
   fi
-  if ! python3 - "$temp_output" "$VOICE_STAGE1_RUN_HASH" "$VOICE_STAGE1_COMPARISON_HASH" \
+  local validation_output
+  local validation_status=0
+  if validation_output="$(python3 - "$temp_output" "$VOICE_STAGE1_RUN_HASH" "$VOICE_STAGE1_COMPARISON_HASH" \
     "$VOICE_STAGE1_TRANSPORT" "$expected_route" "$VOICE_STAGE1_APP_STATE" \
     "$VOICE_STAGE1_NETWORK" "$VOICE_STAGE1_LIFECYCLE" "$expected_fixture_bytes" \
     "$STARTUP_TRUTH_PROBE" "$expected_startup_bytes" <<'PY'
@@ -970,6 +972,35 @@ import sys
 path, run_hash, comparison_hash, transport, route, app_state, network_mode, lifecycle, expected_fixture_bytes, startup_truth_probe, expected_startup_bytes = sys.argv[1:]
 expected_fixture_bytes = int(expected_fixture_bytes)
 expected_startup_bytes = int(expected_startup_bytes)
+MAX_GAP_MS = 250
+
+
+def audio_interval(event):
+    duration_us = event.get("audioWindowMicros")
+    active = event.get("rmsActive")
+    end_ms = event.get("monotonicMs")
+    if (
+        type(duration_us) is not int
+        or duration_us <= 0
+        or type(active) is not bool
+        or type(end_ms) is not int
+    ):
+        raise ValueError("invalid LiveKit playback_written RMS window")
+    duration_ms = (duration_us + 999) // 1000
+    return end_ms - duration_ms, end_ms, active
+
+
+def merge_active_offsets(intervals, attached_ms):
+    merged = []
+    for start_ms, end_ms in sorted(intervals):
+        relative = [max(0, start_ms - attached_ms), end_ms - attached_ms]
+        if merged and relative[0] <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], relative[1])
+        else:
+            merged.append(relative)
+    return merged
+
+
 try:
     with open(path, encoding="utf-8") as handle:
         events = [json.loads(line) for line in handle if line.strip()]
@@ -987,12 +1018,171 @@ for event in events:
         raise SystemExit("observed transport mismatch")
 
 names = [event.get("name") for event in events]
+probe_prompt_end_ms = None
+probe_response_valid = False
+if startup_truth_probe == "1":
+    classification = "startup-indeterminate"
+    prompt_overlap = False
+    active_startup = []
+    attached_ms = 0
+    valid_intervals = []
+    rms_schema_valid = True
+    for event in events:
+        if event.get("name") != "playback_written":
+            continue
+        try:
+            valid_intervals.append(audio_interval(event))
+        except ValueError:
+            rms_schema_valid = False
+
+    prompt_starts = [
+        event for event in events
+        if event.get("name") == "injection_started"
+        and event.get("byteCount") == expected_fixture_bytes
+    ]
+    prompt_ends = [
+        event for event in events
+        if event.get("name") == "prompt_ended"
+        and event.get("byteCount") == expected_fixture_bytes
+    ]
+    prompt_boundaries_valid = (
+        len(prompt_starts) == 1
+        and len(prompt_ends) == 1
+        and type(prompt_starts[0].get("monotonicMs")) is int
+        and type(prompt_ends[0].get("monotonicMs")) is int
+        and prompt_starts[0]["monotonicMs"] < prompt_ends[0]["monotonicMs"]
+    )
+    if prompt_boundaries_valid:
+        prompt_start_ms = prompt_starts[0]["monotonicMs"]
+        probe_prompt_end_ms = prompt_ends[0]["monotonicMs"]
+        prompt_overlap = any(
+            active and start_ms <= probe_prompt_end_ms and end_ms >= prompt_start_ms
+            for start_ms, end_ms, active in valid_intervals
+        )
+        probe_response_valid = any(
+            active and start_ms > probe_prompt_end_ms
+            for start_ms, _, active in valid_intervals
+        )
+
+        call_starts = [
+            event for event in events
+            if event.get("name") == "call_start_requested"
+        ]
+        attachment_events = [
+            event for event in events
+            if event.get("name") == "remote_track_attached"
+        ]
+        call_active_events = [
+            event for event in events
+            if event.get("name") == "call_active"
+        ]
+        detach_events = [
+            event for event in events
+            if event.get("name") == "remote_track_detached"
+        ]
+        lifecycle_schema_valid = all(
+            type(event.get("monotonicMs")) is int
+            for event in call_starts + attachment_events + call_active_events + detach_events
+        )
+        initial_starts = [
+            event for event in events
+            if event.get("name") == "injection_started"
+            and event.get("byteCount") == expected_startup_bytes
+        ]
+        if call_starts and lifecycle_schema_valid:
+            call_start_ms = min(event["monotonicMs"] for event in call_starts)
+            attachments = [
+                event for event in attachment_events
+                if call_start_ms <= event["monotonicMs"] < prompt_start_ms
+            ]
+        else:
+            call_start_ms = None
+            attachments = []
+        detached_before_prompt = any(
+            event["monotonicMs"] < prompt_start_ms
+            for event in detach_events
+            if lifecycle_schema_valid
+        )
+        ordering_valid = (
+            rms_schema_valid
+            and lifecycle_schema_valid
+            and call_start_ms is not None
+            and len(attachments) == 1
+            and not any(
+                event["monotonicMs"] < call_start_ms
+                for event in attachment_events
+            )
+            and len(call_active_events) == 1
+            and len(initial_starts) == 1
+            and type(initial_starts[0].get("monotonicMs")) is int
+            and not detached_before_prompt
+        )
+        if ordering_valid:
+            attached_ms = attachments[0]["monotonicMs"]
+            call_active_ms = call_active_events[0]["monotonicMs"]
+            initial_start_ms = initial_starts[0]["monotonicMs"]
+            ordering_valid = (
+                call_start_ms <= attached_ms < call_active_ms
+                < initial_start_ms < prompt_start_ms
+            )
+
+        if ordering_valid:
+            observation_intervals = sorted(
+                (start_ms, end_ms, active)
+                for start_ms, end_ms, active in valid_intervals
+                if end_ms >= attached_ms and start_ms < prompt_start_ms
+            )
+            coverage_valid = bool(observation_intervals)
+            coverage_end_ms = attached_ms
+            for start_ms, end_ms, _ in observation_intervals:
+                clipped_start_ms = max(start_ms, attached_ms)
+                clipped_end_ms = min(end_ms, prompt_start_ms)
+                if clipped_start_ms - coverage_end_ms > MAX_GAP_MS:
+                    coverage_valid = False
+                coverage_end_ms = max(coverage_end_ms, clipped_end_ms)
+            if prompt_start_ms - coverage_end_ms > MAX_GAP_MS:
+                coverage_valid = False
+
+            active_observation = [
+                (start_ms, end_ms)
+                for start_ms, end_ms, active in observation_intervals
+                if active
+            ]
+            active_straddles_boundary = any(
+                start_ms < prompt_start_ms <= end_ms
+                for start_ms, end_ms in active_observation
+            )
+            active_outside_startup = any(
+                start_ms < attached_ms or end_ms >= prompt_start_ms
+                for start_ms, end_ms in active_observation
+            )
+            if coverage_valid and not active_straddles_boundary and not active_outside_startup:
+                active_startup = active_observation
+                classification = (
+                    "startup-audio-active" if active_startup else "startup-clean"
+                )
+
+    report = {
+        "version": 1,
+        "classification": classification,
+        "promptOverlap": prompt_overlap,
+        "activeIntervalsMs": (
+            merge_active_offsets(active_startup, attached_ms)
+            if classification == "startup-audio-active"
+            else []
+        ),
+    }
+    print("stage1.startup_probe=" + json.dumps(report, separators=(",", ":")))
+    if classification != "startup-clean" or prompt_overlap:
+        raise SystemExit(2)
+
 required_names = [
     "run_prepared", "call_start_requested", "call_active", "call_stopped",
     "route_requested", "route_observed", "lifecycle_requested", "lifecycle_observed",
-    "prompt_ended", "capture_attested", "playback_active", "run_finalized",
+    "prompt_ended", "capture_attested", "run_finalized",
 ]
-required_names.append("remote_audio_first_non_silent")
+if startup_truth_probe != "1":
+    required_names.extend(["playback_active", "remote_audio_first_non_silent"])
 for required in required_names:
     if required not in names:
         raise SystemExit(f"missing required automation event: {required}")
@@ -1118,13 +1308,34 @@ else:
 if lifecycle == "interruption":
     if "interrupt_started" not in names or "playback_stopped" not in names:
         raise SystemExit("interruption evidence is incomplete")
+if startup_truth_probe == "1" and not probe_response_valid:
+    raise SystemExit("missing RMS-backed response playback after prompt completion")
 PY
-  then
-    rm -f "$temp_output"
-    fail "finalized automation event validation failed"
+  )"; then
+    validation_status=0
+  else
+    validation_status=$?
   fi
-  mv -f "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT"
-  chmod 600 "$VOICE_STAGE1_EVENT_OUTPUT"
+
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
+    mv -f "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT"
+    chmod 600 "$VOICE_STAGE1_EVENT_OUTPUT"
+    if [[ -n "$validation_output" ]]; then
+      printf '%s\n' "$validation_output"
+    fi
+    if [[ "$validation_status" -eq 2 ]]; then
+      fail "startup probe did not produce a valid vertical slice"
+    elif [[ "$validation_status" -ne 0 ]]; then
+      fail "finalized automation event validation failed"
+    fi
+  else
+    if [[ "$validation_status" -ne 0 ]]; then
+      rm -f "$temp_output"
+      fail "finalized automation event validation failed"
+    fi
+    mv -f "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT"
+    chmod 600 "$VOICE_STAGE1_EVENT_OUTPUT"
+  fi
 }
 
 run_preflight() {
