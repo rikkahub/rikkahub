@@ -231,22 +231,21 @@ class LiveKitRemoteAudioProbeTest {
     }
 
     @Test
-    fun `close flushes one pending window drains once and rejects every later remote frame`() {
+    fun `track lifecycle records once and close never drains`() {
         val recording = RecordingAudioProbe()
         val probe = LiveKitRemoteAudioProbe(recording, monotonicMs = { 1L })
         probe.onData(ByteBuffer.wrap(byteArrayOf(1, 0)), 16, 48_000, 1, 1, 1)
-        probe.onData(ByteBuffer.wrap(byteArrayOf(2, 0)), 16, 48_000, 1, 1, 2)
 
-        assertEquals(1, recording.written.size)
-
+        probe.onTrackAttached()
+        probe.onTrackAttached()
+        probe.onTrackDetached()
+        probe.onTrackDetached()
         probe.close()
-        val callsAfterClose = recording.totalCalls()
         probe.close()
-        probe.onData(ByteBuffer.wrap(byteArrayOf(2, 0)), 16, 48_000, 1, 1, 2)
 
-        assertEquals(2, recording.written.size)
-        assertEquals(1, recording.drained)
-        assertEquals(callsAfterClose, recording.totalCalls())
+        assertEquals(1, recording.trackAttached)
+        assertEquals(1, recording.trackDetached)
+        assertEquals(0, recording.drained)
     }
 
     private data class Written(
@@ -260,6 +259,8 @@ class LiveKitRemoteAudioProbeTest {
         val written = mutableListOf<Written>()
         var silenceConfirmations = 0
         var drained = 0
+        var trackAttached = 0
+        var trackDetached = 0
 
         override fun onInjectionStarted(totalBytes: Long) = Unit
         override fun onInjectionChunk(byteCount: Int) = Unit
@@ -285,13 +286,20 @@ class LiveKitRemoteAudioProbeTest {
             drained += 1
         }
 
+        override fun onLiveKitRemoteTrackAttached(owner: VoiceAutomationMediaOwner) {
+            trackAttached += 1
+        }
+
+        override fun onLiveKitRemoteTrackDetached(owner: VoiceAutomationMediaOwner) {
+            trackDetached += 1
+        }
+
         override fun onInterruptionStarted() = Unit
 
         override fun onOutputSilenceConfirmed() {
             silenceConfirmations += 1
         }
 
-        fun totalCalls(): Int = written.size + silenceConfirmations + drained
     }
 
     private fun pcm16(sample: Int, frames: Int): ByteBuffer {

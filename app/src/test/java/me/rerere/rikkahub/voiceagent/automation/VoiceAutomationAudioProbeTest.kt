@@ -118,6 +118,33 @@ class VoiceAutomationAudioProbeTest {
     }
 
     @Test
+    fun `LiveKit track lifecycle records without playback epoch and rejects stale owners`() {
+        val runtime = RecordingRuntime(
+            requestedTransport = VoiceAgentTransport.LiveKitExperimental,
+        )
+        val probe = DefaultVoiceAutomationAudioProbe(
+            runtimeProvider = { runtime },
+            monotonicMs = { 1L },
+        )
+        val owner = checkNotNull(probe.captureLiveKitMediaOwner())
+
+        probe.onLiveKitRemoteTrackAttached(owner)
+        probe.onLiveKitRemoteTrackDetached(owner)
+        runtime.runHash = RUN_HASH_B
+        probe.onLiveKitRemoteTrackAttached(owner)
+        probe.onLiveKitRemoteTrackDetached(owner)
+
+        assertEquals(
+            listOf(
+                expected(VoiceAutomationEventName.REMOTE_TRACK_ATTACHED),
+                expected(VoiceAutomationEventName.REMOTE_TRACK_DETACHED),
+            ),
+            runtime.events,
+        )
+        assertTrue(runtime.events.all { it.playbackEpoch == null })
+    }
+
+    @Test
     fun `scheduled LiveKit dropout cannot append after atomic run replacement`() {
         val runtime = RecordingRuntime(
             requestedTransport = VoiceAgentTransport.LiveKitExperimental,

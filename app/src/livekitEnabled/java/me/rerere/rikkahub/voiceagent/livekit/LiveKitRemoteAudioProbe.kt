@@ -19,6 +19,8 @@ internal class LiveKitRemoteAudioProbe(
     private var pendingAudioWindowMicros = 0L
     private var lastNonSilent: Boolean? = null
     private var lastProgressMs: Long? = null
+    private var trackAttached = false
+    private var trackDetached = false
     private val mediaOwner: VoiceAutomationMediaOwner? =
         automationAudioProbe.captureLiveKitMediaOwner()
 
@@ -87,7 +89,22 @@ internal class LiveKitRemoteAudioProbe(
             closed = true
             val owner = mediaOwner ?: return
             flushProgress(owner, nowMs)
-            automationAudioProbe.onLiveKitOutputDrained(owner)
+        }
+    }
+
+    fun onTrackAttached() {
+        synchronized(lock) {
+            if (trackAttached) return
+            trackAttached = true
+            mediaOwner?.let(automationAudioProbe::onLiveKitRemoteTrackAttached)
+        }
+    }
+
+    fun onTrackDetached() {
+        synchronized(lock) {
+            if (trackDetached) return
+            trackDetached = true
+            mediaOwner?.let(automationAudioProbe::onLiveKitRemoteTrackDetached)
         }
     }
 

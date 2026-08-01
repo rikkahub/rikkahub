@@ -25,6 +25,8 @@ internal interface VoiceAutomationAudioProbe {
     fun onOutputQueued(byteCount: Int)
     fun onOutputWritten(byteCount: Int, nonSilent: Boolean)
     fun captureLiveKitMediaOwner(): VoiceAutomationMediaOwner? = null
+    fun onLiveKitRemoteTrackAttached(owner: VoiceAutomationMediaOwner) = Unit
+    fun onLiveKitRemoteTrackDetached(owner: VoiceAutomationMediaOwner) = Unit
     fun onLiveKitOutputWritten(
         owner: VoiceAutomationMediaOwner,
         byteCount: Int,
@@ -188,6 +190,28 @@ internal class DefaultVoiceAutomationAudioProbe(
             return null
         }
         return VoiceAutomationMediaOwner(activeRunHash)
+    }
+
+    @Synchronized
+    override fun onLiveKitRemoteTrackAttached(owner: VoiceAutomationMediaOwner) {
+        withActiveLiveKitOwner(owner) { runtime ->
+            record(
+                runtime,
+                VoiceAutomationEventInput(VoiceAutomationEventName.REMOTE_TRACK_ATTACHED),
+                owner,
+            )
+        }
+    }
+
+    @Synchronized
+    override fun onLiveKitRemoteTrackDetached(owner: VoiceAutomationMediaOwner) {
+        withActiveLiveKitOwner(owner) { runtime ->
+            record(
+                runtime,
+                VoiceAutomationEventInput(VoiceAutomationEventName.REMOTE_TRACK_DETACHED),
+                owner,
+            )
+        }
     }
 
     @Synchronized
