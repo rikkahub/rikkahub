@@ -22,6 +22,8 @@ CALL_START_ACTION="me.rerere.rikkahub.voiceagent.action.START"
 CALL_END_ACTION="me.rerere.rikkahub.voiceagent.action.END"
 EXPECTED_PHYSICAL_SERIAL="RZCX71NXRPB"
 APP_ARTIFACT_BASE_DIR="no_backup/voice-e2e"
+LATEST_VOICE_TRACE_PATH="$APP_ARTIFACT_BASE_DIR/latest-trace-id.txt"
+SANITIZED_VOICE_EVENTS_NAME="voice-experience-events.ndjson"
 PRIVATE_FIXTURE_DIR="files/voice-stage1"
 PRIVATE_PROMPT_PATH="$PRIVATE_FIXTURE_DIR/prompt.pcm"
 PRIVATE_INTERRUPT_PATH="$PRIVATE_FIXTURE_DIR/interrupt.pcm"
@@ -38,6 +40,7 @@ MAX_WAIT_ATTEMPTS="${VOICE_STAGE1_MAX_WAIT_ATTEMPTS:-600}"
 LOCK_DIR="${VOICE_STAGE1_LOCK_DIR:-${TMPDIR:-/tmp}/rikkahub-voice-stage1-locks}"
 PROMPT_TRIGGER="${VOICE_STAGE1_PROMPT_TRIGGER:-initial_fixture}"
 STARTUP_TRUTH_PROBE="${VOICE_STAGE1_STARTUP_TRUTH_PROBE:-0}"
+TRANSCRIPT_PROBE="${VOICE_STAGE1_TRANSCRIPT_PROBE:-0}"
 STARTUP_PRE_ROLL_SECONDS=5
 
 START_ATTEMPTED=0
@@ -59,6 +62,7 @@ STATUS_NETWORK=""
 STATUS_VALIDATED=""
 FIXTURE_TOKEN=""
 FIXTURE_DATA=""
+INITIAL_VOICE_TRACE_ID=""
 
 fail() {
   printf 'stage1: %s\n' "$*" >&2
@@ -88,6 +92,95 @@ validate_nonnegative_number() {
 
 adb_command() {
   timeout "${ADB_TIMEOUT_SECONDS}s" adb -s "$VOICE_STAGE1_SERIAL" "$@"
+}
+
+safe_voice_trace_id() {
+  [[ "$1" =~ ^[A-Za-z0-9_-]{1,128}$ ]]
+}
+
+read_latest_voice_trace_id() {
+  adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" cat "$LATEST_VOICE_TRACE_PATH"
+}
+
+probe_remote_regular_file() {
+  local remote_path="$1"
+  local result
+  if ! result="$(adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" sh -c '
+if [ -e "$1" ]; then
+  if [ -f "$1" ]; then
+    printf present
+  else
+    printf invalid
+  fi
+else
+  printf absent
+fi
+' sh "$remote_path")"; then
+    return 1
+  fi
+  case "$result" in
+    present|absent|invalid)
+      printf '%s' "$result"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+snapshot_initial_voice_trace() {
+  local pointer_state
+  local trace_id
+  pointer_state="$(probe_remote_regular_file "$LATEST_VOICE_TRACE_PATH")" || return 1
+  case "$pointer_state" in
+    absent)
+      INITIAL_VOICE_TRACE_ID=""
+      return 0
+      ;;
+    present)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  trace_id="$(read_latest_voice_trace_id)" || return 1
+  safe_voice_trace_id "$trace_id" || return 1
+  INITIAL_VOICE_TRACE_ID="$trace_id"
+}
+
+fetch_voice_transcript_events() {
+  local pointer_state
+  local trace_id
+  local events_path
+  local events_state
+  local output_parent
+  local temp_output
+  pointer_state="$(probe_remote_regular_file "$LATEST_VOICE_TRACE_PATH")" || return 1
+  [[ "$pointer_state" == "present" ]] || return 1
+  trace_id="$(read_latest_voice_trace_id)" || return 1
+  safe_voice_trace_id "$trace_id" || return 1
+  [[ "$trace_id" != "$INITIAL_VOICE_TRACE_ID" ]] || return 1
+  events_path="$APP_ARTIFACT_BASE_DIR/$trace_id/$SANITIZED_VOICE_EVENTS_NAME"
+  events_state="$(probe_remote_regular_file "$events_path")" || return 1
+  [[ "$events_state" != "invalid" ]] || return 1
+
+  output_parent="$(dirname "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT")"
+  mkdir -p "$output_parent"
+  temp_output="$(mktemp "$output_parent/.voice-stage1-transcript.XXXXXX")" || return 1
+  chmod 600 "$temp_output" || { rm -f "$temp_output"; return 1; }
+  if [[ "$events_state" == "present" ]]; then
+    if ! adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" cat "$events_path" > "$temp_output"; then
+      rm -f "$temp_output"
+      return 1
+    fi
+  elif [[ "$events_state" != "absent" ]]; then
+    rm -f "$temp_output"
+    return 1
+  fi
+  mv -f "$temp_output" "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" || {
+    rm -f "$temp_output"
+    return 1
+  }
 }
 
 clock_now() {
@@ -955,6 +1048,9 @@ finalize_and_fetch() {
     rm -f "$temp_output"
     fail "finalized automation events are empty"
   }
+  if [[ "$TRANSCRIPT_PROBE" == "1" ]]; then
+    fetch_voice_transcript_events || fail "unable to collect sanitized transcript evidence"
+  fi
   expected_route="${VOICE_STAGE1_ROUTE^}"
   expected_fixture_bytes="$(wc -c < "$VOICE_STAGE1_PCM_PATH" | tr -d '[:space:]')"
   if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
@@ -1413,6 +1509,16 @@ validate_normal_inputs() {
     fail "VOICE_STAGE1_INTERRUPT_PCM_PATH must be a nonempty regular file"
   [[ "$STARTUP_TRUTH_PROBE" =~ ^(0|1)$ ]] ||
     fail "VOICE_STAGE1_STARTUP_TRUTH_PROBE must be 0 or 1"
+  [[ "$TRANSCRIPT_PROBE" =~ ^(0|1)$ ]] ||
+    fail "VOICE_STAGE1_TRANSCRIPT_PROBE must be 0 or 1"
+  if [[ "$TRANSCRIPT_PROBE" == "1" ]]; then
+    [[ "$STARTUP_TRUTH_PROBE" == "1" ]] ||
+      fail "transcript probe requires startup truth probe"
+    [[ "$VOICE_STAGE1_TRANSPORT" == "livekit_experimental" ]] ||
+      fail "transcript probe requires livekit_experimental transport"
+    [[ "$VOICE_STAGE1_LIFECYCLE" == "steady" ]] ||
+      fail "transcript probe requires steady lifecycle"
+  fi
   if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
     [[ "$VOICE_STAGE1_TRANSPORT" == "livekit_experimental" ]] ||
       fail "startup truth probe requires livekit_experimental transport"
@@ -1427,6 +1533,13 @@ validate_normal_inputs() {
     prompt_fixture_bytes="$(wc -c < "$VOICE_STAGE1_PCM_PATH" | tr -d '[:space:]')"
     [[ "$startup_fixture_bytes" != "$prompt_fixture_bytes" ]] ||
       fail "startup and prompt fixtures must have different byte counts"
+  fi
+  if [[ "$TRANSCRIPT_PROBE" == "1" ]]; then
+    require_env VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
+    [[ ! -L "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" ]] ||
+      fail "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must not be a symlink"
+    [[ ! -d "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" ]] ||
+      fail "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must not be a directory"
   fi
   validate_positive_integer VOICE_STAGE1_TARGET_SECONDS "$VOICE_STAGE1_TARGET_SECONDS"
   validate_positive_integer VOICE_STAGE1_ADB_TIMEOUT_SECONDS "$ADB_TIMEOUT_SECONDS"
@@ -1510,6 +1623,9 @@ run_scenario() {
   arm_capture_fixture
 
   run_started_at="$(clock_now)"
+  if [[ "$TRANSCRIPT_PROBE" == "1" ]]; then
+    snapshot_initial_voice_trace || fail "unable to collect sanitized transcript evidence"
+  fi
   start_call
   wait_event CALL_ACTIVE 1
   cross_check_network "$initial_network"

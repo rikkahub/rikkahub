@@ -95,6 +95,12 @@ else:
         "staged": {},
         "staged_reads": {},
         "event_grep_reads": {},
+        "voice_trace_id": os.environ.get("FAKE_ADB_INITIAL_VOICE_TRACE_ID", "prior-private-trace"),
+        "voice_trace_pointer_exists": os.environ.get("FAKE_ADB_INITIAL_VOICE_TRACE_ABSENT") != "1",
+        "current_voice_trace_id": os.environ.get("FAKE_ADB_CURRENT_VOICE_TRACE_ID", "current-private-trace"),
+        "voice_events": os.environ.get("FAKE_ADB_VOICE_EVENTS", '{"kind":"sanitized"}\n'),
+        "voice_events_exists": os.environ.get("FAKE_ADB_VOICE_EVENTS_EXISTS", "1") == "1",
+        "voice_events_regular": os.environ.get("FAKE_ADB_VOICE_EVENTS_REGULAR", "1") == "1",
     }
     if os.environ.get("FAKE_ADB_INITIAL_RUN") == "foreign":
         state.update({
@@ -106,6 +112,10 @@ else:
 
 def save():
     state_file.write_text(json.dumps(state, separators=(",", ":")))
+
+def fail_if_requested(name):
+    if os.environ.get("FAKE_ADB_FAIL_MODE") == name:
+        raise SystemExit(82)
 
 def emit(
     name,
@@ -294,6 +304,25 @@ elif tail[:5] == ["exec-in", "run-as", "me.rerere.rikkahub.debug", "sh", "-c"]:
         sys.exit(80)
     if os.environ.get("FAKE_ADB_FAIL_MODE") == "stage_interrupt" and path.endswith("interrupt.pcm"):
         sys.exit(75)
+elif tail[:5] == ["exec-out", "run-as", "me.rerere.rikkahub.debug", "sh", "-c"]:
+    remote_path = tail[-1]
+    if remote_path == "no_backup/voice-e2e/latest-trace-id.txt":
+        fail_if_requested("trace_pointer_probe")
+        if not state["voice_trace_pointer_exists"]:
+            print("absent")
+        else:
+            print("present")
+    elif remote_path.endswith("/voice-experience-events.ndjson"):
+        fail_if_requested("voice_events_probe")
+        if not state["voice_events_exists"]:
+            print("absent")
+        elif not state["voice_events_regular"]:
+            print("invalid")
+        else:
+            print("present")
+    else:
+        print(f"unexpected remote probe path: {remote_path!r}", file=sys.stderr)
+        sys.exit(99)
 elif tail[:3] == ["shell", "am", "start"]:
     if "android.intent.category.HOME" in tail:
         if state["run_state"] == "active" and os.environ.get("FAKE_ADB_LIFECYCLE_MODE") == "preaction_race":
@@ -328,6 +357,9 @@ elif tail[:4] == ["shell", "am", "start-foreground-service", "-n"]:
         save()
         if os.environ.get("FAKE_ADB_FAIL_MODE") == "start":
             sys.exit(74)
+        state["voice_trace_id"] = state["current_voice_trace_id"]
+        state["voice_trace_pointer_exists"] = True
+        save()
         observed = os.environ.get("FAKE_ADB_OBSERVED_TRANSPORT", state["transport"])
         startup_probe = os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") == "1"
         probe_timeline = os.environ.get("FAKE_ADB_PROBE_TIMELINE", "clean")
@@ -644,6 +676,15 @@ elif tail[:5] == ["exec-out", "run-as", "me.rerere.rikkahub.debug", "grep", "-F"
     if not matches:
         sys.exit(1)
     print("\n".join(matches))
+elif tail == ["exec-out", "run-as", "me.rerere.rikkahub.debug", "cat", "no_backup/voice-e2e/latest-trace-id.txt"]:
+    fail_if_requested("trace_pointer_read")
+    print(state["voice_trace_id"])
+elif (tail[:4] == ["exec-out", "run-as", "me.rerere.rikkahub.debug", "cat"] and
+      tail[-1].endswith("/voice-experience-events.ndjson")):
+    fail_if_requested("voice_events_read")
+    if not state["voice_events_exists"]:
+        raise SystemExit(1)
+    print(state["voice_events"], end="")
 elif tail[:4] == ["exec-out", "run-as", "me.rerere.rikkahub.debug", "cat"]:
     print("\n".join(state["events"]))
 else:
@@ -699,6 +740,10 @@ reset_fake() {
   unset FAKE_ADB_STATUS_MALFORMED FAKE_ADB_STAGE_VISIBILITY_DELAY
   unset FAKE_ADB_ARM_MALFORMED FAKE_ADB_SUPPRESS_CAPTURE_ATTESTATION
   unset FAKE_ADB_PROBE_TIMELINE FAKE_CLOCK_STEP
+  unset FAKE_ADB_INITIAL_VOICE_TRACE_ID FAKE_ADB_INITIAL_VOICE_TRACE_ABSENT
+  unset FAKE_ADB_CURRENT_VOICE_TRACE_ID FAKE_ADB_VOICE_EVENTS
+  unset FAKE_ADB_VOICE_EVENTS_EXISTS FAKE_ADB_VOICE_EVENTS_REGULAR
+  unset VOICE_STAGE1_TRANSCRIPT_PROBE VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
 }
 
 command_lines() {
@@ -1170,6 +1215,173 @@ assert_probe_preflight_failure \
 assert_probe_preflight_failure \
   "startup and prompt fixtures must have different byte counts" \
   1 livekit_experimental steady "$EQUAL_STARTUP_PCM"
+
+assert_transcript_preflight_failure() {
+  local expected="$1"
+  local transcript_probe="$2"
+  local startup_probe="$3"
+  local transport="$4"
+  local lifecycle="$5"
+  local startup_path="$6"
+  local transcript_output="$7"
+  reset_fake
+  export VOICE_STAGE1_TRANSCRIPT_PROBE="$transcript_probe"
+  export VOICE_STAGE1_STARTUP_TRUTH_PROBE="$startup_probe"
+  if [[ "$startup_path" == "__unset__" ]]; then
+    unset VOICE_STAGE1_STARTUP_PCM_PATH
+  else
+    export VOICE_STAGE1_STARTUP_PCM_PATH="$startup_path"
+  fi
+  if [[ "$transcript_output" == "__unset__" ]]; then
+    unset VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
+  else
+    export VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$transcript_output"
+  fi
+  set +e
+  output="$(run_scenario "$transport" stable_wifi speaker foreground "$lifecycle" 20 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail "invalid transcript probe preflight was accepted"
+  assert_contains "$output" "$expected"
+  [[ ! -s "$ADB_LOG" ]] || fail "invalid transcript probe preflight reached ADB"
+  unset VOICE_STAGE1_TRANSCRIPT_PROBE VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
+  unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH
+}
+
+TRANSCRIPT_OUTPUT="$TMP_DIR/sanitized-events.ndjson"
+EXPECTED_TRANSCRIPT_OUTPUT="$TMP_DIR/expected-sanitized-events.ndjson"
+TRANSCRIPT_OUTPUT_LINK="$TMP_DIR/sanitized-events-link.ndjson"
+TRANSCRIPT_OUTPUT_DIRECTORY="$TMP_DIR/sanitized-events-directory"
+ln -s "$TRANSCRIPT_OUTPUT" "$TRANSCRIPT_OUTPUT_LINK"
+mkdir "$TRANSCRIPT_OUTPUT_DIRECTORY"
+
+assert_transcript_preflight_failure \
+  "VOICE_STAGE1_TRANSCRIPT_PROBE must be 0 or 1" \
+  2 1 livekit_experimental steady "$STARTUP_PCM_PATH" "$TRANSCRIPT_OUTPUT"
+assert_transcript_preflight_failure \
+  "transcript probe requires startup truth probe" \
+  1 0 livekit_experimental steady "$STARTUP_PCM_PATH" "$TRANSCRIPT_OUTPUT"
+assert_transcript_preflight_failure \
+  "transcript probe requires livekit_experimental transport" \
+  1 1 direct_gemini steady "$STARTUP_PCM_PATH" "$TRANSCRIPT_OUTPUT"
+assert_transcript_preflight_failure \
+  "transcript probe requires steady lifecycle" \
+  1 1 livekit_experimental interruption "$STARTUP_PCM_PATH" "$TRANSCRIPT_OUTPUT"
+assert_transcript_preflight_failure \
+  "VOICE_STAGE1_STARTUP_PCM_PATH is required" \
+  1 1 livekit_experimental steady __unset__ "$TRANSCRIPT_OUTPUT"
+assert_transcript_preflight_failure \
+  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT is required" \
+  1 1 livekit_experimental steady "$STARTUP_PCM_PATH" __unset__
+assert_transcript_preflight_failure \
+  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must not be a symlink" \
+  1 1 livekit_experimental steady "$STARTUP_PCM_PATH" "$TRANSCRIPT_OUTPUT_LINK"
+assert_transcript_preflight_failure \
+  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must not be a directory" \
+  1 1 livekit_experimental steady "$STARTUP_PCM_PATH" "$TRANSCRIPT_OUTPUT_DIRECTORY"
+
+reset_fake
+run_scenario direct_gemini stable_wifi speaker foreground steady 20 >/dev/null
+assert_not_contains "$(command_lines)" "latest-trace-id.txt"
+assert_not_contains "$(command_lines)" "voice-experience-events.ndjson"
+
+enable_transcript_collection() {
+  export VOICE_STAGE1_TRANSCRIPT_PROBE=1
+  export VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$TRANSCRIPT_OUTPUT"
+  export VOICE_STAGE1_STARTUP_TRUTH_PROBE=1
+  export VOICE_STAGE1_STARTUP_PCM_PATH="$STARTUP_PCM_PATH"
+  export FAKE_CLOCK_STEP=1
+}
+
+assert_transcript_output_mode() {
+  [[ "$(stat -c %a "$TRANSCRIPT_OUTPUT")" == "600" ]] ||
+    fail "sanitized transcript output was not mode 0600"
+}
+
+reset_fake
+rm -f "$TRANSCRIPT_OUTPUT"
+enable_transcript_collection
+export FAKE_ADB_VOICE_EVENTS=$'{"kind":"sanitized","text":"safe"}\n'
+run_scenario livekit_experimental stable_wifi speaker foreground steady 20 >/dev/null
+printf '%s\n' '{"kind":"sanitized","text":"safe"}' > "$EXPECTED_TRANSCRIPT_OUTPUT"
+cmp -s "$EXPECTED_TRANSCRIPT_OUTPUT" "$TRANSCRIPT_OUTPUT" ||
+  fail "sanitized transcript output did not preserve exact artifact bytes"
+assert_transcript_output_mode
+
+reset_fake
+rm -f "$TRANSCRIPT_OUTPUT"
+enable_transcript_collection
+export FAKE_ADB_INITIAL_VOICE_TRACE_ABSENT=1
+run_scenario livekit_experimental stable_wifi speaker foreground steady 20 >/dev/null
+[[ -s "$TRANSCRIPT_OUTPUT" ]] || fail "new trace after an absent initial pointer was not collected"
+assert_transcript_output_mode
+
+reset_fake
+rm -f "$TRANSCRIPT_OUTPUT"
+enable_transcript_collection
+export FAKE_ADB_VOICE_EVENTS_EXISTS=0
+run_scenario livekit_experimental stable_wifi speaker foreground steady 20 >/dev/null
+[[ -f "$TRANSCRIPT_OUTPUT" && ! -s "$TRANSCRIPT_OUTPUT" ]] ||
+  fail "proven missing sanitized events did not produce an empty output"
+assert_transcript_output_mode
+
+assert_transcript_collection_failure() {
+  local expected_mode="$1"
+  reset_fake
+  rm -f "$TRANSCRIPT_OUTPUT"
+  enable_transcript_collection
+  case "$expected_mode" in
+    stale)
+      export FAKE_ADB_INITIAL_VOICE_TRACE_ID=private-stale-trace
+      export FAKE_ADB_CURRENT_VOICE_TRACE_ID=private-stale-trace
+      ;;
+    unsafe)
+      export FAKE_ADB_INITIAL_VOICE_TRACE_ID=private-old-trace
+      export FAKE_ADB_CURRENT_VOICE_TRACE_ID=../private-unsafe-trace
+      ;;
+    *)
+      export FAKE_ADB_FAIL_MODE="$expected_mode"
+      ;;
+  esac
+  set +e
+  output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail "transcript collection failure $expected_mode was accepted"
+  assert_equals "stage1: unable to collect sanitized transcript evidence" "$output"
+  assert_not_contains "$output" "private-stale-trace"
+  assert_not_contains "$output" "private-old-trace"
+  assert_not_contains "$output" "private-unsafe-trace"
+  [[ ! -e "$TRANSCRIPT_OUTPUT" ]] || fail "failed transcript collection manufactured an output"
+  if [[ "$expected_mode" == "voice_events_read" ]]; then
+    [[ "$(command_count "action.END")" == "1" ]] ||
+      fail "post-call transcript read failure did not end the call exactly once"
+    [[ "$(command_count "automation.FINALIZE")" == "1" ]] ||
+      fail "post-call transcript read failure did not finalize exactly once"
+  fi
+  unset FAKE_ADB_FAIL_MODE FAKE_ADB_INITIAL_VOICE_TRACE_ID FAKE_ADB_CURRENT_VOICE_TRACE_ID
+}
+
+assert_transcript_collection_failure stale
+assert_transcript_collection_failure unsafe
+assert_transcript_collection_failure trace_pointer_probe
+assert_transcript_collection_failure trace_pointer_read
+assert_transcript_collection_failure voice_events_probe
+assert_transcript_collection_failure voice_events_read
+
+reset_fake
+rm -f "$TRANSCRIPT_OUTPUT"
+enable_transcript_collection
+export FAKE_ADB_VOICE_EVENTS_REGULAR=0
+set +e
+output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+status=$?
+set -e
+[[ "$status" -ne 0 ]] || fail "non-regular sanitized event path was accepted"
+assert_equals "stage1: unable to collect sanitized transcript evidence" "$output"
+[[ ! -e "$TRANSCRIPT_OUTPUT" ]] || fail "invalid sanitized event path manufactured an output"
+unset VOICE_STAGE1_TRANSCRIPT_PROBE VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
+unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH
 
 reset_fake
 export VOICE_STAGE1_STARTUP_TRUTH_PROBE=1
