@@ -328,30 +328,50 @@ def classify_file(path):
         return "unknown", False, 0, 0
 
 
-def worker_rows(path):
-    path_stat = os.lstat(path)
+def worker_snapshot_metadata(file_stat):
     if (
-        stat.S_ISLNK(path_stat.st_mode)
-        or not stat.S_ISREG(path_stat.st_mode)
-        or stat.S_IMODE(path_stat.st_mode) != 0o600
+        stat.S_ISLNK(file_stat.st_mode)
+        or not stat.S_ISREG(file_stat.st_mode)
+        or stat.S_IMODE(file_stat.st_mode) != 0o600
     ):
         raise InvalidEvidence()
+    return (
+        file_stat.st_dev,
+        file_stat.st_ino,
+        file_stat.st_mode,
+        file_stat.st_nlink,
+        file_stat.st_uid,
+        file_stat.st_gid,
+        file_stat.st_size,
+        file_stat.st_mtime_ns,
+        file_stat.st_ctime_ns,
+    )
+
+
+def worker_rows(path):
+    path_metadata = worker_snapshot_metadata(os.lstat(path))
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(path, flags)
     try:
         opened_stat = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(opened_stat.st_mode)
-            or stat.S_IMODE(opened_stat.st_mode) != 0o600
-            or opened_stat.st_dev != path_stat.st_dev
-            or opened_stat.st_ino != path_stat.st_ino
-        ):
+        opened_metadata = worker_snapshot_metadata(opened_stat)
+        if opened_metadata != path_metadata:
             raise InvalidEvidence()
-        source = os.fdopen(descriptor, "r", encoding="utf-8")
+        source = os.fdopen(descriptor, "rb")
         descriptor = -1
         with source:
+            content = source.read()
+            post_read_metadata = worker_snapshot_metadata(os.fstat(source.fileno()))
+            post_read_path_metadata = worker_snapshot_metadata(os.lstat(path))
+            if (
+                post_read_metadata != opened_metadata
+                or post_read_path_metadata != opened_metadata
+                or len(content) != opened_stat.st_size
+                or (content and not content.endswith(b"\n"))
+            ):
+                raise InvalidEvidence()
             rows = []
-            for raw_line in source:
+            for raw_line in content.decode("utf-8").split("\n"):
                 if not raw_line.strip():
                     continue
                 row = json.loads(

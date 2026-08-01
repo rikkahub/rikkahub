@@ -1178,6 +1178,13 @@ if scenario == "valid_then_malformed":
     )
     os.chmod(output, 0o600)
     raise SystemExit(0)
+if scenario == "unterminated_complete":
+    rows = [request(), ready()]
+    output.write_text(
+        "\n".join(json.dumps(row, separators=(",", ":")) for row in rows)
+    )
+    os.chmod(output, 0o600)
+    raise SystemExit(0)
 if scenario == "duplicate_key":
     output.write_text(
         '{"message":"received job request","message":"worker-private-sentinel",'
@@ -1499,6 +1506,7 @@ for unknown_worker_scenario in \
   missing_attribution \
   malformed_json \
   valid_then_malformed \
+  unterminated_complete \
   duplicate_key \
   unstructured \
   missing \
