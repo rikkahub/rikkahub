@@ -99,7 +99,7 @@ import os
 import re
 import stat
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 BASE = {"version", "voiceSessionId", "eventId", "kind", "observedAt", "eventHash"}
 JOB = {"userTurnId", "requestHash", "toolCallId", "argumentHash", "jobId"}
@@ -175,11 +175,16 @@ def reject_nonstandard_number(_value):
 def canonical_utc_timestamp(value):
     if type(value) is not str or UTC_TIMESTAMP.fullmatch(value) is None:
         return False
+    fractional_digits = len(value.rsplit(".", 1)[1][:-1]) if "." in value else 0
+    if fractional_digits > 6:
+        return False
     try:
         parsed = datetime.fromisoformat(value[:-1] + "+00:00")
     except (TypeError, ValueError):
         return False
-    return parsed.utcoffset() is not None and parsed.utcoffset().total_seconds() == 0
+    timespec = {0: "seconds", 3: "milliseconds", 6: "microseconds"}[fractional_digits]
+    canonical = parsed.astimezone(timezone.utc).isoformat(timespec=timespec)
+    return canonical.replace("+00:00", "Z") == value
 
 
 def validate_row(row):

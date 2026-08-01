@@ -1053,6 +1053,10 @@ elif scenario == "bad_timestamp":
     row = job("job_running", "event-bad-timestamp")
     row["observedAt"] = "2026-07-30T12:00:00+00:00"
     rows = [row]
+elif scenario == "lossy_timestamp":
+    row = job("job_running", "event-lossy-timestamp")
+    row["observedAt"] = "2026-07-30T12:00:00.123456789Z"
+    rows = [row]
 elif scenario == "bad_role":
     rows = [transcript("event-bad-role", "system", False, 17)]
 elif scenario == "half_grounded":
@@ -1226,6 +1230,7 @@ for invalid_fixture in \
   bad_identifier \
   bad_hash \
   bad_timestamp \
+  lossy_timestamp \
   bad_role \
   half_grounded \
   grounded_user; do
