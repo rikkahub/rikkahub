@@ -1091,13 +1091,8 @@ if startup_truth_probe == "1":
         ]
         if call_starts and lifecycle_schema_valid:
             call_start_ms = min(event["monotonicMs"] for event in call_starts)
-            attachments = [
-                event for event in attachment_events
-                if call_start_ms <= event["monotonicMs"] < prompt_start_ms
-            ]
         else:
             call_start_ms = None
-            attachments = []
         detached_before_prompt = any(
             event["monotonicMs"] < prompt_start_ms
             for event in detach_events
@@ -1107,23 +1102,19 @@ if startup_truth_probe == "1":
             rms_schema_valid
             and lifecycle_schema_valid
             and call_start_ms is not None
-            and len(attachments) == 1
-            and not any(
-                event["monotonicMs"] < call_start_ms
-                for event in attachment_events
-            )
+            and len(attachment_events) == 1
             and len(call_active_events) == 1
             and len(initial_starts) == 1
             and type(initial_starts[0].get("monotonicMs")) is int
             and not detached_before_prompt
         )
         if ordering_valid:
-            attached_ms = attachments[0]["monotonicMs"]
+            attached_ms = attachment_events[0]["monotonicMs"]
             call_active_ms = call_active_events[0]["monotonicMs"]
             initial_start_ms = initial_starts[0]["monotonicMs"]
             ordering_valid = (
-                call_start_ms <= attached_ms < call_active_ms
-                < initial_start_ms < prompt_start_ms
+                call_start_ms <= call_active_ms < initial_start_ms < prompt_start_ms
+                and call_start_ms <= attached_ms < prompt_start_ms
             )
 
         if ordering_valid:

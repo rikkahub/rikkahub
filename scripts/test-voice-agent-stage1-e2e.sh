@@ -331,13 +331,20 @@ elif tail[:4] == ["shell", "am", "start-foreground-service", "-n"]:
         observed = os.environ.get("FAKE_ADB_OBSERVED_TRANSPORT", state["transport"])
         startup_probe = os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") == "1"
         probe_timeline = os.environ.get("FAKE_ADB_PROBE_TIMELINE", "clean")
-        if startup_probe:
-            emit("remote_track_attached", playback_epoch=1)
+        attach_after_initial = startup_probe and probe_timeline == "call_active_before_attach"
+        if (
+            startup_probe
+            and probe_timeline != "missing_attach"
+            and not attach_after_initial
+        ):
+            emit("remote_track_attached")
             if probe_timeline == "duplicate_attach":
-                emit("remote_track_attached", playback_epoch=1)
+                emit("remote_track_attached")
         if os.environ.get("FAKE_ADB_SUPPRESS_EVENT") != "call_active":
             emit("call_active", observed_transport=observed)
-        if startup_probe and probe_timeline != "missing":
+            if probe_timeline == "duplicate_call_active":
+                emit("call_active", observed_transport=observed)
+        if startup_probe and probe_timeline != "missing" and not attach_after_initial:
             if probe_timeline == "malformed":
                 emit(
                     "playback_written",
@@ -366,6 +373,9 @@ elif tail[:4] == ["shell", "am", "start-foreground-service", "-n"]:
             emit("prompt_ended", byte_count=fixture_bytes)
             if os.environ.get("FAKE_ADB_SUPPRESS_CAPTURE_ATTESTATION") != "1":
                 emit("capture_attested", capture_source="fixture", mic_bytes=0, fixture_bytes=fixture_bytes)
+            if attach_after_initial:
+                emit("remote_track_attached")
+                emit_probe_audio(False)
             if not startup_probe:
                 emit("remote_audio_first_non_silent", playback_epoch=1)
                 emit("playback_active", playback_epoch=1)
@@ -489,16 +499,25 @@ elif tail[:3] == ["shell", "am", "broadcast"]:
                     parsed_events = [
                         event for event in parsed_events if event.get("name") != "call_active"
                     ]
-                elif probe_timeline == "misordered_call_active":
+                elif probe_timeline in {"late_call_active", "late_attach"}:
                     initial_start = next(
                         event["monotonicMs"] for event in parsed_events
                         if event.get("name") == "injection_started"
                         and event.get("byteCount") == state["fixture_initial_bytes"]
                     )
+                    prompt_start = max(
+                        event["monotonicMs"] for event in parsed_events
+                        if event.get("name") == "injection_started"
+                    )
+                    target_name = (
+                        "call_active" if probe_timeline == "late_call_active"
+                        else "remote_track_attached"
+                    )
+                    target_ms = initial_start + 1 if target_name == "call_active" else prompt_start
                     for event in parsed_events:
-                        if event.get("name") == "call_active":
-                            event["monotonicMs"] = initial_start + 1
-                            event["wallClockMs"] = 1_800_000_000_000 + initial_start + 1
+                        if event.get("name") == target_name:
+                            event["monotonicMs"] = target_ms
+                            event["wallClockMs"] = 1_800_000_000_000 + target_ms
                 state["events"] = [
                     json.dumps(event, separators=(",", ":")) for event in parsed_events
                 ]
@@ -1328,9 +1347,13 @@ active|startup-audio-active|false|1
 missing|startup-indeterminate|false|1
 gap|startup-indeterminate|false|1
 detached|startup-indeterminate|false|1
+call_active_before_attach|startup-clean|false|0
+missing_attach|startup-indeterminate|false|1
 duplicate_attach|startup-indeterminate|false|1
+late_attach|startup-indeterminate|false|1
 missing_call_active|startup-indeterminate|false|1
-misordered_call_active|startup-indeterminate|false|1
+duplicate_call_active|startup-indeterminate|false|1
+late_call_active|startup-indeterminate|false|1
 malformed|startup-indeterminate|false|1
 straddle|startup-indeterminate|true|1
 prompt_overlap|startup-clean|true|1
