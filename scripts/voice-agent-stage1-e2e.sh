@@ -37,6 +37,8 @@ CLOCK_COMMAND="${VOICE_STAGE1_CLOCK_COMMAND:-}"
 MAX_WAIT_ATTEMPTS="${VOICE_STAGE1_MAX_WAIT_ATTEMPTS:-600}"
 LOCK_DIR="${VOICE_STAGE1_LOCK_DIR:-${TMPDIR:-/tmp}/rikkahub-voice-stage1-locks}"
 PROMPT_TRIGGER="${VOICE_STAGE1_PROMPT_TRIGGER:-initial_fixture}"
+STARTUP_TRUTH_PROBE="${VOICE_STAGE1_STARTUP_TRUTH_PROBE:-0}"
+STARTUP_PRE_ROLL_SECONDS=5
 
 START_ATTEMPTED=0
 END_ATTEMPTED=0
@@ -93,7 +95,8 @@ clock_now() {
   if [[ -n "$CLOCK_COMMAND" ]]; then
     value="$(timeout "${ADB_TIMEOUT_SECONDS}s" "$CLOCK_COMMAND")" || fail "clock command failed"
   else
-    value="$(date +%s)"
+    value="$(python3 -c 'import time; print(time.monotonic_ns() // 1_000_000_000)')" ||
+      fail "monotonic clock failed"
   fi
   [[ "$value" =~ ^[0-9]+$ ]] || fail "clock returned a non-integer value"
   printf '%s' "$value"
@@ -627,18 +630,20 @@ wait_event_after() {
   done
 }
 
-wait_matching_startup_playback_drain() {
+wait_matching_fixture_attestation() {
+  local expected_bytes="$1"
   local lines
-  local boundary_ms
+  local attestation_ms
   local evidence_status
-  begin_wait "matching startup playback_drained"
+  begin_wait "matching fixture attestation"
   while true; do
     if lines="$(adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" \
       grep -F '"schemaVersion":1' "$AUTOMATION_EVENT_PATH" 2>/dev/null)" &&
       [[ -n "$lines" ]]; then
-      if boundary_ms="$(python3 -c '
+      if attestation_ms="$(python3 -c '
 import json, sys
-run_hash, comparison_hash, transport = sys.argv[1:]
+run_hash, comparison_hash, transport, expected_bytes = sys.argv[1:]
+expected_bytes = int(expected_bytes)
 try:
     events = [json.loads(line) for line in sys.stdin if line.strip()]
 except ValueError:
@@ -647,42 +652,56 @@ if any(event.get("runHash") != run_hash or
        event.get("comparisonHash") != comparison_hash or
        event.get("requestedTransport") != transport for event in events):
     raise SystemExit(2)
-call_active = [event for event in events
-               if event.get("name") == "call_active" and
-               event.get("observedTransport") == transport]
-if not call_active:
+prompt_ends = [event for event in events
+               if event.get("name") == "prompt_ended" and
+               event.get("byteCount") == expected_bytes]
+if not prompt_ends:
     raise SystemExit(1)
-call_active_ms = min(event["monotonicMs"] for event in call_active)
-actives = sorted(
-    (event for event in events
-     if event.get("name") == "playback_active" and
-     event.get("monotonicMs", 0) > call_active_ms and
-     isinstance(event.get("playbackEpoch"), int)),
-    key=lambda event: event["monotonicMs"],
-)
-for active in actives:
-    drains = [event for event in events
-              if event.get("name") == "playback_drained" and
-              event.get("playbackEpoch") == active["playbackEpoch"] and
-              event.get("monotonicMs", 0) > active["monotonicMs"]]
-    if drains:
-        print(min(event["monotonicMs"] for event in drains))
-        raise SystemExit(0)
-raise SystemExit(1)
+if len(prompt_ends) != 1:
+    raise SystemExit(2)
+prompt_end_ms = prompt_ends[0].get("monotonicMs")
+attestations = [event for event in events
+                if event.get("name") == "capture_attested" and
+                event.get("captureSource") == "fixture" and
+                event.get("micBytes") == 0 and
+                event.get("fixtureBytes") == expected_bytes and
+                isinstance(event.get("monotonicMs"), int) and
+                event["monotonicMs"] > prompt_end_ms]
+if not attestations:
+    raise SystemExit(1)
+if len(attestations) != 1:
+    raise SystemExit(2)
+print(attestations[0]["monotonicMs"])
 ' "$VOICE_STAGE1_RUN_HASH" "$VOICE_STAGE1_COMPARISON_HASH" \
-        "$VOICE_STAGE1_TRANSPORT" <<< "$lines")"; then
-        printf '%s\n' "$boundary_ms"
+        "$VOICE_STAGE1_TRANSPORT" "$expected_bytes" <<< "$lines")"; then
+        printf '%s\n' "$attestation_ms"
         return 0
       else
         evidence_status=$?
         if (( evidence_status == 2 )); then
-          fail "startup playback event identity mismatch"
+          fail "fixture attestation evidence mismatch"
           return 1
         fi
       fi
     fi
     continue_wait "$WAIT_TIMEOUT_SECONDS" \
-      "timed out waiting for matching startup playback_drained" || return 1
+      "timed out waiting for matching fixture attestation" || return 1
+  done
+}
+
+wait_startup_pre_roll() {
+  local started_at
+  local now
+  started_at="$(clock_now)"
+  begin_wait "startup truth probe pre-roll"
+  while true; do
+    now="$(clock_now)"
+    (( now >= started_at )) || fail "clock moved backward during startup truth probe pre-roll"
+    if (( now - started_at >= STARTUP_PRE_ROLL_SECONDS + 1 )); then
+      return 0
+    fi
+    continue_wait "$WAIT_TIMEOUT_SECONDS" \
+      "timed out waiting for startup truth probe pre-roll" || return 1
   done
 }
 
@@ -799,7 +818,7 @@ fixture_broadcast() {
 }
 
 arm_capture_fixture() {
-  if [[ "$PROMPT_TRIGGER" == "after_startup_playback_drained" ]]; then
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
     fixture_broadcast "$FIXTURE_ARM_ACTION" \
       --es initial_path "$INJECTION_STARTUP_PATH" \
       --es staged_path "$INJECTION_PROMPT_PATH" \
@@ -938,17 +957,17 @@ finalize_and_fetch() {
   }
   expected_route="${VOICE_STAGE1_ROUTE^}"
   expected_fixture_bytes="$(wc -c < "$VOICE_STAGE1_PCM_PATH" | tr -d '[:space:]')"
-  if [[ "$PROMPT_TRIGGER" == "after_startup_playback_drained" ]]; then
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
     expected_startup_bytes="$(wc -c < "$VOICE_STAGE1_STARTUP_PCM_PATH" | tr -d '[:space:]')"
   fi
   if ! python3 - "$temp_output" "$VOICE_STAGE1_RUN_HASH" "$VOICE_STAGE1_COMPARISON_HASH" \
     "$VOICE_STAGE1_TRANSPORT" "$expected_route" "$VOICE_STAGE1_APP_STATE" \
     "$VOICE_STAGE1_NETWORK" "$VOICE_STAGE1_LIFECYCLE" "$expected_fixture_bytes" \
-    "$PROMPT_TRIGGER" "$expected_startup_bytes" <<'PY'
+    "$STARTUP_TRUTH_PROBE" "$expected_startup_bytes" <<'PY'
 import json
 import sys
 
-path, run_hash, comparison_hash, transport, route, app_state, network_mode, lifecycle, expected_fixture_bytes, prompt_trigger, expected_startup_bytes = sys.argv[1:]
+path, run_hash, comparison_hash, transport, route, app_state, network_mode, lifecycle, expected_fixture_bytes, startup_truth_probe, expected_startup_bytes = sys.argv[1:]
 expected_fixture_bytes = int(expected_fixture_bytes)
 expected_startup_bytes = int(expected_startup_bytes)
 try:
@@ -973,10 +992,7 @@ required_names = [
     "route_requested", "route_observed", "lifecycle_requested", "lifecycle_observed",
     "prompt_ended", "capture_attested", "playback_active", "run_finalized",
 ]
-if prompt_trigger == "after_startup_playback_drained":
-    required_names.append("playback_drained")
-else:
-    required_names.append("remote_audio_first_non_silent")
+required_names.append("remote_audio_first_non_silent")
 for required in required_names:
     if required not in names:
         raise SystemExit(f"missing required automation event: {required}")
@@ -984,40 +1000,24 @@ attestations = [event for event in events if event.get("name") == "capture_attes
 if any(event.get("captureSource") != "fixture" or event.get("micBytes") != 0
        for event in attestations):
     raise SystemExit("microphone contamination attested")
-if prompt_trigger == "after_startup_playback_drained":
-    call_active_ms = min(event["monotonicMs"] for event in events
-                         if event.get("name") == "call_active")
-    startup_pair = None
-    for active in sorted(
-        (event for event in events
-         if event.get("name") == "playback_active" and
-         event.get("monotonicMs", 0) > call_active_ms and
-         isinstance(event.get("playbackEpoch"), int)),
-        key=lambda event: event["monotonicMs"],
-    ):
-        drains = [event for event in events
-                  if event.get("name") == "playback_drained" and
-                  event.get("playbackEpoch") == active["playbackEpoch"] and
-                  event.get("monotonicMs", 0) > active["monotonicMs"]]
-        if drains:
-            startup_pair = (active, min(drains, key=lambda event: event["monotonicMs"]))
-            break
-    if startup_pair is None:
-        raise SystemExit("matching startup playback drain is missing")
-    _, startup_drain = startup_pair
+if startup_truth_probe == "1":
     startup_prompt_ends = [event for event in events
                            if event.get("name") == "prompt_ended" and
-                           event.get("byteCount") == expected_startup_bytes and
-                           event.get("monotonicMs", 0) < startup_drain["monotonicMs"]]
-    if not startup_prompt_ends:
-        raise SystemExit("startup fixture completion is missing before playback drain")
+                           event.get("byteCount") == expected_startup_bytes]
+    if len(startup_prompt_ends) != 1:
+        raise SystemExit("startup fixture completion is missing or duplicated")
+    startup_prompt_end = startup_prompt_ends[0]
+    if not any(event.get("fixtureBytes") == expected_startup_bytes and
+               event.get("monotonicMs", 0) > startup_prompt_end["monotonicMs"]
+               for event in attestations):
+        raise SystemExit("startup fixture capture attestation mismatch")
     staged_prompt_ends = [event for event in events
                           if event.get("name") == "prompt_ended" and
                           event.get("byteCount") == expected_fixture_bytes and
-                          event.get("monotonicMs", 0) > startup_drain["monotonicMs"]]
-    if not staged_prompt_ends:
-        raise SystemExit("staged prompt completion is missing after playback drain")
-    staged_prompt_end = min(staged_prompt_ends, key=lambda event: event["monotonicMs"])
+                          event.get("monotonicMs", 0) > startup_prompt_end["monotonicMs"]]
+    if len(staged_prompt_ends) != 1:
+        raise SystemExit("staged prompt completion is missing or duplicated")
+    staged_prompt_end = staged_prompt_ends[0]
     if not any(event.get("fixtureBytes") == expected_fixture_bytes and
                event.get("monotonicMs", 0) > staged_prompt_end["monotonicMs"]
                for event in attestations):
@@ -1178,6 +1178,8 @@ run_preflight() {
 
 validate_normal_inputs() {
   local required
+  local startup_fixture_bytes
+  local prompt_fixture_bytes
   for required in \
     VOICE_STAGE1_SERIAL \
     VOICE_STAGE1_PACKAGE \
@@ -1196,23 +1198,33 @@ validate_normal_inputs() {
     require_env "$required"
   done
   [[ "$VOICE_STAGE1_PACKAGE" =~ ^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+$ ]] || fail "invalid package name"
-  require_expected_serial
   [[ "$VOICE_STAGE1_TRANSPORT" =~ ^(direct_gemini|livekit_experimental)$ ]] || fail "invalid transport"
   [[ "$VOICE_STAGE1_ROUTE" =~ ^(speaker|earpiece)$ ]] || fail "invalid route"
   [[ "$VOICE_STAGE1_APP_STATE" =~ ^(foreground|background)$ ]] || fail "invalid app state"
   [[ "$VOICE_STAGE1_NETWORK" =~ ^(stable_wifi|cellular|wifi_cellular_wifi)$ ]] || fail "invalid network"
   [[ "$VOICE_STAGE1_LIFECYCLE" =~ ^(steady|interruption|reconnect)$ ]] || fail "invalid lifecycle"
-  [[ "$PROMPT_TRIGGER" =~ ^(initial_fixture|after_startup_playback_drained)$ ]] ||
-    fail "invalid prompt trigger"
-  if [[ "$PROMPT_TRIGGER" == "after_startup_playback_drained" ]]; then
+  [[ "$PROMPT_TRIGGER" == "initial_fixture" ]] || fail "invalid prompt trigger"
+  [[ -f "$VOICE_STAGE1_PCM_PATH" && ! -L "$VOICE_STAGE1_PCM_PATH" && -s "$VOICE_STAGE1_PCM_PATH" ]] ||
+    fail "VOICE_STAGE1_PCM_PATH must be a nonempty regular file"
+  [[ -f "$VOICE_STAGE1_INTERRUPT_PCM_PATH" && ! -L "$VOICE_STAGE1_INTERRUPT_PCM_PATH" &&
+     -s "$VOICE_STAGE1_INTERRUPT_PCM_PATH" ]] ||
+    fail "VOICE_STAGE1_INTERRUPT_PCM_PATH must be a nonempty regular file"
+  [[ "$STARTUP_TRUTH_PROBE" =~ ^(0|1)$ ]] ||
+    fail "VOICE_STAGE1_STARTUP_TRUTH_PROBE must be 0 or 1"
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
     [[ "$VOICE_STAGE1_TRANSPORT" == "livekit_experimental" ]] ||
-      fail "conditioned prompt trigger requires livekit_experimental transport"
+      fail "startup truth probe requires livekit_experimental transport"
     [[ "$VOICE_STAGE1_LIFECYCLE" == "steady" ]] ||
-      fail "conditioned prompt trigger requires steady lifecycle"
+      fail "startup truth probe requires steady lifecycle"
     require_env VOICE_STAGE1_STARTUP_PCM_PATH
     [[ -f "$VOICE_STAGE1_STARTUP_PCM_PATH" && ! -L "$VOICE_STAGE1_STARTUP_PCM_PATH" &&
        -s "$VOICE_STAGE1_STARTUP_PCM_PATH" ]] ||
       fail "VOICE_STAGE1_STARTUP_PCM_PATH must be a nonempty regular file"
+    require_command wc
+    startup_fixture_bytes="$(wc -c < "$VOICE_STAGE1_STARTUP_PCM_PATH" | tr -d '[:space:]')"
+    prompt_fixture_bytes="$(wc -c < "$VOICE_STAGE1_PCM_PATH" | tr -d '[:space:]')"
+    [[ "$startup_fixture_bytes" != "$prompt_fixture_bytes" ]] ||
+      fail "startup and prompt fixtures must have different byte counts"
   fi
   validate_positive_integer VOICE_STAGE1_TARGET_SECONDS "$VOICE_STAGE1_TARGET_SECONDS"
   validate_positive_integer VOICE_STAGE1_ADB_TIMEOUT_SECONDS "$ADB_TIMEOUT_SECONDS"
@@ -1221,13 +1233,9 @@ validate_normal_inputs() {
   validate_nonnegative_number VOICE_STAGE1_POLL_SECONDS "$POLL_SECONDS"
   [[ "$VOICE_STAGE1_RUN_HASH" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "invalid run hash"
   [[ "$VOICE_STAGE1_COMPARISON_HASH" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "invalid comparison hash"
-  [[ -f "$VOICE_STAGE1_PCM_PATH" && ! -L "$VOICE_STAGE1_PCM_PATH" && -s "$VOICE_STAGE1_PCM_PATH" ]] ||
-    fail "VOICE_STAGE1_PCM_PATH must be a nonempty regular file"
-  [[ -f "$VOICE_STAGE1_INTERRUPT_PCM_PATH" && ! -L "$VOICE_STAGE1_INTERRUPT_PCM_PATH" &&
-     -s "$VOICE_STAGE1_INTERRUPT_PCM_PATH" ]] ||
-    fail "VOICE_STAGE1_INTERRUPT_PCM_PATH must be a nonempty regular file"
   [[ ! -L "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a symlink"
   [[ ! -d "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a directory"
+  require_expected_serial
 
   require_command adb
   require_command timeout
@@ -1240,8 +1248,6 @@ validate_normal_inputs() {
   require_command flock
   if [[ -n "$CLOCK_COMMAND" ]]; then
     [[ -x "$CLOCK_COMMAND" ]] || fail "VOICE_STAGE1_CLOCK_COMMAND must be executable"
-  else
-    require_command date
   fi
 }
 
@@ -1249,7 +1255,9 @@ run_scenario() {
   local initial_network
   local run_started_at
   local lifecycle_boundary_ms
-  local prompt_trigger_boundary_ms
+  local expected_prompt_bytes
+  local expected_startup_bytes
+  local initial_attestation_ms
   AUTOMATION_EVENT_PATH="$(app_artifact_path \
     "$APP_ARTIFACT_BASE_DIR/${VOICE_STAGE1_RUN_HASH#sha256:}" automation-events.jsonl)"
 
@@ -1290,7 +1298,7 @@ run_scenario() {
   expect_control_data $'status=ok\naction=prepare'
 
   FIXTURES_STAGED=1
-  if [[ "$PROMPT_TRIGGER" == "after_startup_playback_drained" ]]; then
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
     stage_file "$VOICE_STAGE1_STARTUP_PCM_PATH" "$PRIVATE_STARTUP_PATH"
     stage_file "$VOICE_STAGE1_PCM_PATH" "$PRIVATE_PROMPT_PATH"
   else
@@ -1314,11 +1322,14 @@ run_scenario() {
   fi
   wait_lifecycle "$VOICE_STAGE1_APP_STATE" "$lifecycle_boundary_ms"
 
-  if [[ "$PROMPT_TRIGGER" == "after_startup_playback_drained" ]]; then
-    wait_matching_startup_playback_drain >/dev/null
-    prompt_trigger_boundary_ms="$(latest_run_event_monotonic_ms)"
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
+    expected_startup_bytes="$(wc -c < "$VOICE_STAGE1_STARTUP_PCM_PATH" | tr -d '[:space:]')"
+    expected_prompt_bytes="$(wc -c < "$VOICE_STAGE1_PCM_PATH" | tr -d '[:space:]')"
+    initial_attestation_ms="$(wait_matching_fixture_attestation "$expected_startup_bytes")"
+    [[ "$initial_attestation_ms" =~ ^[0-9]+$ ]] || fail "invalid initial fixture attestation timestamp"
+    wait_startup_pre_roll
     trigger_capture_fixture "$INJECTION_PROMPT_PATH"
-    wait_event_after PROMPT_ENDED "$prompt_trigger_boundary_ms"
+    wait_matching_fixture_attestation "$expected_prompt_bytes" >/dev/null
   else
     wait_event PROMPT_ENDED
     wait_event PLAYBACK_ACTIVE

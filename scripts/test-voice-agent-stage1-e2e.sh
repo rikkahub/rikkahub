@@ -89,7 +89,8 @@ else:
         "injections": 0,
         "fixture_token": None,
         "fixture_initial_bytes": 0,
-        "startup_drain_observed_by_runner": False,
+        "initial_attestation_observed_by_runner": False,
+        "attestation_clock_calls": None,
         "staged": {},
         "staged_reads": {},
         "event_grep_reads": {},
@@ -304,11 +305,8 @@ elif tail[:4] == ["shell", "am", "start-foreground-service", "-n"]:
         if values.get("captureFixtureToken") == state.get("fixture_token"):
             state["injections"] = 1
             fixture_bytes = state["fixture_initial_bytes"]
-            condition_trigger = (
-                os.environ.get("VOICE_STAGE1_PROMPT_TRIGGER") ==
-                "after_startup_playback_drained"
-            )
-            if condition_trigger:
+            startup_probe = os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") == "1"
+            if startup_probe:
                 emit("remote_audio_first_non_silent", playback_epoch=1)
                 emit("playback_active", playback_epoch=1)
             emit("injection_started", byte_count=fixture_bytes)
@@ -317,13 +315,7 @@ elif tail[:4] == ["shell", "am", "start-foreground-service", "-n"]:
             emit("prompt_ended", byte_count=fixture_bytes)
             if os.environ.get("FAKE_ADB_SUPPRESS_CAPTURE_ATTESTATION") != "1":
                 emit("capture_attested", capture_source="fixture", mic_bytes=0, fixture_bytes=fixture_bytes)
-            if condition_trigger:
-                drain_mode = os.environ.get("FAKE_ADB_STARTUP_DRAIN_MODE", "matching")
-                if drain_mode == "wrong_epoch":
-                    emit("playback_drained", playback_epoch=2)
-                elif os.environ.get("FAKE_ADB_SUPPRESS_EVENT") != "playback_drained":
-                    emit("playback_drained", playback_epoch=1)
-            else:
+            if not startup_probe:
                 emit("remote_audio_first_non_silent", playback_epoch=1)
                 emit("playback_active", playback_epoch=1)
         save()
@@ -455,11 +447,17 @@ elif tail[:3] == ["shell", "am", "broadcast"]:
             completed(1, "status=error\nerror=invalid_request")
             sys.exit(0)
         if (
-            os.environ.get("VOICE_STAGE1_PROMPT_TRIGGER") == "after_startup_playback_drained"
-            and not state.get("startup_drain_observed_by_runner")
+            os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") == "1"
+            and not state.get("initial_attestation_observed_by_runner")
         ):
             completed(1, "status=error\nerror=invalid_request")
             sys.exit(0)
+        if os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") == "1":
+            calls_file = Path(os.environ["FAKE_CLOCK_COUNTER"] + ".calls")
+            clock_calls = int(calls_file.read_text()) if calls_file.exists() else 0
+            if clock_calls - state["attestation_clock_calls"] < 6:
+                completed(1, "status=error\nerror=invalid_request")
+                sys.exit(0)
         staged_bytes = state["staged"].get("files/" + values.get("path", ""), 0)
         state["injections"] += 1
         emit("injection_started", byte_count=staged_bytes)
@@ -467,7 +465,7 @@ elif tail[:3] == ["shell", "am", "broadcast"]:
         emit("injection_completed", byte_count=staged_bytes)
         emit("prompt_ended", byte_count=staged_bytes)
         emit("capture_attested", capture_source="fixture", mic_bytes=0, fixture_bytes=staged_bytes)
-        if os.environ.get("VOICE_STAGE1_PROMPT_TRIGGER") != "after_startup_playback_drained":
+        if os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") != "1":
             emit("playback_stopped", playback_epoch=1)
         save()
         completed(0, "status=ok\naction=trigger\naccepted=true")
@@ -514,13 +512,20 @@ elif tail[:5] == ["exec-out", "run-as", "me.rerere.rikkahub.debug", "grep", "-F"
         state["recovery_emitted"] = True
         save()
     matches = [line for line in state["events"] if pattern in line]
-    if (
-        os.environ.get("VOICE_STAGE1_PROMPT_TRIGGER") == "after_startup_playback_drained"
-        and matches
-        and any('"name":"playback_drained"' in line for line in matches)
-    ):
-        state["startup_drain_observed_by_runner"] = True
-        save()
+    if os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") == "1" and '"schemaVersion":1' in pattern:
+        initial_bytes = state.get("fixture_initial_bytes")
+        observed = any(
+            json.loads(line).get("name") == "capture_attested"
+            and json.loads(line).get("fixtureBytes") == initial_bytes
+            for line in matches
+        )
+        if observed and not state.get("initial_attestation_observed_by_runner"):
+            calls_file = Path(os.environ["FAKE_CLOCK_COUNTER"] + ".calls")
+            state["initial_attestation_observed_by_runner"] = True
+            state["attestation_clock_calls"] = (
+                int(calls_file.read_text()) if calls_file.exists() else 0
+            )
+            save()
     if not matches:
         sys.exit(1)
     print("\n".join(matches))
@@ -534,6 +539,7 @@ chmod +x "$BIN_DIR/adb"
 
 cat > "$BIN_DIR/fake-clock" <<'PY'
 #!/usr/bin/env python3
+import json
 import os
 from pathlib import Path
 
@@ -546,7 +552,13 @@ calls_file = Path(str(counter) + ".calls")
 calls = int(calls_file.read_text()) + 1 if calls_file.exists() else 1
 calls_file.write_text(str(calls))
 mode = os.environ.get("FAKE_CLOCK_MODE", "forward")
-if mode == "frozen":
+state_path = Path(os.environ["FAKE_ADB_STATE_DIR"]) / "state.json"
+state = json.loads(state_path.read_text()) if state_path.exists() else {}
+if mode == "probe_frozen" and state.get("initial_attestation_observed_by_runner"):
+    value = value
+elif mode == "probe_backward" and state.get("initial_attestation_observed_by_runner"):
+    value -= 1
+elif mode == "frozen":
     value = 100 if calls <= 20 else 1000
 elif mode == "backward":
     value = 110 - calls * 10 if calls <= 10 else 1000
@@ -571,7 +583,7 @@ reset_fake() {
   unset FAKE_ADB_BACKGROUND_NETWORK_BLOCKED
   unset FAKE_ADB_STATUS_MALFORMED FAKE_ADB_STAGE_VISIBILITY_DELAY
   unset FAKE_ADB_ARM_MALFORMED FAKE_ADB_SUPPRESS_CAPTURE_ATTESTATION
-  unset FAKE_ADB_STARTUP_DRAIN_MODE
+  unset FAKE_CLOCK_STEP
 }
 
 command_lines() {
@@ -992,52 +1004,81 @@ set -e
 [[ "$(command_count "action.END")" == "0" ]] || fail "cleanup ended a call this invocation did not start"
 unset FAKE_ADB_INITIAL_RUN
 
+assert_probe_preflight_failure() {
+  local expected="$1"
+  local probe_value="$2"
+  local transport="$3"
+  local lifecycle="$4"
+  local startup_path="$5"
+  reset_fake
+  export VOICE_STAGE1_STARTUP_TRUTH_PROBE="$probe_value"
+  if [[ "$startup_path" == "__unset__" ]]; then
+    unset VOICE_STAGE1_STARTUP_PCM_PATH
+  else
+    export VOICE_STAGE1_STARTUP_PCM_PATH="$startup_path"
+  fi
+  set +e
+  output="$(run_scenario "$transport" stable_wifi speaker foreground "$lifecycle" 20 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail "invalid probe preflight was accepted"
+  assert_contains "$output" "$expected"
+  [[ ! -s "$ADB_LOG" ]] || fail "invalid probe preflight reached ADB"
+  unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH
+}
+
+EMPTY_STARTUP_PCM="$TMP_DIR/empty-startup.pcm"
+SYMLINK_STARTUP_PCM="$TMP_DIR/symlink-startup.pcm"
+EQUAL_STARTUP_PCM="$TMP_DIR/equal-startup.pcm"
+: > "$EMPTY_STARTUP_PCM"
+ln -s "$STARTUP_PCM_PATH" "$SYMLINK_STARTUP_PCM"
+cp "$PCM_PATH" "$EQUAL_STARTUP_PCM"
+
+assert_probe_preflight_failure \
+  "VOICE_STAGE1_STARTUP_TRUTH_PROBE must be 0 or 1" \
+  2 livekit_experimental steady "$STARTUP_PCM_PATH"
+assert_probe_preflight_failure \
+  "startup truth probe requires livekit_experimental transport" \
+  1 direct_gemini steady "$STARTUP_PCM_PATH"
+assert_probe_preflight_failure \
+  "startup truth probe requires steady lifecycle" \
+  1 livekit_experimental interruption "$STARTUP_PCM_PATH"
+assert_probe_preflight_failure \
+  "VOICE_STAGE1_STARTUP_PCM_PATH is required" \
+  1 livekit_experimental steady __unset__
+assert_probe_preflight_failure \
+  "VOICE_STAGE1_STARTUP_PCM_PATH must be a nonempty regular file" \
+  1 livekit_experimental steady "$EMPTY_STARTUP_PCM"
+assert_probe_preflight_failure \
+  "VOICE_STAGE1_STARTUP_PCM_PATH must be a nonempty regular file" \
+  1 livekit_experimental steady "$SYMLINK_STARTUP_PCM"
+assert_probe_preflight_failure \
+  "startup and prompt fixtures must have different byte counts" \
+  1 livekit_experimental steady "$EQUAL_STARTUP_PCM"
+
 reset_fake
+export VOICE_STAGE1_STARTUP_TRUTH_PROBE=1
+export VOICE_STAGE1_STARTUP_PCM_PATH="$STARTUP_PCM_PATH"
 export VOICE_STAGE1_PROMPT_TRIGGER=unsupported
 set +e
-invalid_prompt_trigger_output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
-invalid_prompt_trigger_status=$?
+output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+status=$?
 set -e
-[[ "$invalid_prompt_trigger_status" -ne 0 ]] || fail "invalid prompt trigger was accepted"
-assert_contains "$invalid_prompt_trigger_output" "invalid prompt trigger"
+[[ "$status" -ne 0 ]] || fail "probe accepted a non-default prompt trigger"
+assert_contains "$output" "invalid prompt trigger"
 [[ ! -s "$ADB_LOG" ]] || fail "invalid prompt trigger reached ADB"
+unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH
 unset VOICE_STAGE1_PROMPT_TRIGGER
 
 reset_fake
 export VOICE_STAGE1_PROMPT_TRIGGER=after_startup_playback_drained
-export VOICE_STAGE1_STARTUP_PCM_PATH="$STARTUP_PCM_PATH"
 set +e
-conditioned_direct_output="$(run_scenario direct_gemini stable_wifi speaker foreground steady 20 2>&1)"
-conditioned_direct_status=$?
+output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+status=$?
 set -e
-[[ "$conditioned_direct_status" -ne 0 ]] || fail "conditioned prompt trigger accepted direct transport"
-assert_contains "$conditioned_direct_output" \
-  "conditioned prompt trigger requires livekit_experimental transport"
-[[ ! -s "$ADB_LOG" ]] || fail "conditioned direct transport reached ADB"
-unset VOICE_STAGE1_PROMPT_TRIGGER VOICE_STAGE1_STARTUP_PCM_PATH
-
-reset_fake
-export VOICE_STAGE1_PROMPT_TRIGGER=after_startup_playback_drained
-export VOICE_STAGE1_STARTUP_PCM_PATH="$STARTUP_PCM_PATH"
-set +e
-conditioned_interruption_output="$(run_scenario livekit_experimental stable_wifi speaker foreground interruption 20 2>&1)"
-conditioned_interruption_status=$?
-set -e
-[[ "$conditioned_interruption_status" -ne 0 ]] || fail "conditioned prompt trigger accepted interruption lifecycle"
-assert_contains "$conditioned_interruption_output" "conditioned prompt trigger requires steady lifecycle"
-[[ ! -s "$ADB_LOG" ]] || fail "conditioned interruption lifecycle reached ADB"
-unset VOICE_STAGE1_PROMPT_TRIGGER VOICE_STAGE1_STARTUP_PCM_PATH
-
-reset_fake
-export VOICE_STAGE1_PROMPT_TRIGGER=after_startup_playback_drained
-unset VOICE_STAGE1_STARTUP_PCM_PATH
-set +e
-missing_startup_pcm_output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
-missing_startup_pcm_status=$?
-set -e
-[[ "$missing_startup_pcm_status" -ne 0 ]] || fail "conditioned prompt trigger accepted missing startup PCM"
-assert_contains "$missing_startup_pcm_output" "VOICE_STAGE1_STARTUP_PCM_PATH is required"
-[[ ! -s "$ADB_LOG" ]] || fail "missing startup PCM reached ADB"
+[[ "$status" -ne 0 ]] || fail "old startup drain trigger was accepted"
+assert_contains "$output" "invalid prompt trigger"
+[[ ! -s "$ADB_LOG" ]] || fail "old startup drain trigger reached ADB"
 unset VOICE_STAGE1_PROMPT_TRIGGER
 
 ROWS=(
@@ -1125,13 +1166,14 @@ run_scenario livekit_experimental stable_wifi speaker foreground steady 20 >/dev
 assert_common_success_contract livekit_experimental
 
 reset_fake
-export VOICE_STAGE1_PROMPT_TRIGGER=after_startup_playback_drained
+export VOICE_STAGE1_STARTUP_TRUTH_PROBE=1
 export VOICE_STAGE1_STARTUP_PCM_PATH="$STARTUP_PCM_PATH"
-conditioned_output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20)"
-assert_equals 'stage1.run=complete' "$conditioned_output"
+export FAKE_CLOCK_STEP=1
+probe_output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20)"
+assert_equals 'stage1.run=complete' "$probe_output"
 assert_common_success_contract livekit_experimental
 [[ "$(command_count "me.rerere.rikkahub.debug.voiceagent.TRIGGER_CAPTURE_FIXTURE")" == "1" ]] ||
-  fail "conditioned prompt was not triggered exactly once"
+  fail "startup probe prompt was not triggered exactly once"
 python3 - "$TMP_DIR/automation-events.jsonl" "$STARTUP_PCM_PATH" "$PCM_PATH" <<'PY'
 import json
 import os
@@ -1143,56 +1185,55 @@ startup_bytes = os.path.getsize(startup_path)
 prompt_bytes = os.path.getsize(prompt_path)
 prompt_ends = [event for event in events if event.get("name") == "prompt_ended"]
 if [event.get("byteCount") for event in prompt_ends] != [startup_bytes, prompt_bytes]:
-    raise SystemExit("conditioned run did not select distinct startup and staged prompt completions")
-active = next(event for event in events if event.get("name") == "playback_active")
-drained = next(event for event in events if event.get("name") == "playback_drained")
-if active.get("playbackEpoch") != drained.get("playbackEpoch"):
-    raise SystemExit("startup drain did not match the active playback epoch")
-if not (active["monotonicMs"] < prompt_ends[0]["monotonicMs"] <
-        drained["monotonicMs"] < prompt_ends[1]["monotonicMs"]):
-    raise SystemExit("staged prompt was not injected after startup playback drained")
+    raise SystemExit("probe did not select distinct startup and staged prompt completions")
+attestations = [event for event in events if event.get("name") == "capture_attested"]
+if [event.get("fixtureBytes") for event in attestations] != [startup_bytes, prompt_bytes]:
+    raise SystemExit("probe did not attest both fixtures in order")
 post_prompt_attestations = [
     event for event in events
     if event.get("name") == "capture_attested"
     and event["monotonicMs"] > prompt_ends[1]["monotonicMs"]
 ]
 if not post_prompt_attestations or post_prompt_attestations[0].get("fixtureBytes") != prompt_bytes:
-    raise SystemExit("conditioned run did not attest the staged prompt after its completion")
+    raise SystemExit("probe did not attest the staged prompt after its completion")
 PY
 assert_private_path_absent "files/voice-stage1/startup.pcm"
-unset VOICE_STAGE1_PROMPT_TRIGGER VOICE_STAGE1_STARTUP_PCM_PATH
+unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH FAKE_CLOCK_STEP
 
 reset_fake
-export VOICE_STAGE1_PROMPT_TRIGGER=after_startup_playback_drained
+export VOICE_STAGE1_STARTUP_TRUTH_PROBE=1
 export VOICE_STAGE1_STARTUP_PCM_PATH="$STARTUP_PCM_PATH"
-export FAKE_ADB_SUPPRESS_EVENT=playback_drained
+export FAKE_CLOCK_MODE=probe_frozen
 set +e
-missing_startup_drain_output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
-missing_startup_drain_status=$?
+frozen_probe_output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+frozen_probe_status=$?
 set -e
-[[ "$missing_startup_drain_status" -ne 0 ]] || fail "missing startup drain was accepted"
-assert_contains "$missing_startup_drain_output" "timed out waiting for matching startup playback_drained"
+[[ "$frozen_probe_status" -ne 0 ]] || fail "frozen startup probe clock was accepted"
+assert_contains "$frozen_probe_output" "wait attempt limit reached for startup truth probe pre-roll"
 [[ "$(command_count "me.rerere.rikkahub.debug.voiceagent.TRIGGER_CAPTURE_FIXTURE")" == "0" ]] ||
-  fail "missing startup drain triggered the staged prompt"
-[[ "$(command_count "action.END")" == "1" ]] || fail "startup drain timeout did not end the call once"
+  fail "frozen startup probe triggered the staged prompt"
+[[ "$(command_count "action.END")" == "1" ]] || fail "frozen startup probe did not end once"
 [[ "$(command_count "automation.FINALIZE")" == "1" ]] ||
-  fail "startup drain timeout did not finalize the automation run once"
+  fail "frozen startup probe did not finalize once"
 assert_private_path_absent "files/voice-stage1/startup.pcm"
-unset VOICE_STAGE1_PROMPT_TRIGGER VOICE_STAGE1_STARTUP_PCM_PATH FAKE_ADB_SUPPRESS_EVENT
+unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH FAKE_CLOCK_MODE
 
 reset_fake
-export VOICE_STAGE1_PROMPT_TRIGGER=after_startup_playback_drained
+export VOICE_STAGE1_STARTUP_TRUTH_PROBE=1
 export VOICE_STAGE1_STARTUP_PCM_PATH="$STARTUP_PCM_PATH"
-export FAKE_ADB_STARTUP_DRAIN_MODE=wrong_epoch
+export FAKE_CLOCK_MODE=probe_backward
 set +e
-wrong_startup_epoch_output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
-wrong_startup_epoch_status=$?
+backward_probe_output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+backward_probe_status=$?
 set -e
-[[ "$wrong_startup_epoch_status" -ne 0 ]] || fail "wrong startup drain epoch was accepted"
-assert_contains "$wrong_startup_epoch_output" "timed out waiting for matching startup playback_drained"
+[[ "$backward_probe_status" -ne 0 ]] || fail "backward startup probe clock was accepted"
+assert_contains "$backward_probe_output" "clock moved backward during startup truth probe pre-roll"
 [[ "$(command_count "me.rerere.rikkahub.debug.voiceagent.TRIGGER_CAPTURE_FIXTURE")" == "0" ]] ||
-  fail "wrong startup drain epoch triggered the staged prompt"
-unset VOICE_STAGE1_PROMPT_TRIGGER VOICE_STAGE1_STARTUP_PCM_PATH FAKE_ADB_STARTUP_DRAIN_MODE
+  fail "backward startup probe triggered the staged prompt"
+[[ "$(command_count "action.END")" == "1" ]] || fail "backward startup probe did not end once"
+[[ "$(command_count "automation.FINALIZE")" == "1" ]] ||
+  fail "backward startup probe did not finalize once"
+unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH FAKE_CLOCK_MODE
 
 reset_fake
 export FAKE_ADB_ARM_MALFORMED=1
