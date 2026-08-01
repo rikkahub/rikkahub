@@ -90,10 +90,22 @@ validate_nonnegative_number() {
   [[ "$value" =~ ^([0-9]+)(\.[0-9]+)?$ ]] || fail "$name must be a nonnegative number"
 }
 
-classify_transcript_file() {
+classify_transcript_evidence() {
   require_env VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
+  require_env VOICE_STAGE1_WORKER_LOG_PATH
+  require_env VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS
+  case "$VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS" in
+    complete|unavailable)
+      ;;
+    *)
+      fail "VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS must be complete or unavailable"
+      ;;
+  esac
   require_command python3
-  python3 - "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" <<'PY'
+  python3 - \
+    "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" \
+    "$VOICE_STAGE1_WORKER_LOG_PATH" \
+    "$VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS" <<'PY'
 import json
 import os
 import re
@@ -153,6 +165,10 @@ COUNT_FIELDS = {
     "textCharacterCount",
 }
 BOOLEAN_FIELDS = {"interrupted", "userSpeaking", "agentSpeaking"}
+TARGET_AGENT = "rikka-livekit-experimental"
+JOB_REQUEST = "received job request"
+READY_TOPIC = "voice.ready.v1"
+TRANSCRIPT_MARKER = "voice_user_transcript_final"
 
 
 class InvalidEvidence(Exception):
@@ -232,7 +248,11 @@ def validate_row(row):
             raise InvalidEvidence()
 
 
-def record(classification, covered, rows, qualifying):
+def emit_record(prefix, payload):
+    print(prefix + json.dumps(payload, separators=(",", ":")))
+
+
+def file_record(classification, covered, rows, qualifying):
     payload = {
         "version": 1,
         "classification": classification,
@@ -240,13 +260,29 @@ def record(classification, covered, rows, qualifying):
         "rowCount": rows,
         "qualifyingUserTranscriptCount": qualifying,
     }
-    print(
-        "stage1.final_user_transcript_file="
-        + json.dumps(payload, separators=(",", ":"))
-    )
+    emit_record("stage1.final_user_transcript_file=", payload)
 
 
-def classify(path):
+def worker_record(classification, activity_count, marker_count):
+    payload = {
+        "version": 1,
+        "classification": classification,
+        "sessionActivityCount": activity_count,
+        "markerCount": marker_count,
+    }
+    emit_record("stage1.worker_transcript_log=", payload)
+
+
+def combined_record(classification, boundary):
+    payload = {
+        "version": 1,
+        "classification": classification,
+        "firstMissingBoundary": boundary,
+    }
+    emit_record("stage1.final_user_transcript=", payload)
+
+
+def classify_file(path):
     try:
         file_stat = os.lstat(path)
         if stat.S_ISLNK(file_stat.st_mode) or not stat.S_ISREG(file_stat.st_mode):
@@ -283,16 +319,146 @@ def classify(path):
                 ):
                     qualifying_count += 1
         if row_count == 0:
-            record("unknown", True, 0, 0)
+            return "unknown", True, 0, 0
         elif qualifying_count:
-            record("present", True, row_count, qualifying_count)
+            return "present", True, row_count, qualifying_count
         else:
-            record("absent", True, row_count, 0)
+            return "absent", True, row_count, 0
     except BaseException:
-        record("unknown", False, 0, 0)
+        return "unknown", False, 0, 0
 
 
-classify(sys.argv[1])
+def worker_rows(path):
+    path_stat = os.lstat(path)
+    if (
+        stat.S_ISLNK(path_stat.st_mode)
+        or not stat.S_ISREG(path_stat.st_mode)
+        or stat.S_IMODE(path_stat.st_mode) != 0o600
+    ):
+        raise InvalidEvidence()
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        opened_stat = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened_stat.st_mode)
+            or stat.S_IMODE(opened_stat.st_mode) != 0o600
+            or opened_stat.st_dev != path_stat.st_dev
+            or opened_stat.st_ino != path_stat.st_ino
+        ):
+            raise InvalidEvidence()
+        source = os.fdopen(descriptor, "r", encoding="utf-8")
+        descriptor = -1
+        with source:
+            rows = []
+            for raw_line in source:
+                if not raw_line.strip():
+                    continue
+                row = json.loads(
+                    raw_line,
+                    object_pairs_hook=reject_duplicate_keys,
+                    parse_constant=reject_nonstandard_number,
+                )
+                if type(row) is not dict:
+                    raise InvalidEvidence()
+                for field in {"message", "agent_name", "job_id", "room", "topic"} & set(row):
+                    if type(row[field]) is not str:
+                        raise InvalidEvidence()
+                if not row.get("message"):
+                    raise InvalidEvidence()
+                rows.append(row)
+            return rows
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def classify_worker(path, capture_status):
+    if capture_status != "complete":
+        return "unknown", 0, 0
+    try:
+        rows = worker_rows(path)
+        relevant = []
+        requests = []
+        for index, row in enumerate(rows):
+            message = row["message"]
+            kinds = []
+            if message == JOB_REQUEST:
+                kinds.append("request")
+            if row.get("topic") == READY_TOPIC:
+                kinds.append("ready")
+            if message == TRANSCRIPT_MARKER:
+                kinds.append("marker")
+            if not kinds:
+                continue
+            agent_name = row.get("agent_name")
+            if not agent_name:
+                raise InvalidEvidence()
+            if agent_name != TARGET_AGENT:
+                continue
+            if len(kinds) != 1:
+                raise InvalidEvidence()
+            job_id = row.get("job_id")
+            room = row.get("room")
+            if not job_id or not room:
+                raise InvalidEvidence()
+            kind = kinds[0]
+            relevant.append((index, kind, job_id, room))
+            if kind == "request":
+                requests.append((index, job_id, room))
+        if len(requests) != 1:
+            raise InvalidEvidence()
+        request_index, selected_job, selected_room = requests[0]
+        if any(
+            job_id != selected_job or room != selected_room
+            for _, _, job_id, room in relevant
+        ):
+            raise InvalidEvidence()
+        ready_indices = [
+            index for index, kind, _, _ in relevant if kind == "ready"
+        ]
+        if not ready_indices or any(index <= request_index for index in ready_indices):
+            raise InvalidEvidence()
+        ready_index = min(ready_indices)
+        marker_indices = [
+            index for index, kind, _, _ in relevant if kind == "marker"
+        ]
+        if any(index <= ready_index for index in marker_indices):
+            raise InvalidEvidence()
+        activity_count = sum(
+            1
+            for index, row in enumerate(rows)
+            if index >= request_index
+            and row.get("agent_name") == TARGET_AGENT
+            and row.get("job_id") == selected_job
+            and row.get("room") == selected_room
+        )
+        marker_count = len(marker_indices)
+        classification = "marker-present" if marker_count else "marker-absent"
+        return classification, activity_count, marker_count
+    except BaseException:
+        return "unknown", 0, 0
+
+
+file_result = classify_file(sys.argv[1])
+worker_result = classify_worker(sys.argv[2], sys.argv[3])
+file_state, file_covered, row_count, qualifying_count = file_result
+worker_state, activity_count, marker_count = worker_result
+
+if file_state == "present":
+    verdict, boundary, status = "present", "ask-hermes", 0
+elif worker_state == "marker-present" and file_covered:
+    verdict, boundary, status = "bridge-breakage", "android-transcript-evidence", 2
+elif worker_state == "marker-absent":
+    verdict, boundary, status = "absent-at-worker", "final-user-transcript", 2
+else:
+    verdict, boundary, status = "unknown", "evidence-collection", 3
+
+file_record(file_state, file_covered, row_count, qualifying_count)
+worker_record(worker_state, activity_count, marker_count)
+combined_record(verdict, boundary)
+raise SystemExit(status)
+
 PY
 }
 
@@ -1904,7 +2070,7 @@ case "$#" in
         run_preflight
         ;;
       --classify-transcript)
-        classify_transcript_file
+        classify_transcript_evidence
         ;;
       *)
         fail "usage: voice-agent-stage1-e2e.sh [--preflight|--classify-transcript]"

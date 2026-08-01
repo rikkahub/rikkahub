@@ -8,6 +8,7 @@ BIN_DIR="$TMP_DIR/bin"
 STATE_DIR="$TMP_DIR/state"
 ADB_LOG="$TMP_DIR/adb-argv.bin"
 CLOCK_LOG="$TMP_DIR/clock-argv.bin"
+EXTERNAL_LOG="$TMP_DIR/external-argv.log"
 LOCK_DIR="$TMP_DIR/locks"
 PCM_PATH="$TMP_DIR/prompt.pcm"
 INTERRUPT_PCM_PATH="$TMP_DIR/interrupt.pcm"
@@ -29,6 +30,7 @@ printf 'primary-pcm' > "$PCM_PATH"
 printf 'interrupt-pcm' > "$INTERRUPT_PCM_PATH"
 printf 'startup-silence' > "$STARTUP_PCM_PATH"
 : > "$WORKER_LOG"
+: > "$EXTERNAL_LOG"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
@@ -743,13 +745,25 @@ counter.write_text(str(value))
 print(value)
 PY
 chmod +x "$BIN_DIR/fake-clock"
+
+cat > "$BIN_DIR/forbidden-external" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' "${0##*/}" >> "$FAKE_EXTERNAL_LOG"
+exit 97
+SH
+chmod +x "$BIN_DIR/forbidden-external"
+for external_command in curl wget ssh scp rsync gradle lk kubectl; do
+  ln -s forbidden-external "$BIN_DIR/$external_command"
+done
 export PATH="$BIN_DIR:$PATH"
+export FAKE_EXTERNAL_LOG="$EXTERNAL_LOG"
 
 reset_fake() {
   rm -rf "$STATE_DIR"
   mkdir -p "$STATE_DIR"
   : > "$ADB_LOG"
   : > "$CLOCK_LOG"
+  : > "$EXTERNAL_LOG"
   rm -f "$TMP_DIR/clock-counter" "$TMP_DIR/clock-counter.calls"
   rm -f "$LOCK_DIR"/*
   unset FAKE_ADB_DEVICES_MODE FAKE_ADB_FAIL_MODE FAKE_ADB_OBSERVED_TRANSPORT
@@ -765,6 +779,7 @@ reset_fake() {
   unset FAKE_ADB_VOICE_EVENTS_EXISTS FAKE_ADB_VOICE_EVENTS_REGULAR
   unset FAKE_ADB_VOICE_EVENTS_SYMLINK
   unset VOICE_STAGE1_TRANSCRIPT_PROBE VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
+  unset VOICE_STAGE1_WORKER_LOG_PATH VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS
 }
 
 command_lines() {
@@ -816,6 +831,37 @@ assert_no_adb_mutations() {
   assert_not_contains "$commands" "exec-in${separator}"
   assert_not_contains "$commands" "run-as${separator}${PACKAGE}${separator}mkdir"
   assert_not_contains "$commands" "run-as${separator}${PACKAGE}${separator}rm"
+}
+
+assert_only_allowlisted_stage1_artifacts() {
+  python3 - "$ADB_LOG" <<'PY'
+import re
+import sys
+
+fields = open(sys.argv[1], "rb").read().split(b"\0")
+allowed = re.compile(
+    r"^no_backup/voice-e2e/(?:latest-trace-id\.txt|"
+    r"[A-Za-z0-9_-]{1,128}/(?:automation-events\.jsonl|voice-experience-events\.ndjson))$"
+)
+seen = {
+    "latest-trace-id.txt": False,
+    "automation-events.jsonl": False,
+    "voice-experience-events.ndjson": False,
+}
+for raw in fields:
+    if not raw or raw == b"__END__":
+        continue
+    value = raw.decode("utf-8")
+    if not value.startswith("no_backup/voice-e2e"):
+        continue
+    if allowed.fullmatch(value) is None:
+        raise SystemExit("non-allowlisted Stage 1 artifact path observed")
+    for name in seen:
+        if value.endswith("/" + name):
+            seen[name] = True
+if not all(seen.values()):
+    raise SystemExit("allowlisted Stage 1 artifact coverage was incomplete")
+PY
 }
 
 assert_private_path_absent() {
@@ -1074,11 +1120,142 @@ output.write_text("".join(json.dumps(row, separators=(",", ":")) + "\n" for row 
 PY
 }
 
+write_worker_log_fixture() {
+  local scenario="$1"
+  local output="$2"
+  python3 - "$scenario" "$output" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+scenario = sys.argv[1]
+output = Path(sys.argv[2])
+agent = "rikka-livekit-experimental"
+job = "worker-private-job"
+room = "worker-private-room"
+other_job = "worker-private-other-job"
+other_room = "worker-private-other-room"
+
+
+def request(selected_job=job, selected_room=room, selected_agent=agent):
+    return {
+        "message": "received job request",
+        "agent_name": selected_agent,
+        "job_id": selected_job,
+        "room": selected_room,
+    }
+
+
+def ready(selected_job=job, selected_room=room, selected_agent=agent):
+    return {
+        "message": "published ready topic",
+        "agent_name": selected_agent,
+        "job_id": selected_job,
+        "room": selected_room,
+        "topic": "voice.ready.v1",
+    }
+
+
+def marker(selected_job=job, selected_room=room, selected_agent=agent):
+    return {
+        "message": "voice_user_transcript_final",
+        "agent_name": selected_agent,
+        "job_id": selected_job,
+        "room": selected_room,
+    }
+
+
+if scenario == "malformed_json":
+    output.write_text('{"message":"worker-private-sentinel"\n')
+    os.chmod(output, 0o600)
+    raise SystemExit(0)
+if scenario == "valid_then_malformed":
+    rows = [request(), ready(), marker()]
+    output.write_text(
+        "".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows)
+        + '{"message":"worker-private-sentinel"\n'
+    )
+    os.chmod(output, 0o600)
+    raise SystemExit(0)
+if scenario == "duplicate_key":
+    output.write_text(
+        '{"message":"received job request","message":"worker-private-sentinel",'
+        '"agent_name":"rikka-livekit-experimental","job_id":"worker-private-job",'
+        '"room":"worker-private-room"}\n'
+    )
+    os.chmod(output, 0o600)
+    raise SystemExit(0)
+if scenario == "unstructured":
+    rows = [["worker-private-sentinel"]]
+elif scenario == "marker_present":
+    rows = [request(), ready(), marker()]
+elif scenario == "marker_absent":
+    rows = [request(), ready()]
+elif scenario == "registration_only":
+    rows = [{"message": "registered worker", "agent_name": agent}]
+elif scenario == "missing_ready":
+    rows = [request()]
+elif scenario == "two_jobs":
+    rows = [request(), ready(), request(other_job, other_room), ready(other_job, other_room)]
+elif scenario == "mismatched_ready":
+    rows = [request(), ready(other_job, other_room)]
+elif scenario == "mismatched_marker":
+    rows = [request(), ready(), marker(other_job, other_room)]
+elif scenario == "marker_before_ready":
+    rows = [request(), marker(), ready()]
+elif scenario == "ready_before_request":
+    rows = [ready(), request()]
+elif scenario == "missing_attribution":
+    row = request()
+    del row["room"]
+    rows = [row, ready()]
+elif scenario == "truncated":
+    output.write_text('{"message":"received job request"')
+    os.chmod(output, 0o600)
+    raise SystemExit(0)
+else:
+    raise ValueError("unsupported worker fixture scenario")
+
+output.write_text(
+    "\n" + "".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows)
+)
+os.chmod(output, 0o600)
+PY
+}
+
+prepare_worker_log_fixture() {
+  local scenario="$1"
+  local output="$2"
+  rm -f "$output" "$output.target"
+  case "$scenario" in
+    missing)
+      ;;
+    symlink)
+      write_worker_log_fixture marker_present "$output.target"
+      ln -s "$output.target" "$output"
+      ;;
+    unreadable)
+      write_worker_log_fixture marker_present "$output"
+      chmod 000 "$output"
+      ;;
+    wrong_mode)
+      write_worker_log_fixture marker_present "$output"
+      chmod 640 "$output"
+      ;;
+    *)
+      write_worker_log_fixture "$scenario" "$output"
+      ;;
+  esac
+}
+
 run_transcript_classifier() {
   local fixture="$1"
+  local worker_log="${2:-$WORKER_LOG}"
+  local capture_status="${3:-unavailable}"
   VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$fixture" \
-  VOICE_STAGE1_WORKER_LOG_PATH="$WORKER_LOG" \
-  VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS=unavailable \
+  VOICE_STAGE1_WORKER_LOG_PATH="$worker_log" \
+  VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS="$capture_status" \
   bash "$RUNNER" --classify-transcript
 }
 
@@ -1091,16 +1268,39 @@ transcript_file_record() {
     "$classification" "$covered" "$rows" "$qualifying"
 }
 
+worker_log_record() {
+  local classification="$1"
+  local activity_count="$2"
+  local marker_count="$3"
+  printf 'stage1.worker_transcript_log={"version":1,"classification":"%s","sessionActivityCount":%s,"markerCount":%s}' \
+    "$classification" "$activity_count" "$marker_count"
+}
+
+combined_transcript_record() {
+  local classification="$1"
+  local boundary="$2"
+  printf 'stage1.final_user_transcript={"version":1,"classification":"%s","firstMissingBoundary":"%s"}' \
+    "$classification" "$boundary"
+}
+
 assert_classifier_privacy() {
   local combined_output="$1"
-  local fixture="$2"
+  local transcript_fixture="$2"
+  local worker_fixture="${3:-$WORKER_LOG}"
   assert_not_contains "$combined_output" "fixture-session"
   assert_not_contains "$combined_output" "other-session"
   assert_not_contains "$combined_output" "event-final-user"
   assert_not_contains "$combined_output" "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   assert_not_contains "$combined_output" "2026-07-30T12:00:00Z"
   assert_not_contains "$combined_output" "fixture-private-sentinel"
-  assert_not_contains "$combined_output" "$fixture"
+  assert_not_contains "$combined_output" "worker-private-job"
+  assert_not_contains "$combined_output" "worker-private-room"
+  assert_not_contains "$combined_output" "worker-private-sentinel"
+  assert_not_contains "$combined_output" "received job request"
+  assert_not_contains "$combined_output" "voice.ready.v1"
+  assert_not_contains "$combined_output" "voice_user_transcript_final"
+  assert_not_contains "$combined_output" "$transcript_fixture"
+  assert_not_contains "$combined_output" "$worker_fixture"
 }
 
 assert_transcript_file_result() {
@@ -1125,12 +1325,109 @@ assert_transcript_file_result() {
   run_transcript_classifier "$fixture" >"$stdout_file" 2>"$stderr_file"
   status=$?
   set -e
-  [[ "$status" -eq 0 ]] || fail "file-only classifier failed for $scenario with status $status"
-  assert_equals "$(transcript_file_record "$classification" "$covered" "$rows" "$qualifying")" \
-    "$(cat "$stdout_file")"
+  local expected_status=3
+  local combined_classification=unknown
+  local combined_boundary=evidence-collection
+  if [[ "$classification" == "present" ]]; then
+    expected_status=0
+    combined_classification=present
+    combined_boundary=ask-hermes
+  fi
+  [[ "$status" -eq "$expected_status" ]] ||
+    fail "classifier returned status $status for file scenario $scenario, expected $expected_status"
+  assert_equals "$(cat <<EOF
+$(transcript_file_record "$classification" "$covered" "$rows" "$qualifying")
+$(worker_log_record unknown 0 0)
+$(combined_transcript_record "$combined_classification" "$combined_boundary")
+EOF
+)" "$(cat "$stdout_file")"
   [[ ! -s "$stderr_file" ]] || fail "classifier emitted a non-fixed parser diagnostic for $scenario"
   [[ ! -s "$ADB_LOG" ]] || fail "classification mode reached ADB for $scenario"
-  assert_classifier_privacy "$(cat "$stdout_file" "$stderr_file")" "$fixture"
+  [[ ! -s "$EXTERNAL_LOG" ]] || fail "classification mode reached an external command for $scenario"
+  assert_classifier_privacy "$(cat "$stdout_file" "$stderr_file")" "$fixture" "$WORKER_LOG"
+}
+
+assert_worker_result() {
+  local scenario="$1"
+  local capture_status="$2"
+  local classification="$3"
+  local activity_count="$4"
+  local marker_count="$5"
+  local combined_classification="$6"
+  local combined_boundary="$7"
+  local expected_status="$8"
+  local transcript_fixture="$TRANSCRIPT_FIXTURE_DIR/worker-$scenario.ndjson"
+  local worker_fixture="$TRANSCRIPT_FIXTURE_DIR/worker-$scenario.log"
+  local stdout_file="$TMP_DIR/classifier-stdout"
+  local stderr_file="$TMP_DIR/classifier-stderr"
+  local status
+  rm -f "$transcript_fixture" "$stdout_file" "$stderr_file"
+  reset_fake
+  write_transcript_fixture empty "$transcript_fixture"
+  prepare_worker_log_fixture "$scenario" "$worker_fixture"
+  set +e
+  run_transcript_classifier "$transcript_fixture" "$worker_fixture" "$capture_status" \
+    >"$stdout_file" 2>"$stderr_file"
+  status=$?
+  set -e
+  [[ "$status" -eq "$expected_status" ]] ||
+    fail "worker classifier returned status $status for $scenario, expected $expected_status"
+  assert_equals "$(cat <<EOF
+$(transcript_file_record unknown true 0 0)
+$(worker_log_record "$classification" "$activity_count" "$marker_count")
+$(combined_transcript_record "$combined_classification" "$combined_boundary")
+EOF
+)" "$(cat "$stdout_file")"
+  [[ ! -s "$stderr_file" ]] || fail "worker classifier emitted a parser diagnostic for $scenario"
+  [[ ! -s "$ADB_LOG" ]] || fail "worker classification reached ADB for $scenario"
+  [[ ! -s "$EXTERNAL_LOG" ]] || fail "worker classification reached an external command for $scenario"
+  assert_classifier_privacy "$(cat "$stdout_file" "$stderr_file")" \
+    "$transcript_fixture" "$worker_fixture"
+}
+
+assert_combined_result() {
+  local label="$1"
+  local transcript_scenario="$2"
+  local file_classification="$3"
+  local file_covered="$4"
+  local row_count="$5"
+  local qualifying_count="$6"
+  local worker_scenario="$7"
+  local worker_classification="$8"
+  local activity_count="$9"
+  local marker_count="${10}"
+  local combined_classification="${11}"
+  local combined_boundary="${12}"
+  local expected_status="${13}"
+  local transcript_fixture="$TRANSCRIPT_FIXTURE_DIR/matrix-$label.ndjson"
+  local worker_fixture="$TRANSCRIPT_FIXTURE_DIR/matrix-$label.log"
+  local stdout_file="$TMP_DIR/classifier-stdout"
+  local stderr_file="$TMP_DIR/classifier-stderr"
+  local status
+  rm -f "$transcript_fixture" "$stdout_file" "$stderr_file"
+  reset_fake
+  if [[ "$transcript_scenario" != "missing" ]]; then
+    write_transcript_fixture "$transcript_scenario" "$transcript_fixture"
+  fi
+  prepare_worker_log_fixture "$worker_scenario" "$worker_fixture"
+  set +e
+  run_transcript_classifier "$transcript_fixture" "$worker_fixture" complete \
+    >"$stdout_file" 2>"$stderr_file"
+  status=$?
+  set -e
+  [[ "$status" -eq "$expected_status" ]] ||
+    fail "combined classifier returned status $status for $label, expected $expected_status"
+  assert_equals "$(cat <<EOF
+$(transcript_file_record "$file_classification" "$file_covered" "$row_count" "$qualifying_count")
+$(worker_log_record "$worker_classification" "$activity_count" "$marker_count")
+$(combined_transcript_record "$combined_classification" "$combined_boundary")
+EOF
+)" "$(cat "$stdout_file")"
+  [[ ! -s "$stderr_file" ]] || fail "combined classifier emitted a parser diagnostic for $label"
+  [[ ! -s "$ADB_LOG" ]] || fail "combined classification reached ADB for $label"
+  [[ ! -s "$EXTERNAL_LOG" ]] || fail "combined classification reached an external command for $label"
+  assert_classifier_privacy "$(cat "$stdout_file" "$stderr_file")" \
+    "$transcript_fixture" "$worker_fixture"
 }
 
 run_scenario() {
@@ -1186,6 +1483,66 @@ assert_common_success_contract() {
   assert_not_contains "$all_commands" "pull"
   assert_contains "$(cat "$output")" "\"observedTransport\":\"$transport\""
 }
+
+assert_worker_result marker_present complete marker-present 3 1 \
+  bridge-breakage android-transcript-evidence 2
+assert_worker_result marker_absent complete marker-absent 2 0 \
+  absent-at-worker final-user-transcript 2
+for unknown_worker_scenario in \
+  registration_only \
+  missing_ready \
+  two_jobs \
+  mismatched_ready \
+  mismatched_marker \
+  marker_before_ready \
+  ready_before_request \
+  missing_attribution \
+  malformed_json \
+  valid_then_malformed \
+  duplicate_key \
+  unstructured \
+  missing \
+  symlink \
+  unreadable \
+  wrong_mode; do
+  assert_worker_result "$unknown_worker_scenario" complete unknown 0 0 \
+    unknown evidence-collection 3
+done
+assert_worker_result truncated unavailable unknown 0 0 unknown evidence-collection 3
+
+assert_combined_result file-present-worker-present \
+  final_user present true 1 1 marker_present marker-present 3 1 \
+  present ask-hermes 0
+assert_combined_result file-present-worker-absent \
+  final_user present true 1 1 marker_absent marker-absent 2 0 \
+  present ask-hermes 0
+assert_combined_result empty-worker-absent \
+  empty unknown true 0 0 marker_absent marker-absent 2 0 \
+  absent-at-worker final-user-transcript 2
+assert_combined_result empty-worker-present \
+  empty unknown true 0 0 marker_present marker-present 3 1 \
+  bridge-breakage android-transcript-evidence 2
+assert_combined_result job-worker-absent \
+  job absent true 1 0 marker_absent marker-absent 2 0 \
+  absent-at-worker final-user-transcript 2
+assert_combined_result job-worker-present \
+  job absent true 1 0 marker_present marker-present 3 1 \
+  bridge-breakage android-transcript-evidence 2
+assert_combined_result empty-worker-unknown \
+  empty unknown true 0 0 registration_only unknown 0 0 \
+  unknown evidence-collection 3
+assert_combined_result missing-worker-present \
+  missing unknown false 0 0 marker_present marker-present 3 1 \
+  unknown evidence-collection 3
+assert_combined_result malformed-worker-present \
+  malformed_json unknown false 0 0 marker_present marker-present 3 1 \
+  unknown evidence-collection 3
+assert_combined_result missing-worker-absent \
+  missing unknown false 0 0 marker_absent marker-absent 2 0 \
+  absent-at-worker final-user-transcript 2
+assert_combined_result malformed-worker-absent \
+  malformed_json unknown false 0 0 marker_absent marker-absent 2 0 \
+  absent-at-worker final-user-transcript 2
 
 assert_transcript_file_result final_user present true 1 1
 assert_transcript_file_result interrupted_user absent true 1 0
@@ -1249,6 +1606,57 @@ set -e
 assert_equals "stage1: VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT is required" \
   "$(cat "$TMP_DIR/classifier-stderr")"
 [[ ! -s "$ADB_LOG" ]] || fail "invalid classification arguments reached ADB"
+
+assert_invalid_classifier_environment() {
+  local expected="$1"
+  shift
+  reset_fake
+  set +e
+  env "$@" bash "$RUNNER" --classify-transcript \
+    >"$TMP_DIR/classifier-stdout" 2>"$TMP_DIR/classifier-stderr"
+  status=$?
+  set -e
+  [[ "$status" -eq 1 ]] || fail "invalid classifier environment exited with status $status"
+  [[ ! -s "$TMP_DIR/classifier-stdout" ]] ||
+    fail "invalid classifier environment emitted result records"
+  assert_equals "stage1: $expected" "$(cat "$TMP_DIR/classifier-stderr")"
+  [[ ! -s "$ADB_LOG" ]] || fail "invalid classifier environment reached ADB"
+  [[ ! -s "$EXTERNAL_LOG" ]] || fail "invalid classifier environment reached an external command"
+}
+
+write_transcript_fixture empty "$TRANSCRIPT_FIXTURE_DIR/invalid-environment.ndjson"
+assert_invalid_classifier_environment \
+  "VOICE_STAGE1_WORKER_LOG_PATH is required" \
+  VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$TRANSCRIPT_FIXTURE_DIR/invalid-environment.ndjson" \
+  VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS=unavailable
+assert_invalid_classifier_environment \
+  "VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS is required" \
+  VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$TRANSCRIPT_FIXTURE_DIR/invalid-environment.ndjson" \
+  VOICE_STAGE1_WORKER_LOG_PATH="$WORKER_LOG"
+assert_invalid_classifier_environment \
+  "VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS must be complete or unavailable" \
+  VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$TRANSCRIPT_FIXTURE_DIR/invalid-environment.ndjson" \
+  VOICE_STAGE1_WORKER_LOG_PATH="$WORKER_LOG" \
+  VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS=truncated
+
+assert_rejected_runner_arguments() {
+  reset_fake
+  set +e
+  bash "$RUNNER" "$@" >"$TMP_DIR/classifier-stdout" 2>"$TMP_DIR/classifier-stderr"
+  status=$?
+  set -e
+  [[ "$status" -eq 1 ]] || fail "invalid runner arguments exited with status $status"
+  [[ ! -s "$TMP_DIR/classifier-stdout" ]] || fail "invalid runner arguments emitted stdout"
+  assert_equals \
+    "stage1: usage: voice-agent-stage1-e2e.sh [--preflight|--classify-transcript]" \
+    "$(cat "$TMP_DIR/classifier-stderr")"
+  [[ ! -s "$ADB_LOG" ]] || fail "invalid runner arguments reached ADB"
+  [[ ! -s "$EXTERNAL_LOG" ]] || fail "invalid runner arguments reached an external command"
+}
+
+assert_rejected_runner_arguments --classify-transcript extra
+assert_rejected_runner_arguments --classify-transcript=complete
+assert_rejected_runner_arguments --unknown
 
 reset_fake
 preflight_output="$(runner_env bash "$RUNNER" --preflight </dev/null)"
@@ -1645,6 +2053,7 @@ printf '%s\n' '{"kind":"sanitized","text":"safe"}' > "$EXPECTED_TRANSCRIPT_OUTPU
 cmp -s "$EXPECTED_TRANSCRIPT_OUTPUT" "$TRANSCRIPT_OUTPUT" ||
   fail "sanitized transcript output did not preserve exact artifact bytes"
 assert_transcript_output_mode
+assert_only_allowlisted_stage1_artifacts
 
 reset_fake
 rm -f "$TRANSCRIPT_OUTPUT"
