@@ -331,7 +331,14 @@ elif tail[:4] == ["shell", "am", "start-foreground-service", "-n"]:
         observed = os.environ.get("FAKE_ADB_OBSERVED_TRANSPORT", state["transport"])
         startup_probe = os.environ.get("VOICE_STAGE1_STARTUP_TRUTH_PROBE") == "1"
         probe_timeline = os.environ.get("FAKE_ADB_PROBE_TIMELINE", "clean")
-        attach_after_initial = startup_probe and probe_timeline == "call_active_before_attach"
+        independent_order_timeline = probe_timeline in {
+            "call_active_before_attach",
+            "call_active_before_attach_active",
+        }
+        if startup_probe and independent_order_timeline:
+            for _ in range(4):
+                emit("call_start_requested", observed_transport=state["transport"])
+        attach_after_initial = startup_probe and independent_order_timeline
         if (
             startup_probe
             and probe_timeline != "missing_attach"
@@ -374,8 +381,9 @@ elif tail[:4] == ["shell", "am", "start-foreground-service", "-n"]:
             if os.environ.get("FAKE_ADB_SUPPRESS_CAPTURE_ATTESTATION") != "1":
                 emit("capture_attested", capture_source="fixture", mic_bytes=0, fixture_bytes=fixture_bytes)
             if attach_after_initial:
+                advance_event_time(300)
                 emit("remote_track_attached")
-                emit_probe_audio(False)
+                emit_probe_audio(probe_timeline == "call_active_before_attach_active")
             if not startup_probe:
                 emit("remote_audio_first_non_silent", playback_epoch=1)
                 emit("playback_active", playback_epoch=1)
@@ -1321,6 +1329,9 @@ while IFS='|' read -r timeline classification prompt_overlap expected_status; do
   [[ "$timeline_status" == "$expected_status" ]] ||
     fail "startup probe timeline $timeline returned $timeline_status, expected $expected_status"
   assert_contains "$timeline_output" "stage1.startup_probe={\"version\":1,\"classification\":\"$classification\",\"promptOverlap\":$prompt_overlap,\"activeIntervalsMs\":"
+  if [[ "$timeline" == "call_active_before_attach_active" ]]; then
+    assert_contains "$timeline_output" 'stage1.startup_probe={"version":1,"classification":"startup-audio-active","promptOverlap":false,"activeIntervalsMs":[[5,10]]}'
+  fi
   if [[ "$classification" == "startup-audio-active" ]]; then
     assert_not_contains "$timeline_output" '"activeIntervalsMs":[]'
   fi
@@ -1348,6 +1359,7 @@ missing|startup-indeterminate|false|1
 gap|startup-indeterminate|false|1
 detached|startup-indeterminate|false|1
 call_active_before_attach|startup-clean|false|0
+call_active_before_attach_active|startup-audio-active|false|1
 missing_attach|startup-indeterminate|false|1
 duplicate_attach|startup-indeterminate|false|1
 late_attach|startup-indeterminate|false|1
