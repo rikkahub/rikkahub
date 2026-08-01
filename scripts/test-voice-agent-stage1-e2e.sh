@@ -101,6 +101,8 @@ else:
         "voice_events": os.environ.get("FAKE_ADB_VOICE_EVENTS", '{"kind":"sanitized"}\n'),
         "voice_events_exists": os.environ.get("FAKE_ADB_VOICE_EVENTS_EXISTS", "1") == "1",
         "voice_events_regular": os.environ.get("FAKE_ADB_VOICE_EVENTS_REGULAR", "1") == "1",
+        "voice_events_symlink": os.environ.get("FAKE_ADB_VOICE_EVENTS_SYMLINK") == "1",
+        "trace_pointer_reads": 0,
     }
     if os.environ.get("FAKE_ADB_INITIAL_RUN") == "foreign":
         state.update({
@@ -115,6 +117,15 @@ def save():
 
 def fail_if_requested(name):
     if os.environ.get("FAKE_ADB_FAIL_MODE") == name:
+        raise SystemExit(82)
+
+def fail_trace_pointer_read_if_requested():
+    state["trace_pointer_reads"] += 1
+    save()
+    mode = os.environ.get("FAKE_ADB_FAIL_MODE")
+    if mode == "initial_trace_pointer_read" and state["trace_pointer_reads"] == 1:
+        raise SystemExit(82)
+    if mode == "final_trace_pointer_read" and state["trace_pointer_reads"] == 2:
         raise SystemExit(82)
 
 def emit(
@@ -316,6 +327,11 @@ elif tail[:5] == ["exec-out", "run-as", "me.rerere.rikkahub.debug", "sh", "-c"]:
         fail_if_requested("voice_events_probe")
         if not state["voice_events_exists"]:
             print("absent")
+        elif state["voice_events_symlink"]:
+            if '[ -L "$1" ]' in tail[5]:
+                print("invalid")
+            else:
+                print("present")
         elif not state["voice_events_regular"]:
             print("invalid")
         else:
@@ -677,7 +693,7 @@ elif tail[:5] == ["exec-out", "run-as", "me.rerere.rikkahub.debug", "grep", "-F"
         sys.exit(1)
     print("\n".join(matches))
 elif tail == ["exec-out", "run-as", "me.rerere.rikkahub.debug", "cat", "no_backup/voice-e2e/latest-trace-id.txt"]:
-    fail_if_requested("trace_pointer_read")
+    fail_trace_pointer_read_if_requested()
     print(state["voice_trace_id"])
 elif (tail[:4] == ["exec-out", "run-as", "me.rerere.rikkahub.debug", "cat"] and
       tail[-1].endswith("/voice-experience-events.ndjson")):
@@ -743,6 +759,7 @@ reset_fake() {
   unset FAKE_ADB_INITIAL_VOICE_TRACE_ID FAKE_ADB_INITIAL_VOICE_TRACE_ABSENT
   unset FAKE_ADB_CURRENT_VOICE_TRACE_ID FAKE_ADB_VOICE_EVENTS
   unset FAKE_ADB_VOICE_EVENTS_EXISTS FAKE_ADB_VOICE_EVENTS_REGULAR
+  unset FAKE_ADB_VOICE_EVENTS_SYMLINK
   unset VOICE_STAGE1_TRANSCRIPT_PROBE VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
 }
 
@@ -1353,7 +1370,8 @@ assert_transcript_collection_failure() {
   assert_not_contains "$output" "private-old-trace"
   assert_not_contains "$output" "private-unsafe-trace"
   [[ ! -e "$TRANSCRIPT_OUTPUT" ]] || fail "failed transcript collection manufactured an output"
-  if [[ "$expected_mode" == "voice_events_read" ]]; then
+  if [[ "$expected_mode" == "voice_events_read" ||
+        "$expected_mode" == "final_trace_pointer_read" ]]; then
     [[ "$(command_count "action.END")" == "1" ]] ||
       fail "post-call transcript read failure did not end the call exactly once"
     [[ "$(command_count "automation.FINALIZE")" == "1" ]] ||
@@ -1365,9 +1383,28 @@ assert_transcript_collection_failure() {
 assert_transcript_collection_failure stale
 assert_transcript_collection_failure unsafe
 assert_transcript_collection_failure trace_pointer_probe
-assert_transcript_collection_failure trace_pointer_read
+assert_transcript_collection_failure initial_trace_pointer_read
 assert_transcript_collection_failure voice_events_probe
 assert_transcript_collection_failure voice_events_read
+
+reset_fake
+rm -f "$TRANSCRIPT_OUTPUT"
+enable_transcript_collection
+export FAKE_ADB_VOICE_EVENTS_SYMLINK=1
+set +e
+output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+status=$?
+set -e
+[[ "$status" -ne 0 ]] || fail "symlink sanitized event path was accepted"
+assert_equals "stage1: unable to collect sanitized transcript evidence" "$output"
+[[ ! -e "$TRANSCRIPT_OUTPUT" ]] || fail "symlink sanitized event path published an output"
+[[ "$(command_count "action.END")" == "1" ]] ||
+  fail "symlink sanitized event path did not end the call exactly once"
+[[ "$(command_count "automation.FINALIZE")" == "1" ]] ||
+  fail "symlink sanitized event path did not finalize exactly once"
+unset FAKE_ADB_VOICE_EVENTS_SYMLINK
+
+assert_transcript_collection_failure final_trace_pointer_read
 
 reset_fake
 rm -f "$TRANSCRIPT_OUTPUT"

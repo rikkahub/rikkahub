@@ -106,7 +106,9 @@ probe_remote_regular_file() {
   local remote_path="$1"
   local result
   if ! result="$(adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" sh -c '
-if [ -e "$1" ]; then
+if [ -L "$1" ]; then
+  printf invalid
+elif [ -e "$1" ]; then
   if [ -f "$1" ]; then
     printf present
   else
