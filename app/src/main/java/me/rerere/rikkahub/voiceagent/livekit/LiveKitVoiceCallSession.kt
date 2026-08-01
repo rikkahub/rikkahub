@@ -45,6 +45,7 @@ import org.koin.core.context.GlobalContext
 
 internal const val LIVEKIT_READY_TOPIC = "voice.ready.v1"
 internal const val LIVEKIT_INTERRUPT_RPC = "voice.interrupt"
+internal const val LIVEKIT_PERSISTENCE_RPC = "voice.persist.v1"
 
 internal class LiveKitVoiceCallSession(
     private val details: LiveKitSessionDetails,
@@ -53,7 +54,9 @@ internal class LiveKitVoiceCallSession(
     private val routeLease: VoiceAgentRouteLease,
     private val scope: CoroutineScope,
     private val captureSource: VoiceCaptureSource = VoiceCaptureSource.Microphone,
-    private val rpcMethods: Map<String, suspend (LiveKitRpcInvocation) -> String> = emptyMap(),
+    rpcMethods: Map<String, suspend (LiveKitRpcInvocation) -> String> = emptyMap(),
+    persistenceHandler: (suspend (LiveKitRpcInvocation) -> String)? = null,
+    private val persistenceOwner: LiveKitPersistenceOwner? = null,
     private val connectTimeoutMillis: Long = DEFAULT_LIVEKIT_CONNECT_TIMEOUT_MS,
     private val readyTimeoutMillis: Long = DEFAULT_LIVEKIT_READY_TIMEOUT_MS,
     private val cleanupDispatcher: CoroutineDispatcher = Dispatchers.Default,
@@ -62,6 +65,15 @@ internal class LiveKitVoiceCallSession(
     private val automationAudioProbeProvider: () -> VoiceAutomationAudioProbe? =
         VoiceAutomationAudioProbes::activeSharedOrNull,
 ) : RouteOwnedManagedVoiceCallSession {
+    private val registeredRpcMethods = buildMap {
+        require(LIVEKIT_PERSISTENCE_RPC !in rpcMethods) {
+            "$LIVEKIT_PERSISTENCE_RPC is owned by the persistence handler"
+        }
+        putAll(rpcMethods)
+        persistenceHandler?.let { handler ->
+            put(LIVEKIT_PERSISTENCE_RPC, handler)
+        }
+    }
     private val activeTraceId = traceId
     private val mutableState = MutableStateFlow(VoiceAgentUiState(traceId = activeTraceId))
     private val started = AtomicBoolean(false)
@@ -86,6 +98,9 @@ internal class LiveKitVoiceCallSession(
     init {
         require(connectTimeoutMillis > 0) { "connectTimeoutMillis must be positive" }
         require(readyTimeoutMillis > 0) { "readyTimeoutMillis must be positive" }
+        require((persistenceHandler == null) == (persistenceOwner == null)) {
+            "persistenceHandler and persistenceOwner must be provided together"
+        }
     }
 
     override val state: StateFlow<VoiceAgentUiState> = mutableState.asStateFlow()
@@ -99,7 +114,8 @@ internal class LiveKitVoiceCallSession(
         eventJob = { eventJob },
         microphoneJob = { microphoneJob },
         rpcAdmission = rpcAdmission,
-        rpcMethods = rpcMethods.keys,
+        rpcMethods = registeredRpcMethods.keys,
+        persistenceOwner = persistenceOwner,
         room = room,
         automationAudioActivation = { automationAudioActivation },
         captureSource = captureSource,
@@ -120,7 +136,7 @@ internal class LiveKitVoiceCallSession(
                 failExperimental("LiveKit experimental automation audio failed")
                 return
             }
-            rpcMethods.forEach { (method, handler) ->
+            registeredRpcMethods.forEach { (method, handler) ->
                 room.registerRpcMethod(method) { invocation ->
                     rpcAdmission.runInbound { handler(invocation) }
                 }
@@ -396,6 +412,7 @@ private class LiveKitCleanupOperation(
     private val microphoneJob: () -> Job?,
     private val rpcAdmission: LiveKitRpcAdmission,
     rpcMethods: Set<String>,
+    private val persistenceOwner: LiveKitPersistenceOwner?,
     private val room: LiveKitRoomFacade,
     private val automationAudioActivation: () -> AutoCloseable?,
     private val captureSource: VoiceCaptureSource,
@@ -405,7 +422,9 @@ private class LiveKitCleanupOperation(
     private var connectionJobCompleted = false
     private var eventJobCompleted = false
     private var microphoneJobCompleted = false
+    private var persistenceDrainCompleted = persistenceOwner == null
     private var rpcWorkCompleted = false
+    private var persistenceOwnerCompleted = persistenceOwner == null
     private var automationAudioCompleted = false
     private var captureSourceCompleted = false
     private val pendingRpcMethods = rpcMethods.toMutableSet()
@@ -425,11 +444,16 @@ private class LiveKitCleanupOperation(
                 )
                 captureSourceCompleted = cleanCaptureSource(captureSourceCompleted, failures)
                 retireRoute(failures)
-                unregisterRpcMethods(failures)
                 connectionJobCompleted = cleanJob(connectionJob(), connectionJobCompleted, failures)
                 eventJobCompleted = cleanJob(eventJob(), eventJobCompleted, failures)
                 microphoneJobCompleted = cleanJob(microphoneJob(), microphoneJobCompleted, failures)
                 rpcWorkCompleted = cleanRpcWork(rpcWorkCompleted, failures)
+                drainPersistenceOwner(failures)
+                unregisterRpcMethods(
+                    allowed = rpcWorkCompleted && persistenceDrainCompleted,
+                    failures = failures,
+                )
+                closePersistenceOwner(failures)
                 disconnectRoom(failures)
                 closeRoom(failures)
             }
@@ -494,7 +518,21 @@ private class LiveKitCleanupOperation(
         }
     }
 
-    private fun unregisterRpcMethods(failures: CleanupAttemptFailures) {
+    private suspend fun drainPersistenceOwner(failures: CleanupAttemptFailures) {
+        if (persistenceDrainCompleted || !rpcWorkCompleted) return
+        try {
+            persistenceOwner?.drain()
+            persistenceDrainCompleted = true
+        } catch (error: Throwable) {
+            failures.add(error)
+        }
+    }
+
+    private fun unregisterRpcMethods(
+        allowed: Boolean,
+        failures: CleanupAttemptFailures,
+    ) {
+        if (!allowed) return
         pendingRpcMethods.toList().forEach { method ->
             try {
                 room.unregisterRpcMethod(method)
@@ -519,12 +557,27 @@ private class LiveKitCleanupOperation(
         }
     }
 
+    private fun closePersistenceOwner(failures: CleanupAttemptFailures) {
+        if (
+            persistenceOwnerCompleted ||
+            !rpcWorkCompleted ||
+            !persistenceDrainCompleted
+        ) return
+        try {
+            persistenceOwner?.close()
+            persistenceOwnerCompleted = true
+        } catch (error: Throwable) {
+            failures.add(error)
+        }
+    }
+
     private fun disconnectRoom(failures: CleanupAttemptFailures) {
         if (
             disconnectCompleted ||
             !automationAudioCompleted ||
             !jobsCompleted() ||
             !rpcWorkCompleted ||
+            !persistenceOwnerCompleted ||
             pendingRpcMethods.isNotEmpty()
         ) return
         try {
@@ -554,7 +607,9 @@ private class LiveKitCleanupOperation(
             !captureSourceCompleted ||
             !routeCompleted ||
             !jobsCompleted() ||
+            !persistenceDrainCompleted ||
             !rpcWorkCompleted ||
+            !persistenceOwnerCompleted ||
             pendingRpcMethods.isNotEmpty() ||
             !disconnectCompleted ||
             !closeCompleted

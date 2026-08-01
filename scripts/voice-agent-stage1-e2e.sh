@@ -25,8 +25,10 @@ APP_ARTIFACT_BASE_DIR="no_backup/voice-e2e"
 PRIVATE_FIXTURE_DIR="files/voice-stage1"
 PRIVATE_PROMPT_PATH="$PRIVATE_FIXTURE_DIR/prompt.pcm"
 PRIVATE_INTERRUPT_PATH="$PRIVATE_FIXTURE_DIR/interrupt.pcm"
+PRIVATE_STARTUP_PATH="$PRIVATE_FIXTURE_DIR/startup.pcm"
 INJECTION_PROMPT_PATH="voice-stage1/prompt.pcm"
 INJECTION_INTERRUPT_PATH="voice-stage1/interrupt.pcm"
+INJECTION_STARTUP_PATH="voice-stage1/startup.pcm"
 
 ADB_TIMEOUT_SECONDS="${VOICE_STAGE1_ADB_TIMEOUT_SECONDS:-10}"
 WAIT_TIMEOUT_SECONDS="${VOICE_STAGE1_WAIT_TIMEOUT_SECONDS:-120}"
@@ -34,6 +36,9 @@ POLL_SECONDS="${VOICE_STAGE1_POLL_SECONDS:-1}"
 CLOCK_COMMAND="${VOICE_STAGE1_CLOCK_COMMAND:-}"
 MAX_WAIT_ATTEMPTS="${VOICE_STAGE1_MAX_WAIT_ATTEMPTS:-600}"
 LOCK_DIR="${VOICE_STAGE1_LOCK_DIR:-${TMPDIR:-/tmp}/rikkahub-voice-stage1-locks}"
+PROMPT_TRIGGER="${VOICE_STAGE1_PROMPT_TRIGGER:-initial_fixture}"
+STARTUP_TRUTH_PROBE="${VOICE_STAGE1_STARTUP_TRUTH_PROBE:-0}"
+STARTUP_PRE_ROLL_SECONDS=5
 
 START_ATTEMPTED=0
 END_ATTEMPTED=0
@@ -90,7 +95,8 @@ clock_now() {
   if [[ -n "$CLOCK_COMMAND" ]]; then
     value="$(timeout "${ADB_TIMEOUT_SECONDS}s" "$CLOCK_COMMAND")" || fail "clock command failed"
   else
-    value="$(date +%s)"
+    value="$(python3 -c 'import time; print(time.monotonic_ns() // 1_000_000_000)')" ||
+      fail "monotonic clock failed"
   fi
   [[ "$value" =~ ^[0-9]+$ ]] || fail "clock returned a non-integer value"
   printf '%s' "$value"
@@ -400,7 +406,7 @@ stage_file() {
 
 remove_private_fixtures() {
   adb_command shell run-as "$VOICE_STAGE1_PACKAGE" rm -f \
-    "$PRIVATE_PROMPT_PATH" "$PRIVATE_INTERRUPT_PATH" >/dev/null
+    "$PRIVATE_PROMPT_PATH" "$PRIVATE_INTERRUPT_PATH" "$PRIVATE_STARTUP_PATH" >/dev/null
 }
 
 raw_cleanup_finalize() {
@@ -624,6 +630,81 @@ wait_event_after() {
   done
 }
 
+wait_matching_fixture_attestation() {
+  local expected_bytes="$1"
+  local lines
+  local attestation_ms
+  local evidence_status
+  begin_wait "matching fixture attestation"
+  while true; do
+    if lines="$(adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" \
+      grep -F '"schemaVersion":1' "$AUTOMATION_EVENT_PATH" 2>/dev/null)" &&
+      [[ -n "$lines" ]]; then
+      if attestation_ms="$(python3 -c '
+import json, sys
+run_hash, comparison_hash, transport, expected_bytes = sys.argv[1:]
+expected_bytes = int(expected_bytes)
+try:
+    events = [json.loads(line) for line in sys.stdin if line.strip()]
+except ValueError:
+    raise SystemExit(2)
+if any(event.get("runHash") != run_hash or
+       event.get("comparisonHash") != comparison_hash or
+       event.get("requestedTransport") != transport for event in events):
+    raise SystemExit(2)
+prompt_ends = [event for event in events
+               if event.get("name") == "prompt_ended" and
+               event.get("byteCount") == expected_bytes]
+if not prompt_ends:
+    raise SystemExit(1)
+if len(prompt_ends) != 1:
+    raise SystemExit(2)
+prompt_end_ms = prompt_ends[0].get("monotonicMs")
+attestations = [event for event in events
+                if event.get("name") == "capture_attested" and
+                event.get("captureSource") == "fixture" and
+                event.get("micBytes") == 0 and
+                event.get("fixtureBytes") == expected_bytes and
+                isinstance(event.get("monotonicMs"), int) and
+                event["monotonicMs"] > prompt_end_ms]
+if not attestations:
+    raise SystemExit(1)
+if len(attestations) != 1:
+    raise SystemExit(2)
+print(attestations[0]["monotonicMs"])
+' "$VOICE_STAGE1_RUN_HASH" "$VOICE_STAGE1_COMPARISON_HASH" \
+        "$VOICE_STAGE1_TRANSPORT" "$expected_bytes" <<< "$lines")"; then
+        printf '%s\n' "$attestation_ms"
+        return 0
+      else
+        evidence_status=$?
+        if (( evidence_status == 2 )); then
+          fail "fixture attestation evidence mismatch"
+          return 1
+        fi
+      fi
+    fi
+    continue_wait "$WAIT_TIMEOUT_SECONDS" \
+      "timed out waiting for matching fixture attestation" || return 1
+  done
+}
+
+wait_startup_pre_roll() {
+  local started_at
+  local now
+  started_at="$(clock_now)"
+  begin_wait "startup truth probe pre-roll"
+  while true; do
+    now="$(clock_now)"
+    (( now >= started_at )) || fail "clock moved backward during startup truth probe pre-roll"
+    if (( now - started_at >= STARTUP_PRE_ROLL_SECONDS + 1 )); then
+      return 0
+    fi
+    continue_wait "$WAIT_TIMEOUT_SECONDS" \
+      "timed out waiting for startup truth probe pre-roll" || return 1
+  done
+}
+
 mark_boundary() {
   local boundary="${1,,}"
   control_broadcast MARK \
@@ -737,11 +818,19 @@ fixture_broadcast() {
 }
 
 arm_capture_fixture() {
-  fixture_broadcast "$FIXTURE_ARM_ACTION" \
-    --es initial_path "$INJECTION_PROMPT_PATH" \
-    --es staged_path "$INJECTION_INTERRUPT_PATH" \
-    --ei chunk_bytes 3200 \
-    --el chunk_delay_ms 100
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
+    fixture_broadcast "$FIXTURE_ARM_ACTION" \
+      --es initial_path "$INJECTION_STARTUP_PATH" \
+      --es staged_path "$INJECTION_PROMPT_PATH" \
+      --ei chunk_bytes 3200 \
+      --el chunk_delay_ms 100
+  else
+    fixture_broadcast "$FIXTURE_ARM_ACTION" \
+      --es initial_path "$INJECTION_PROMPT_PATH" \
+      --es staged_path "$INJECTION_INTERRUPT_PATH" \
+      --ei chunk_bytes 3200 \
+      --el chunk_delay_ms 100
+  fi
   [[ "$FIXTURE_DATA" =~ ^status=ok$'\n'action=arm$'\n'token=(fixture-[1-9][0-9]*)$ ]] ||
     fail "fixture arm returned malformed data"
   FIXTURE_TOKEN="${BASH_REMATCH[1]}"
@@ -839,6 +928,7 @@ finalize_and_fetch() {
   local temp_output
   local expected_route
   local expected_fixture_bytes
+  local expected_startup_bytes=0
   output_parent="$(dirname "$VOICE_STAGE1_EVENT_OUTPUT")"
   mkdir -p "$output_parent"
   [[ ! -L "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a symlink"
@@ -867,14 +957,50 @@ finalize_and_fetch() {
   }
   expected_route="${VOICE_STAGE1_ROUTE^}"
   expected_fixture_bytes="$(wc -c < "$VOICE_STAGE1_PCM_PATH" | tr -d '[:space:]')"
-  if ! python3 - "$temp_output" "$VOICE_STAGE1_RUN_HASH" "$VOICE_STAGE1_COMPARISON_HASH" \
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
+    expected_startup_bytes="$(wc -c < "$VOICE_STAGE1_STARTUP_PCM_PATH" | tr -d '[:space:]')"
+  fi
+  local validation_output
+  local validation_status=0
+  if validation_output="$(python3 - "$temp_output" "$VOICE_STAGE1_RUN_HASH" "$VOICE_STAGE1_COMPARISON_HASH" \
     "$VOICE_STAGE1_TRANSPORT" "$expected_route" "$VOICE_STAGE1_APP_STATE" \
-    "$VOICE_STAGE1_NETWORK" "$VOICE_STAGE1_LIFECYCLE" "$expected_fixture_bytes" <<'PY'
+    "$VOICE_STAGE1_NETWORK" "$VOICE_STAGE1_LIFECYCLE" "$expected_fixture_bytes" \
+    "$STARTUP_TRUTH_PROBE" "$expected_startup_bytes" <<'PY'
 import json
 import sys
 
-path, run_hash, comparison_hash, transport, route, app_state, network_mode, lifecycle, expected_fixture_bytes = sys.argv[1:]
+path, run_hash, comparison_hash, transport, route, app_state, network_mode, lifecycle, expected_fixture_bytes, startup_truth_probe, expected_startup_bytes = sys.argv[1:]
 expected_fixture_bytes = int(expected_fixture_bytes)
+expected_startup_bytes = int(expected_startup_bytes)
+MAX_GAP_MS = 250
+
+
+def audio_interval(event):
+    duration_us = event.get("audioWindowMicros")
+    active = event.get("rmsActive")
+    end_ms = event.get("monotonicMs")
+    if (
+        type(duration_us) is not int
+        or duration_us <= 0
+        or type(active) is not bool
+        or type(end_ms) is not int
+    ):
+        raise ValueError("invalid LiveKit playback_written RMS window")
+    duration_ms = (duration_us + 999) // 1000
+    return end_ms - duration_ms, end_ms, active
+
+
+def merge_active_offsets(intervals, attached_ms):
+    merged = []
+    for start_ms, end_ms in sorted(intervals):
+        relative = [max(0, start_ms - attached_ms), end_ms - attached_ms]
+        if merged and relative[0] <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], relative[1])
+        else:
+            merged.append(relative)
+    return merged
+
+
 try:
     with open(path, encoding="utf-8") as handle:
         events = [json.loads(line) for line in handle if line.strip()]
@@ -892,27 +1018,200 @@ for event in events:
         raise SystemExit("observed transport mismatch")
 
 names = [event.get("name") for event in events]
-for required in ("run_prepared", "call_start_requested", "call_active", "call_stopped",
-                 "route_requested", "route_observed",
-                 "lifecycle_requested", "lifecycle_observed", "prompt_ended",
-                 "capture_attested", "remote_audio_first_non_silent",
-                 "playback_active", "run_finalized"):
+probe_prompt_end_ms = None
+probe_response_valid = False
+if startup_truth_probe == "1":
+    classification = "startup-indeterminate"
+    prompt_overlap = False
+    active_startup = []
+    attached_ms = 0
+    valid_intervals = []
+    rms_schema_valid = True
+    for event in events:
+        if event.get("name") != "playback_written":
+            continue
+        try:
+            valid_intervals.append(audio_interval(event))
+        except ValueError:
+            rms_schema_valid = False
+
+    prompt_starts = [
+        event for event in events
+        if event.get("name") == "injection_started"
+        and event.get("byteCount") == expected_fixture_bytes
+    ]
+    prompt_ends = [
+        event for event in events
+        if event.get("name") == "prompt_ended"
+        and event.get("byteCount") == expected_fixture_bytes
+    ]
+    prompt_boundaries_valid = (
+        len(prompt_starts) == 1
+        and len(prompt_ends) == 1
+        and type(prompt_starts[0].get("monotonicMs")) is int
+        and type(prompt_ends[0].get("monotonicMs")) is int
+        and prompt_starts[0]["monotonicMs"] < prompt_ends[0]["monotonicMs"]
+    )
+    if prompt_boundaries_valid:
+        prompt_start_ms = prompt_starts[0]["monotonicMs"]
+        probe_prompt_end_ms = prompt_ends[0]["monotonicMs"]
+        prompt_overlap = any(
+            active and start_ms <= probe_prompt_end_ms and end_ms >= prompt_start_ms
+            for start_ms, end_ms, active in valid_intervals
+        )
+        probe_response_valid = any(
+            active and start_ms > probe_prompt_end_ms
+            for start_ms, _, active in valid_intervals
+        )
+
+        call_starts = [
+            event for event in events
+            if event.get("name") == "call_start_requested"
+        ]
+        attachment_events = [
+            event for event in events
+            if event.get("name") == "remote_track_attached"
+        ]
+        call_active_events = [
+            event for event in events
+            if event.get("name") == "call_active"
+        ]
+        detach_events = [
+            event for event in events
+            if event.get("name") == "remote_track_detached"
+        ]
+        lifecycle_schema_valid = all(
+            type(event.get("monotonicMs")) is int
+            for event in call_starts + attachment_events + call_active_events + detach_events
+        )
+        initial_starts = [
+            event for event in events
+            if event.get("name") == "injection_started"
+            and event.get("byteCount") == expected_startup_bytes
+        ]
+        if call_starts and lifecycle_schema_valid:
+            call_start_ms = min(event["monotonicMs"] for event in call_starts)
+        else:
+            call_start_ms = None
+        detached_before_prompt = any(
+            event["monotonicMs"] < prompt_start_ms
+            for event in detach_events
+            if lifecycle_schema_valid
+        )
+        ordering_valid = (
+            rms_schema_valid
+            and lifecycle_schema_valid
+            and call_start_ms is not None
+            and len(attachment_events) == 1
+            and len(call_active_events) == 1
+            and len(initial_starts) == 1
+            and type(initial_starts[0].get("monotonicMs")) is int
+            and not detached_before_prompt
+        )
+        if ordering_valid:
+            attached_ms = attachment_events[0]["monotonicMs"]
+            call_active_ms = call_active_events[0]["monotonicMs"]
+            initial_start_ms = initial_starts[0]["monotonicMs"]
+            ordering_valid = (
+                call_start_ms <= call_active_ms < initial_start_ms < prompt_start_ms
+                and call_start_ms <= attached_ms < prompt_start_ms
+            )
+
+        if ordering_valid:
+            observation_intervals = sorted(
+                (start_ms, end_ms, active)
+                for start_ms, end_ms, active in valid_intervals
+                if end_ms >= attached_ms and start_ms < prompt_start_ms
+            )
+            coverage_valid = bool(observation_intervals)
+            coverage_end_ms = attached_ms
+            for start_ms, end_ms, _ in observation_intervals:
+                clipped_start_ms = max(start_ms, attached_ms)
+                clipped_end_ms = min(end_ms, prompt_start_ms)
+                if clipped_start_ms - coverage_end_ms > MAX_GAP_MS:
+                    coverage_valid = False
+                coverage_end_ms = max(coverage_end_ms, clipped_end_ms)
+            if prompt_start_ms - coverage_end_ms > MAX_GAP_MS:
+                coverage_valid = False
+
+            active_observation = [
+                (start_ms, end_ms)
+                for start_ms, end_ms, active in observation_intervals
+                if active
+            ]
+            active_straddles_boundary = any(
+                start_ms < prompt_start_ms <= end_ms
+                for start_ms, end_ms in active_observation
+            )
+            active_outside_startup = any(
+                start_ms < attached_ms or end_ms >= prompt_start_ms
+                for start_ms, end_ms in active_observation
+            )
+            if coverage_valid and not active_straddles_boundary and not active_outside_startup:
+                active_startup = active_observation
+                classification = (
+                    "startup-audio-active" if active_startup else "startup-clean"
+                )
+
+    report = {
+        "version": 1,
+        "classification": classification,
+        "promptOverlap": prompt_overlap,
+        "activeIntervalsMs": (
+            merge_active_offsets(active_startup, attached_ms)
+            if classification == "startup-audio-active"
+            else []
+        ),
+    }
+    print("stage1.startup_probe=" + json.dumps(report, separators=(",", ":")))
+    if classification != "startup-clean" or prompt_overlap:
+        raise SystemExit(2)
+
+required_names = [
+    "run_prepared", "call_start_requested", "call_active", "call_stopped",
+    "route_requested", "route_observed", "lifecycle_requested", "lifecycle_observed",
+    "prompt_ended", "capture_attested", "run_finalized",
+]
+if startup_truth_probe != "1":
+    required_names.extend(["playback_active", "remote_audio_first_non_silent"])
+for required in required_names:
     if required not in names:
         raise SystemExit(f"missing required automation event: {required}")
 attestations = [event for event in events if event.get("name") == "capture_attested"]
-if (not attestations or attestations[0].get("captureSource") != "fixture" or
-        attestations[0].get("micBytes") != 0 or
-        attestations[0].get("fixtureBytes") != expected_fixture_bytes):
-    raise SystemExit("capture source attestation mismatch")
 if any(event.get("captureSource") != "fixture" or event.get("micBytes") != 0
        for event in attestations):
     raise SystemExit("microphone contamination attested")
-prompt_end_ms = min(event["monotonicMs"] for event in events
-                    if event.get("name") == "prompt_ended")
-first_output_ms = min(event["monotonicMs"] for event in events
-                      if event.get("name") == "remote_audio_first_non_silent")
-if first_output_ms - prompt_end_ms < 0:
-    raise SystemExit("output audio began before prompt end")
+if startup_truth_probe == "1":
+    startup_prompt_ends = [event for event in events
+                           if event.get("name") == "prompt_ended" and
+                           event.get("byteCount") == expected_startup_bytes]
+    if len(startup_prompt_ends) != 1:
+        raise SystemExit("startup fixture completion is missing or duplicated")
+    startup_prompt_end = startup_prompt_ends[0]
+    if not any(event.get("fixtureBytes") == expected_startup_bytes and
+               event.get("monotonicMs", 0) > startup_prompt_end["monotonicMs"]
+               for event in attestations):
+        raise SystemExit("startup fixture capture attestation mismatch")
+    staged_prompt_ends = [event for event in events
+                          if event.get("name") == "prompt_ended" and
+                          event.get("byteCount") == expected_fixture_bytes and
+                          event.get("monotonicMs", 0) > startup_prompt_end["monotonicMs"]]
+    if len(staged_prompt_ends) != 1:
+        raise SystemExit("staged prompt completion is missing or duplicated")
+    staged_prompt_end = staged_prompt_ends[0]
+    if not any(event.get("fixtureBytes") == expected_fixture_bytes and
+               event.get("monotonicMs", 0) > staged_prompt_end["monotonicMs"]
+               for event in attestations):
+        raise SystemExit("staged prompt capture attestation mismatch")
+else:
+    if (not attestations or attestations[0].get("fixtureBytes") != expected_fixture_bytes):
+        raise SystemExit("capture source attestation mismatch")
+    prompt_end_ms = min(event["monotonicMs"] for event in events
+                        if event.get("name") == "prompt_ended")
+    first_output_ms = min(event["monotonicMs"] for event in events
+                          if event.get("name") == "remote_audio_first_non_silent")
+    if first_output_ms - prompt_end_ms < 0:
+        raise SystemExit("output audio began before prompt end")
 if not any(event.get("name") == "call_active" and event.get("observedTransport") == transport
            for event in events):
     raise SystemExit("observed transport mismatch")
@@ -1000,13 +1299,34 @@ else:
 if lifecycle == "interruption":
     if "interrupt_started" not in names or "playback_stopped" not in names:
         raise SystemExit("interruption evidence is incomplete")
+if startup_truth_probe == "1" and not probe_response_valid:
+    raise SystemExit("missing RMS-backed response playback after prompt completion")
 PY
-  then
-    rm -f "$temp_output"
-    fail "finalized automation event validation failed"
+  )"; then
+    validation_status=0
+  else
+    validation_status=$?
   fi
-  mv -f "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT"
-  chmod 600 "$VOICE_STAGE1_EVENT_OUTPUT"
+
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
+    mv -f "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT"
+    chmod 600 "$VOICE_STAGE1_EVENT_OUTPUT"
+    if [[ -n "$validation_output" ]]; then
+      printf '%s\n' "$validation_output"
+    fi
+    if [[ "$validation_status" -eq 2 ]]; then
+      fail "startup probe did not produce a valid vertical slice"
+    elif [[ "$validation_status" -ne 0 ]]; then
+      fail "finalized automation event validation failed"
+    fi
+  else
+    if [[ "$validation_status" -ne 0 ]]; then
+      rm -f "$temp_output"
+      fail "finalized automation event validation failed"
+    fi
+    mv -f "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT"
+    chmod 600 "$VOICE_STAGE1_EVENT_OUTPUT"
+  fi
 }
 
 run_preflight() {
@@ -1060,6 +1380,8 @@ run_preflight() {
 
 validate_normal_inputs() {
   local required
+  local startup_fixture_bytes
+  local prompt_fixture_bytes
   for required in \
     VOICE_STAGE1_SERIAL \
     VOICE_STAGE1_PACKAGE \
@@ -1078,12 +1400,34 @@ validate_normal_inputs() {
     require_env "$required"
   done
   [[ "$VOICE_STAGE1_PACKAGE" =~ ^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)+$ ]] || fail "invalid package name"
-  require_expected_serial
   [[ "$VOICE_STAGE1_TRANSPORT" =~ ^(direct_gemini|livekit_experimental)$ ]] || fail "invalid transport"
   [[ "$VOICE_STAGE1_ROUTE" =~ ^(speaker|earpiece)$ ]] || fail "invalid route"
   [[ "$VOICE_STAGE1_APP_STATE" =~ ^(foreground|background)$ ]] || fail "invalid app state"
   [[ "$VOICE_STAGE1_NETWORK" =~ ^(stable_wifi|cellular|wifi_cellular_wifi)$ ]] || fail "invalid network"
   [[ "$VOICE_STAGE1_LIFECYCLE" =~ ^(steady|interruption|reconnect)$ ]] || fail "invalid lifecycle"
+  [[ "$PROMPT_TRIGGER" == "initial_fixture" ]] || fail "invalid prompt trigger"
+  [[ -f "$VOICE_STAGE1_PCM_PATH" && ! -L "$VOICE_STAGE1_PCM_PATH" && -s "$VOICE_STAGE1_PCM_PATH" ]] ||
+    fail "VOICE_STAGE1_PCM_PATH must be a nonempty regular file"
+  [[ -f "$VOICE_STAGE1_INTERRUPT_PCM_PATH" && ! -L "$VOICE_STAGE1_INTERRUPT_PCM_PATH" &&
+     -s "$VOICE_STAGE1_INTERRUPT_PCM_PATH" ]] ||
+    fail "VOICE_STAGE1_INTERRUPT_PCM_PATH must be a nonempty regular file"
+  [[ "$STARTUP_TRUTH_PROBE" =~ ^(0|1)$ ]] ||
+    fail "VOICE_STAGE1_STARTUP_TRUTH_PROBE must be 0 or 1"
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
+    [[ "$VOICE_STAGE1_TRANSPORT" == "livekit_experimental" ]] ||
+      fail "startup truth probe requires livekit_experimental transport"
+    [[ "$VOICE_STAGE1_LIFECYCLE" == "steady" ]] ||
+      fail "startup truth probe requires steady lifecycle"
+    require_env VOICE_STAGE1_STARTUP_PCM_PATH
+    [[ -f "$VOICE_STAGE1_STARTUP_PCM_PATH" && ! -L "$VOICE_STAGE1_STARTUP_PCM_PATH" &&
+       -s "$VOICE_STAGE1_STARTUP_PCM_PATH" ]] ||
+      fail "VOICE_STAGE1_STARTUP_PCM_PATH must be a nonempty regular file"
+    require_command wc
+    startup_fixture_bytes="$(wc -c < "$VOICE_STAGE1_STARTUP_PCM_PATH" | tr -d '[:space:]')"
+    prompt_fixture_bytes="$(wc -c < "$VOICE_STAGE1_PCM_PATH" | tr -d '[:space:]')"
+    [[ "$startup_fixture_bytes" != "$prompt_fixture_bytes" ]] ||
+      fail "startup and prompt fixtures must have different byte counts"
+  fi
   validate_positive_integer VOICE_STAGE1_TARGET_SECONDS "$VOICE_STAGE1_TARGET_SECONDS"
   validate_positive_integer VOICE_STAGE1_ADB_TIMEOUT_SECONDS "$ADB_TIMEOUT_SECONDS"
   validate_positive_integer VOICE_STAGE1_WAIT_TIMEOUT_SECONDS "$WAIT_TIMEOUT_SECONDS"
@@ -1091,13 +1435,9 @@ validate_normal_inputs() {
   validate_nonnegative_number VOICE_STAGE1_POLL_SECONDS "$POLL_SECONDS"
   [[ "$VOICE_STAGE1_RUN_HASH" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "invalid run hash"
   [[ "$VOICE_STAGE1_COMPARISON_HASH" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "invalid comparison hash"
-  [[ -f "$VOICE_STAGE1_PCM_PATH" && ! -L "$VOICE_STAGE1_PCM_PATH" && -s "$VOICE_STAGE1_PCM_PATH" ]] ||
-    fail "VOICE_STAGE1_PCM_PATH must be a nonempty regular file"
-  [[ -f "$VOICE_STAGE1_INTERRUPT_PCM_PATH" && ! -L "$VOICE_STAGE1_INTERRUPT_PCM_PATH" &&
-     -s "$VOICE_STAGE1_INTERRUPT_PCM_PATH" ]] ||
-    fail "VOICE_STAGE1_INTERRUPT_PCM_PATH must be a nonempty regular file"
   [[ ! -L "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a symlink"
   [[ ! -d "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a directory"
+  require_expected_serial
 
   require_command adb
   require_command timeout
@@ -1110,8 +1450,6 @@ validate_normal_inputs() {
   require_command flock
   if [[ -n "$CLOCK_COMMAND" ]]; then
     [[ -x "$CLOCK_COMMAND" ]] || fail "VOICE_STAGE1_CLOCK_COMMAND must be executable"
-  else
-    require_command date
   fi
 }
 
@@ -1119,6 +1457,9 @@ run_scenario() {
   local initial_network
   local run_started_at
   local lifecycle_boundary_ms
+  local expected_prompt_bytes
+  local expected_startup_bytes
+  local initial_attestation_ms
   AUTOMATION_EVENT_PATH="$(app_artifact_path \
     "$APP_ARTIFACT_BASE_DIR/${VOICE_STAGE1_RUN_HASH#sha256:}" automation-events.jsonl)"
 
@@ -1159,8 +1500,13 @@ run_scenario() {
   expect_control_data $'status=ok\naction=prepare'
 
   FIXTURES_STAGED=1
-  stage_file "$VOICE_STAGE1_PCM_PATH" "$PRIVATE_PROMPT_PATH"
-  stage_file "$VOICE_STAGE1_INTERRUPT_PCM_PATH" "$PRIVATE_INTERRUPT_PATH"
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
+    stage_file "$VOICE_STAGE1_STARTUP_PCM_PATH" "$PRIVATE_STARTUP_PATH"
+    stage_file "$VOICE_STAGE1_PCM_PATH" "$PRIVATE_PROMPT_PATH"
+  else
+    stage_file "$VOICE_STAGE1_PCM_PATH" "$PRIVATE_PROMPT_PATH"
+    stage_file "$VOICE_STAGE1_INTERRUPT_PCM_PATH" "$PRIVATE_INTERRUPT_PATH"
+  fi
   arm_capture_fixture
 
   run_started_at="$(clock_now)"
@@ -1178,8 +1524,18 @@ run_scenario() {
   fi
   wait_lifecycle "$VOICE_STAGE1_APP_STATE" "$lifecycle_boundary_ms"
 
-  wait_event PROMPT_ENDED
-  wait_event PLAYBACK_ACTIVE
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
+    expected_startup_bytes="$(wc -c < "$VOICE_STAGE1_STARTUP_PCM_PATH" | tr -d '[:space:]')"
+    expected_prompt_bytes="$(wc -c < "$VOICE_STAGE1_PCM_PATH" | tr -d '[:space:]')"
+    initial_attestation_ms="$(wait_matching_fixture_attestation "$expected_startup_bytes")"
+    [[ "$initial_attestation_ms" =~ ^[0-9]+$ ]] || fail "invalid initial fixture attestation timestamp"
+    wait_startup_pre_roll
+    trigger_capture_fixture "$INJECTION_PROMPT_PATH"
+    wait_matching_fixture_attestation "$expected_prompt_bytes" >/dev/null
+  else
+    wait_event PROMPT_ENDED
+    wait_event PLAYBACK_ACTIVE
+  fi
 
   case "$VOICE_STAGE1_LIFECYCLE" in
     steady)

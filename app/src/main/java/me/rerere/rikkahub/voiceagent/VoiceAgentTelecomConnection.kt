@@ -10,6 +10,7 @@ import android.telecom.CallEndpointException
 import android.telecom.Connection
 import android.telecom.DisconnectCause
 import androidx.annotation.RequiresApi
+import androidx.core.content.ContextCompat
 import java.util.concurrent.Executor
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventInput
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventName
@@ -31,7 +32,7 @@ internal class VoiceAgentTelecomConnection private constructor(
         onRetired: (VoiceAgentTelecomConnection, Result<Unit>) -> Unit,
     ) : this(
         onCallEndRequested = { context.startService(voiceAgentCallEndIntent(context)) },
-        endpointRequestExecutor = context.mainExecutor,
+        endpointRequestExecutor = ContextCompat.getMainExecutor(context),
         automationRuntimeProvider = {
             runCatching { GlobalContext.get().get<VoiceAutomationRuntime>() }.getOrNull()
         },

@@ -136,7 +136,10 @@ val appModule = module {
     }
 
     single {
-        LiveKitVoiceCallFactory(context = get())
+        LiveKitVoiceCallFactory(
+            context = get(),
+            chatService = get(),
+        )
     }
 
     single<VoiceAgentCallFactory> {

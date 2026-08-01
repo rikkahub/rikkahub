@@ -18,6 +18,8 @@ internal const val VOICE_CALL_ID_KEY = "voice_call_id"
 internal const val VOICE_STATUS_KEY = "voice_status"
 internal const val VOICE_CREATED_AT_KEY = "voice_created_at"
 internal const val VOICE_UPDATED_AT_KEY = "voice_updated_at"
+internal const val VOICE_GROUNDED_JOB_ID_KEY = "voice_grounded_job_id"
+internal const val VOICE_GROUNDED_RESULT_HASH_KEY = "voice_grounded_result_hash"
 
 enum class VoiceTranscriptStatus(val statusName: String) {
     Partial("partial"),
@@ -46,6 +48,8 @@ class VoiceTranscriptPersister {
         interrupted: Boolean,
         sessionId: String? = null,
         turnId: String? = null,
+        groundedJobId: String? = null,
+        groundedResultHash: String? = null,
     ): Conversation {
         return conversation.appendMessage(
             UIMessage(
@@ -57,6 +61,8 @@ class VoiceTranscriptPersister {
                             sessionId = sessionId,
                             eventId = turnId,
                             status = if (interrupted) "interrupted" else "complete",
+                            groundedJobId = groundedJobId,
+                            groundedResultHash = groundedResultHash,
                         ),
                     )
                 ),
@@ -102,6 +108,8 @@ class VoiceTranscriptPersister {
         } else {
             VoiceTranscriptStatus.Complete
         },
+        groundedJobId: String? = null,
+        groundedResultHash: String? = null,
     ): Conversation = upsertTranscriptTurn(
         conversation = conversation,
         message = UIMessage(
@@ -114,6 +122,8 @@ class VoiceTranscriptPersister {
                         turnId = turnId,
                         sessionId = sessionId,
                         status = status.statusName,
+                        groundedJobId = groundedJobId,
+                        groundedResultHash = groundedResultHash,
                     ),
                 )
             ),
@@ -157,6 +167,8 @@ class VoiceTranscriptPersister {
         turnId: String,
         sessionId: String?,
         status: String,
+        groundedJobId: String? = null,
+        groundedResultHash: String? = null,
     ) = buildJsonObject {
         put(VOICE_TRANSCRIPT_ROLE_KEY, role)
         put(VOICE_TRANSCRIPT_TURN_ID_KEY, turnId)
@@ -164,14 +176,24 @@ class VoiceTranscriptPersister {
             sessionId = sessionId,
             eventId = turnId,
             status = status,
+            groundedJobId = groundedJobId,
+            groundedResultHash = groundedResultHash,
         )
     }
 
-    private fun voiceArtifactMetadata(sessionId: String?, eventId: String?, status: String) = buildJsonObject {
+    private fun voiceArtifactMetadata(
+        sessionId: String?,
+        eventId: String?,
+        status: String,
+        groundedJobId: String? = null,
+        groundedResultHash: String? = null,
+    ) = buildJsonObject {
         putVoiceArtifactMetadata(
             sessionId = sessionId,
             eventId = eventId,
             status = status,
+            groundedJobId = groundedJobId,
+            groundedResultHash = groundedResultHash,
         )
     }
 
@@ -180,6 +202,8 @@ class VoiceTranscriptPersister {
         eventId: String?,
         status: String,
         callId: String? = null,
+        groundedJobId: String? = null,
+        groundedResultHash: String? = null,
     ) {
         val timestamp = Clock.System.now().toString()
         put(VOICE_STATUS_KEY, status)
@@ -191,6 +215,8 @@ class VoiceTranscriptPersister {
             put(VOICE_CREATED_AT_KEY, timestamp)
             put(VOICE_UPDATED_AT_KEY, timestamp)
         }
+        groundedJobId?.let { put(VOICE_GROUNDED_JOB_ID_KEY, it) }
+        groundedResultHash?.let { put(VOICE_GROUNDED_RESULT_HASH_KEY, it) }
     }
 
     private fun UIMessage.isVoiceTranscript(

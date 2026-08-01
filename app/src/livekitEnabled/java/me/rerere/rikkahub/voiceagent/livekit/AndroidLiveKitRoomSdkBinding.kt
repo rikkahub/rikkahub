@@ -160,9 +160,17 @@ internal class AndroidLiveKitRoomSdkAdapter(
             val probe = remoteAudioProbeFactory()
             try {
                 track.addSink(probe)
-                remoteAudioProbes[track] = RemoteAudioAttachment(probe)
             } catch (error: Throwable) {
-                probe.close()
+                runCatching(probe::close).exceptionOrNull()?.let(error::addSuppressed)
+                throw error
+            }
+            remoteAudioProbes[track] = RemoteAudioAttachment(probe)
+            try {
+                probe.onTrackAttached()
+            } catch (error: Throwable) {
+                runCatching { track.removeSink(probe) }.exceptionOrNull()?.let(error::addSuppressed)
+                remoteAudioProbes.remove(track)
+                runCatching(probe::close).exceptionOrNull()?.let(error::addSuppressed)
                 throw error
             }
         }
@@ -171,9 +179,9 @@ internal class AndroidLiveKitRoomSdkAdapter(
     private fun detachRemoteAudio(track: RemoteAudioTrack) {
         synchronized(remoteAudioLock) {
             val attachment = remoteAudioProbes[track] ?: return
-            attachment.closeProbe()
             track.removeSink(attachment.probe)
             remoteAudioProbes.remove(track)
+            attachment.detachAfterSinkRemoval()
         }
     }
 
@@ -185,13 +193,14 @@ internal class AndroidLiveKitRoomSdkAdapter(
             while (iterator.hasNext()) {
                 val (track, attachment) = iterator.next()
                 try {
-                    attachment.closeProbe()
-                } catch (error: Throwable) {
-                    failure = failure.withFailure(error)
-                }
-                try {
                     track.removeSink(attachment.probe)
                     iterator.remove()
+                } catch (error: Throwable) {
+                    failure = failure.withFailure(error)
+                    continue
+                }
+                try {
+                    attachment.detachAfterSinkRemoval()
                 } catch (error: Throwable) {
                     failure = failure.withFailure(error)
                 }
@@ -207,12 +216,16 @@ internal class AndroidLiveKitRoomSdkAdapter(
     private class RemoteAudioAttachment(
         val probe: LiveKitRemoteAudioProbe,
     ) {
-        private var closed = false
+        private var detached = false
 
-        fun closeProbe() {
-            if (closed) return
-            closed = true
-            probe.close()
+        fun detachAfterSinkRemoval() {
+            if (detached) return
+            detached = true
+            try {
+                probe.onTrackDetached()
+            } finally {
+                probe.close()
+            }
         }
     }
 }

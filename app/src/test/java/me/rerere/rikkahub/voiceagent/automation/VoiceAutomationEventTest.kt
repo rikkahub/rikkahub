@@ -43,7 +43,8 @@ class VoiceAutomationEventTest {
                 "\"requestedTransport\":\"direct_gemini\"," +
                 "\"observedTransport\":\"livekit_experimental\",\"name\":\"call_active\"," +
                 "\"route\":\"Speaker\",\"network\":\"wifi\",\"lifecycle\":\"foreground\"," +
-                "\"playbackEpoch\":1,\"byteCount\":3200,\"succeeded\":true," +
+                "\"playbackEpoch\":1,\"byteCount\":3200,\"rmsActive\":null," +
+                "\"audioWindowMicros\":null,\"succeeded\":true," +
                 "\"correlationKind\":\"session\",\"correlationHash\":\"$CORRELATION_HASH\"," +
                 "\"requestedModelHash\":null,\"observedModelHash\":null,\"voiceHash\":null," +
                 "\"instructionHash\":null,\"directAccountConfigurationHash\":null," +
@@ -53,6 +54,58 @@ class VoiceAutomationEventTest {
         )
         assertTrue(writer.file.canRead())
         assertTrue(writer.file.canWrite())
+    }
+
+    @Test
+    fun `LiveKit playback written serializes RMS window fields canonically`() {
+        val writer = VoiceAutomationEventWriter.create(
+            Files.createTempDirectory("voice-automation-rms").toFile(),
+            RUN_HASH,
+        )
+        writer.append(
+            event(
+                requestedTransport = VoiceAgentTransport.LiveKitExperimental,
+                name = VoiceAutomationEventName.PLAYBACK_WRITTEN,
+                playbackEpoch = 1,
+                byteCount = 3_200,
+                rmsActive = true,
+                audioWindowMicros = 20_000,
+            ),
+        )
+
+        val line = writer.file.readText()
+        assertTrue(
+            line.contains(
+                "\"byteCount\":3200,\"rmsActive\":true," +
+                    "\"audioWindowMicros\":20000,\"succeeded\":null",
+            ),
+        )
+    }
+
+    @Test
+    fun `RMS window fields are exclusive to LiveKit playback written`() {
+        val valid = event(
+            requestedTransport = VoiceAgentTransport.LiveKitExperimental,
+            name = VoiceAutomationEventName.PLAYBACK_WRITTEN,
+            playbackEpoch = 1,
+            byteCount = 320,
+            rmsActive = false,
+            audioWindowMicros = 10_000,
+        )
+        VoiceAutomationEventValidation.validate(valid)
+
+        listOf(
+            valid.copy(rmsActive = null),
+            valid.copy(audioWindowMicros = null),
+            valid.copy(audioWindowMicros = 0),
+            valid.copy(byteCount = 0),
+            valid.copy(requestedTransport = VoiceAgentTransport.DirectGemini),
+            valid.copy(name = VoiceAutomationEventName.PLAYBACK_ACTIVE),
+        ).forEach { invalid ->
+            assertFailsWith<IllegalArgumentException> {
+                VoiceAutomationEventValidation.validate(invalid)
+            }
+        }
     }
 
     @Test
@@ -106,17 +159,25 @@ class VoiceAutomationEventTest {
         monotonicMs: Long = 10,
         wallClockMs: Long = 20,
         runHash: String = RUN_HASH,
+        requestedTransport: VoiceAgentTransport = VoiceAgentTransport.DirectGemini,
+        name: VoiceAutomationEventName = VoiceAutomationEventName.RUN_PREPARED,
+        playbackEpoch: Long? = null,
         correlationKind: VoiceAutomationCorrelationKind? = null,
         byteCount: Long? = null,
+        rmsActive: Boolean? = null,
+        audioWindowMicros: Long? = null,
     ) = VoiceAutomationEvent(
         monotonicMs = monotonicMs,
         wallClockMs = wallClockMs,
         runHash = runHash,
         comparisonHash = COMPARISON_HASH,
-        requestedTransport = VoiceAgentTransport.DirectGemini,
+        requestedTransport = requestedTransport,
         observedTransport = null,
-        name = VoiceAutomationEventName.RUN_PREPARED,
+        name = name,
+        playbackEpoch = playbackEpoch,
         byteCount = byteCount,
+        rmsActive = rmsActive,
+        audioWindowMicros = audioWindowMicros,
         correlationKind = correlationKind,
         correlationHash = null,
     )

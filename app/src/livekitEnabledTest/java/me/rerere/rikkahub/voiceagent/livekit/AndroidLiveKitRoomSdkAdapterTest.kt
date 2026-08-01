@@ -153,6 +153,8 @@ class AndroidLiveKitRoomSdkAdapterTest {
             every { track.removeSink(any()) } just Runs
         }
         probes.forEach { probe ->
+            every { probe.onTrackAttached() } just Runs
+            every { probe.onTrackDetached() } just Runs
             every { probe.close() } just Runs
         }
         every { room.disconnect() } just Runs
@@ -188,6 +190,8 @@ class AndroidLiveKitRoomSdkAdapterTest {
         tracks.zip(probes).forEach { (track, probe) ->
             verify(exactly = 1) { track.addSink(probe) }
             verify(exactly = 1) { track.removeSink(probe) }
+            verify(exactly = 1) { probe.onTrackAttached() }
+            verify(exactly = 1) { probe.onTrackDetached() }
             verify(exactly = 1) { probe.close() }
         }
         verify(exactly = 1) { room.disconnect() }
@@ -213,6 +217,8 @@ class AndroidLiveKitRoomSdkAdapterTest {
             }
         }
         every { probe.close() } just Runs
+        every { probe.onTrackAttached() } just Runs
+        every { probe.onTrackDetached() } just Runs
         every { room.disconnect() } just Runs
         val adapter = AndroidLiveKitRoomSdkAdapter(
             room = room,
@@ -230,18 +236,21 @@ class AndroidLiveKitRoomSdkAdapterTest {
 
         assertTrue(firstFailure is IllegalStateException)
         assertEquals(1, removalAttempts)
+        verify(exactly = 0) { probe.onTrackDetached() }
+        verify(exactly = 0) { probe.close() }
         verify(exactly = 0) { room.disconnect() }
 
         adapter.disconnect()
         collection.cancel()
 
         assertEquals(2, removalAttempts)
+        verify(exactly = 1) { probe.onTrackDetached() }
         verify(exactly = 1) { probe.close() }
         verify(exactly = 1) { room.disconnect() }
     }
 
     @Test
-    fun `only expected agent microphone can drive or drain shared remote audio state`() = runTest {
+    fun `only expected agent microphone can drive shared remote audio state`() = runTest {
         val room = mockk<Room>()
         val expectedParticipant = mockk<RemoteParticipant>()
         val irrelevantParticipant = mockk<RemoteParticipant>()
@@ -311,6 +320,8 @@ class AndroidLiveKitRoomSdkAdapterTest {
 
         assertEquals(listOf(true), recording.nonSilentWrites)
         assertEquals(0, recording.drained)
+        assertEquals(1, recording.trackAttached)
+        assertEquals(0, recording.trackDetached)
         verify(exactly = 0) { irrelevantTrack.addSink(any()) }
         verify(exactly = 0) { irrelevantTrack.removeSink(any()) }
 
@@ -333,7 +344,8 @@ class AndroidLiveKitRoomSdkAdapterTest {
         collection.cancel()
 
         assertEquals(1, recording.silenceConfirmations)
-        assertEquals(1, recording.drained)
+        assertEquals(0, recording.drained)
+        assertEquals(1, recording.trackDetached)
         verify(exactly = 1) { expectedTrack.removeSink(any()) }
     }
 
@@ -341,6 +353,8 @@ class AndroidLiveKitRoomSdkAdapterTest {
         val nonSilentWrites = mutableListOf<Boolean>()
         var silenceConfirmations = 0
         var drained = 0
+        var trackAttached = 0
+        var trackDetached = 0
 
         override fun onInjectionStarted(totalBytes: Long) = Unit
         override fun onInjectionChunk(byteCount: Int) = Unit
@@ -356,6 +370,14 @@ class AndroidLiveKitRoomSdkAdapterTest {
 
         override fun onOutputDrained() {
             drained += 1
+        }
+
+        override fun onLiveKitRemoteTrackAttached(owner: VoiceAutomationMediaOwner) {
+            trackAttached += 1
+        }
+
+        override fun onLiveKitRemoteTrackDetached(owner: VoiceAutomationMediaOwner) {
+            trackDetached += 1
         }
 
         override fun onInterruptionStarted() = Unit

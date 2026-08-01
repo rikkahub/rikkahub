@@ -46,6 +46,8 @@ internal class VoiceAutomationEventWriter private constructor(
         appendNullableString("lifecycle", event.lifecycle?.wireName)
         appendNullableNumber("playbackEpoch", event.playbackEpoch)
         appendNullableNumber("byteCount", event.byteCount)
+        appendNullableBoolean("rmsActive", event.rmsActive)
+        appendNullableNumber("audioWindowMicros", event.audioWindowMicros)
         appendNullableBoolean("succeeded", event.succeeded)
         appendNullableString("correlationKind", event.correlationKind?.wireName)
         appendNullableString("correlationHash", event.correlationHash)

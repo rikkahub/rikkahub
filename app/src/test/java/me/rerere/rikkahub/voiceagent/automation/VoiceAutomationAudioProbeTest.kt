@@ -33,6 +33,11 @@ class VoiceAutomationAudioProbeTest {
             runtime.events,
         )
         assertTrue(runtime.events.all { it.correlationKind == null && it.correlationHash == null })
+        assertTrue(
+            runtime.events
+                .filter { it.name == VoiceAutomationEventName.PLAYBACK_WRITTEN }
+                .all { it.rmsActive == null && it.audioWindowMicros == null },
+        )
     }
 
     @Test
@@ -50,6 +55,18 @@ class VoiceAutomationAudioProbeTest {
             owner = owner,
             byteCount = 320,
             nonSilent = true,
+            rmsActive = true,
+            audioWindowMicros = 10_000,
+        )
+        assertEquals(
+            VoiceAutomationEventInput(
+                name = VoiceAutomationEventName.PLAYBACK_WRITTEN,
+                playbackEpoch = 1,
+                byteCount = 320,
+                rmsActive = true,
+                audioWindowMicros = 10_000,
+            ),
+            runtime.events.single { it.name == VoiceAutomationEventName.PLAYBACK_WRITTEN },
         )
 
         assertEquals(
@@ -81,6 +98,8 @@ class VoiceAutomationAudioProbeTest {
             owner = staleOwner,
             byteCount = 320,
             nonSilent = true,
+            rmsActive = true,
+            audioWindowMicros = 10_000,
         )
         assertEquals(emptyList<VoiceAutomationEventInput>(), runtime.events)
 
@@ -88,12 +107,41 @@ class VoiceAutomationAudioProbeTest {
             owner = currentOwner,
             byteCount = 320,
             nonSilent = true,
+            rmsActive = false,
+            audioWindowMicros = 10_000,
         )
 
         assertEquals(
             LIVEKIT_MEDIA_STATE_HASH_B,
             runtime.events.single { it.name == VoiceAutomationEventName.PLAYBACK_ACTIVE }.correlationHash,
         )
+    }
+
+    @Test
+    fun `LiveKit track lifecycle records without playback epoch and rejects stale owners`() {
+        val runtime = RecordingRuntime(
+            requestedTransport = VoiceAgentTransport.LiveKitExperimental,
+        )
+        val probe = DefaultVoiceAutomationAudioProbe(
+            runtimeProvider = { runtime },
+            monotonicMs = { 1L },
+        )
+        val owner = checkNotNull(probe.captureLiveKitMediaOwner())
+
+        probe.onLiveKitRemoteTrackAttached(owner)
+        probe.onLiveKitRemoteTrackDetached(owner)
+        runtime.runHash = RUN_HASH_B
+        probe.onLiveKitRemoteTrackAttached(owner)
+        probe.onLiveKitRemoteTrackDetached(owner)
+
+        assertEquals(
+            listOf(
+                expected(VoiceAutomationEventName.REMOTE_TRACK_ATTACHED),
+                expected(VoiceAutomationEventName.REMOTE_TRACK_DETACHED),
+            ),
+            runtime.events,
+        )
+        assertTrue(runtime.events.all { it.playbackEpoch == null })
     }
 
     @Test
@@ -109,7 +157,13 @@ class VoiceAutomationAudioProbeTest {
             scheduler = scheduler,
         )
         val owner = checkNotNull(probe.captureLiveKitMediaOwner())
-        probe.onLiveKitOutputWritten(owner, byteCount = 320, nonSilent = true)
+        probe.onLiveKitOutputWritten(
+            owner,
+            byteCount = 320,
+            nonSilent = true,
+            rmsActive = true,
+            audioWindowMicros = 10_000,
+        )
         runtime.beforeOwnedRecord = { event ->
             if (event.name == VoiceAutomationEventName.DROPOUT_STARTED) {
                 runtime.runHash = RUN_HASH_B
