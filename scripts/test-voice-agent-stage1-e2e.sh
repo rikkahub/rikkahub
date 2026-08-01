@@ -12,6 +12,8 @@ LOCK_DIR="$TMP_DIR/locks"
 PCM_PATH="$TMP_DIR/prompt.pcm"
 INTERRUPT_PCM_PATH="$TMP_DIR/interrupt.pcm"
 STARTUP_PCM_PATH="$TMP_DIR/startup.pcm"
+TRANSCRIPT_FIXTURE_DIR="$TMP_DIR/transcript-fixtures"
+WORKER_LOG="$TMP_DIR/worker.log"
 SERIAL="RZCX71NXRPB"
 PACKAGE="me.rerere.rikkahub.debug"
 RUN_HASH="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -22,10 +24,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$BIN_DIR" "$STATE_DIR" "$LOCK_DIR"
+mkdir -p "$BIN_DIR" "$STATE_DIR" "$LOCK_DIR" "$TRANSCRIPT_FIXTURE_DIR"
 printf 'primary-pcm' > "$PCM_PATH"
 printf 'interrupt-pcm' > "$INTERRUPT_PCM_PATH"
 printf 'startup-silence' > "$STARTUP_PCM_PATH"
+: > "$WORKER_LOG"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
@@ -740,6 +743,7 @@ counter.write_text(str(value))
 print(value)
 PY
 chmod +x "$BIN_DIR/fake-clock"
+export PATH="$BIN_DIR:$PATH"
 
 reset_fake() {
   rm -rf "$STATE_DIR"
@@ -875,6 +879,256 @@ runner_env() {
     "$@"
 }
 
+write_transcript_fixture() {
+  local scenario="$1"
+  local output="$2"
+  python3 - "$scenario" "$output" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+scenario = sys.argv[1]
+output = Path(sys.argv[2])
+hash_a = "sha256:" + "a" * 64
+hash_b = "sha256:" + "b" * 64
+hash_c = "sha256:" + "c" * 64
+timestamp = "2026-07-30T12:00:00Z"
+
+
+def base(kind, event_id):
+    return {
+        "version": 1,
+        "voiceSessionId": "fixture-session",
+        "eventId": event_id,
+        "kind": kind,
+        "observedAt": timestamp,
+        "eventHash": hash_a,
+    }
+
+
+def job(kind, event_id):
+    row = base(kind, event_id)
+    row.update({
+        "userTurnId": "turn-job",
+        "requestHash": hash_b,
+        "toolCallId": "tool-job",
+        "argumentHash": hash_c,
+        "jobId": "job-fixed",
+    })
+    if kind == "job_accepted":
+        row["promptCharacterCount"] = 17
+    elif kind == "job_succeeded":
+        row.update({"resultHash": hash_b, "answerCharacterCount": 23})
+    elif kind in {"job_failed", "job_expired", "job_canceled"}:
+        row["failureReasonCharacterCount"] = 11
+    return row
+
+
+def transcript(event_id, role, interrupted, count):
+    row = base("transcript", event_id)
+    row.update({
+        "turnId": "turn-transcript",
+        "role": role,
+        "interrupted": interrupted,
+        "textCharacterCount": count,
+    })
+    return row
+
+
+def valid_kind(kind):
+    if kind.startswith("job_") or kind == "still_working":
+        return job(kind, f"event-{kind}")
+    if kind in {"delivery_eligible", "delivery_started", "speech_started"}:
+        row = base(kind, f"event-{kind}")
+        row.update({"toolCallId": "tool-delivery", "jobId": "job-delivery"})
+        return row
+    if kind == "delivery_blocked":
+        row = base(kind, "event-delivery-blocked")
+        row.update({
+            "toolCallId": "tool-delivery",
+            "jobId": "job-delivery",
+            "userSpeaking": False,
+            "agentSpeaking": True,
+        })
+        return row
+    if kind == "delivery_announced":
+        row = base(kind, "event-delivery-announced")
+        row.update({
+            "toolCallId": "tool-delivery",
+            "jobId": "job-delivery",
+            "assistantTurnId": "turn-assistant",
+        })
+        return row
+    if kind == "follow_up_correlation":
+        row = base(kind, "event-follow-up")
+        row.update({
+            "followUpTurnId": "turn-follow-up",
+            "assistantTurnId": "turn-assistant",
+            "resultHash": hash_c,
+        })
+        return row
+    raise ValueError("unsupported fixture kind")
+
+
+if scenario == "empty":
+    output.write_bytes(b"")
+    raise SystemExit(0)
+if scenario == "malformed_json":
+    output.write_text('{"sentinel":"fixture-private-sentinel"\n')
+    raise SystemExit(0)
+if scenario == "non_object":
+    output.write_text('["fixture-private-sentinel"]\n')
+    raise SystemExit(0)
+
+if scenario == "final_user":
+    rows = [transcript("event-final-user", "user", False, 17)]
+elif scenario == "interrupted_user":
+    rows = [transcript("event-interrupted-user", "user", True, 17)]
+elif scenario == "assistant":
+    row = transcript("event-assistant", "assistant", False, 23)
+    row.update({"groundedJobId": "job-fixed", "groundedResultHash": hash_b})
+    rows = [row]
+elif scenario == "job":
+    rows = [job("job_accepted", "event-job")]
+elif scenario.startswith("valid_"):
+    rows = [valid_kind(scenario.removeprefix("valid_"))]
+elif scenario == "mixed_session":
+    first = job("job_running", "event-mixed-one")
+    second = job("job_running", "event-mixed-two")
+    second["voiceSessionId"] = "other-session"
+    rows = [first, second]
+elif scenario == "duplicate_event":
+    rows = [
+        job("job_running", "event-duplicate"),
+        job("still_working", "event-duplicate"),
+    ]
+elif scenario == "unknown_kind":
+    rows = [base("unknown_kind", "event-unknown")]
+elif scenario == "bad_type":
+    row = transcript("event-bad-type", "user", False, 17)
+    row["version"] = True
+    rows = [row]
+elif scenario == "bad_schema":
+    row = transcript("event-bad-schema", "user", False, 17)
+    row["sentinel"] = "fixture-private-sentinel"
+    rows = [row]
+elif scenario == "missing_key":
+    row = job("job_running", "event-missing-key")
+    del row["requestHash"]
+    rows = [row]
+elif scenario == "qualifying_then_invalid":
+    rows = [transcript("event-first-valid", "user", False, 17)]
+    output.write_text(
+        json.dumps(rows[0], separators=(",", ":"))
+        + '\n{"sentinel":"fixture-private-sentinel"\n'
+    )
+    raise SystemExit(0)
+elif scenario == "null_value":
+    row = job("job_running", "event-null")
+    row["jobId"] = None
+    rows = [row]
+elif scenario == "bool_count":
+    row = transcript("event-bool-count", "user", False, 17)
+    row["textCharacterCount"] = True
+    rows = [row]
+elif scenario == "bad_boolean":
+    row = transcript("event-bad-boolean", "assistant", False, 17)
+    row["interrupted"] = 0
+    rows = [row]
+elif scenario == "negative_count":
+    row = job("job_accepted", "event-negative-count")
+    row["promptCharacterCount"] = -1
+    rows = [row]
+elif scenario == "zero_final_user":
+    rows = [transcript("event-zero-final", "user", False, 0)]
+elif scenario == "bad_identifier":
+    row = job("job_running", "event-bad-identifier")
+    row["jobId"] = "bad/job"
+    rows = [row]
+elif scenario == "bad_hash":
+    row = job("job_running", "event-bad-hash")
+    row["requestHash"] = "sha256:abcd"
+    rows = [row]
+elif scenario == "bad_timestamp":
+    row = job("job_running", "event-bad-timestamp")
+    row["observedAt"] = "2026-07-30T12:00:00+00:00"
+    rows = [row]
+elif scenario == "bad_role":
+    rows = [transcript("event-bad-role", "system", False, 17)]
+elif scenario == "half_grounded":
+    row = transcript("event-half-grounded", "assistant", False, 17)
+    row["groundedJobId"] = "job-fixed"
+    rows = [row]
+elif scenario == "grounded_user":
+    row = transcript("event-grounded-user", "user", False, 17)
+    row.update({"groundedJobId": "job-fixed", "groundedResultHash": hash_b})
+    rows = [row]
+else:
+    raise ValueError("unsupported fixture scenario")
+
+output.write_text("".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows))
+PY
+}
+
+run_transcript_classifier() {
+  local fixture="$1"
+  VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$fixture" \
+  VOICE_STAGE1_WORKER_LOG_PATH="$WORKER_LOG" \
+  VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS=unavailable \
+  bash "$RUNNER" --classify-transcript
+}
+
+transcript_file_record() {
+  local classification="$1"
+  local covered="$2"
+  local rows="$3"
+  local qualifying="$4"
+  printf 'stage1.final_user_transcript_file={"version":1,"classification":"%s","collectionCovered":%s,"rowCount":%s,"qualifyingUserTranscriptCount":%s}' \
+    "$classification" "$covered" "$rows" "$qualifying"
+}
+
+assert_classifier_privacy() {
+  local combined_output="$1"
+  local fixture="$2"
+  assert_not_contains "$combined_output" "fixture-session"
+  assert_not_contains "$combined_output" "other-session"
+  assert_not_contains "$combined_output" "event-final-user"
+  assert_not_contains "$combined_output" "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  assert_not_contains "$combined_output" "2026-07-30T12:00:00Z"
+  assert_not_contains "$combined_output" "fixture-private-sentinel"
+  assert_not_contains "$combined_output" "$fixture"
+}
+
+assert_transcript_file_result() {
+  local scenario="$1"
+  local classification="$2"
+  local covered="$3"
+  local rows="$4"
+  local qualifying="$5"
+  local fixture="$TRANSCRIPT_FIXTURE_DIR/$scenario.ndjson"
+  local stdout_file="$TMP_DIR/classifier-stdout"
+  local stderr_file="$TMP_DIR/classifier-stderr"
+  local status
+  rm -f "$fixture" "$stdout_file" "$stderr_file"
+  reset_fake
+  if [[ "$scenario" != "missing" && "$scenario" != "unreadable" ]]; then
+    write_transcript_fixture "$scenario" "$fixture"
+  elif [[ "$scenario" == "unreadable" ]]; then
+    write_transcript_fixture final_user "$fixture"
+    chmod 000 "$fixture"
+  fi
+  set +e
+  run_transcript_classifier "$fixture" >"$stdout_file" 2>"$stderr_file"
+  status=$?
+  set -e
+  [[ "$status" -eq 0 ]] || fail "file-only classifier failed for $scenario with status $status"
+  assert_equals "$(transcript_file_record "$classification" "$covered" "$rows" "$qualifying")" \
+    "$(cat "$stdout_file")"
+  [[ ! -s "$stderr_file" ]] || fail "classifier emitted a non-fixed parser diagnostic for $scenario"
+  [[ ! -s "$ADB_LOG" ]] || fail "classification mode reached ADB for $scenario"
+  assert_classifier_privacy "$(cat "$stdout_file" "$stderr_file")" "$fixture"
+}
+
 run_scenario() {
   local transport="$1"
   local network="$2"
@@ -928,6 +1182,68 @@ assert_common_success_contract() {
   assert_not_contains "$all_commands" "pull"
   assert_contains "$(cat "$output")" "\"observedTransport\":\"$transport\""
 }
+
+assert_transcript_file_result final_user present true 1 1
+assert_transcript_file_result interrupted_user absent true 1 0
+assert_transcript_file_result assistant absent true 1 0
+assert_transcript_file_result job absent true 1 0
+assert_transcript_file_result zero_final_user absent true 1 0
+assert_transcript_file_result empty unknown true 0 0
+assert_transcript_file_result missing unknown false 0 0
+assert_transcript_file_result unreadable unknown false 0 0
+
+for sanitized_kind in \
+  job_accepted \
+  job_running \
+  still_working \
+  job_succeeded \
+  job_failed \
+  job_expired \
+  job_canceled \
+  delivery_eligible \
+  delivery_started \
+  speech_started \
+  delivery_blocked \
+  delivery_announced \
+  follow_up_correlation; do
+  assert_transcript_file_result "valid_$sanitized_kind" absent true 1 0
+done
+
+for invalid_fixture in \
+  mixed_session \
+  duplicate_event \
+  malformed_json \
+  unknown_kind \
+  bad_type \
+  bad_schema \
+  missing_key \
+  qualifying_then_invalid \
+  null_value \
+  non_object \
+  bool_count \
+  bad_boolean \
+  negative_count \
+  bad_identifier \
+  bad_hash \
+  bad_timestamp \
+  bad_role \
+  half_grounded \
+  grounded_user; do
+  assert_transcript_file_result "$invalid_fixture" unknown false 0 0
+done
+
+reset_fake
+set +e
+VOICE_STAGE1_WORKER_LOG_PATH="$WORKER_LOG" \
+VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS=unavailable \
+bash "$RUNNER" --classify-transcript >"$TMP_DIR/classifier-stdout" 2>"$TMP_DIR/classifier-stderr"
+status=$?
+set -e
+[[ "$status" -eq 1 ]] || fail "classifier accepted a missing transcript output environment value"
+[[ ! -s "$TMP_DIR/classifier-stdout" ]] || fail "invalid classifier invocation emitted a result record"
+assert_equals "stage1: VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT is required" \
+  "$(cat "$TMP_DIR/classifier-stderr")"
+[[ ! -s "$ADB_LOG" ]] || fail "invalid classification arguments reached ADB"
 
 reset_fake
 preflight_output="$(runner_env bash "$RUNNER" --preflight </dev/null)"

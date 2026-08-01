@@ -90,6 +90,207 @@ validate_nonnegative_number() {
   [[ "$value" =~ ^([0-9]+)(\.[0-9]+)?$ ]] || fail "$name must be a nonnegative number"
 }
 
+classify_transcript_file() {
+  require_env VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
+  require_command python3
+  python3 - "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" <<'PY'
+import json
+import os
+import re
+import stat
+import sys
+from datetime import datetime
+
+BASE = {"version", "voiceSessionId", "eventId", "kind", "observedAt", "eventHash"}
+JOB = {"userTurnId", "requestHash", "toolCallId", "argumentHash", "jobId"}
+GROUNDING = {"groundedJobId", "groundedResultHash"}
+IDENTIFIER = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+HASH = re.compile(r"^sha256:[0-9a-f]{64}$")
+UTC_TIMESTAMP = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]{3}|\.[0-9]{6}|\.[0-9]{9})?Z$"
+)
+
+SCHEMAS = {
+    "job_accepted": BASE | JOB | {"promptCharacterCount"},
+    "job_running": BASE | JOB,
+    "still_working": BASE | JOB,
+    "job_succeeded": BASE | JOB | {"resultHash", "answerCharacterCount"},
+    "job_failed": BASE | JOB | {"failureReasonCharacterCount"},
+    "job_expired": BASE | JOB | {"failureReasonCharacterCount"},
+    "job_canceled": BASE | JOB | {"failureReasonCharacterCount"},
+    "transcript": BASE | {"turnId", "role", "interrupted", "textCharacterCount"},
+    "delivery_eligible": BASE | {"toolCallId", "jobId"},
+    "delivery_started": BASE | {"toolCallId", "jobId"},
+    "speech_started": BASE | {"toolCallId", "jobId"},
+    "delivery_blocked": BASE | {"toolCallId", "jobId", "userSpeaking", "agentSpeaking"},
+    "delivery_announced": BASE | {"toolCallId", "jobId", "assistantTurnId"},
+    "follow_up_correlation": BASE | {"followUpTurnId", "assistantTurnId", "resultHash"},
+}
+
+IDENTIFIER_FIELDS = {
+    "voiceSessionId",
+    "eventId",
+    "userTurnId",
+    "toolCallId",
+    "jobId",
+    "turnId",
+    "groundedJobId",
+    "assistantTurnId",
+    "followUpTurnId",
+}
+HASH_FIELDS = {
+    "eventHash",
+    "requestHash",
+    "argumentHash",
+    "resultHash",
+    "groundedResultHash",
+}
+COUNT_FIELDS = {
+    "promptCharacterCount",
+    "answerCharacterCount",
+    "failureReasonCharacterCount",
+    "textCharacterCount",
+}
+BOOLEAN_FIELDS = {"interrupted", "userSpeaking", "agentSpeaking"}
+
+
+class InvalidEvidence(Exception):
+    pass
+
+
+def reject_duplicate_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise InvalidEvidence()
+        result[key] = value
+    return result
+
+
+def reject_nonstandard_number(_value):
+    raise InvalidEvidence()
+
+
+def canonical_utc_timestamp(value):
+    if type(value) is not str or UTC_TIMESTAMP.fullmatch(value) is None:
+        return False
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except (TypeError, ValueError):
+        return False
+    return parsed.utcoffset() is not None and parsed.utcoffset().total_seconds() == 0
+
+
+def validate_row(row):
+    if type(row) is not dict or any(value is None for value in row.values()):
+        raise InvalidEvidence()
+    kind = row.get("kind")
+    try:
+        expected_keys = SCHEMAS[kind]
+    except (KeyError, TypeError):
+        raise InvalidEvidence() from None
+    actual_keys = set(row)
+    if kind == "transcript":
+        if frozenset(actual_keys) not in {
+            frozenset(expected_keys),
+            frozenset(expected_keys | GROUNDING),
+        }:
+            raise InvalidEvidence()
+    elif actual_keys != expected_keys:
+        raise InvalidEvidence()
+    if type(row["version"]) is not int or row["version"] != 1:
+        raise InvalidEvidence()
+    if not canonical_utc_timestamp(row["observedAt"]):
+        raise InvalidEvidence()
+    for field in actual_keys & IDENTIFIER_FIELDS:
+        value = row[field]
+        if type(value) is not str or IDENTIFIER.fullmatch(value) is None:
+            raise InvalidEvidence()
+    for field in actual_keys & HASH_FIELDS:
+        value = row[field]
+        if type(value) is not str or HASH.fullmatch(value) is None:
+            raise InvalidEvidence()
+    for field in actual_keys & COUNT_FIELDS:
+        value = row[field]
+        if type(value) is not int or value < 0:
+            raise InvalidEvidence()
+    for field in actual_keys & BOOLEAN_FIELDS:
+        if type(row[field]) is not bool:
+            raise InvalidEvidence()
+    if kind == "transcript":
+        role = row["role"]
+        if type(role) is not str or role not in {"user", "assistant"}:
+            raise InvalidEvidence()
+        has_grounding = GROUNDING <= actual_keys
+        if role == "user" and has_grounding:
+            raise InvalidEvidence()
+
+
+def record(classification, covered, rows, qualifying):
+    payload = {
+        "version": 1,
+        "classification": classification,
+        "collectionCovered": covered,
+        "rowCount": rows,
+        "qualifyingUserTranscriptCount": qualifying,
+    }
+    print(
+        "stage1.final_user_transcript_file="
+        + json.dumps(payload, separators=(",", ":"))
+    )
+
+
+def classify(path):
+    try:
+        file_stat = os.lstat(path)
+        if stat.S_ISLNK(file_stat.st_mode) or not stat.S_ISREG(file_stat.st_mode):
+            raise InvalidEvidence()
+        if not os.access(path, os.R_OK):
+            raise InvalidEvidence()
+        session_id = None
+        event_ids = set()
+        row_count = 0
+        qualifying_count = 0
+        with open(path, "r", encoding="utf-8") as source:
+            for raw_line in source:
+                if not raw_line.strip():
+                    continue
+                row_count += 1
+                row = json.loads(
+                    raw_line,
+                    object_pairs_hook=reject_duplicate_keys,
+                    parse_constant=reject_nonstandard_number,
+                )
+                validate_row(row)
+                if session_id is None:
+                    session_id = row["voiceSessionId"]
+                elif row["voiceSessionId"] != session_id:
+                    raise InvalidEvidence()
+                if row["eventId"] in event_ids:
+                    raise InvalidEvidence()
+                event_ids.add(row["eventId"])
+                if (
+                    row["kind"] == "transcript"
+                    and row["role"] == "user"
+                    and row["interrupted"] is False
+                    and row["textCharacterCount"] > 0
+                ):
+                    qualifying_count += 1
+        if row_count == 0:
+            record("unknown", True, 0, 0)
+        elif qualifying_count:
+            record("present", True, row_count, qualifying_count)
+        else:
+            record("absent", True, row_count, 0)
+    except BaseException:
+        record("unknown", False, 0, 0)
+
+
+classify(sys.argv[1])
+PY
+}
+
 adb_command() {
   timeout "${ADB_TIMEOUT_SECONDS}s" adb -s "$VOICE_STAGE1_SERIAL" "$@"
 }
@@ -1693,10 +1894,19 @@ case "$#" in
     run_scenario
     ;;
   1)
-    [[ "$1" == "--preflight" ]] || fail "usage: voice-agent-stage1-e2e.sh [--preflight]"
-    run_preflight
+    case "$1" in
+      --preflight)
+        run_preflight
+        ;;
+      --classify-transcript)
+        classify_transcript_file
+        ;;
+      *)
+        fail "usage: voice-agent-stage1-e2e.sh [--preflight|--classify-transcript]"
+        ;;
+    esac
     ;;
   *)
-    fail "usage: voice-agent-stage1-e2e.sh [--preflight]"
+    fail "usage: voice-agent-stage1-e2e.sh [--preflight|--classify-transcript]"
     ;;
 esac
