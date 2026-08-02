@@ -1860,7 +1860,8 @@ if not any(event.get("name") == "lifecycle_requested" and event.get("lifecycle")
            for event in events):
     raise SystemExit("lifecycle request mismatch")
 lifecycle_observations = [event for index, event in enumerate(events)
-                          if index > route_observed_index and event.get("name") == "lifecycle_observed"]
+                          if route_observed_index < index < call_stops[0] and
+                          event.get("name") == "lifecycle_observed"]
 if not lifecycle_observations:
     raise SystemExit("lifecycle observation mismatch")
 latest_lifecycle = max(

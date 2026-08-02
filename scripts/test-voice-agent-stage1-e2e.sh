@@ -490,6 +490,8 @@ elif tail[:4] == ["shell", "am", "start-foreground-service", "-n"]:
         state["call_started"] = False
         if state["run_state"] == "active":
             emit("call_stopped", succeeded=True)
+            if os.environ.get("FAKE_ADB_LIFECYCLE_MODE") == "postcall_transition":
+                emit("lifecycle_observed", lifecycle="background")
         save()
     print("Starting service: Intent")
 elif tail == ["shell", "dumpsys", "activity", "services", "me.rerere.rikkahub.debug"]:
@@ -3287,6 +3289,12 @@ reset_fake
 export FAKE_ADB_LIFECYCLE_MODE=transient
 transient_lifecycle_output="$(run_scenario direct_gemini stable_wifi speaker foreground steady 20 2>&1)"
 assert_contains "$transient_lifecycle_output" "stage1.run=complete"
+unset FAKE_ADB_LIFECYCLE_MODE
+
+reset_fake
+export FAKE_ADB_LIFECYCLE_MODE=postcall_transition
+postcall_lifecycle_output="$(run_scenario direct_gemini stable_wifi speaker foreground steady 20 2>&1)"
+assert_contains "$postcall_lifecycle_output" "stage1.run=complete"
 unset FAKE_ADB_LIFECYCLE_MODE
 
 reset_fake
