@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Preserve the canonical 16 kHz fixture in real time and encode it in LiveKit's actual normalized-float callback format, so a valid physical-device call can form a final user transcript.
+**Goal:** Preserve the canonical 16 kHz fixture in real time and encode it in LiveKit's actual native-endian `FloatS16` callback format, so a valid physical-device call can form a final user transcript.
 
-**Architecture:** `LiveKitAutomationPcmSource` remains the synchronized owner of queued fixture bytes and gains a small streaming PCM16-to-normalized-float mono converter driven by the sample rate reported by `AudioProcessorInterface`. `LiveKitInjectedPcmProcessor` forwards initialization and reset events to that source, while production microphone capture remains untouched because the processor is enabled only during fixture automation. The SDK callback buffer is a native `float*` view of the first planar capture channel, not an interleaved PCM16 buffer.
+**Architecture:** `LiveKitAutomationPcmSource` remains the synchronized owner of queued fixture bytes and gains a small streaming PCM16-to-`FloatS16` mono converter driven by the sample rate reported by `AudioProcessorInterface`. `LiveKitInjectedPcmProcessor` forwards initialization and reset events to that source, while production microphone capture remains untouched because the processor is enabled only during fixture automation. The SDK callback buffer is a native `float*` view of the first planar capture channel, not an interleaved PCM16 or normalized-float buffer.
 
-**Tech Stack:** Kotlin, LiveKit Android `AudioProcessorInterface`, little-endian PCM16 fixture input, native-endian float32 callback output, kotlinx-coroutines-test, JUnit 4, Gradle Android unit tests, managed `mdev` physical-device testing.
+**Tech Stack:** Kotlin, LiveKit Android `AudioProcessorInterface`, little-endian PCM16 fixture input, native-endian `FloatS16` callback output, kotlinx-coroutines-test, JUnit 4, Gradle Android unit tests, managed physical-device testing.
 
 ## Global Constraints
 
 - Fixture input remains little-endian PCM16 at exactly 16,000 Hz and one channel.
-- LiveKit callback output is one normalized native-endian float per callback frame.
+- LiveKit callback output is one native-endian `FloatS16` value per callback frame, preserving the PCM16 numeric amplitude.
 - The existing 3,200-byte / 100 ms harness pacing remains unchanged.
 - No new telemetry is added unless post-fix physical evidence remains undecidable.
 - Never access or pull the raw private voice-experience artifact; collect only the sanitized NDJSON evidence file.
@@ -28,12 +28,12 @@
 
 **Interfaces:**
 - Consumes: `VoiceCaptureFixtureSource.pump(onPcm16, onFixtureComplete)` chunks containing little-endian 16 kHz mono PCM16.
-- Produces: `LiveKitAutomationPcmSource.configureOutputFormat(sampleRateHz: Int, numChannels: Int)` and normalized-float `replaceOrZero(buffer: ByteBuffer)` behavior.
+- Produces: `LiveKitAutomationPcmSource.configureOutputFormat(sampleRateHz: Int, numChannels: Int)` and `FloatS16` `replaceOrZero(buffer: ByteBuffer)` behavior.
 - Produces: `LiveKitInjectedPcmProcessor.initializeAudioProcessing(sampleRateHz, numChannels)` and `resetAudioProcessing(newRate)` forwarding that format without changing `AudioProcessorInterface`.
 
 - [ ] **Step 1: Write failing representation and 16-to-48 kHz regression tests**
 
-First add a test that places `+0.5` and `-0.5` PCM16 fixture samples into a direct callback buffer and expects normalized native-endian floats. Confirm that it fails while the processor still writes PCM16 bytes. Then add a test that initializes the real processor at 48 kHz mono and checks hand-derived output samples:
+First add a test that places `+16384` and `-16384` PCM16 fixture samples into a direct callback buffer and expects the same numeric values as native-endian floats. Confirm that it fails while the processor writes PCM16 bytes or normalized floats. Then add a test that initializes the real processor at 48 kHz mono and checks hand-derived output samples:
 
 ```kotlin
 @Test
@@ -49,8 +49,8 @@ fun `16 kHz fixture keeps real time pacing in a 48 kHz capture buffer`() = runTe
 
     assertArrayEquals(
         floatArrayOf(
-            normalized(0x0102), normalized(0x0102), normalized(0x0102),
-            normalized(0x0304), normalized(0x0304), normalized(0x0304),
+            floatS16(0x0102), floatS16(0x0102), floatS16(0x0102),
+            floatS16(0x0304), floatS16(0x0304), floatS16(0x0304),
         ),
         processFloats(processor, sampleCount = 6),
         0.0f,
@@ -94,7 +94,7 @@ fun configureOutputFormat(sampleRateHz: Int, numChannels: Int)
 fun replaceOrZero(buffer: ByteBuffer)
 ```
 
-`configureOutputFormat` requires positive values and resets `resamplePhase` and `currentSample` only when the negotiated format changes. `replaceOrZero` sets native byte order, reads each source sample as signed little-endian PCM16, divides it by 32,768, and writes one float per callback frame. It adds 16,000 to `resamplePhase` for each output frame and consumes source samples while the phase is at least `outputSampleRateHz`. When no complete source sample is queued, it emits `0.0f`. Any trailing bytes that cannot form a float are zero-filled.
+`configureOutputFormat` requires positive values and resets `resamplePhase` and `currentSample` only when the negotiated format changes. `replaceOrZero` sets native byte order, reads each source sample as signed little-endian PCM16, preserves that sample's numeric amplitude as `FloatS16`, and writes one float per callback frame. It adds 16,000 to `resamplePhase` for each output frame and consumes source samples while the phase is at least `outputSampleRateHz`. When no complete source sample is queued, it emits `0.0f`. Any trailing bytes that cannot form a float are zero-filled.
 
 Do not duplicate samples for `numChannels`. The exact WebRTC bridge passes `audio->channels()[0]` as one planar float stream and uses the reported channel count only as format metadata.
 
@@ -124,7 +124,7 @@ VOICE_AGENT_LIVEKIT_EXPERIMENT_ENABLED=true ./gradlew --no-configuration-cache \
   --tests 'me.rerere.rikkahub.voiceagent.livekit.LiveKitInjectedPcmProcessorTest'
 ```
 
-Expected: PASS. Update active-path assertions to decode normalized floats from direct native-order buffers; do not weaken their ordering, zero-fill, stale-run, or inactive-microphone assertions.
+Expected: PASS. Update active-path assertions to decode `FloatS16` values from direct native-order buffers; do not weaken their ordering, zero-fill, stale-run, or inactive-microphone assertions.
 
 - [ ] **Step 5: Add planar-channel and reset coverage**
 
@@ -143,7 +143,7 @@ fun `capture callback receives one float stream even when capture reports stereo
     advanceUntilIdle()
 
     assertArrayEquals(
-        floatArrayOf(normalized(0x0102)),
+        floatArrayOf(floatS16(0x0102)),
         processFloats(processor, sampleCount = 1),
         0.0f,
     )
@@ -162,7 +162,7 @@ fun `capture format reset discards an unfinished resampling phase`() = runTest {
     fixture.startInitial()
     advanceUntilIdle()
     assertArrayEquals(
-        floatArrayOf(normalized(0x0102)),
+        floatArrayOf(floatS16(0x0102)),
         processFloats(processor, sampleCount = 1),
         0.0f,
     )
@@ -170,7 +170,7 @@ fun `capture format reset discards an unfinished resampling phase`() = runTest {
     processor.resetAudioProcessing(newRate = 16_000)
 
     assertArrayEquals(
-        floatArrayOf(normalized(0x0304)),
+        floatArrayOf(floatS16(0x0304)),
         processFloats(processor, sampleCount = 1),
         0.0f,
     )
@@ -179,7 +179,7 @@ fun `capture format reset discards an unfinished resampling phase`() = runTest {
 }
 ```
 
-Use literal PCM16 input samples and exact normalized-float assertions. Run each new test first and confirm it fails for the missing planar/reset behavior before changing production code further.
+Use literal PCM16 input samples and exact `FloatS16` assertions. Run each new test first and confirm it fails for the missing planar/reset behavior before changing production code further.
 
 - [ ] **Step 6: Run the focused class again and commit**
 
@@ -189,7 +189,7 @@ Run the command from Step 4, then:
 git add \
   app/src/livekitEnabled/java/me/rerere/rikkahub/voiceagent/livekit/LiveKitInjectedPcmProcessor.kt \
   app/src/livekitEnabledTest/java/me/rerere/rikkahub/voiceagent/livekit/LiveKitInjectedPcmProcessorTest.kt
-git commit -m "fix: write LiveKit fixture as normalized floats"
+git commit -m "fix: preserve S16 amplitude in LiveKit float capture"
 ```
 
 ### Task 2: Verify the Android change and close the transcript boundary on the phone

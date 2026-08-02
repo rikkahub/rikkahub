@@ -8,18 +8,18 @@ The Stage 1 fixture source is canonical 16-bit, 16 kHz, mono PCM. It emits 3,200
 
 When WebRTC captures at 48 kHz, the original processor consumes fixture bytes three times faster than the fixture produces them. Each 100 ms source chunk becomes roughly 33 ms of accelerated audio followed by zero fill.
 
-The first physical-device transaction after correcting that pacing still produced no final user transcript. Inspection of the exact LiveKit 2.27.0 and prefixed WebRTC 144.7559.09 sources then exposed a second, more fundamental contract: the post-processing `ByteBuffer` is a native view over `float*`, with one normalized 32-bit float per capture frame. It is not a PCM16 byte buffer. Writing little-endian PCM16 into that storage creates invalid capture samples even when pacing is correct.
+The first physical-device transaction after correcting that pacing still produced no final user transcript. Inspection of the exact LiveKit 2.27.0 and prefixed WebRTC 144.7559.09 sources then exposed a second, more fundamental contract: the post-processing `ByteBuffer` is a native view over `float*`, with one `FloatS16` sample per capture frame. It is not a PCM16 byte buffer and it is not normalized `[-1, 1]` float audio. Writing little-endian PCM16 bytes into that storage corrupts capture samples; dividing PCM16 by 32,768 makes them effectively silent.
 
 ## Decision
 
-Keep the canonical fixture and its real-time 16 kHz pacing unchanged. Convert it inside `LiveKitInjectedPcmProcessor` to the SDK callback's actual normalized-float format and negotiated sample rate.
+Keep the canonical fixture and its real-time 16 kHz pacing unchanged. Convert it inside `LiveKitInjectedPcmProcessor` to the SDK callback's actual native-endian `FloatS16` format and negotiated sample rate.
 
 The processor will:
 
 - treat fixture samples as little-endian PCM16 at 16 kHz mono;
 - retain the negotiated output sample rate and validate the reported channel count from `initializeAudioProcessing`;
 - resample with a deterministic streaming phase accumulator, preserving phase across SDK buffers;
-- normalize each signed PCM16 sample by 32,768 and write it as a native-endian 32-bit float;
+- preserve each signed PCM16 sample's numeric amplitude and write that value as a native-endian 32-bit float;
 - write one float per callback frame because the WebRTC bridge exposes the first planar capture channel, not an interleaved channel buffer;
 - zero-fill with `0.0f` when source audio is not currently queued;
 - reset resampling state when the SDK capture format resets or automation ownership ends.
@@ -33,6 +33,7 @@ The callback representation is established by the exact dependency revisions use
 - LiveKit Android 2.27.0 forwards the callback `ByteBuffer` unchanged through `CustomAudioProcessingFactory.AudioProcessingBridge`.
 - Prefixed WebRTC 144.7559.09 corresponds to `webrtc-sdk/webrtc` commit `b1800a61db8320af5c14456c13622d8b85b1ed39`.
 - At that revision, `ExternalAudioProcessingJni::Process` creates the Java buffer from a `float*` with `buffer_size * sizeof(float)`, and `ExternalAudioProcessor::Process` passes `audio->channels()[0]`.
+- The same revision's `AudioBuffer::CopyFrom(int16_t*)` converts with `S16ToFloatS16`, and `audio_util.h` defines `FloatS16` as `[-32768.0, 32768.0]` while normalized `Float` is a distinct `[-1.0, 1.0]` representation.
 
 ## Rejected Alternatives
 
@@ -54,12 +55,12 @@ Rejected for now. The post-pacing physical result and exact dependency source lo
 
 ## Testing
 
-The regression suite first demonstrates the representation bug by asserting that signed PCM16 fixture samples become normalized native-endian floats. It separately initializes the processor at 48 kHz and asserts that 16 kHz source samples expand to the correct number of callback frames rather than being consumed one-for-one.
+The regression suite first demonstrates the representation bug by asserting that signed PCM16 fixture samples retain their S16 numeric amplitude in native-endian float storage. It separately initializes the processor at 48 kHz and asserts that 16 kHz source samples expand to the correct number of callback frames rather than being consumed one-for-one.
 
 Focused tests will cover:
 
-- signed PCM16-to-float normalization in a direct native-order buffer;
-- 16 kHz mono pass-through as normalized floats;
+- signed PCM16-to-`FloatS16` conversion in a direct native-order buffer;
+- 16 kHz mono pass-through at S16 amplitude;
 - 16-to-48 kHz streaming conversion across multiple SDK buffers;
 - one planar float stream when the capture format reports multiple channels;
 - zero fill before fixture data and after exhaustion;

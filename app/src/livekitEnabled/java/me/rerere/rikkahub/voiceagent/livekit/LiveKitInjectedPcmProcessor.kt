@@ -146,7 +146,7 @@ internal class LiveKitAutomationPcmSource(
             buffer.order(ByteOrder.nativeOrder())
             while (buffer.remaining() >= FLOAT_BYTES_PER_SAMPLE) {
                 val sample = currentSample ?: readSampleLocked().also { currentSample = it }
-                buffer.putFloat(sample?.toFloat()?.div(PCM16_SCALE) ?: 0.0f)
+                buffer.putFloat(sample?.toFloat() ?: 0.0f)
                 if (sample != null) {
                     resamplePhase += FIXTURE_SAMPLE_RATE_HZ
                     while (resamplePhase >= outputSampleRateHz) {
@@ -238,7 +238,6 @@ internal class LiveKitAutomationPcmSource(
     private companion object {
         const val FIXTURE_SAMPLE_RATE_HZ = 16_000
         const val FLOAT_BYTES_PER_SAMPLE = Float.SIZE_BYTES
-        const val PCM16_SCALE = 32_768.0f
     }
 }
 

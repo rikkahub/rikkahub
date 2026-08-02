@@ -27,7 +27,7 @@ class LiveKitInjectedPcmProcessorTest {
     }
 
     @Test
-    fun `PCM16 fixture samples become normalized floats in the native capture buffer`() = runTest {
+    fun `PCM16 fixture samples retain S16 amplitude in the native float capture buffer`() = runTest {
         val fixture = fixtureSource(pcm16(16_384, -16_384))
         val source = activeSource()
         val processor = LiveKitInjectedPcmProcessor(source)
@@ -38,7 +38,14 @@ class LiveKitInjectedPcmProcessorTest {
         advanceUntilIdle()
 
         assertArrayEquals(
-            floatArrayOf(0.5f, 0.5f, 0.5f, -0.5f, -0.5f, -0.5f),
+            floatArrayOf(
+                16_384.0f,
+                16_384.0f,
+                16_384.0f,
+                -16_384.0f,
+                -16_384.0f,
+                -16_384.0f,
+            ),
             processFloats(processor, sampleCount = 6),
             0.0f,
         )
@@ -60,17 +67,17 @@ class LiveKitInjectedPcmProcessorTest {
         advanceUntilIdle()
 
         assertArrayEquals(
-            floatArrayOf(normalized(0x0102), normalized(0x0102)),
+            floatArrayOf(floatS16(0x0102), floatS16(0x0102)),
             processFloats(processor, sampleCount = 2),
             0.0f,
         )
         assertFalse(source.injectionComplete())
         assertArrayEquals(
             floatArrayOf(
-                normalized(0x0102),
-                normalized(0x0304),
-                normalized(0x0304),
-                normalized(0x0304),
+                floatS16(0x0102),
+                floatS16(0x0304),
+                floatS16(0x0304),
+                floatS16(0x0304),
             ),
             processFloats(processor, sampleCount = 4),
             0.0f,
@@ -93,7 +100,7 @@ class LiveKitInjectedPcmProcessorTest {
         advanceUntilIdle()
 
         assertArrayEquals(
-            floatArrayOf(normalized(0x0102)),
+            floatArrayOf(floatS16(0x0102)),
             processFloats(processor, sampleCount = 1),
             0.0f,
         )
@@ -112,7 +119,7 @@ class LiveKitInjectedPcmProcessorTest {
         fixture.startInitial()
         advanceUntilIdle()
         assertArrayEquals(
-            floatArrayOf(normalized(0x0102)),
+            floatArrayOf(floatS16(0x0102)),
             processFloats(processor, sampleCount = 1),
             0.0f,
         )
@@ -120,7 +127,7 @@ class LiveKitInjectedPcmProcessorTest {
         processor.resetAudioProcessing(newRate = 16_000)
 
         assertArrayEquals(
-            floatArrayOf(normalized(0x0304)),
+            floatArrayOf(floatS16(0x0304)),
             processFloats(processor, sampleCount = 1),
             0.0f,
         )
@@ -139,7 +146,7 @@ class LiveKitInjectedPcmProcessorTest {
         firstFixture.startInitial()
         advanceUntilIdle()
         assertArrayEquals(
-            floatArrayOf(normalized(0x0102)),
+            floatArrayOf(floatS16(0x0102)),
             processFloats(processor, sampleCount = 1),
             0.0f,
         )
@@ -152,7 +159,7 @@ class LiveKitInjectedPcmProcessorTest {
         advanceUntilIdle()
 
         assertArrayEquals(
-            floatArrayOf(normalized(0x0304)),
+            floatArrayOf(floatS16(0x0304)),
             processFloats(processor, sampleCount = 1),
             0.0f,
         )
@@ -172,19 +179,19 @@ class LiveKitInjectedPcmProcessorTest {
         advanceUntilIdle()
 
         assertArrayEquals(
-            floatArrayOf(normalized(0x0201)),
+            floatArrayOf(floatS16(0x0201)),
             processFloats(processor, 1),
             0.0f,
         )
         assertFalse(source.injectionComplete())
         assertArrayEquals(
-            floatArrayOf(normalized(0x0403)),
+            floatArrayOf(floatS16(0x0403)),
             processFloats(processor, 1),
             0.0f,
         )
         assertFalse(source.injectionComplete())
         assertArrayEquals(
-            floatArrayOf(normalized(0x0605), 0.0f),
+            floatArrayOf(floatS16(0x0605), 0.0f),
             processFloats(processor, 2),
             0.0f,
         )
@@ -215,7 +222,7 @@ class LiveKitInjectedPcmProcessorTest {
 
         buffer.flip()
         assertArrayEquals(
-            floatArrayOf(normalized(0x0c0b), normalized(0x0e0d), 0.0f),
+            floatArrayOf(floatS16(0x0c0b), floatS16(0x0e0d), 0.0f),
             FloatArray(3) { buffer.float },
             0.0f,
         )
@@ -332,7 +339,7 @@ class LiveKitInjectedPcmProcessorTest {
         return FloatArray(sampleCount) { buffer.float }
     }
 
-    private fun normalized(sample: Int): Float = sample.toShort().toFloat() / 32_768.0f
+    private fun floatS16(sample: Int): Float = sample.toShort().toFloat()
 
     private fun pcm16(vararg samples: Int): ByteArray =
         ByteArray(samples.size * PCM16_BYTES_PER_SAMPLE).also { bytes ->
