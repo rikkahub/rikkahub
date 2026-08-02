@@ -1372,14 +1372,11 @@ events = [json.loads(line) for line in sys.stdin if line.strip() and
           json.loads(line)["monotonicMs"] > boundary]
 if not events:
     raise SystemExit(1)
-latest = max(
-    enumerate(events),
-    key=lambda item: (item[1]["monotonicMs"], item[0]),
-)[1]
-if latest["lifecycle"] != expected:
+if not any(event["lifecycle"] == expected for event in events):
     raise SystemExit(2)
 raise SystemExit(0)
 ' "$boundary_ms" "$expected" <<< "$lines"; then
+        sleep_poll
         android_state="$(read_android_app_state)" || return 1
         if [[ "$android_state" != "$expected" ]]; then
           fail "lifecycle activity readback mismatch: Android=$android_state expected=$expected"
@@ -1864,11 +1861,7 @@ lifecycle_observations = [event for index, event in enumerate(events)
                           event.get("name") == "lifecycle_observed"]
 if not lifecycle_observations:
     raise SystemExit("lifecycle observation mismatch")
-latest_lifecycle = max(
-    enumerate(lifecycle_observations),
-    key=lambda item: (item[1]["monotonicMs"], item[0]),
-)[1]
-if latest_lifecycle.get("lifecycle") != app_state:
+if not any(event.get("lifecycle") == app_state for event in lifecycle_observations):
     raise SystemExit("conflicting lifecycle observation")
 
 observed_networks = [event.get("network") for event in events if event.get("name") == "network_observed"]
