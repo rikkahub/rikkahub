@@ -108,6 +108,8 @@ else:
         "voice_events_regular": os.environ.get("FAKE_ADB_VOICE_EVENTS_REGULAR", "1") == "1",
         "voice_events_symlink": os.environ.get("FAKE_ADB_VOICE_EVENTS_SYMLINK") == "1",
         "trace_pointer_reads": 0,
+        "call_start_clock": None,
+        "call_end_clock": None,
     }
     if os.environ.get("FAKE_ADB_INITIAL_RUN") == "foreign":
         state.update({
@@ -120,12 +122,26 @@ else:
 def save():
     state_file.write_text(json.dumps(state, separators=(",", ":")))
 
+def fake_clock_value():
+    counter = Path(os.environ["FAKE_CLOCK_COUNTER"])
+    return int(counter.read_text()) if counter.exists() else 0
+
 def fail_if_requested(name):
+    if (
+        name == "voice_events_read"
+        and os.environ.get("FAKE_ADB_NOISY_PRIVATE_FAILURE") == "1"
+    ):
+        print("PRIVATE-REMOTE-VOICE-EVENTS-PATH", file=sys.stderr)
     if os.environ.get("FAKE_ADB_FAIL_MODE") == name:
         raise SystemExit(82)
 
 def fail_trace_pointer_read_if_requested():
     state["trace_pointer_reads"] += 1
+    if state["trace_pointer_reads"] == 1:
+        advance = int(os.environ.get("FAKE_ADB_TRACE_SNAPSHOT_CLOCK_ADVANCE", "0"))
+        if advance:
+            counter = Path(os.environ["FAKE_CLOCK_COUNTER"])
+            counter.write_text(str(fake_clock_value() + advance))
     save()
     mode = os.environ.get("FAKE_ADB_FAIL_MODE")
     if mode == "initial_trace_pointer_read" and state["trace_pointer_reads"] == 1:
@@ -373,6 +389,7 @@ elif tail[:4] == ["shell", "am", "start-foreground-service", "-n"]:
     action = tail[tail.index("-a") + 1]
     if action.endswith(".START"):
         values = extras()
+        state["call_start_clock"] = fake_clock_value()
         state["call_started"] = True
         emit("call_start_requested", observed_transport=state["transport"])
         save()
@@ -442,6 +459,7 @@ elif tail[:4] == ["shell", "am", "start-foreground-service", "-n"]:
                 emit("playback_active", playback_epoch=1)
         save()
     else:
+        state["call_end_clock"] = fake_clock_value()
         state["call_started"] = False
         if state["run_state"] == "active":
             emit("call_stopped", succeeded=True)
@@ -755,6 +773,32 @@ chmod +x "$BIN_DIR/forbidden-external"
 for external_command in curl wget ssh scp rsync gradle lk kubectl; do
   ln -s forbidden-external "$BIN_DIR/$external_command"
 done
+
+export FAKE_REAL_MKDIR="$(command -v mkdir)"
+export FAKE_REAL_MKTEMP="$(command -v mktemp)"
+export FAKE_REAL_CHMOD="$(command -v chmod)"
+export FAKE_REAL_MV="$(command -v mv)"
+cat > "$BIN_DIR/private-file-command" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+command_name="${0##*/}"
+if [[ "${FAKE_PRIVATE_FILE_FAIL:-}" == "$command_name" && "$*" == *PRIVATE-OUTPUT-SENTINEL* ]]; then
+  printf '%s %s\n' "$command_name" "$*" >&2
+  exit 88
+fi
+case "$command_name" in
+  mkdir) real_command="$FAKE_REAL_MKDIR" ;;
+  mktemp) real_command="$FAKE_REAL_MKTEMP" ;;
+  chmod) real_command="$FAKE_REAL_CHMOD" ;;
+  mv) real_command="$FAKE_REAL_MV" ;;
+  *) exit 89 ;;
+esac
+exec "$real_command" "$@"
+SH
+chmod +x "$BIN_DIR/private-file-command"
+for private_command in mkdir mktemp chmod mv; do
+  ln -s private-file-command "$BIN_DIR/$private_command"
+done
 export PATH="$BIN_DIR:$PATH"
 export FAKE_EXTERNAL_LOG="$EXTERNAL_LOG"
 
@@ -773,12 +817,15 @@ reset_fake() {
   unset FAKE_ADB_BACKGROUND_NETWORK_BLOCKED
   unset FAKE_ADB_STATUS_MALFORMED FAKE_ADB_STAGE_VISIBILITY_DELAY
   unset FAKE_ADB_ARM_MALFORMED FAKE_ADB_SUPPRESS_CAPTURE_ATTESTATION
-  unset FAKE_ADB_PROBE_TIMELINE FAKE_CLOCK_STEP
+  unset FAKE_ADB_PROBE_TIMELINE FAKE_CLOCK_STEP FAKE_ADB_TRACE_SNAPSHOT_CLOCK_ADVANCE
   unset FAKE_ADB_INITIAL_VOICE_TRACE_ID FAKE_ADB_INITIAL_VOICE_TRACE_ABSENT
   unset FAKE_ADB_CURRENT_VOICE_TRACE_ID FAKE_ADB_VOICE_EVENTS
   unset FAKE_ADB_VOICE_EVENTS_EXISTS FAKE_ADB_VOICE_EVENTS_REGULAR
-  unset FAKE_ADB_VOICE_EVENTS_SYMLINK
+  unset FAKE_ADB_VOICE_EVENTS_SYMLINK FAKE_ADB_NOISY_PRIVATE_FAILURE
+  unset FAKE_PRIVATE_FILE_FAIL VOICE_STAGE1_TEST_EVENT_OUTPUT
+  unset VOICE_STAGE1_TEST_MAX_WAIT_ATTEMPTS
   unset VOICE_STAGE1_TRANSCRIPT_PROBE VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
+  unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH
   unset VOICE_STAGE1_WORKER_LOG_PATH VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS
 }
 
@@ -918,7 +965,7 @@ runner_env() {
     VOICE_STAGE1_POLL_SECONDS=0 \
     VOICE_STAGE1_ADB_TIMEOUT_SECONDS=5 \
     VOICE_STAGE1_WAIT_TIMEOUT_SECONDS=120 \
-    VOICE_STAGE1_MAX_WAIT_ATTEMPTS=8 \
+    VOICE_STAGE1_MAX_WAIT_ATTEMPTS="${VOICE_STAGE1_TEST_MAX_WAIT_ATTEMPTS:-8}" \
     VOICE_STAGE1_LOCK_DIR="$LOCK_DIR" \
     VOICE_STAGE1_SERIAL="$SERIAL" \
     VOICE_STAGE1_PACKAGE="$PACKAGE" \
@@ -1454,8 +1501,10 @@ run_scenario() {
   local app_state="$4"
   local lifecycle="$5"
   local target_seconds="$6"
-  local output="$TMP_DIR/automation-events.jsonl"
-  rm -f "$output"
+  local output="${VOICE_STAGE1_TEST_EVENT_OUTPUT:-$TMP_DIR/automation-events.jsonl}"
+  if [[ -z "${VOICE_STAGE1_TEST_EVENT_OUTPUT+x}" ]]; then
+    rm -f "$output"
+  fi
   runner_env \
     VOICE_STAGE1_CONVERSATION_ID=conversation-1 \
     VOICE_STAGE1_TRANSPORT="$transport" \
@@ -2017,12 +2066,45 @@ assert_transcript_preflight_failure() {
   unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH
 }
 
+assert_evidence_output_preflight_failure() {
+  local expected="$1"
+  local automation_output="$2"
+  local transcript_output="$3"
+  reset_fake
+  export VOICE_STAGE1_TEST_EVENT_OUTPUT="$automation_output"
+  export VOICE_STAGE1_TRANSCRIPT_PROBE=1
+  export VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$transcript_output"
+  export VOICE_STAGE1_STARTUP_TRUTH_PROBE=1
+  export VOICE_STAGE1_STARTUP_PCM_PATH="$STARTUP_PCM_PATH"
+  set +e
+  output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail "invalid evidence outputs were accepted"
+  assert_equals "stage1: $expected" "$output"
+  [[ ! -s "$ADB_LOG" ]] || fail "invalid evidence outputs reached ADB"
+}
+
 TRANSCRIPT_OUTPUT="$TMP_DIR/sanitized-events.ndjson"
 EXPECTED_TRANSCRIPT_OUTPUT="$TMP_DIR/expected-sanitized-events.ndjson"
 TRANSCRIPT_OUTPUT_LINK="$TMP_DIR/sanitized-events-link.ndjson"
 TRANSCRIPT_OUTPUT_DIRECTORY="$TMP_DIR/sanitized-events-directory"
 ln -s "$TRANSCRIPT_OUTPUT" "$TRANSCRIPT_OUTPUT_LINK"
 mkdir "$TRANSCRIPT_OUTPUT_DIRECTORY"
+
+TRANSCRIPT_OUTPUT_FIFO="$TMP_DIR/transcript-output.fifo"
+AUTOMATION_OUTPUT_FIFO="$TMP_DIR/automation-output.fifo"
+mkfifo "$TRANSCRIPT_OUTPUT_FIFO" "$AUTOMATION_OUTPUT_FIFO"
+
+ALIAS_PARENT="$TMP_DIR/output-alias-parent"
+mkdir "$ALIAS_PARENT"
+ALIAS_AUTOMATION="$ALIAS_PARENT/events.jsonl"
+ALIAS_TRANSCRIPT="$ALIAS_PARENT/./events.jsonl"
+
+HARDLINK_AUTOMATION="$TMP_DIR/hardlink-automation.jsonl"
+HARDLINK_TRANSCRIPT="$TMP_DIR/hardlink-transcript.jsonl"
+: > "$HARDLINK_AUTOMATION"
+ln "$HARDLINK_AUTOMATION" "$HARDLINK_TRANSCRIPT"
 
 assert_transcript_preflight_failure \
   "VOICE_STAGE1_TRANSCRIPT_PROBE must be 0 or 1" \
@@ -2043,11 +2125,31 @@ assert_transcript_preflight_failure \
   "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT is required" \
   1 1 livekit_experimental steady "$STARTUP_PCM_PATH" __unset__
 assert_transcript_preflight_failure \
-  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must not be a symlink" \
+  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent or a regular non-symlink file" \
   1 1 livekit_experimental steady "$STARTUP_PCM_PATH" "$TRANSCRIPT_OUTPUT_LINK"
 assert_transcript_preflight_failure \
-  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must not be a directory" \
+  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent or a regular non-symlink file" \
   1 1 livekit_experimental steady "$STARTUP_PCM_PATH" "$TRANSCRIPT_OUTPUT_DIRECTORY"
+
+assert_evidence_output_preflight_failure \
+  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent or a regular non-symlink file" \
+  "$TMP_DIR/fifo-transcript-automation.jsonl" "$TRANSCRIPT_OUTPUT_FIFO"
+assert_evidence_output_preflight_failure \
+  "VOICE_STAGE1_EVENT_OUTPUT must be absent or a regular non-symlink file" \
+  "$AUTOMATION_OUTPUT_FIFO" "$TMP_DIR/fifo-automation-transcript.jsonl"
+SAME_OUTPUT="$TMP_DIR/same-evidence-output.jsonl"
+assert_evidence_output_preflight_failure \
+  "Stage1 evidence outputs must be distinct" "$SAME_OUTPUT" "$SAME_OUTPUT"
+assert_evidence_output_preflight_failure \
+  "Stage1 evidence outputs must be distinct" "$ALIAS_AUTOMATION" "$ALIAS_TRANSCRIPT"
+assert_evidence_output_preflight_failure \
+  "Stage1 evidence outputs must be distinct" "$HARDLINK_AUTOMATION" "$HARDLINK_TRANSCRIPT"
+assert_evidence_output_preflight_failure \
+  "VOICE_STAGE1_EVENT_OUTPUT must be absent or a regular non-symlink file" \
+  "$TRANSCRIPT_OUTPUT_LINK" "$TMP_DIR/automation-link-transcript.jsonl"
+assert_evidence_output_preflight_failure \
+  "VOICE_STAGE1_EVENT_OUTPUT must be absent or a regular non-symlink file" \
+  "$TRANSCRIPT_OUTPUT_DIRECTORY" "$TMP_DIR/automation-directory-transcript.jsonl"
 
 reset_fake
 run_scenario direct_gemini stable_wifi speaker foreground steady 20 >/dev/null
@@ -2066,6 +2168,75 @@ assert_transcript_output_mode() {
   [[ "$(stat -c %a "$TRANSCRIPT_OUTPUT")" == "600" ]] ||
     fail "sanitized transcript output was not mode 0600"
 }
+
+assert_no_unpublished_evidence_temps() {
+  local automation_parent="$1"
+  local transcript_parent="$2"
+  if [[ -d "$automation_parent" ]]; then
+    [[ -z "$(find "$automation_parent" -maxdepth 1 -name '.voice-stage1-events.*' -print -quit)" ]] ||
+      fail "unpublished automation temp remained"
+  fi
+  if [[ -d "$transcript_parent" ]]; then
+    [[ -z "$(find "$transcript_parent" -maxdepth 1 -name '.voice-stage1-transcript.*' -print -quit)" ]] ||
+      fail "unpublished transcript temp remained"
+  fi
+}
+
+reset_fake
+rm -f "$TRANSCRIPT_OUTPUT"
+enable_transcript_collection
+export FAKE_ADB_TRACE_SNAPSHOT_CLOCK_ADVANCE=1000
+export FAKE_CLOCK_STEP=1
+export VOICE_STAGE1_TEST_MAX_WAIT_ATTEMPTS=120
+run_scenario livekit_experimental stable_wifi speaker foreground steady 100 >/dev/null
+python3 - "$STATE_DIR/state.json" <<'PY'
+import json
+import sys
+
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+start = state["call_start_clock"]
+end = state["call_end_clock"]
+if type(start) is not int or type(end) is not int or end - start < 100:
+    raise SystemExit("slow trace snapshot consumed the call-duration window")
+PY
+
+for private_command in mkdir mktemp chmod mv; do
+  reset_fake
+  AUTOMATION_SENTINEL_PARENT="$TMP_DIR/PRIVATE-OUTPUT-SENTINEL-automation-$private_command"
+  TRANSCRIPT_SAFE_PARENT="$TMP_DIR/transcript-safe-$private_command"
+  [[ "$private_command" == mkdir ]] || mkdir -p "$AUTOMATION_SENTINEL_PARENT"
+  mkdir -p "$TRANSCRIPT_SAFE_PARENT"
+  export VOICE_STAGE1_TEST_EVENT_OUTPUT="$AUTOMATION_SENTINEL_PARENT/events.jsonl"
+  enable_transcript_collection
+  export VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$TRANSCRIPT_SAFE_PARENT/events.ndjson"
+  export FAKE_PRIVATE_FILE_FAIL="$private_command"
+  set +e
+  output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail "automation $private_command failure was accepted"
+  assert_equals "stage1: unable to fetch finalized automation events" "$output"
+  assert_not_contains "$output" "PRIVATE-OUTPUT-SENTINEL"
+  assert_no_unpublished_evidence_temps "$AUTOMATION_SENTINEL_PARENT" "$TRANSCRIPT_SAFE_PARENT"
+
+  reset_fake
+  AUTOMATION_SAFE_PARENT="$TMP_DIR/automation-safe-$private_command"
+  TRANSCRIPT_SENTINEL_PARENT="$TMP_DIR/PRIVATE-OUTPUT-SENTINEL-transcript-$private_command"
+  mkdir -p "$AUTOMATION_SAFE_PARENT"
+  [[ "$private_command" == mkdir ]] || mkdir -p "$TRANSCRIPT_SENTINEL_PARENT"
+  export VOICE_STAGE1_TEST_EVENT_OUTPUT="$AUTOMATION_SAFE_PARENT/events.jsonl"
+  enable_transcript_collection
+  export VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$TRANSCRIPT_SENTINEL_PARENT/events.ndjson"
+  export FAKE_PRIVATE_FILE_FAIL="$private_command"
+  set +e
+  output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail "transcript $private_command failure was accepted"
+  assert_equals "stage1: unable to collect sanitized transcript evidence" "$output"
+  assert_not_contains "$output" "PRIVATE-OUTPUT-SENTINEL"
+  assert_no_unpublished_evidence_temps "$AUTOMATION_SAFE_PARENT" "$TRANSCRIPT_SENTINEL_PARENT"
+done
 
 reset_fake
 rm -f "$TRANSCRIPT_OUTPUT"
@@ -2113,12 +2284,16 @@ assert_transcript_collection_failure() {
       export FAKE_ADB_FAIL_MODE="$expected_mode"
       ;;
   esac
+  if [[ "$expected_mode" == "voice_events_read" ]]; then
+    export FAKE_ADB_NOISY_PRIVATE_FAILURE=1
+  fi
   set +e
   output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
   status=$?
   set -e
   [[ "$status" -ne 0 ]] || fail "transcript collection failure $expected_mode was accepted"
   assert_equals "stage1: unable to collect sanitized transcript evidence" "$output"
+  assert_no_unpublished_evidence_temps "$TMP_DIR" "$(dirname "$TRANSCRIPT_OUTPUT")"
   assert_not_contains "$output" "private-stale-trace"
   assert_not_contains "$output" "private-old-trace"
   assert_not_contains "$output" "private-unsafe-trace"
@@ -2449,7 +2624,7 @@ missing_attestation_output="$(run_scenario direct_gemini stable_wifi speaker for
 missing_attestation_status=$?
 set -e
 [[ "$missing_attestation_status" -ne 0 ]] || fail "runner accepted missing capture attestation"
-assert_contains "$missing_attestation_output" "missing required automation event: capture_attested"
+assert_equals "stage1: finalized automation event validation failed" "$missing_attestation_output"
 unset FAKE_ADB_SUPPRESS_CAPTURE_ATTESTATION
 
 reset_fake

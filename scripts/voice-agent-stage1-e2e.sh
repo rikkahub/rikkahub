@@ -105,7 +105,7 @@ classify_transcript_evidence() {
   python3 - \
     "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" \
     "$VOICE_STAGE1_WORKER_LOG_PATH" \
-    "$VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS" <<'PY'
+    "$VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS" 2>/dev/null <<'PY'
 import json
 import os
 import re
@@ -466,12 +466,20 @@ adb_command() {
   timeout "${ADB_TIMEOUT_SECONDS}s" adb -s "$VOICE_STAGE1_SERIAL" "$@"
 }
 
+private_mkdir() { (umask 077; mkdir -p -- "$1") 2>/dev/null; }
+private_mktemp() { mktemp "$1" 2>/dev/null; }
+private_chmod() { chmod 600 -- "$1" 2>/dev/null; }
+private_move() { mv -f -- "$1" "$2" 2>/dev/null; }
+private_remove_temp() { rm -f -- "$1" 2>/dev/null || true; }
+private_dirname() { dirname -- "$1" 2>/dev/null; }
+
 safe_voice_trace_id() {
   [[ "$1" =~ ^[A-Za-z0-9_-]{1,128}$ ]]
 }
 
 read_latest_voice_trace_id() {
-  adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" cat "$LATEST_VOICE_TRACE_PATH"
+  adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" \
+    cat "$LATEST_VOICE_TRACE_PATH" 2>/dev/null
 }
 
 probe_remote_regular_file() {
@@ -489,7 +497,7 @@ elif [ -e "$1" ]; then
 else
   printf absent
 fi
-' sh "$remote_path")"; then
+' sh "$remote_path" 2>/dev/null)"; then
     return 1
   fi
   case "$result" in
@@ -499,6 +507,62 @@ fi
     *)
       return 1
       ;;
+  esac
+}
+
+validate_evidence_output_paths() {
+  local status=0
+  if python3 - \
+    "$VOICE_STAGE1_EVENT_OUTPUT" \
+    "$TRANSCRIPT_PROBE" \
+    "${VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT:-}" 2>/dev/null <<'PY'
+import os
+import stat
+import sys
+
+AUTOMATION_INVALID = 10
+TRANSCRIPT_INVALID = 11
+ALIASED = 12
+UNEXPECTED = 13
+
+
+def identity(path, invalid_status):
+    try:
+        canonical = os.path.realpath(os.path.abspath(path))
+        try:
+            value = os.lstat(path)
+        except FileNotFoundError:
+            inode = None
+        else:
+            if stat.S_ISLNK(value.st_mode) or not stat.S_ISREG(value.st_mode):
+                raise SystemExit(invalid_status)
+            inode = (value.st_dev, value.st_ino)
+        return canonical, inode
+    except SystemExit:
+        raise
+    except BaseException:
+        raise SystemExit(UNEXPECTED) from None
+
+
+automation = identity(sys.argv[1], AUTOMATION_INVALID)
+if sys.argv[2] == "1":
+    transcript = identity(sys.argv[3], TRANSCRIPT_INVALID)
+    if automation[0] == transcript[0]:
+        raise SystemExit(ALIASED)
+    if automation[1] is not None and automation[1] == transcript[1]:
+        raise SystemExit(ALIASED)
+PY
+  then
+    return 0
+  else
+    status=$?
+  fi
+
+  case "$status" in
+    10) fail "VOICE_STAGE1_EVENT_OUTPUT must be absent or a regular non-symlink file" ;;
+    11) fail "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent or a regular non-symlink file" ;;
+    12) fail "Stage1 evidence outputs must be distinct" ;;
+    *) fail "unable to validate Stage1 evidence outputs" ;;
   esac
 }
 
@@ -528,7 +592,7 @@ fetch_voice_transcript_events() {
   local events_path
   local events_state
   local output_parent
-  local temp_output
+  local temp_output=""
   pointer_state="$(probe_remote_regular_file "$LATEST_VOICE_TRACE_PATH")" || return 1
   [[ "$pointer_state" == "present" ]] || return 1
   trace_id="$(read_latest_voice_trace_id)" || return 1
@@ -538,23 +602,29 @@ fetch_voice_transcript_events() {
   events_state="$(probe_remote_regular_file "$events_path")" || return 1
   [[ "$events_state" != "invalid" ]] || return 1
 
-  output_parent="$(dirname "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT")"
-  mkdir -p "$output_parent"
-  temp_output="$(mktemp "$output_parent/.voice-stage1-transcript.XXXXXX")" || return 1
-  chmod 600 "$temp_output" || { rm -f "$temp_output"; return 1; }
+  output_parent="$(private_dirname "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT")" || return 1
+  private_mkdir "$output_parent" || return 1
+  temp_output="$(private_mktemp "$output_parent/.voice-stage1-transcript.XXXXXX")" ||
+    return 1
+  private_chmod "$temp_output" || {
+    private_remove_temp "$temp_output"
+    return 1
+  }
   if [[ "$events_state" == "present" ]]; then
-    if ! adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" cat "$events_path" > "$temp_output"; then
-      rm -f "$temp_output"
+    if ! adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" cat "$events_path" \
+      >"$temp_output" 2>/dev/null; then
+      private_remove_temp "$temp_output"
       return 1
     fi
   elif [[ "$events_state" != "absent" ]]; then
-    rm -f "$temp_output"
+    private_remove_temp "$temp_output"
     return 1
   fi
-  mv -f "$temp_output" "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" || {
-    rm -f "$temp_output"
+  private_move "$temp_output" "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" || {
+    private_remove_temp "$temp_output"
     return 1
   }
+  temp_output=""
 }
 
 clock_now() {
@@ -1392,14 +1462,13 @@ perform_handover() {
 
 finalize_and_fetch() {
   local output_parent
-  local temp_output
+  local temp_output=""
   local expected_route
   local expected_fixture_bytes
   local expected_startup_bytes=0
-  output_parent="$(dirname "$VOICE_STAGE1_EVENT_OUTPUT")"
-  mkdir -p "$output_parent"
-  [[ ! -L "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a symlink"
-  [[ ! -d "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a directory"
+  output_parent="$(private_dirname "$VOICE_STAGE1_EVENT_OUTPUT")" ||
+    fail "unable to fetch finalized automation events"
+  private_mkdir "$output_parent" || fail "unable to fetch finalized automation events"
 
   FINALIZE_ATTEMPTED=1
   control_broadcast FINALIZE
@@ -1412,18 +1481,25 @@ finalize_and_fetch() {
     fail "finalized comparison hash mismatch"
   [[ "$STATUS_TRANSPORT" == "$VOICE_STAGE1_TRANSPORT" ]] || fail "finalized transport mismatch"
 
-  temp_output="$(mktemp "$output_parent/.voice-stage1-events.XXXXXX")"
-  chmod 600 "$temp_output"
-  if ! adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" cat "$AUTOMATION_EVENT_PATH" > "$temp_output"; then
-    rm -f "$temp_output"
+  temp_output="$(private_mktemp "$output_parent/.voice-stage1-events.XXXXXX")" ||
+    fail "unable to fetch finalized automation events"
+  private_chmod "$temp_output" || {
+    private_remove_temp "$temp_output"
+    fail "unable to fetch finalized automation events"
+  }
+  if ! adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" cat "$AUTOMATION_EVENT_PATH" \
+    >"$temp_output" 2>/dev/null; then
+    private_remove_temp "$temp_output"
     fail "unable to fetch finalized automation events"
   fi
   [[ -s "$temp_output" ]] || {
-    rm -f "$temp_output"
+    private_remove_temp "$temp_output"
     fail "finalized automation events are empty"
   }
-  if [[ "$TRANSCRIPT_PROBE" == "1" ]]; then
-    fetch_voice_transcript_events || fail "unable to collect sanitized transcript evidence"
+  if [[ "$TRANSCRIPT_PROBE" == "1" ]] && ! fetch_voice_transcript_events; then
+    private_remove_temp "$temp_output"
+    fail "unable to collect sanitized transcript evidence"
+    return 1
   fi
   expected_route="${VOICE_STAGE1_ROUTE^}"
   expected_fixture_bytes="$(wc -c < "$VOICE_STAGE1_PCM_PATH" | tr -d '[:space:]')"
@@ -1435,7 +1511,7 @@ finalize_and_fetch() {
   if validation_output="$(python3 - "$temp_output" "$VOICE_STAGE1_RUN_HASH" "$VOICE_STAGE1_COMPARISON_HASH" \
     "$VOICE_STAGE1_TRANSPORT" "$expected_route" "$VOICE_STAGE1_APP_STATE" \
     "$VOICE_STAGE1_NETWORK" "$VOICE_STAGE1_LIFECYCLE" "$expected_fixture_bytes" \
-    "$STARTUP_TRUTH_PROBE" "$expected_startup_bytes" <<'PY'
+    "$STARTUP_TRUTH_PROBE" "$expected_startup_bytes" 2>/dev/null <<'PY'
 import json
 import sys
 
@@ -1779,8 +1855,11 @@ PY
   fi
 
   if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
-    mv -f "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT"
-    chmod 600 "$VOICE_STAGE1_EVENT_OUTPUT"
+    private_move "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT" || {
+      private_remove_temp "$temp_output"
+      fail "unable to fetch finalized automation events"
+    }
+    temp_output=""
     if [[ -n "$validation_output" ]]; then
       printf '%s\n' "$validation_output"
     fi
@@ -1791,11 +1870,14 @@ PY
     fi
   else
     if [[ "$validation_status" -ne 0 ]]; then
-      rm -f "$temp_output"
+      private_remove_temp "$temp_output"
       fail "finalized automation event validation failed"
     fi
-    mv -f "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT"
-    chmod 600 "$VOICE_STAGE1_EVENT_OUTPUT"
+    private_move "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT" || {
+      private_remove_temp "$temp_output"
+      fail "unable to fetch finalized automation events"
+    }
+    temp_output=""
   fi
 }
 
@@ -1910,11 +1992,9 @@ validate_normal_inputs() {
   fi
   if [[ "$TRANSCRIPT_PROBE" == "1" ]]; then
     require_env VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
-    [[ ! -L "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" ]] ||
-      fail "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must not be a symlink"
-    [[ ! -d "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" ]] ||
-      fail "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must not be a directory"
   fi
+  require_command python3
+  validate_evidence_output_paths
   validate_positive_integer VOICE_STAGE1_TARGET_SECONDS "$VOICE_STAGE1_TARGET_SECONDS"
   validate_positive_integer VOICE_STAGE1_ADB_TIMEOUT_SECONDS "$ADB_TIMEOUT_SECONDS"
   validate_positive_integer VOICE_STAGE1_WAIT_TIMEOUT_SECONDS "$WAIT_TIMEOUT_SECONDS"
@@ -1922,8 +2002,6 @@ validate_normal_inputs() {
   validate_nonnegative_number VOICE_STAGE1_POLL_SECONDS "$POLL_SECONDS"
   [[ "$VOICE_STAGE1_RUN_HASH" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "invalid run hash"
   [[ "$VOICE_STAGE1_COMPARISON_HASH" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "invalid comparison hash"
-  [[ ! -L "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a symlink"
-  [[ ! -d "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a directory"
   require_expected_serial
 
   require_command adb
@@ -1996,10 +2074,10 @@ run_scenario() {
   fi
   arm_capture_fixture
 
-  run_started_at="$(clock_now)"
   if [[ "$TRANSCRIPT_PROBE" == "1" ]]; then
     snapshot_initial_voice_trace || fail "unable to collect sanitized transcript evidence"
   fi
+  run_started_at="$(clock_now)"
   start_call
   wait_event CALL_ACTIVE 1
   cross_check_network "$initial_network"
