@@ -22,6 +22,8 @@ CALL_START_ACTION="me.rerere.rikkahub.voiceagent.action.START"
 CALL_END_ACTION="me.rerere.rikkahub.voiceagent.action.END"
 EXPECTED_PHYSICAL_SERIAL="RZCX71NXRPB"
 APP_ARTIFACT_BASE_DIR="no_backup/voice-e2e"
+LATEST_VOICE_TRACE_PATH="$APP_ARTIFACT_BASE_DIR/latest-trace-id.txt"
+SANITIZED_VOICE_EVENTS_NAME="voice-experience-events.ndjson"
 PRIVATE_FIXTURE_DIR="files/voice-stage1"
 PRIVATE_PROMPT_PATH="$PRIVATE_FIXTURE_DIR/prompt.pcm"
 PRIVATE_INTERRUPT_PATH="$PRIVATE_FIXTURE_DIR/interrupt.pcm"
@@ -38,6 +40,7 @@ MAX_WAIT_ATTEMPTS="${VOICE_STAGE1_MAX_WAIT_ATTEMPTS:-600}"
 LOCK_DIR="${VOICE_STAGE1_LOCK_DIR:-${TMPDIR:-/tmp}/rikkahub-voice-stage1-locks}"
 PROMPT_TRIGGER="${VOICE_STAGE1_PROMPT_TRIGGER:-initial_fixture}"
 STARTUP_TRUTH_PROBE="${VOICE_STAGE1_STARTUP_TRUTH_PROBE:-0}"
+TRANSCRIPT_PROBE="${VOICE_STAGE1_TRANSCRIPT_PROBE:-0}"
 STARTUP_PRE_ROLL_SECONDS=5
 
 START_ATTEMPTED=0
@@ -59,6 +62,11 @@ STATUS_NETWORK=""
 STATUS_VALIDATED=""
 FIXTURE_TOKEN=""
 FIXTURE_DATA=""
+INITIAL_VOICE_TRACE_ID=""
+AUTOMATION_TEMP_OUTPUT=""
+TRANSCRIPT_TEMP_OUTPUT=""
+EVIDENCE_TEMP_CLEANUP_FAILED=0
+EVIDENCE_TEMP_CLEANUP_DIAGNOSTIC_EMITTED=0
 
 fail() {
   printf 'stage1: %s\n' "$*" >&2
@@ -86,8 +94,592 @@ validate_nonnegative_number() {
   [[ "$value" =~ ^([0-9]+)(\.[0-9]+)?$ ]] || fail "$name must be a nonnegative number"
 }
 
+classify_transcript_evidence() {
+  require_env VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
+  require_env VOICE_STAGE1_WORKER_LOG_PATH
+  require_env VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS
+  case "$VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS" in
+    complete|unavailable)
+      ;;
+    *)
+      fail "VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS must be complete or unavailable"
+      ;;
+  esac
+  require_command python3
+  python3 - \
+    "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" \
+    "$VOICE_STAGE1_WORKER_LOG_PATH" \
+    "$VOICE_STAGE1_WORKER_LOG_CAPTURE_STATUS" 2>/dev/null <<'PY'
+import json
+import os
+import re
+import stat
+import sys
+from datetime import datetime, timezone
+
+BASE = {"version", "voiceSessionId", "eventId", "kind", "observedAt", "eventHash"}
+JOB = {"userTurnId", "requestHash", "toolCallId", "argumentHash", "jobId"}
+GROUNDING = {"groundedJobId", "groundedResultHash"}
+IDENTIFIER = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+HASH = re.compile(r"^sha256:[0-9a-f]{64}$")
+UTC_TIMESTAMP = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]{3}|\.[0-9]{6}|\.[0-9]{9})?Z$"
+)
+
+SCHEMAS = {
+    "job_accepted": BASE | JOB | {"promptCharacterCount"},
+    "job_running": BASE | JOB,
+    "still_working": BASE | JOB,
+    "job_succeeded": BASE | JOB | {"resultHash", "answerCharacterCount"},
+    "job_failed": BASE | JOB | {"failureReasonCharacterCount"},
+    "job_expired": BASE | JOB | {"failureReasonCharacterCount"},
+    "job_canceled": BASE | JOB | {"failureReasonCharacterCount"},
+    "transcript": BASE | {"turnId", "role", "interrupted", "textCharacterCount"},
+    "delivery_eligible": BASE | {"toolCallId", "jobId"},
+    "delivery_started": BASE | {"toolCallId", "jobId"},
+    "speech_started": BASE | {"toolCallId", "jobId"},
+    "delivery_blocked": BASE | {"toolCallId", "jobId", "userSpeaking", "agentSpeaking"},
+    "delivery_announced": BASE | {"toolCallId", "jobId", "assistantTurnId"},
+    "follow_up_correlation": BASE | {"followUpTurnId", "assistantTurnId", "resultHash"},
+}
+
+IDENTIFIER_FIELDS = {
+    "voiceSessionId",
+    "eventId",
+    "userTurnId",
+    "toolCallId",
+    "jobId",
+    "turnId",
+    "groundedJobId",
+    "assistantTurnId",
+    "followUpTurnId",
+}
+HASH_FIELDS = {
+    "eventHash",
+    "requestHash",
+    "argumentHash",
+    "resultHash",
+    "groundedResultHash",
+}
+COUNT_FIELDS = {
+    "promptCharacterCount",
+    "answerCharacterCount",
+    "failureReasonCharacterCount",
+    "textCharacterCount",
+}
+BOOLEAN_FIELDS = {"interrupted", "userSpeaking", "agentSpeaking"}
+TARGET_AGENT = "rikka-livekit-experimental"
+JOB_REQUEST = "received job request"
+READY_MARKER = "voice_session_ready"
+TRANSCRIPT_MARKER = "voice_user_transcript_final"
+
+
+class InvalidEvidence(Exception):
+    pass
+
+
+def reject_duplicate_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise InvalidEvidence()
+        result[key] = value
+    return result
+
+
+def reject_nonstandard_number(_value):
+    raise InvalidEvidence()
+
+
+def canonical_utc_timestamp(value):
+    if type(value) is not str or UTC_TIMESTAMP.fullmatch(value) is None:
+        return False
+    fractional_digits = len(value.rsplit(".", 1)[1][:-1]) if "." in value else 0
+    if fractional_digits > 6:
+        return False
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
+    except (TypeError, ValueError):
+        return False
+    timespec = {0: "seconds", 3: "milliseconds", 6: "microseconds"}[fractional_digits]
+    canonical = parsed.astimezone(timezone.utc).isoformat(timespec=timespec)
+    return canonical.replace("+00:00", "Z") == value
+
+
+def validate_row(row):
+    if type(row) is not dict or any(value is None for value in row.values()):
+        raise InvalidEvidence()
+    kind = row.get("kind")
+    try:
+        expected_keys = SCHEMAS[kind]
+    except (KeyError, TypeError):
+        raise InvalidEvidence() from None
+    actual_keys = set(row)
+    if kind == "transcript":
+        if frozenset(actual_keys) not in {
+            frozenset(expected_keys),
+            frozenset(expected_keys | GROUNDING),
+        }:
+            raise InvalidEvidence()
+    elif actual_keys != expected_keys:
+        raise InvalidEvidence()
+    if type(row["version"]) is not int or row["version"] != 1:
+        raise InvalidEvidence()
+    if not canonical_utc_timestamp(row["observedAt"]):
+        raise InvalidEvidence()
+    for field in actual_keys & IDENTIFIER_FIELDS:
+        value = row[field]
+        if type(value) is not str or IDENTIFIER.fullmatch(value) is None:
+            raise InvalidEvidence()
+    for field in actual_keys & HASH_FIELDS:
+        value = row[field]
+        if type(value) is not str or HASH.fullmatch(value) is None:
+            raise InvalidEvidence()
+    for field in actual_keys & COUNT_FIELDS:
+        value = row[field]
+        if type(value) is not int or value < 0:
+            raise InvalidEvidence()
+    for field in actual_keys & BOOLEAN_FIELDS:
+        if type(row[field]) is not bool:
+            raise InvalidEvidence()
+    if kind == "transcript":
+        role = row["role"]
+        if type(role) is not str or role not in {"user", "assistant"}:
+            raise InvalidEvidence()
+        has_grounding = GROUNDING <= actual_keys
+        if role == "user" and has_grounding:
+            raise InvalidEvidence()
+
+
+def emit_record(prefix, payload):
+    print(prefix + json.dumps(payload, separators=(",", ":")))
+
+
+def file_record(classification, covered, rows, qualifying):
+    payload = {
+        "version": 1,
+        "classification": classification,
+        "collectionCovered": covered,
+        "rowCount": rows,
+        "qualifyingUserTranscriptCount": qualifying,
+    }
+    emit_record("stage1.final_user_transcript_file=", payload)
+
+
+def worker_record(classification, activity_count, marker_count):
+    payload = {
+        "version": 1,
+        "classification": classification,
+        "sessionActivityCount": activity_count,
+        "markerCount": marker_count,
+    }
+    emit_record("stage1.worker_transcript_log=", payload)
+
+
+def combined_record(classification, boundary):
+    payload = {
+        "version": 1,
+        "classification": classification,
+        "firstMissingBoundary": boundary,
+    }
+    emit_record("stage1.final_user_transcript=", payload)
+
+
+def snapshot_metadata(file_stat):
+    if (
+        stat.S_ISLNK(file_stat.st_mode)
+        or not stat.S_ISREG(file_stat.st_mode)
+        or stat.S_IMODE(file_stat.st_mode) != 0o600
+    ):
+        raise InvalidEvidence()
+    return (
+        file_stat.st_dev,
+        file_stat.st_ino,
+        file_stat.st_mode,
+        file_stat.st_nlink,
+        file_stat.st_uid,
+        file_stat.st_gid,
+        file_stat.st_size,
+        file_stat.st_mtime_ns,
+        file_stat.st_ctime_ns,
+    )
+
+
+def stable_snapshot_bytes(path):
+    path_metadata = snapshot_metadata(os.lstat(path))
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        opened_stat = os.fstat(descriptor)
+        opened_metadata = snapshot_metadata(opened_stat)
+        if opened_metadata != path_metadata:
+            raise InvalidEvidence()
+        source = os.fdopen(descriptor, "rb")
+        descriptor = -1
+        with source:
+            content = source.read()
+            post_read_metadata = snapshot_metadata(os.fstat(source.fileno()))
+            post_read_path_metadata = snapshot_metadata(os.lstat(path))
+            if (
+                post_read_metadata != opened_metadata
+                or post_read_path_metadata != opened_metadata
+                or len(content) != opened_stat.st_size
+                or (content and not content.endswith(b"\n"))
+            ):
+                raise InvalidEvidence()
+            return content
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def classify_file(path):
+    try:
+        content = stable_snapshot_bytes(path)
+        session_id = None
+        event_ids = set()
+        row_count = 0
+        qualifying_count = 0
+        for raw_line in content.decode("utf-8").split("\n"):
+            if not raw_line.strip():
+                continue
+            row_count += 1
+            row = json.loads(
+                raw_line,
+                object_pairs_hook=reject_duplicate_keys,
+                parse_constant=reject_nonstandard_number,
+            )
+            validate_row(row)
+            if session_id is None:
+                session_id = row["voiceSessionId"]
+            elif row["voiceSessionId"] != session_id:
+                raise InvalidEvidence()
+            if row["eventId"] in event_ids:
+                raise InvalidEvidence()
+            event_ids.add(row["eventId"])
+            if (
+                row["kind"] == "transcript"
+                and row["role"] == "user"
+                and row["interrupted"] is False
+                and row["textCharacterCount"] > 0
+            ):
+                qualifying_count += 1
+        if row_count == 0:
+            return "unknown", True, 0, 0
+        elif qualifying_count:
+            return "present", True, row_count, qualifying_count
+        else:
+            return "absent", True, row_count, 0
+    except BaseException:
+        return "unknown", False, 0, 0
+
+
+def worker_rows(path):
+    content = stable_snapshot_bytes(path)
+    rows = []
+    for raw_line in content.decode("utf-8").split("\n"):
+        if not raw_line.strip():
+            continue
+        row = json.loads(
+            raw_line,
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=reject_nonstandard_number,
+        )
+        if type(row) is not dict:
+            raise InvalidEvidence()
+        for field in {"message", "agent_name", "job_id", "room"} & set(row):
+            if type(row[field]) is not str:
+                raise InvalidEvidence()
+        if not row.get("message"):
+            raise InvalidEvidence()
+        rows.append(row)
+    return rows
+
+
+def classify_worker(path, capture_status):
+    if capture_status != "complete":
+        return "unknown", 0, 0
+    try:
+        rows = worker_rows(path)
+        requests = []
+        children = []
+        for index, row in enumerate(rows):
+            message = row["message"]
+            if message == JOB_REQUEST:
+                if row.get("agent_name") != TARGET_AGENT:
+                    continue
+                job_id, room = row.get("job_id"), row.get("room")
+                if not job_id or not room:
+                    raise InvalidEvidence()
+                requests.append((index, job_id, room))
+            elif message in {READY_MARKER, TRANSCRIPT_MARKER}:
+                job_id, room = row.get("job_id"), row.get("room")
+                if not job_id or not room:
+                    raise InvalidEvidence()
+                children.append((index, message, job_id, room))
+        if len(requests) != 1:
+            raise InvalidEvidence()
+        request_index, selected_job, selected_room = requests[0]
+        selected = [
+            (index, message)
+            for index, message, job_id, room in children
+            if job_id == selected_job and room == selected_room
+        ]
+        if any(index <= request_index for index, _ in selected):
+            raise InvalidEvidence()
+        ready_indices = [index for index, message in selected if message == READY_MARKER]
+        marker_indices = [index for index, message in selected if message == TRANSCRIPT_MARKER]
+
+        if marker_indices:
+            classification = "marker-present"
+        elif len(ready_indices) == 1:
+            classification = "marker-absent"
+        else:
+            raise InvalidEvidence()
+        activity_count = 1 + len(selected)
+        marker_count = len(marker_indices)
+        return classification, activity_count, marker_count
+    except BaseException:
+        return "unknown", 0, 0
+
+
+file_result = classify_file(sys.argv[1])
+worker_result = classify_worker(sys.argv[2], sys.argv[3])
+file_state, file_covered, row_count, qualifying_count = file_result
+worker_state, activity_count, marker_count = worker_result
+
+if file_state == "present":
+    verdict, boundary, status = "present", "ask-hermes", 0
+elif worker_state == "marker-present" and file_covered:
+    verdict, boundary, status = "bridge-breakage", "android-transcript-evidence", 2
+elif worker_state == "marker-absent":
+    verdict, boundary, status = "absent-at-worker", "final-user-transcript", 2
+else:
+    verdict, boundary, status = "unknown", "evidence-collection", 3
+
+file_record(file_state, file_covered, row_count, qualifying_count)
+worker_record(worker_state, activity_count, marker_count)
+combined_record(verdict, boundary)
+raise SystemExit(status)
+
+PY
+}
+
 adb_command() {
   timeout "${ADB_TIMEOUT_SECONDS}s" adb -s "$VOICE_STAGE1_SERIAL" "$@"
+}
+
+private_mkdir() { (umask 077; mkdir -p -- "$1") 2>/dev/null; }
+private_mktemp() { mktemp "$1" 2>/dev/null; }
+private_chmod() { chmod 600 -- "$1" 2>/dev/null; }
+private_publish_temp() {
+  ln -T -- "$1" "$2" 2>/dev/null || return 1
+  rm -- "$1" 2>/dev/null
+}
+private_remove_temp() { rm -f -- "$1" 2>/dev/null; }
+private_dirname() { dirname -- "$1" 2>/dev/null; }
+private_fixture_size() { (wc -c < "$1" | tr -d '[:space:]') 2>/dev/null; }
+
+clear_owned_evidence_temp() {
+  local owner_name="$1"
+  local temp_path="${!owner_name}"
+  [[ -n "$temp_path" ]] || return 0
+  if private_remove_temp "$temp_path"; then
+    printf -v "$owner_name" '%s' ""
+    return 0
+  fi
+  EVIDENCE_TEMP_CLEANUP_FAILED=1
+  return 1
+}
+
+report_evidence_temp_cleanup_failure() {
+  EVIDENCE_TEMP_CLEANUP_FAILED=1
+  if (( EVIDENCE_TEMP_CLEANUP_DIAGNOSTIC_EMITTED == 0 )); then
+    EVIDENCE_TEMP_CLEANUP_DIAGNOSTIC_EMITTED=1
+    fail "unable to clean unpublished Stage1 evidence"
+    return 1
+  fi
+  return 1
+}
+
+discard_owned_evidence_temp() {
+  clear_owned_evidence_temp "$1" || report_evidence_temp_cleanup_failure
+}
+
+publish_owned_evidence_temp() {
+  local owner_name="$1"
+  local destination="$2"
+  local temp_path="${!owner_name}"
+  [[ -n "$temp_path" ]] || return 1
+  private_publish_temp "$temp_path" "$destination" || return 1
+  printf -v "$owner_name" '%s' ""
+}
+
+fail_after_owned_evidence_cleanup() {
+  local owner_name="$1"
+  local diagnostic="$2"
+  discard_owned_evidence_temp "$owner_name" || return 1
+  (( EVIDENCE_TEMP_CLEANUP_FAILED == 0 )) || return 1
+  fail "$diagnostic"
+}
+
+cleanup_owned_evidence_temps() {
+  local cleanup_status=0
+  clear_owned_evidence_temp AUTOMATION_TEMP_OUTPUT || cleanup_status=1
+  clear_owned_evidence_temp TRANSCRIPT_TEMP_OUTPUT || cleanup_status=1
+  if (( cleanup_status != 0 )); then
+    report_evidence_temp_cleanup_failure
+    return 1
+  fi
+  return 0
+}
+
+safe_voice_trace_id() {
+  [[ "$1" =~ ^[A-Za-z0-9_-]{1,128}$ ]]
+}
+
+read_latest_voice_trace_id() {
+  adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" \
+    cat "$LATEST_VOICE_TRACE_PATH" 2>/dev/null
+}
+
+probe_remote_regular_file() {
+  local remote_path="$1"
+  local result
+  if ! result="$(adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" sh -c '
+if [ -L "$1" ]; then
+  printf invalid
+elif [ -e "$1" ]; then
+  if [ -f "$1" ]; then
+    printf present
+  else
+    printf invalid
+  fi
+else
+  printf absent
+fi
+' sh "$remote_path" 2>/dev/null)"; then
+    return 1
+  fi
+  case "$result" in
+    present|absent|invalid)
+      printf '%s' "$result"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+validate_evidence_output_paths() {
+  local status=0
+  if python3 - \
+    "$VOICE_STAGE1_EVENT_OUTPUT" \
+    "$TRANSCRIPT_PROBE" \
+    "${VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT:-}" 2>/dev/null <<'PY'
+import os
+import sys
+
+AUTOMATION_INVALID = 10
+TRANSCRIPT_INVALID = 11
+ALIASED = 12
+UNEXPECTED = 13
+
+
+def destination(path, invalid_status):
+    try:
+        canonical = os.path.realpath(os.path.abspath(path))
+        try:
+            os.lstat(path)
+        except FileNotFoundError:
+            pass
+        else:
+            raise SystemExit(invalid_status)
+        return canonical
+    except SystemExit:
+        raise
+    except BaseException:
+        raise SystemExit(UNEXPECTED) from None
+
+
+automation = destination(sys.argv[1], AUTOMATION_INVALID)
+if sys.argv[2] == "1":
+    transcript = destination(sys.argv[3], TRANSCRIPT_INVALID)
+    if automation == transcript:
+        raise SystemExit(ALIASED)
+PY
+  then
+    return 0
+  else
+    status=$?
+  fi
+
+  case "$status" in
+    10) fail "VOICE_STAGE1_EVENT_OUTPUT must be absent" ;;
+    11) fail "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent" ;;
+    12) fail "Stage1 evidence outputs must be distinct" ;;
+    *) fail "unable to validate Stage1 evidence outputs" ;;
+  esac
+}
+
+snapshot_initial_voice_trace() {
+  local pointer_state
+  local trace_id
+  pointer_state="$(probe_remote_regular_file "$LATEST_VOICE_TRACE_PATH")" || return 1
+  case "$pointer_state" in
+    absent)
+      INITIAL_VOICE_TRACE_ID=""
+      return 0
+      ;;
+    present)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  trace_id="$(read_latest_voice_trace_id)" || return 1
+  safe_voice_trace_id "$trace_id" || return 1
+  INITIAL_VOICE_TRACE_ID="$trace_id"
+}
+
+fetch_voice_transcript_events() {
+  local pointer_state
+  local trace_id
+  local events_path
+  local events_state
+  local output_parent
+  pointer_state="$(probe_remote_regular_file "$LATEST_VOICE_TRACE_PATH")" || return 1
+  [[ "$pointer_state" == "present" ]] || return 1
+  trace_id="$(read_latest_voice_trace_id)" || return 1
+  safe_voice_trace_id "$trace_id" || return 1
+  [[ "$trace_id" != "$INITIAL_VOICE_TRACE_ID" ]] || return 1
+  events_path="$APP_ARTIFACT_BASE_DIR/$trace_id/$SANITIZED_VOICE_EVENTS_NAME"
+  events_state="$(probe_remote_regular_file "$events_path")" || return 1
+  [[ "$events_state" != "invalid" ]] || return 1
+
+  output_parent="$(private_dirname "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT")" || return 1
+  private_mkdir "$output_parent" || return 1
+  TRANSCRIPT_TEMP_OUTPUT="$(private_mktemp "$output_parent/.voice-stage1-transcript.XXXXXX")" ||
+    return 1
+  private_chmod "$TRANSCRIPT_TEMP_OUTPUT" || {
+    discard_owned_evidence_temp TRANSCRIPT_TEMP_OUTPUT || return 1
+    return 1
+  }
+  if [[ "$events_state" == "present" ]]; then
+    if ! adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" cat "$events_path" \
+      2>/dev/null >"$TRANSCRIPT_TEMP_OUTPUT"; then
+      discard_owned_evidence_temp TRANSCRIPT_TEMP_OUTPUT || return 1
+      return 1
+    fi
+  elif [[ "$events_state" != "absent" ]]; then
+    discard_owned_evidence_temp TRANSCRIPT_TEMP_OUTPUT || return 1
+    return 1
+  fi
+  publish_owned_evidence_temp TRANSCRIPT_TEMP_OUTPUT "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" || {
+    discard_owned_evidence_temp TRANSCRIPT_TEMP_OUTPUT || return 1
+    return 1
+  }
 }
 
 clock_now() {
@@ -426,6 +1018,7 @@ cleanup_resources() {
   (( CLEANUP_RUNNING == 0 )) || return 0
   CLEANUP_RUNNING=1
   set +e
+  cleanup_owned_evidence_temps || cleanup_status=1
   if (( START_ATTEMPTED == 1 && END_ATTEMPTED == 0 )); then
     END_ATTEMPTED=1
     raw_cleanup_end || cleanup_status=1
@@ -464,12 +1057,18 @@ cleanup_resources() {
 on_exit() {
   local original_status=$?
   local cleanup_status=0
-  trap - EXIT
+  trap - EXIT TERM INT HUP
   cleanup_resources || cleanup_status=$?
   if (( original_status == 0 && cleanup_status != 0 )); then
     original_status=$cleanup_status
   fi
   exit "$original_status"
+}
+
+on_signal() {
+  local signal_number="$1"
+  trap - TERM INT HUP
+  exit "$((128 + signal_number))"
 }
 
 remove_preflight_fixture_once() {
@@ -925,14 +1524,12 @@ perform_handover() {
 
 finalize_and_fetch() {
   local output_parent
-  local temp_output
   local expected_route
   local expected_fixture_bytes
   local expected_startup_bytes=0
-  output_parent="$(dirname "$VOICE_STAGE1_EVENT_OUTPUT")"
-  mkdir -p "$output_parent"
-  [[ ! -L "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a symlink"
-  [[ ! -d "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a directory"
+  output_parent="$(private_dirname "$VOICE_STAGE1_EVENT_OUTPUT")" ||
+    fail "unable to fetch finalized automation events"
+  private_mkdir "$output_parent" || fail "unable to fetch finalized automation events"
 
   FINALIZE_ATTEMPTED=1
   control_broadcast FINALIZE
@@ -945,27 +1542,43 @@ finalize_and_fetch() {
     fail "finalized comparison hash mismatch"
   [[ "$STATUS_TRANSPORT" == "$VOICE_STAGE1_TRANSPORT" ]] || fail "finalized transport mismatch"
 
-  temp_output="$(mktemp "$output_parent/.voice-stage1-events.XXXXXX")"
-  chmod 600 "$temp_output"
-  if ! adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" cat "$AUTOMATION_EVENT_PATH" > "$temp_output"; then
-    rm -f "$temp_output"
-    fail "unable to fetch finalized automation events"
-  fi
-  [[ -s "$temp_output" ]] || {
-    rm -f "$temp_output"
-    fail "finalized automation events are empty"
-  }
   expected_route="${VOICE_STAGE1_ROUTE^}"
-  expected_fixture_bytes="$(wc -c < "$VOICE_STAGE1_PCM_PATH" | tr -d '[:space:]')"
+  expected_fixture_bytes="$(private_fixture_size "$VOICE_STAGE1_PCM_PATH")" ||
+    fail "unable to fetch finalized automation events"
+  [[ "$expected_fixture_bytes" =~ ^[1-9][0-9]*$ ]] ||
+    fail "unable to fetch finalized automation events"
   if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
-    expected_startup_bytes="$(wc -c < "$VOICE_STAGE1_STARTUP_PCM_PATH" | tr -d '[:space:]')"
+    expected_startup_bytes="$(private_fixture_size "$VOICE_STAGE1_STARTUP_PCM_PATH")" ||
+      fail "unable to fetch finalized automation events"
+    [[ "$expected_startup_bytes" =~ ^[1-9][0-9]*$ ]] ||
+      fail "unable to fetch finalized automation events"
+  fi
+
+  AUTOMATION_TEMP_OUTPUT="$(private_mktemp "$output_parent/.voice-stage1-events.XXXXXX")" ||
+    fail "unable to fetch finalized automation events"
+  private_chmod "$AUTOMATION_TEMP_OUTPUT" ||
+    fail_after_owned_evidence_cleanup \
+      AUTOMATION_TEMP_OUTPUT "unable to fetch finalized automation events"
+  if ! adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" cat "$AUTOMATION_EVENT_PATH" \
+    2>/dev/null >"$AUTOMATION_TEMP_OUTPUT"; then
+    fail_after_owned_evidence_cleanup \
+      AUTOMATION_TEMP_OUTPUT "unable to fetch finalized automation events"
+  fi
+  [[ -s "$AUTOMATION_TEMP_OUTPUT" ]] ||
+    fail_after_owned_evidence_cleanup \
+      AUTOMATION_TEMP_OUTPUT "finalized automation events are empty"
+  if [[ "$TRANSCRIPT_PROBE" == "1" ]] && ! fetch_voice_transcript_events; then
+    discard_owned_evidence_temp AUTOMATION_TEMP_OUTPUT || return 1
+    (( EVIDENCE_TEMP_CLEANUP_FAILED == 0 )) || return 1
+    fail "unable to collect sanitized transcript evidence"
+    return 1
   fi
   local validation_output
   local validation_status=0
-  if validation_output="$(python3 - "$temp_output" "$VOICE_STAGE1_RUN_HASH" "$VOICE_STAGE1_COMPARISON_HASH" \
+  if validation_output="$(python3 - "$AUTOMATION_TEMP_OUTPUT" "$VOICE_STAGE1_RUN_HASH" "$VOICE_STAGE1_COMPARISON_HASH" \
     "$VOICE_STAGE1_TRANSPORT" "$expected_route" "$VOICE_STAGE1_APP_STATE" \
     "$VOICE_STAGE1_NETWORK" "$VOICE_STAGE1_LIFECYCLE" "$expected_fixture_bytes" \
-    "$STARTUP_TRUTH_PROBE" "$expected_startup_bytes" <<'PY'
+    "$STARTUP_TRUTH_PROBE" "$expected_startup_bytes" 2>/dev/null <<'PY'
 import json
 import sys
 
@@ -1309,8 +1922,9 @@ PY
   fi
 
   if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
-    mv -f "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT"
-    chmod 600 "$VOICE_STAGE1_EVENT_OUTPUT"
+    publish_owned_evidence_temp AUTOMATION_TEMP_OUTPUT "$VOICE_STAGE1_EVENT_OUTPUT" ||
+      fail_after_owned_evidence_cleanup \
+        AUTOMATION_TEMP_OUTPUT "unable to fetch finalized automation events"
     if [[ -n "$validation_output" ]]; then
       printf '%s\n' "$validation_output"
     fi
@@ -1321,11 +1935,12 @@ PY
     fi
   else
     if [[ "$validation_status" -ne 0 ]]; then
-      rm -f "$temp_output"
-      fail "finalized automation event validation failed"
+      fail_after_owned_evidence_cleanup \
+        AUTOMATION_TEMP_OUTPUT "finalized automation event validation failed"
     fi
-    mv -f "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT"
-    chmod 600 "$VOICE_STAGE1_EVENT_OUTPUT"
+    publish_owned_evidence_temp AUTOMATION_TEMP_OUTPUT "$VOICE_STAGE1_EVENT_OUTPUT" ||
+      fail_after_owned_evidence_cleanup \
+        AUTOMATION_TEMP_OUTPUT "unable to fetch finalized automation events"
   fi
 }
 
@@ -1413,6 +2028,16 @@ validate_normal_inputs() {
     fail "VOICE_STAGE1_INTERRUPT_PCM_PATH must be a nonempty regular file"
   [[ "$STARTUP_TRUTH_PROBE" =~ ^(0|1)$ ]] ||
     fail "VOICE_STAGE1_STARTUP_TRUTH_PROBE must be 0 or 1"
+  [[ "$TRANSCRIPT_PROBE" =~ ^(0|1)$ ]] ||
+    fail "VOICE_STAGE1_TRANSCRIPT_PROBE must be 0 or 1"
+  if [[ "$TRANSCRIPT_PROBE" == "1" ]]; then
+    [[ "$STARTUP_TRUTH_PROBE" == "1" ]] ||
+      fail "transcript probe requires startup truth probe"
+    [[ "$VOICE_STAGE1_TRANSPORT" == "livekit_experimental" ]] ||
+      fail "transcript probe requires livekit_experimental transport"
+    [[ "$VOICE_STAGE1_LIFECYCLE" == "steady" ]] ||
+      fail "transcript probe requires steady lifecycle"
+  fi
   if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
     [[ "$VOICE_STAGE1_TRANSPORT" == "livekit_experimental" ]] ||
       fail "startup truth probe requires livekit_experimental transport"
@@ -1428,6 +2053,11 @@ validate_normal_inputs() {
     [[ "$startup_fixture_bytes" != "$prompt_fixture_bytes" ]] ||
       fail "startup and prompt fixtures must have different byte counts"
   fi
+  if [[ "$TRANSCRIPT_PROBE" == "1" ]]; then
+    require_env VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
+  fi
+  require_command python3
+  validate_evidence_output_paths
   validate_positive_integer VOICE_STAGE1_TARGET_SECONDS "$VOICE_STAGE1_TARGET_SECONDS"
   validate_positive_integer VOICE_STAGE1_ADB_TIMEOUT_SECONDS "$ADB_TIMEOUT_SECONDS"
   validate_positive_integer VOICE_STAGE1_WAIT_TIMEOUT_SECONDS "$WAIT_TIMEOUT_SECONDS"
@@ -1435,8 +2065,6 @@ validate_normal_inputs() {
   validate_nonnegative_number VOICE_STAGE1_POLL_SECONDS "$POLL_SECONDS"
   [[ "$VOICE_STAGE1_RUN_HASH" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "invalid run hash"
   [[ "$VOICE_STAGE1_COMPARISON_HASH" =~ ^sha256:[0-9a-f]{64}$ ]] || fail "invalid comparison hash"
-  [[ ! -L "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a symlink"
-  [[ ! -d "$VOICE_STAGE1_EVENT_OUTPUT" ]] || fail "VOICE_STAGE1_EVENT_OUTPUT must not be a directory"
   require_expected_serial
 
   require_command adb
@@ -1467,6 +2095,9 @@ run_scenario() {
   select_device
   require_package
   trap on_exit EXIT
+  trap 'on_signal 15' TERM
+  trap 'on_signal 2' INT
+  trap 'on_signal 1' HUP
 
   if [[ "$VOICE_STAGE1_APP_STATE" == "foreground" ]]; then
     adb_command shell am start -W -a android.intent.action.MAIN \
@@ -1509,6 +2140,9 @@ run_scenario() {
   fi
   arm_capture_fixture
 
+  if [[ "$TRANSCRIPT_PROBE" == "1" ]]; then
+    snapshot_initial_voice_trace || fail "unable to collect sanitized transcript evidence"
+  fi
   run_started_at="$(clock_now)"
   start_call
   wait_event CALL_ACTIVE 1
@@ -1565,7 +2199,7 @@ run_scenario() {
   wait_call_stopped
   finalize_and_fetch
   cleanup_resources
-  trap - EXIT
+  trap - EXIT TERM INT HUP
   printf 'stage1.run=complete\n'
 }
 
@@ -1575,10 +2209,19 @@ case "$#" in
     run_scenario
     ;;
   1)
-    [[ "$1" == "--preflight" ]] || fail "usage: voice-agent-stage1-e2e.sh [--preflight]"
-    run_preflight
+    case "$1" in
+      --preflight)
+        run_preflight
+        ;;
+      --classify-transcript)
+        classify_transcript_evidence
+        ;;
+      *)
+        fail "usage: voice-agent-stage1-e2e.sh [--preflight|--classify-transcript]"
+        ;;
+    esac
     ;;
   *)
-    fail "usage: voice-agent-stage1-e2e.sh [--preflight]"
+    fail "usage: voice-agent-stage1-e2e.sh [--preflight|--classify-transcript]"
     ;;
 esac
