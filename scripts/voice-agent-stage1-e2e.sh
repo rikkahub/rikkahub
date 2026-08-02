@@ -63,6 +63,10 @@ STATUS_VALIDATED=""
 FIXTURE_TOKEN=""
 FIXTURE_DATA=""
 INITIAL_VOICE_TRACE_ID=""
+AUTOMATION_TEMP_OUTPUT=""
+TRANSCRIPT_TEMP_OUTPUT=""
+EVIDENCE_TEMP_CLEANUP_FAILED=0
+EVIDENCE_TEMP_CLEANUP_DIAGNOSTIC_EMITTED=0
 
 fail() {
   printf 'stage1: %s\n' "$*" >&2
@@ -282,53 +286,7 @@ def combined_record(classification, boundary):
     emit_record("stage1.final_user_transcript=", payload)
 
 
-def classify_file(path):
-    try:
-        file_stat = os.lstat(path)
-        if stat.S_ISLNK(file_stat.st_mode) or not stat.S_ISREG(file_stat.st_mode):
-            raise InvalidEvidence()
-        if not os.access(path, os.R_OK):
-            raise InvalidEvidence()
-        session_id = None
-        event_ids = set()
-        row_count = 0
-        qualifying_count = 0
-        with open(path, "r", encoding="utf-8") as source:
-            for raw_line in source:
-                if not raw_line.strip():
-                    continue
-                row_count += 1
-                row = json.loads(
-                    raw_line,
-                    object_pairs_hook=reject_duplicate_keys,
-                    parse_constant=reject_nonstandard_number,
-                )
-                validate_row(row)
-                if session_id is None:
-                    session_id = row["voiceSessionId"]
-                elif row["voiceSessionId"] != session_id:
-                    raise InvalidEvidence()
-                if row["eventId"] in event_ids:
-                    raise InvalidEvidence()
-                event_ids.add(row["eventId"])
-                if (
-                    row["kind"] == "transcript"
-                    and row["role"] == "user"
-                    and row["interrupted"] is False
-                    and row["textCharacterCount"] > 0
-                ):
-                    qualifying_count += 1
-        if row_count == 0:
-            return "unknown", True, 0, 0
-        elif qualifying_count:
-            return "present", True, row_count, qualifying_count
-        else:
-            return "absent", True, row_count, 0
-    except BaseException:
-        return "unknown", False, 0, 0
-
-
-def worker_snapshot_metadata(file_stat):
+def snapshot_metadata(file_stat):
     if (
         stat.S_ISLNK(file_stat.st_mode)
         or not stat.S_ISREG(file_stat.st_mode)
@@ -348,21 +306,21 @@ def worker_snapshot_metadata(file_stat):
     )
 
 
-def worker_rows(path):
-    path_metadata = worker_snapshot_metadata(os.lstat(path))
+def stable_snapshot_bytes(path):
+    path_metadata = snapshot_metadata(os.lstat(path))
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(path, flags)
     try:
         opened_stat = os.fstat(descriptor)
-        opened_metadata = worker_snapshot_metadata(opened_stat)
+        opened_metadata = snapshot_metadata(opened_stat)
         if opened_metadata != path_metadata:
             raise InvalidEvidence()
         source = os.fdopen(descriptor, "rb")
         descriptor = -1
         with source:
             content = source.read()
-            post_read_metadata = worker_snapshot_metadata(os.fstat(source.fileno()))
-            post_read_path_metadata = worker_snapshot_metadata(os.lstat(path))
+            post_read_metadata = snapshot_metadata(os.fstat(source.fileno()))
+            post_read_path_metadata = snapshot_metadata(os.lstat(path))
             if (
                 post_read_metadata != opened_metadata
                 or post_read_path_metadata != opened_metadata
@@ -370,27 +328,73 @@ def worker_rows(path):
                 or (content and not content.endswith(b"\n"))
             ):
                 raise InvalidEvidence()
-            rows = []
-            for raw_line in content.decode("utf-8").split("\n"):
-                if not raw_line.strip():
-                    continue
-                row = json.loads(
-                    raw_line,
-                    object_pairs_hook=reject_duplicate_keys,
-                    parse_constant=reject_nonstandard_number,
-                )
-                if type(row) is not dict:
-                    raise InvalidEvidence()
-                for field in {"message", "agent_name", "job_id", "room"} & set(row):
-                    if type(row[field]) is not str:
-                        raise InvalidEvidence()
-                if not row.get("message"):
-                    raise InvalidEvidence()
-                rows.append(row)
-            return rows
+            return content
     finally:
         if descriptor >= 0:
             os.close(descriptor)
+
+
+def classify_file(path):
+    try:
+        content = stable_snapshot_bytes(path)
+        session_id = None
+        event_ids = set()
+        row_count = 0
+        qualifying_count = 0
+        for raw_line in content.decode("utf-8").split("\n"):
+            if not raw_line.strip():
+                continue
+            row_count += 1
+            row = json.loads(
+                raw_line,
+                object_pairs_hook=reject_duplicate_keys,
+                parse_constant=reject_nonstandard_number,
+            )
+            validate_row(row)
+            if session_id is None:
+                session_id = row["voiceSessionId"]
+            elif row["voiceSessionId"] != session_id:
+                raise InvalidEvidence()
+            if row["eventId"] in event_ids:
+                raise InvalidEvidence()
+            event_ids.add(row["eventId"])
+            if (
+                row["kind"] == "transcript"
+                and row["role"] == "user"
+                and row["interrupted"] is False
+                and row["textCharacterCount"] > 0
+            ):
+                qualifying_count += 1
+        if row_count == 0:
+            return "unknown", True, 0, 0
+        elif qualifying_count:
+            return "present", True, row_count, qualifying_count
+        else:
+            return "absent", True, row_count, 0
+    except BaseException:
+        return "unknown", False, 0, 0
+
+
+def worker_rows(path):
+    content = stable_snapshot_bytes(path)
+    rows = []
+    for raw_line in content.decode("utf-8").split("\n"):
+        if not raw_line.strip():
+            continue
+        row = json.loads(
+            raw_line,
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=reject_nonstandard_number,
+        )
+        if type(row) is not dict:
+            raise InvalidEvidence()
+        for field in {"message", "agent_name", "job_id", "room"} & set(row):
+            if type(row[field]) is not str:
+                raise InvalidEvidence()
+        if not row.get("message"):
+            raise InvalidEvidence()
+        rows.append(row)
+    return rows
 
 
 def classify_worker(path, capture_status):
@@ -469,10 +473,67 @@ adb_command() {
 private_mkdir() { (umask 077; mkdir -p -- "$1") 2>/dev/null; }
 private_mktemp() { mktemp "$1" 2>/dev/null; }
 private_chmod() { chmod 600 -- "$1" 2>/dev/null; }
-private_move() { mv -f -- "$1" "$2" 2>/dev/null; }
-private_remove_temp() { rm -f -- "$1" 2>/dev/null || true; }
+private_publish_temp() {
+  ln -- "$1" "$2" 2>/dev/null || return 1
+  rm -- "$1" 2>/dev/null
+}
+private_remove_temp() { rm -f -- "$1" 2>/dev/null; }
 private_dirname() { dirname -- "$1" 2>/dev/null; }
 private_fixture_size() { (wc -c < "$1" | tr -d '[:space:]') 2>/dev/null; }
+
+clear_owned_evidence_temp() {
+  local owner_name="$1"
+  local temp_path="${!owner_name}"
+  [[ -n "$temp_path" ]] || return 0
+  if private_remove_temp "$temp_path"; then
+    printf -v "$owner_name" '%s' ""
+    return 0
+  fi
+  EVIDENCE_TEMP_CLEANUP_FAILED=1
+  return 1
+}
+
+report_evidence_temp_cleanup_failure() {
+  EVIDENCE_TEMP_CLEANUP_FAILED=1
+  if (( EVIDENCE_TEMP_CLEANUP_DIAGNOSTIC_EMITTED == 0 )); then
+    EVIDENCE_TEMP_CLEANUP_DIAGNOSTIC_EMITTED=1
+    fail "unable to clean unpublished Stage1 evidence"
+    return 1
+  fi
+  return 1
+}
+
+discard_owned_evidence_temp() {
+  clear_owned_evidence_temp "$1" || report_evidence_temp_cleanup_failure
+}
+
+publish_owned_evidence_temp() {
+  local owner_name="$1"
+  local destination="$2"
+  local temp_path="${!owner_name}"
+  [[ -n "$temp_path" ]] || return 1
+  private_publish_temp "$temp_path" "$destination" || return 1
+  printf -v "$owner_name" '%s' ""
+}
+
+fail_after_owned_evidence_cleanup() {
+  local owner_name="$1"
+  local diagnostic="$2"
+  discard_owned_evidence_temp "$owner_name" || return 1
+  (( EVIDENCE_TEMP_CLEANUP_FAILED == 0 )) || return 1
+  fail "$diagnostic"
+}
+
+cleanup_owned_evidence_temps() {
+  local cleanup_status=0
+  clear_owned_evidence_temp AUTOMATION_TEMP_OUTPUT || cleanup_status=1
+  clear_owned_evidence_temp TRANSCRIPT_TEMP_OUTPUT || cleanup_status=1
+  if (( cleanup_status != 0 )); then
+    report_evidence_temp_cleanup_failure
+    return 1
+  fi
+  return 0
+}
 
 safe_voice_trace_id() {
   [[ "$1" =~ ^[A-Za-z0-9_-]{1,128}$ ]]
@@ -518,7 +579,6 @@ validate_evidence_output_paths() {
     "$TRANSCRIPT_PROBE" \
     "${VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT:-}" 2>/dev/null <<'PY'
 import os
-import stat
 import sys
 
 AUTOMATION_INVALID = 10
@@ -527,30 +587,26 @@ ALIASED = 12
 UNEXPECTED = 13
 
 
-def identity(path, invalid_status):
+def destination(path, invalid_status):
     try:
         canonical = os.path.realpath(os.path.abspath(path))
         try:
-            value = os.lstat(path)
+            os.lstat(path)
         except FileNotFoundError:
-            inode = None
+            pass
         else:
-            if stat.S_ISLNK(value.st_mode) or not stat.S_ISREG(value.st_mode):
-                raise SystemExit(invalid_status)
-            inode = (value.st_dev, value.st_ino)
-        return canonical, inode
+            raise SystemExit(invalid_status)
+        return canonical
     except SystemExit:
         raise
     except BaseException:
         raise SystemExit(UNEXPECTED) from None
 
 
-automation = identity(sys.argv[1], AUTOMATION_INVALID)
+automation = destination(sys.argv[1], AUTOMATION_INVALID)
 if sys.argv[2] == "1":
-    transcript = identity(sys.argv[3], TRANSCRIPT_INVALID)
-    if automation[0] == transcript[0]:
-        raise SystemExit(ALIASED)
-    if automation[1] is not None and automation[1] == transcript[1]:
+    transcript = destination(sys.argv[3], TRANSCRIPT_INVALID)
+    if automation == transcript:
         raise SystemExit(ALIASED)
 PY
   then
@@ -560,8 +616,8 @@ PY
   fi
 
   case "$status" in
-    10) fail "VOICE_STAGE1_EVENT_OUTPUT must be absent or a regular non-symlink file" ;;
-    11) fail "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent or a regular non-symlink file" ;;
+    10) fail "VOICE_STAGE1_EVENT_OUTPUT must be absent" ;;
+    11) fail "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent" ;;
     12) fail "Stage1 evidence outputs must be distinct" ;;
     *) fail "unable to validate Stage1 evidence outputs" ;;
   esac
@@ -593,7 +649,6 @@ fetch_voice_transcript_events() {
   local events_path
   local events_state
   local output_parent
-  local temp_output=""
   pointer_state="$(probe_remote_regular_file "$LATEST_VOICE_TRACE_PATH")" || return 1
   [[ "$pointer_state" == "present" ]] || return 1
   trace_id="$(read_latest_voice_trace_id)" || return 1
@@ -605,27 +660,26 @@ fetch_voice_transcript_events() {
 
   output_parent="$(private_dirname "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT")" || return 1
   private_mkdir "$output_parent" || return 1
-  temp_output="$(private_mktemp "$output_parent/.voice-stage1-transcript.XXXXXX")" ||
+  TRANSCRIPT_TEMP_OUTPUT="$(private_mktemp "$output_parent/.voice-stage1-transcript.XXXXXX")" ||
     return 1
-  private_chmod "$temp_output" || {
-    private_remove_temp "$temp_output"
+  private_chmod "$TRANSCRIPT_TEMP_OUTPUT" || {
+    discard_owned_evidence_temp TRANSCRIPT_TEMP_OUTPUT || return 1
     return 1
   }
   if [[ "$events_state" == "present" ]]; then
     if ! adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" cat "$events_path" \
-      >"$temp_output" 2>/dev/null; then
-      private_remove_temp "$temp_output"
+      2>/dev/null >"$TRANSCRIPT_TEMP_OUTPUT"; then
+      discard_owned_evidence_temp TRANSCRIPT_TEMP_OUTPUT || return 1
       return 1
     fi
   elif [[ "$events_state" != "absent" ]]; then
-    private_remove_temp "$temp_output"
+    discard_owned_evidence_temp TRANSCRIPT_TEMP_OUTPUT || return 1
     return 1
   fi
-  private_move "$temp_output" "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" || {
-    private_remove_temp "$temp_output"
+  publish_owned_evidence_temp TRANSCRIPT_TEMP_OUTPUT "$VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT" || {
+    discard_owned_evidence_temp TRANSCRIPT_TEMP_OUTPUT || return 1
     return 1
   }
-  temp_output=""
 }
 
 clock_now() {
@@ -964,6 +1018,7 @@ cleanup_resources() {
   (( CLEANUP_RUNNING == 0 )) || return 0
   CLEANUP_RUNNING=1
   set +e
+  cleanup_owned_evidence_temps || cleanup_status=1
   if (( START_ATTEMPTED == 1 && END_ATTEMPTED == 0 )); then
     END_ATTEMPTED=1
     raw_cleanup_end || cleanup_status=1
@@ -1002,12 +1057,18 @@ cleanup_resources() {
 on_exit() {
   local original_status=$?
   local cleanup_status=0
-  trap - EXIT
+  trap - EXIT TERM INT HUP
   cleanup_resources || cleanup_status=$?
   if (( original_status == 0 && cleanup_status != 0 )); then
     original_status=$cleanup_status
   fi
   exit "$original_status"
+}
+
+on_signal() {
+  local signal_number="$1"
+  trap - TERM INT HUP
+  exit "$((128 + signal_number))"
 }
 
 remove_preflight_fixture_once() {
@@ -1463,7 +1524,6 @@ perform_handover() {
 
 finalize_and_fetch() {
   local output_parent
-  local temp_output=""
   local expected_route
   local expected_fixture_bytes
   local expected_startup_bytes=0
@@ -1494,29 +1554,28 @@ finalize_and_fetch() {
       fail "unable to fetch finalized automation events"
   fi
 
-  temp_output="$(private_mktemp "$output_parent/.voice-stage1-events.XXXXXX")" ||
+  AUTOMATION_TEMP_OUTPUT="$(private_mktemp "$output_parent/.voice-stage1-events.XXXXXX")" ||
     fail "unable to fetch finalized automation events"
-  private_chmod "$temp_output" || {
-    private_remove_temp "$temp_output"
-    fail "unable to fetch finalized automation events"
-  }
+  private_chmod "$AUTOMATION_TEMP_OUTPUT" ||
+    fail_after_owned_evidence_cleanup \
+      AUTOMATION_TEMP_OUTPUT "unable to fetch finalized automation events"
   if ! adb_command exec-out run-as "$VOICE_STAGE1_PACKAGE" cat "$AUTOMATION_EVENT_PATH" \
-    >"$temp_output" 2>/dev/null; then
-    private_remove_temp "$temp_output"
-    fail "unable to fetch finalized automation events"
+    2>/dev/null >"$AUTOMATION_TEMP_OUTPUT"; then
+    fail_after_owned_evidence_cleanup \
+      AUTOMATION_TEMP_OUTPUT "unable to fetch finalized automation events"
   fi
-  [[ -s "$temp_output" ]] || {
-    private_remove_temp "$temp_output"
-    fail "finalized automation events are empty"
-  }
+  [[ -s "$AUTOMATION_TEMP_OUTPUT" ]] ||
+    fail_after_owned_evidence_cleanup \
+      AUTOMATION_TEMP_OUTPUT "finalized automation events are empty"
   if [[ "$TRANSCRIPT_PROBE" == "1" ]] && ! fetch_voice_transcript_events; then
-    private_remove_temp "$temp_output"
+    discard_owned_evidence_temp AUTOMATION_TEMP_OUTPUT || return 1
+    (( EVIDENCE_TEMP_CLEANUP_FAILED == 0 )) || return 1
     fail "unable to collect sanitized transcript evidence"
     return 1
   fi
   local validation_output
   local validation_status=0
-  if validation_output="$(python3 - "$temp_output" "$VOICE_STAGE1_RUN_HASH" "$VOICE_STAGE1_COMPARISON_HASH" \
+  if validation_output="$(python3 - "$AUTOMATION_TEMP_OUTPUT" "$VOICE_STAGE1_RUN_HASH" "$VOICE_STAGE1_COMPARISON_HASH" \
     "$VOICE_STAGE1_TRANSPORT" "$expected_route" "$VOICE_STAGE1_APP_STATE" \
     "$VOICE_STAGE1_NETWORK" "$VOICE_STAGE1_LIFECYCLE" "$expected_fixture_bytes" \
     "$STARTUP_TRUTH_PROBE" "$expected_startup_bytes" 2>/dev/null <<'PY'
@@ -1863,11 +1922,9 @@ PY
   fi
 
   if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
-    private_move "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT" || {
-      private_remove_temp "$temp_output"
-      fail "unable to fetch finalized automation events"
-    }
-    temp_output=""
+    publish_owned_evidence_temp AUTOMATION_TEMP_OUTPUT "$VOICE_STAGE1_EVENT_OUTPUT" ||
+      fail_after_owned_evidence_cleanup \
+        AUTOMATION_TEMP_OUTPUT "unable to fetch finalized automation events"
     if [[ -n "$validation_output" ]]; then
       printf '%s\n' "$validation_output"
     fi
@@ -1878,14 +1935,12 @@ PY
     fi
   else
     if [[ "$validation_status" -ne 0 ]]; then
-      private_remove_temp "$temp_output"
-      fail "finalized automation event validation failed"
+      fail_after_owned_evidence_cleanup \
+        AUTOMATION_TEMP_OUTPUT "finalized automation event validation failed"
     fi
-    private_move "$temp_output" "$VOICE_STAGE1_EVENT_OUTPUT" || {
-      private_remove_temp "$temp_output"
-      fail "unable to fetch finalized automation events"
-    }
-    temp_output=""
+    publish_owned_evidence_temp AUTOMATION_TEMP_OUTPUT "$VOICE_STAGE1_EVENT_OUTPUT" ||
+      fail_after_owned_evidence_cleanup \
+        AUTOMATION_TEMP_OUTPUT "unable to fetch finalized automation events"
   fi
 }
 
@@ -2040,6 +2095,9 @@ run_scenario() {
   select_device
   require_package
   trap on_exit EXIT
+  trap 'on_signal 15' TERM
+  trap 'on_signal 2' INT
+  trap 'on_signal 1' HUP
 
   if [[ "$VOICE_STAGE1_APP_STATE" == "foreground" ]]; then
     adb_command shell am start -W -a android.intent.action.MAIN \
@@ -2141,7 +2199,7 @@ run_scenario() {
   wait_call_stopped
   finalize_and_fetch
   cleanup_resources
-  trap - EXIT
+  trap - EXIT TERM INT HUP
   printf 'stage1.run=complete\n'
 }
 

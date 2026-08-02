@@ -58,6 +58,31 @@ assert_equals() {
   }
 }
 
+path_metadata() {
+  python3 - "$1" <<'PY'
+import json
+import os
+import stat
+import sys
+
+path = sys.argv[1]
+value = os.lstat(path)
+payload = {
+    "device": value.st_dev,
+    "inode": value.st_ino,
+    "mode": value.st_mode,
+    "links": value.st_nlink,
+    "uid": value.st_uid,
+    "gid": value.st_gid,
+    "size": value.st_size,
+    "mtimeNs": value.st_mtime_ns,
+    "ctimeNs": value.st_ctime_ns,
+    "target": os.readlink(path) if stat.S_ISLNK(value.st_mode) else None,
+}
+print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+PY
+}
+
 cat > "$BIN_DIR/adb" <<'PY'
 #!/usr/bin/env python3
 import json
@@ -777,7 +802,8 @@ done
 export FAKE_REAL_MKDIR="$(command -v mkdir)"
 export FAKE_REAL_MKTEMP="$(command -v mktemp)"
 export FAKE_REAL_CHMOD="$(command -v chmod)"
-export FAKE_REAL_MV="$(command -v mv)"
+export FAKE_REAL_LN="$(command -v ln)"
+export FAKE_REAL_RM="$(command -v rm)"
 export FAKE_REAL_WC="$(command -v wc)"
 cat > "$BIN_DIR/private-file-command" <<'SH'
 #!/usr/bin/env bash
@@ -787,17 +813,64 @@ if [[ "${FAKE_PRIVATE_FILE_FAIL:-}" == "$command_name" && "$*" == *PRIVATE-OUTPU
   printf '%s %s\n' "$command_name" "$*" >&2
   exit 88
 fi
+if [[ "$command_name" == "rm" && -n "${FAKE_PRIVATE_REMOVE_FAIL:-}" ]]; then
+  private_path="${@: -1}"
+  case "$private_path:$FAKE_PRIVATE_REMOVE_FAIL" in
+    */.voice-stage1-events.*:automation|*/.voice-stage1-transcript.*:transcript)
+      printf 'PRIVATE-RM-FAIL-SENTINEL %s\n' "$private_path" >&2
+      exit 88
+      ;;
+  esac
+fi
+if [[ "$command_name" == "ln" && -n "${FAKE_PRIVATE_PUBLISH_RACE:-}" ]]; then
+  source_path="${@: -2:1}"
+  destination="${@: -1}"
+  case "$source_path:$FAKE_PRIVATE_PUBLISH_RACE" in
+    */.voice-stage1-events.*:automation|*/.voice-stage1-transcript.*:transcript)
+      if [[ ! -e "$destination" && ! -L "$destination" ]]; then
+        printf 'synthetic-late-destination\n' > "$destination"
+        "$FAKE_REAL_CHMOD" 640 "$destination"
+      fi
+      ;;
+  esac
+fi
+if [[ "$command_name" == "chmod" && -n "${FAKE_PRIVATE_REOPEN_FAIL:-}" ]]; then
+  private_path="${@: -1}"
+  case "$private_path:$FAKE_PRIVATE_REOPEN_FAIL" in
+    */.voice-stage1-events.*:automation|*/.voice-stage1-transcript.*:transcript)
+      "$FAKE_REAL_CHMOD" "$@"
+      "$FAKE_REAL_RM" -f -- "$private_path"
+      "$FAKE_REAL_LN" -s -- "$FAKE_PRIVATE_REOPEN_FAILURE_TARGET" "$private_path"
+      printf 'injected\n' > "$FAKE_PRIVATE_REOPEN_MARKER"
+      exit 0
+      ;;
+  esac
+fi
+if [[ "$command_name" == "chmod" && -n "${FAKE_PRIVATE_SIGNAL_AFTER_CHMOD:-}" ]]; then
+  private_path="${@: -1}"
+  signal_family="${FAKE_PRIVATE_SIGNAL_AFTER_CHMOD#*:}"
+  signal_name="${FAKE_PRIVATE_SIGNAL_AFTER_CHMOD%%:*}"
+  case "$private_path:$signal_family" in
+    */.voice-stage1-events.*:automation|*/.voice-stage1-transcript.*:transcript)
+      "$FAKE_REAL_CHMOD" "$@"
+      printf 'injected\n' > "$FAKE_PRIVATE_SIGNAL_MARKER"
+      kill -s "$signal_name" "$PPID"
+      exit 0
+      ;;
+  esac
+fi
 case "$command_name" in
   mkdir) real_command="$FAKE_REAL_MKDIR" ;;
   mktemp) real_command="$FAKE_REAL_MKTEMP" ;;
   chmod) real_command="$FAKE_REAL_CHMOD" ;;
-  mv) real_command="$FAKE_REAL_MV" ;;
+  ln) real_command="$FAKE_REAL_LN" ;;
+  rm) real_command="$FAKE_REAL_RM" ;;
   *) exit 89 ;;
 esac
 exec "$real_command" "$@"
 SH
 chmod +x "$BIN_DIR/private-file-command"
-for private_command in mkdir mktemp chmod mv; do
+for private_command in mkdir mktemp chmod ln rm; do
   ln -s private-file-command "$BIN_DIR/$private_command"
 done
 cat > "$BIN_DIR/wc" <<'SH'
@@ -806,6 +879,7 @@ set -euo pipefail
 if [[ "${FAKE_WC_FAIL_WHEN_FINALIZED:-}" == "1" ]] &&
    python3 - "$FAKE_ADB_STATE_DIR/state.json" <<'PY'
 import json
+import os
 import sys
 
 try:
@@ -844,7 +918,11 @@ reset_fake() {
   unset FAKE_ADB_CURRENT_VOICE_TRACE_ID FAKE_ADB_VOICE_EVENTS
   unset FAKE_ADB_VOICE_EVENTS_EXISTS FAKE_ADB_VOICE_EVENTS_REGULAR
   unset FAKE_ADB_VOICE_EVENTS_SYMLINK FAKE_ADB_NOISY_PRIVATE_FAILURE
-  unset FAKE_PRIVATE_FILE_FAIL VOICE_STAGE1_TEST_EVENT_OUTPUT
+  unset FAKE_PRIVATE_FILE_FAIL FAKE_PRIVATE_PUBLISH_RACE FAKE_PRIVATE_REOPEN_FAIL
+  unset FAKE_PRIVATE_REOPEN_FAILURE_TARGET FAKE_PRIVATE_REOPEN_MARKER
+  unset FAKE_PRIVATE_REMOVE_FAIL FAKE_PRIVATE_SIGNAL_AFTER_CHMOD
+  unset FAKE_PRIVATE_SIGNAL_MARKER
+  unset VOICE_STAGE1_TEST_EVENT_OUTPUT
   unset FAKE_WC_FAIL_WHEN_FINALIZED
   unset VOICE_STAGE1_TEST_MAX_WAIT_ATTEMPTS
   unset VOICE_STAGE1_TRANSCRIPT_PROBE VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
@@ -1000,6 +1078,7 @@ write_transcript_fixture() {
   local output="$2"
   python3 - "$scenario" "$output" <<'PY'
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -1088,12 +1167,19 @@ def valid_kind(kind):
 
 if scenario == "empty":
     output.write_bytes(b"")
+    os.chmod(output, 0o600)
     raise SystemExit(0)
 if scenario == "malformed_json":
     output.write_text('{"sentinel":"fixture-private-sentinel"\n')
+    os.chmod(output, 0o600)
     raise SystemExit(0)
 if scenario == "non_object":
     output.write_text('["fixture-private-sentinel"]\n')
+    os.chmod(output, 0o600)
+    raise SystemExit(0)
+if scenario == "invalid_utf8":
+    output.write_bytes(b'\xff\n')
+    os.chmod(output, 0o600)
     raise SystemExit(0)
 
 if scenario == "final_user":
@@ -1138,6 +1224,12 @@ elif scenario == "qualifying_then_invalid":
         json.dumps(rows[0], separators=(",", ":"))
         + '\n{"sentinel":"fixture-private-sentinel"\n'
     )
+    os.chmod(output, 0o600)
+    raise SystemExit(0)
+elif scenario == "unterminated_complete":
+    rows = [transcript("event-final-user", "user", False, 17)]
+    output.write_text(json.dumps(rows[0], separators=(",", ":")))
+    os.chmod(output, 0o600)
     raise SystemExit(0)
 elif scenario == "null_value":
     row = job("job_running", "event-null")
@@ -1187,8 +1279,73 @@ else:
     raise ValueError("unsupported fixture scenario")
 
 output.write_text("".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows))
+os.chmod(output, 0o600)
 PY
 }
+
+ANDROID_SNAPSHOT_FAULT_DIR="$TMP_DIR/android-snapshot-fault"
+mkdir -p "$ANDROID_SNAPSHOT_FAULT_DIR"
+cat > "$ANDROID_SNAPSHOT_FAULT_DIR/sitecustomize.py" <<'PY'
+import os
+
+mode = os.environ.get("FAKE_ANDROID_SNAPSHOT_CHANGE")
+target = os.path.abspath(os.environ.get("FAKE_ANDROID_SNAPSHOT_TARGET", ""))
+marker = os.environ.get("FAKE_ANDROID_SNAPSHOT_MARKER")
+real_fstat = os.fstat
+target_fstat_calls = 0
+injected = False
+
+
+def inject_change():
+    if mode == "mutation":
+        with open(target, "r+b", buffering=0) as handle:
+            content = handle.read()
+            needle = b"event-final-user"
+            replacement = b"event-xinal-user"
+            offset = content.index(needle)
+            handle.seek(offset)
+            handle.write(replacement)
+            os.fsync(handle.fileno())
+    elif mode == "replacement":
+        with open(target, "rb") as source:
+            content = source.read()
+        replacement_path = target + ".replacement"
+        descriptor = os.open(
+            replacement_path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
+        with os.fdopen(descriptor, "wb") as replacement:
+            replacement.write(content)
+            replacement.flush()
+            os.fsync(replacement.fileno())
+        os.replace(replacement_path, target)
+    elif mode == "truncation":
+        os.truncate(target, max(0, os.path.getsize(target) - 1))
+    else:
+        raise RuntimeError("unsupported Android snapshot fault")
+    with open(marker, "w", encoding="utf-8") as marker_file:
+        marker_file.write("injected\n")
+
+
+def injected_fstat(descriptor):
+    global injected, target_fstat_calls
+    if mode and not injected:
+        try:
+            opened_path = os.path.realpath(f"/proc/self/fd/{descriptor}")
+        except OSError:
+            opened_path = ""
+        if opened_path == target:
+            target_fstat_calls += 1
+            if target_fstat_calls == 2:
+                injected = True
+                inject_change()
+    return real_fstat(descriptor)
+
+
+if mode:
+    os.fstat = injected_fstat
+PY
 
 write_worker_log_fixture() {
   local scenario="$1"
@@ -1400,13 +1557,31 @@ assert_transcript_file_result() {
   local stdout_file="$TMP_DIR/classifier-stdout"
   local stderr_file="$TMP_DIR/classifier-stderr"
   local status
-  rm -f "$fixture" "$stdout_file" "$stderr_file"
+  rm -f "$fixture" "$fixture.target" "$stdout_file" "$stderr_file"
   reset_fake
-  if [[ "$scenario" != "missing" && "$scenario" != "unreadable" ]]; then
-    write_transcript_fixture "$scenario" "$fixture"
-  elif [[ "$scenario" == "unreadable" ]]; then
-    write_transcript_fixture final_user "$fixture"
-    chmod 000 "$fixture"
+  case "$scenario" in
+    missing)
+      ;;
+    unreadable)
+      write_transcript_fixture final_user "$fixture"
+      chmod 000 "$fixture"
+      ;;
+    symlink)
+      write_transcript_fixture final_user "$fixture.target"
+      ln -s "$fixture.target" "$fixture"
+      ;;
+    wrong_mode)
+      write_transcript_fixture final_user "$fixture"
+      chmod 644 "$fixture"
+      ;;
+    *)
+      write_transcript_fixture "$scenario" "$fixture"
+      ;;
+  esac
+  if [[ -f "$fixture" && ! -L "$fixture" &&
+        "$scenario" != "unreadable" && "$scenario" != "wrong_mode" ]]; then
+    [[ "$(stat -c %a "$fixture")" == "600" ]] ||
+      fail "Android fixture $scenario was not explicitly mode 0600"
   fi
   set +e
   run_transcript_classifier "$fixture" >"$stdout_file" 2>"$stderr_file"
@@ -1431,6 +1606,41 @@ EOF
   [[ ! -s "$stderr_file" ]] || fail "classifier emitted a non-fixed parser diagnostic for $scenario"
   [[ ! -s "$ADB_LOG" ]] || fail "classification mode reached ADB for $scenario"
   [[ ! -s "$EXTERNAL_LOG" ]] || fail "classification mode reached an external command for $scenario"
+  assert_classifier_privacy "$(cat "$stdout_file" "$stderr_file")" "$fixture" "$WORKER_LOG"
+}
+
+assert_android_snapshot_change_result() {
+  local change="$1"
+  local fixture="$TRANSCRIPT_FIXTURE_DIR/snapshot-$change.ndjson"
+  local marker="$TMP_DIR/android-snapshot-$change.injected"
+  local stdout_file="$TMP_DIR/classifier-stdout"
+  local stderr_file="$TMP_DIR/classifier-stderr"
+  local status
+  rm -f "$fixture" "$fixture.replacement" "$marker" "$stdout_file" "$stderr_file"
+  reset_fake
+  write_transcript_fixture final_user "$fixture"
+  [[ "$(stat -c %a "$fixture")" == "600" ]] ||
+    fail "Android snapshot $change fixture was not mode 0600"
+  set +e
+  FAKE_ANDROID_SNAPSHOT_CHANGE="$change" \
+  FAKE_ANDROID_SNAPSHOT_TARGET="$fixture" \
+  FAKE_ANDROID_SNAPSHOT_MARKER="$marker" \
+  PYTHONPATH="$ANDROID_SNAPSHOT_FAULT_DIR${PYTHONPATH:+:$PYTHONPATH}" \
+    run_transcript_classifier "$fixture" >"$stdout_file" 2>"$stderr_file"
+  status=$?
+  set -e
+  [[ -s "$marker" ]] || fail "Android snapshot $change fault was not injected"
+  [[ "$status" -eq 3 ]] ||
+    fail "Android snapshot $change returned status $status, expected 3"
+  assert_equals "$(cat <<EOF
+$(transcript_file_record unknown false 0 0)
+$(worker_log_record unknown 0 0)
+$(combined_transcript_record unknown evidence-collection)
+EOF
+)" "$(cat "$stdout_file")"
+  [[ ! -s "$stderr_file" ]] || fail "Android snapshot $change emitted a private diagnostic"
+  [[ ! -s "$ADB_LOG" ]] || fail "Android snapshot $change reached ADB"
+  [[ ! -s "$EXTERNAL_LOG" ]] || fail "Android snapshot $change reached an external command"
   assert_classifier_privacy "$(cat "$stdout_file" "$stderr_file")" "$fixture" "$WORKER_LOG"
 }
 
@@ -1647,6 +1857,10 @@ assert_transcript_file_result zero_final_user absent true 1 0
 assert_transcript_file_result empty unknown true 0 0
 assert_transcript_file_result missing unknown false 0 0
 assert_transcript_file_result unreadable unknown false 0 0
+assert_transcript_file_result symlink unknown false 0 0
+assert_transcript_file_result wrong_mode unknown false 0 0
+assert_transcript_file_result unterminated_complete unknown false 0 0
+assert_transcript_file_result invalid_utf8 unknown false 0 0
 
 for sanitized_kind in \
   job_accepted \
@@ -1688,6 +1902,10 @@ for invalid_fixture in \
   grounded_user; do
   assert_transcript_file_result "$invalid_fixture" unknown false 0 0
 done
+
+assert_android_snapshot_change_result mutation
+assert_android_snapshot_change_result replacement
+assert_android_snapshot_change_result truncation
 
 reset_fake
 set +e
@@ -2108,6 +2326,17 @@ assert_evidence_output_preflight_failure() {
   [[ ! -s "$ADB_LOG" ]] || fail "invalid evidence outputs reached ADB"
 }
 
+assert_preexisting_evidence_output_preserved() {
+  local expected="$1"
+  local automation_output="$2"
+  local transcript_output="$3"
+  local preserved_path="$4"
+  local before
+  before="$(path_metadata "$preserved_path")"
+  assert_evidence_output_preflight_failure "$expected" "$automation_output" "$transcript_output"
+  assert_equals "$before" "$(path_metadata "$preserved_path")"
+}
+
 TRANSCRIPT_OUTPUT="$TMP_DIR/sanitized-events.ndjson"
 EXPECTED_TRANSCRIPT_OUTPUT="$TMP_DIR/expected-sanitized-events.ndjson"
 TRANSCRIPT_OUTPUT_LINK="$TMP_DIR/sanitized-events-link.ndjson"
@@ -2118,6 +2347,17 @@ mkdir "$TRANSCRIPT_OUTPUT_DIRECTORY"
 TRANSCRIPT_OUTPUT_FIFO="$TMP_DIR/transcript-output.fifo"
 AUTOMATION_OUTPUT_FIFO="$TMP_DIR/automation-output.fifo"
 mkfifo "$TRANSCRIPT_OUTPUT_FIFO" "$AUTOMATION_OUTPUT_FIFO"
+
+PREEXISTING_AUTOMATION="$TMP_DIR/preexisting-automation.jsonl"
+PREEXISTING_AUTOMATION_SENTINEL="$TMP_DIR/preexisting-automation.sentinel"
+PREEXISTING_TRANSCRIPT="$TMP_DIR/preexisting-transcript.ndjson"
+PREEXISTING_TRANSCRIPT_SENTINEL="$TMP_DIR/preexisting-transcript.sentinel"
+printf 'synthetic-preexisting-automation\n' > "$PREEXISTING_AUTOMATION_SENTINEL"
+cp "$PREEXISTING_AUTOMATION_SENTINEL" "$PREEXISTING_AUTOMATION"
+chmod 640 "$PREEXISTING_AUTOMATION"
+printf 'synthetic-preexisting-transcript\n' > "$PREEXISTING_TRANSCRIPT_SENTINEL"
+cp "$PREEXISTING_TRANSCRIPT_SENTINEL" "$PREEXISTING_TRANSCRIPT"
+chmod 640 "$PREEXISTING_TRANSCRIPT"
 
 ALIAS_PARENT="$TMP_DIR/output-alias-parent"
 mkdir "$ALIAS_PARENT"
@@ -2147,32 +2387,57 @@ assert_transcript_preflight_failure \
 assert_transcript_preflight_failure \
   "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT is required" \
   1 1 livekit_experimental steady "$STARTUP_PCM_PATH" __unset__
-assert_transcript_preflight_failure \
-  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent or a regular non-symlink file" \
-  1 1 livekit_experimental steady "$STARTUP_PCM_PATH" "$TRANSCRIPT_OUTPUT_LINK"
-assert_transcript_preflight_failure \
-  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent or a regular non-symlink file" \
-  1 1 livekit_experimental steady "$STARTUP_PCM_PATH" "$TRANSCRIPT_OUTPUT_DIRECTORY"
 
-assert_evidence_output_preflight_failure \
-  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent or a regular non-symlink file" \
-  "$TMP_DIR/fifo-transcript-automation.jsonl" "$TRANSCRIPT_OUTPUT_FIFO"
-assert_evidence_output_preflight_failure \
-  "VOICE_STAGE1_EVENT_OUTPUT must be absent or a regular non-symlink file" \
-  "$AUTOMATION_OUTPUT_FIFO" "$TMP_DIR/fifo-automation-transcript.jsonl"
+assert_preexisting_evidence_output_preserved \
+  "VOICE_STAGE1_EVENT_OUTPUT must be absent" \
+  "$PREEXISTING_AUTOMATION" "$TMP_DIR/preexisting-automation-transcript.ndjson" \
+  "$PREEXISTING_AUTOMATION"
+cmp -s "$PREEXISTING_AUTOMATION_SENTINEL" "$PREEXISTING_AUTOMATION" ||
+  fail "pre-existing automation output bytes changed"
+assert_preexisting_evidence_output_preserved \
+  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent" \
+  "$TMP_DIR/preexisting-transcript-automation.jsonl" "$PREEXISTING_TRANSCRIPT" \
+  "$PREEXISTING_TRANSCRIPT"
+cmp -s "$PREEXISTING_TRANSCRIPT_SENTINEL" "$PREEXISTING_TRANSCRIPT" ||
+  fail "pre-existing transcript output bytes changed"
+
+assert_preexisting_evidence_output_preserved \
+  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent" \
+  "$TMP_DIR/link-transcript-automation.jsonl" "$TRANSCRIPT_OUTPUT_LINK" \
+  "$TRANSCRIPT_OUTPUT_LINK"
+assert_preexisting_evidence_output_preserved \
+  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent" \
+  "$TMP_DIR/directory-transcript-automation.jsonl" "$TRANSCRIPT_OUTPUT_DIRECTORY" \
+  "$TRANSCRIPT_OUTPUT_DIRECTORY"
+assert_preexisting_evidence_output_preserved \
+  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent" \
+  "$TMP_DIR/fifo-transcript-automation.jsonl" "$TRANSCRIPT_OUTPUT_FIFO" \
+  "$TRANSCRIPT_OUTPUT_FIFO"
+assert_preexisting_evidence_output_preserved \
+  "VOICE_STAGE1_EVENT_OUTPUT must be absent" \
+  "$AUTOMATION_OUTPUT_FIFO" "$TMP_DIR/fifo-automation-transcript.jsonl" \
+  "$AUTOMATION_OUTPUT_FIFO"
 SAME_OUTPUT="$TMP_DIR/same-evidence-output.jsonl"
 assert_evidence_output_preflight_failure \
   "Stage1 evidence outputs must be distinct" "$SAME_OUTPUT" "$SAME_OUTPUT"
 assert_evidence_output_preflight_failure \
   "Stage1 evidence outputs must be distinct" "$ALIAS_AUTOMATION" "$ALIAS_TRANSCRIPT"
-assert_evidence_output_preflight_failure \
-  "Stage1 evidence outputs must be distinct" "$HARDLINK_AUTOMATION" "$HARDLINK_TRANSCRIPT"
-assert_evidence_output_preflight_failure \
-  "VOICE_STAGE1_EVENT_OUTPUT must be absent or a regular non-symlink file" \
-  "$TRANSCRIPT_OUTPUT_LINK" "$TMP_DIR/automation-link-transcript.jsonl"
-assert_evidence_output_preflight_failure \
-  "VOICE_STAGE1_EVENT_OUTPUT must be absent or a regular non-symlink file" \
-  "$TRANSCRIPT_OUTPUT_DIRECTORY" "$TMP_DIR/automation-directory-transcript.jsonl"
+assert_preexisting_evidence_output_preserved \
+  "VOICE_STAGE1_EVENT_OUTPUT must be absent" \
+  "$HARDLINK_AUTOMATION" "$TMP_DIR/hardlink-automation-transcript.jsonl" \
+  "$HARDLINK_AUTOMATION"
+assert_preexisting_evidence_output_preserved \
+  "VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT must be absent" \
+  "$TMP_DIR/hardlink-transcript-automation.jsonl" "$HARDLINK_TRANSCRIPT" \
+  "$HARDLINK_TRANSCRIPT"
+assert_preexisting_evidence_output_preserved \
+  "VOICE_STAGE1_EVENT_OUTPUT must be absent" \
+  "$TRANSCRIPT_OUTPUT_LINK" "$TMP_DIR/automation-link-transcript.jsonl" \
+  "$TRANSCRIPT_OUTPUT_LINK"
+assert_preexisting_evidence_output_preserved \
+  "VOICE_STAGE1_EVENT_OUTPUT must be absent" \
+  "$TRANSCRIPT_OUTPUT_DIRECTORY" "$TMP_DIR/automation-directory-transcript.jsonl" \
+  "$TRANSCRIPT_OUTPUT_DIRECTORY"
 
 reset_fake
 run_scenario direct_gemini stable_wifi speaker foreground steady 20 >/dev/null
@@ -2204,6 +2469,180 @@ assert_no_unpublished_evidence_temps() {
       fail "unpublished transcript temp remained"
   fi
 }
+
+assert_late_publication_race_preserved() {
+  local family="$1"
+  local automation_parent="$TMP_DIR/late-race-$family-automation"
+  local transcript_parent="$TMP_DIR/late-race-$family-transcript"
+  local automation_output="$automation_parent/events.jsonl"
+  local transcript_output="$transcript_parent/events.ndjson"
+  local raced_output
+  local expected_diagnostic
+  local transport="direct_gemini"
+  local output
+  local status
+  reset_fake
+  mkdir -p "$automation_parent" "$transcript_parent"
+  export VOICE_STAGE1_TEST_EVENT_OUTPUT="$automation_output"
+  if [[ "$family" == "transcript" ]]; then
+    enable_transcript_collection
+    export VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$transcript_output"
+    raced_output="$transcript_output"
+    expected_diagnostic="stage1: unable to collect sanitized transcript evidence"
+    transport="livekit_experimental"
+  else
+    raced_output="$automation_output"
+    expected_diagnostic="stage1: unable to fetch finalized automation events"
+  fi
+  export FAKE_PRIVATE_PUBLISH_RACE="$family"
+  set +e
+  output="$(run_scenario "$transport" stable_wifi speaker foreground steady 20 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail "late $family destination race was accepted"
+  assert_equals "$expected_diagnostic" "$output"
+  assert_equals "synthetic-late-destination" "$(cat "$raced_output")"
+  [[ "$(stat -c %a "$raced_output")" == "640" ]] ||
+    fail "late $family destination metadata changed"
+  assert_no_unpublished_evidence_temps "$automation_parent" "$transcript_parent"
+  if [[ "$family" == "transcript" ]]; then
+    [[ ! -e "$automation_output" ]] || fail "transcript race published automation output"
+  fi
+}
+
+assert_late_publication_race_preserved automation
+assert_late_publication_race_preserved transcript
+
+assert_failed_private_reopen_is_contained() {
+  local family="$1"
+  local automation_parent="$TMP_DIR/PRIVATE-REOPEN-SENTINEL-$family-automation"
+  local transcript_parent="$TMP_DIR/PRIVATE-REOPEN-SENTINEL-$family-transcript"
+  local automation_output="$automation_parent/events.jsonl"
+  local transcript_output="$transcript_parent/events.ndjson"
+  local failure_target="$TMP_DIR/reopen-failure-target-$family"
+  local expected_diagnostic="stage1: unable to fetch finalized automation events"
+  local transport="direct_gemini"
+  local output
+  local status
+  reset_fake
+  mkdir -p "$automation_parent" "$transcript_parent" "$failure_target"
+  export VOICE_STAGE1_TEST_EVENT_OUTPUT="$automation_output"
+  if [[ "$family" == "transcript" ]]; then
+    enable_transcript_collection
+    export VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$transcript_output"
+    expected_diagnostic="stage1: unable to collect sanitized transcript evidence"
+    transport="livekit_experimental"
+  fi
+  export FAKE_PRIVATE_REOPEN_FAIL="$family"
+  export FAKE_PRIVATE_REOPEN_FAILURE_TARGET="$failure_target"
+  export FAKE_PRIVATE_REOPEN_MARKER="$TMP_DIR/reopen-injected-$family"
+  set +e
+  output="$(run_scenario "$transport" stable_wifi speaker foreground steady 20 2>&1)"
+  status=$?
+  set -e
+  [[ -s "$FAKE_PRIVATE_REOPEN_MARKER" ]] || fail "$family private-temp reopen failure was not injected"
+  [[ "$status" -ne 0 ]] || fail "$family private-temp reopen failure was accepted"
+  assert_equals "$expected_diagnostic" "$output"
+  assert_not_contains "$output" "PRIVATE-REOPEN-SENTINEL"
+  [[ ! -e "$automation_output" && ! -L "$automation_output" ]] ||
+    fail "$family private-temp reopen failure published automation output"
+  [[ ! -e "$transcript_output" && ! -L "$transcript_output" ]] ||
+    fail "$family private-temp reopen failure published transcript output"
+  assert_no_unpublished_evidence_temps "$automation_parent" "$transcript_parent"
+}
+
+assert_failed_private_reopen_is_contained automation
+assert_failed_private_reopen_is_contained transcript
+
+assert_signal_cleans_owned_evidence() {
+  local family="$1"
+  local signal_name="$2"
+  local expected_status="$3"
+  local automation_parent="$TMP_DIR/PRIVATE-SIGNAL-SENTINEL-$family-automation"
+  local transcript_parent="$TMP_DIR/PRIVATE-SIGNAL-SENTINEL-$family-transcript"
+  local automation_output="$automation_parent/events.jsonl"
+  local transcript_output="$transcript_parent/events.ndjson"
+  local transport="direct_gemini"
+  local output
+  local status
+  reset_fake
+  mkdir -p "$automation_parent" "$transcript_parent"
+  export VOICE_STAGE1_TEST_EVENT_OUTPUT="$automation_output"
+  if [[ "$family" == "transcript" ]]; then
+    enable_transcript_collection
+    export VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$transcript_output"
+    transport="livekit_experimental"
+  fi
+  export FAKE_PRIVATE_SIGNAL_AFTER_CHMOD="$signal_name:$family"
+  export FAKE_PRIVATE_SIGNAL_MARKER="$TMP_DIR/signal-injected-$signal_name-$family"
+  set +e
+  output="$(run_scenario "$transport" stable_wifi speaker foreground steady 20 2>&1)"
+  status=$?
+  set -e
+  [[ -s "$FAKE_PRIVATE_SIGNAL_MARKER" ]] || fail "$signal_name was not injected for $family temp"
+  [[ "$status" -eq "$expected_status" ]] ||
+    fail "$signal_name during $family temp ownership exited with status $status"
+  assert_equals "" "$output"
+  assert_not_contains "$output" "PRIVATE-SIGNAL-SENTINEL"
+  [[ ! -e "$automation_output" && ! -L "$automation_output" ]] ||
+    fail "$signal_name during $family temp ownership published automation output"
+  [[ ! -e "$transcript_output" && ! -L "$transcript_output" ]] ||
+    fail "$signal_name during $family temp ownership published transcript output"
+  assert_no_unpublished_evidence_temps "$automation_parent" "$transcript_parent"
+}
+
+assert_signal_cleans_owned_evidence automation TERM 143
+assert_signal_cleans_owned_evidence transcript INT 130
+assert_signal_cleans_owned_evidence automation HUP 129
+
+assert_late_race_cleanup_failure_is_reported() {
+  local family="$1"
+  local automation_parent="$TMP_DIR/PRIVATE-RM-FAIL-SENTINEL-$family-automation"
+  local transcript_parent="$TMP_DIR/PRIVATE-RM-FAIL-SENTINEL-$family-transcript"
+  local automation_output="$automation_parent/events.jsonl"
+  local transcript_output="$transcript_parent/events.ndjson"
+  local temp_pattern=".voice-stage1-events.*"
+  local raced_output="$automation_output"
+  local stranded_parent="$automation_parent"
+  local transport="direct_gemini"
+  local output
+  local status
+  local stranded
+  reset_fake
+  mkdir -p "$automation_parent" "$transcript_parent"
+  export VOICE_STAGE1_TEST_EVENT_OUTPUT="$automation_output"
+  if [[ "$family" == "transcript" ]]; then
+    enable_transcript_collection
+    export VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$transcript_output"
+    temp_pattern=".voice-stage1-transcript.*"
+    raced_output="$transcript_output"
+    stranded_parent="$transcript_parent"
+    transport="livekit_experimental"
+  fi
+  export FAKE_PRIVATE_PUBLISH_RACE="$family"
+  export FAKE_PRIVATE_REMOVE_FAIL="$family"
+  set +e
+  output="$(run_scenario "$transport" stable_wifi speaker foreground steady 20 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail "late $family race with cleanup failure was accepted"
+  assert_equals "stage1: unable to clean unpublished Stage1 evidence" "$output"
+  assert_not_contains "$output" "PRIVATE-RM-FAIL-SENTINEL"
+  assert_equals "synthetic-late-destination" "$(cat "$raced_output")"
+  [[ "$(stat -c %a "$raced_output")" == "640" ]] ||
+    fail "late $family destination metadata changed after cleanup failure"
+  stranded="$(find "$stranded_parent" -maxdepth 1 -name "$temp_pattern" -print)"
+  [[ -n "$stranded" && "${stranded//$'\n'/}" == "$stranded" ]] ||
+    fail "cleanup failure did not strand exactly one synthetic $family temp"
+  [[ -f "$stranded" && ! -L "$stranded" ]] ||
+    fail "cleanup failure stranded an unexpected $family object"
+  unset FAKE_PRIVATE_REMOVE_FAIL
+  rm -f -- "$stranded"
+  assert_no_unpublished_evidence_temps "$automation_parent" "$transcript_parent"
+}
+
+assert_late_race_cleanup_failure_is_reported automation
+assert_late_race_cleanup_failure_is_reported transcript
 
 assert_fixture_size_failure_cleanup() {
   reset_fake
@@ -2246,7 +2685,7 @@ if type(start) is not int or type(end) is not int or end - start < 100:
     raise SystemExit("slow trace snapshot consumed the call-duration window")
 PY
 
-for private_command in mkdir mktemp chmod mv; do
+for private_command in mkdir mktemp chmod ln; do
   reset_fake
   AUTOMATION_SENTINEL_PARENT="$TMP_DIR/PRIVATE-OUTPUT-SENTINEL-automation-$private_command"
   TRANSCRIPT_SAFE_PARENT="$TMP_DIR/transcript-safe-$private_command"
