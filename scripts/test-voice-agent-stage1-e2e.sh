@@ -778,6 +778,7 @@ export FAKE_REAL_MKDIR="$(command -v mkdir)"
 export FAKE_REAL_MKTEMP="$(command -v mktemp)"
 export FAKE_REAL_CHMOD="$(command -v chmod)"
 export FAKE_REAL_MV="$(command -v mv)"
+export FAKE_REAL_WC="$(command -v wc)"
 cat > "$BIN_DIR/private-file-command" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -799,6 +800,27 @@ chmod +x "$BIN_DIR/private-file-command"
 for private_command in mkdir mktemp chmod mv; do
   ln -s private-file-command "$BIN_DIR/$private_command"
 done
+cat > "$BIN_DIR/wc" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${FAKE_WC_FAIL_WHEN_FINALIZED:-}" == "1" ]] &&
+   python3 - "$FAKE_ADB_STATE_DIR/state.json" <<'PY'
+import json
+import sys
+
+try:
+    state = json.load(open(sys.argv[1], encoding="utf-8"))
+except (OSError, ValueError):
+    raise SystemExit(1)
+raise SystemExit(0 if state.get("run_state") == "finalized" else 1)
+PY
+then
+  printf '%s\n' 'PRIVATE-FIXTURE-SIZE-PATH' >&2
+  exit 88
+fi
+exec "$FAKE_REAL_WC" "$@"
+SH
+chmod +x "$BIN_DIR/wc"
 export PATH="$BIN_DIR:$PATH"
 export FAKE_EXTERNAL_LOG="$EXTERNAL_LOG"
 
@@ -823,6 +845,7 @@ reset_fake() {
   unset FAKE_ADB_VOICE_EVENTS_EXISTS FAKE_ADB_VOICE_EVENTS_REGULAR
   unset FAKE_ADB_VOICE_EVENTS_SYMLINK FAKE_ADB_NOISY_PRIVATE_FAILURE
   unset FAKE_PRIVATE_FILE_FAIL VOICE_STAGE1_TEST_EVENT_OUTPUT
+  unset FAKE_WC_FAIL_WHEN_FINALIZED
   unset VOICE_STAGE1_TEST_MAX_WAIT_ATTEMPTS
   unset VOICE_STAGE1_TRANSCRIPT_PROBE VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT
   unset VOICE_STAGE1_STARTUP_TRUTH_PROBE VOICE_STAGE1_STARTUP_PCM_PATH
@@ -2181,6 +2204,29 @@ assert_no_unpublished_evidence_temps() {
       fail "unpublished transcript temp remained"
   fi
 }
+
+assert_fixture_size_failure_cleanup() {
+  reset_fake
+  local automation_parent="$TMP_DIR/fixture-size-automation"
+  local transcript_parent="$TMP_DIR/fixture-size-transcript"
+  mkdir -p "$automation_parent" "$transcript_parent"
+  export VOICE_STAGE1_TEST_EVENT_OUTPUT="$automation_parent/events.jsonl"
+  enable_transcript_collection
+  export VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$transcript_parent/events.ndjson"
+  export FAKE_WC_FAIL_WHEN_FINALIZED=1
+  set +e
+  output="$(run_scenario livekit_experimental stable_wifi speaker foreground steady 20 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail "fixture-size failure was accepted"
+  [[ ! -e "$automation_parent/events.jsonl" ]] ||
+    fail "fixture-size failure published automation output"
+  assert_no_unpublished_evidence_temps "$automation_parent" "$transcript_parent"
+  assert_equals "stage1: unable to fetch finalized automation events" "$output"
+  assert_not_contains "$output" "PRIVATE-FIXTURE-SIZE-PATH"
+}
+
+assert_fixture_size_failure_cleanup
 
 reset_fake
 rm -f "$TRANSCRIPT_OUTPUT"

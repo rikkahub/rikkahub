@@ -472,6 +472,7 @@ private_chmod() { chmod 600 -- "$1" 2>/dev/null; }
 private_move() { mv -f -- "$1" "$2" 2>/dev/null; }
 private_remove_temp() { rm -f -- "$1" 2>/dev/null || true; }
 private_dirname() { dirname -- "$1" 2>/dev/null; }
+private_fixture_size() { (wc -c < "$1" | tr -d '[:space:]') 2>/dev/null; }
 
 safe_voice_trace_id() {
   [[ "$1" =~ ^[A-Za-z0-9_-]{1,128}$ ]]
@@ -1481,6 +1482,18 @@ finalize_and_fetch() {
     fail "finalized comparison hash mismatch"
   [[ "$STATUS_TRANSPORT" == "$VOICE_STAGE1_TRANSPORT" ]] || fail "finalized transport mismatch"
 
+  expected_route="${VOICE_STAGE1_ROUTE^}"
+  expected_fixture_bytes="$(private_fixture_size "$VOICE_STAGE1_PCM_PATH")" ||
+    fail "unable to fetch finalized automation events"
+  [[ "$expected_fixture_bytes" =~ ^[1-9][0-9]*$ ]] ||
+    fail "unable to fetch finalized automation events"
+  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
+    expected_startup_bytes="$(private_fixture_size "$VOICE_STAGE1_STARTUP_PCM_PATH")" ||
+      fail "unable to fetch finalized automation events"
+    [[ "$expected_startup_bytes" =~ ^[1-9][0-9]*$ ]] ||
+      fail "unable to fetch finalized automation events"
+  fi
+
   temp_output="$(private_mktemp "$output_parent/.voice-stage1-events.XXXXXX")" ||
     fail "unable to fetch finalized automation events"
   private_chmod "$temp_output" || {
@@ -1500,11 +1513,6 @@ finalize_and_fetch() {
     private_remove_temp "$temp_output"
     fail "unable to collect sanitized transcript evidence"
     return 1
-  fi
-  expected_route="${VOICE_STAGE1_ROUTE^}"
-  expected_fixture_bytes="$(wc -c < "$VOICE_STAGE1_PCM_PATH" | tr -d '[:space:]')"
-  if [[ "$STARTUP_TRUTH_PROBE" == "1" ]]; then
-    expected_startup_bytes="$(wc -c < "$VOICE_STAGE1_STARTUP_PCM_PATH" | tr -d '[:space:]')"
   fi
   local validation_output
   local validation_status=0
