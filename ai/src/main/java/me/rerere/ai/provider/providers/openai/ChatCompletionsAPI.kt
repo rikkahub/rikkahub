@@ -1,13 +1,7 @@
 package me.rerere.ai.provider.providers.openai
 
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -31,11 +25,12 @@ import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
-import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.effectiveCapabilityProfile
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
+import me.rerere.ai.provider.providers.withUniqueToolCallIds
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
@@ -43,6 +38,13 @@ import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.BoundedStreamBridge
+import me.rerere.ai.util.ProviderStreamErrorCode
+import me.rerere.ai.util.ProviderStreamException
+import me.rerere.ai.util.providerStreamFailure
+import me.rerere.ai.util.providerRequestFailure
+import me.rerere.ai.util.ProviderStreamTerminationReason
+import me.rerere.ai.util.boundedStreamFlow
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -65,11 +67,10 @@ import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import kotlin.time.Clock
 
-private const val TAG = "ChatCompletionsAPI"
-
 class ChatCompletionsAPI(
     private val client: OkHttpClient,
-    private val keyRoulette: KeyRoulette
+    private val keyRoulette: KeyRoulette,
+    private val streamQueueCapacity: Int = BoundedStreamBridge.DEFAULT_CAPACITY,
 ) : OpenAIImpl {
     override suspend fun generateText(
         providerSetting: ProviderSetting.OpenAI,
@@ -91,11 +92,9 @@ class ChatCompletionsAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
-
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+            throw providerRequestFailure(response)
         }
 
         val bodyStr = response.body?.string() ?: ""
@@ -132,7 +131,11 @@ class ChatCompletionsAPI(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): Flow<MessageChunk> = callbackFlow {
+    ): Flow<MessageChunk> = boundedStreamFlow(
+        capacity = streamQueueCapacity,
+    ) { bridge ->
+        var completed = false
+        val toolCallAssembler = OpenAIChatToolCallAssembler()
         val requestBody = buildChatCompletionRequest(
             messages = messages,
             params = params,
@@ -149,11 +152,6 @@ class ChatCompletionsAPI(
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
-
-        // just for debugging response body
-        // println(client.newCall(request).await().body?.string())
-
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -162,94 +160,98 @@ class ChatCompletionsAPI(
                 data: String
             ) {
                 if (data == "[DONE]") {
-                    println("[onEvent] (done) 结束流: $data")
-                    close()
+                    completed = true
+                    bridge.complete()
                     return
                 }
-                Log.d(TAG, "onEvent: $data")
-                data
-                    .trim()
-                    .split("\n")
-                    .filter { it.isNotBlank() }
-                    .map { json.parseToJsonElement(it).jsonObject }
-                    .forEach {
-                        if (it["error"] != null) {
-                            val error = it["error"]!!.parseErrorDetail()
-                            throw error
+                try {
+                    for (line in data.trim().split("\n").filter { it.isNotBlank() }) {
+                        val event = json.parseToJsonElement(line).jsonObject
+                        if (event["error"] != null) {
+                            bridge.fail(
+                                ProviderStreamException(
+                                    ProviderStreamErrorCode.STREAM_UPSTREAM_FAILURE,
+                                    "Provider returned a stream error",
+                                    event["error"]!!.parseErrorDetail(),
+                                )
+                            )
+                            return
                         }
-                        val id = it["id"]?.jsonPrimitive?.contentOrNull ?: ""
-                        val model = it["model"]?.jsonPrimitive?.contentOrNull ?: ""
+                        val id = event["id"]?.jsonPrimitive?.contentOrNull ?: ""
+                        val model = event["model"]?.jsonPrimitive?.contentOrNull ?: ""
 
-                        val choices = it["choices"]?.jsonArray ?: JsonArray(emptyList())
+                        val choices = event["choices"]?.jsonArray ?: JsonArray(emptyList())
                         val choiceList = buildList {
-                            if (choices.isNotEmpty()) {
-                                val choice = choices[0].jsonObject
+                            choices.forEach { choiceElement ->
+                                val choice = choiceElement.jsonObject
                                 val message =
                                     choice["delta"]?.jsonObject ?: choice["message"]?.jsonObject
-                                    ?: throw Exception("delta/message is null")
+                                    ?: throw IllegalArgumentException("delta/message is null")
                                 val finishReason =
-                                    choice["finish_reason"]?.jsonPrimitive?.contentOrNull
-                                        ?: "unknown"
+                                    choice["finish_reason"]?.jsonPrimitive?.contentOrNull ?: "unknown"
+                                if (finishReason != "unknown") completed = true
                                 add(
                                     UIMessageChoice(
-                                        index = 0,
-                                        delta = parseMessage(message),
+                                        index = choice["index"]?.jsonPrimitive?.intOrNull ?: 0,
+                                        delta = parseMessage(
+                                            message,
+                                            choice["index"]?.jsonPrimitive?.intOrNull ?: 0,
+                                            toolCallAssembler,
+                                        ),
                                         message = null,
                                         finishReason = finishReason,
                                     )
                                 )
                             }
                         }
-                        val usage = parseTokenUsage(it["usage"] as? JsonObject)
+                        val usage = parseTokenUsage(event["usage"] as? JsonObject)
 
-                        val messageChunk = MessageChunk(
-                            id = id,
-                            model = model,
-                            choices = choiceList,
-                            usage = usage
-                        )
-                        trySend(messageChunk).onFailure { e ->
-                            Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
-                        }
+                        if (!bridge.emit(
+                                MessageChunk(
+                                    id = id,
+                                    model = model,
+                                    choices = choiceList,
+                                    usage = usage,
+                                )
+                            )
+                        ) return
                     }
+                } catch (error: Throwable) {
+                    bridge.fail(
+                        ProviderStreamException(
+                            ProviderStreamErrorCode.STREAM_MALFORMED_EVENT,
+                            "Malformed provider stream event",
+                            error,
+                        ),
+                        ProviderStreamTerminationReason.MALFORMED_EVENT,
+                    )
+                }
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                var exception = t
-
-                t?.printStackTrace()
-                println("[onFailure] 发生错误: ${t?.javaClass?.name} ${t?.message} / $response")
+                var exception: Throwable = t ?: RuntimeException("Provider stream failed")
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        println(bodyElement)
                         exception = bodyElement.parseErrorDetail()
-                        Log.i(TAG, "onFailure: $exception")
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
-                    e.printStackTrace()
-                    exception = e
+                    if (t == null) exception = e
                 } finally {
-                    close(exception)
+                    bridge.fail(providerStreamFailure(exception, response?.code, response?.message))
                 }
             }
 
             override fun onClosed(eventSource: EventSource) {
-                close()
+                if (completed) bridge.complete() else bridge.failIncomplete()
             }
         }
 
         val eventSource = EventSources.createFactory(client).newEventSource(request, listener)
-
-        awaitClose {
-            println("[awaitClose] 关闭eventSource ")
-            eventSource.cancel()
-        }
-        // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
-    }.buffer(Channel.UNLIMITED)
+        bridge.attachUpstreamCanceller(eventSource::cancel)
+    }
 
 
     private fun buildChatCompletionRequest(
@@ -295,7 +297,7 @@ class ChatCompletionsAPI(
                 }
             }
 
-            if (params.model.abilities.contains(ModelAbility.REASONING)) {
+            if (params.model.effectiveCapabilityProfile().reasoning) {
                 val level = params.reasoningLevel
                 when (host) {
                     "openrouter.ai" -> {
@@ -431,7 +433,7 @@ class ChatCompletionsAPI(
                 }
             }
 
-            if (params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()) {
+            if (params.model.effectiveCapabilityProfile().toolCalling && params.tools.isNotEmpty()) {
                 putJsonArray("tools") {
                     params.tools.forEach { tool ->
                         add(buildJsonObject {
@@ -468,7 +470,7 @@ class ChatCompletionsAPI(
         includeHistoryReasoning: Boolean = true,
         supportInputModalities: List<Modality> = listOf(Modality.TEXT, Modality.IMAGE),
     ) = buildJsonArray {
-        val filteredMessages = messages.filter { it.isValidToUpload() }
+        val filteredMessages = messages.withUniqueToolCallIds().filter { it.isValidToUpload() }
 
         filteredMessages.forEach { message ->
             if (message.role == MessageRole.ASSISTANT) {
@@ -592,7 +594,6 @@ class ChatCompletionsAPI(
                                             put("url", encodedImage.base64)
                                         })
                                     }.onFailure {
-                                        it.printStackTrace()
                                         put("type", "text")
                                         put("text", "")
                                     }
@@ -649,7 +650,6 @@ class ChatCompletionsAPI(
                                             put("url", encodedImage.base64)
                                         })
                                     }.onFailure {
-                                        it.printStackTrace()
                                         put("type", "text")
                                         put("text", "")
                                     }
@@ -697,7 +697,6 @@ class ChatCompletionsAPI(
                                         put("url", encodedImage.base64)
                                     })
                                 }.onFailure {
-                                    Log.w(TAG, "encode tool result image failed: ${part.url}", it)
                                     put("type", "text")
                                     put("text", "Error: Failed to encode image to base64")
                                 }
@@ -711,7 +710,11 @@ class ChatCompletionsAPI(
         }
     }
 
-    private fun parseMessage(jsonObject: JsonObject): UIMessage {
+    private fun parseMessage(
+        jsonObject: JsonObject,
+        choiceIndex: Int? = null,
+        toolCallAssembler: OpenAIChatToolCallAssembler? = null,
+    ): UIMessage {
         val role = MessageRole.valueOf(
             jsonObject["role"]?.jsonPrimitive?.contentOrNull?.uppercase() ?: "ASSISTANT"
         )
@@ -742,22 +745,25 @@ class ChatCompletionsAPI(
                         )
                     )
                 }
-                toolCalls.forEach { toolCalls ->
-                    val type = toolCalls.jsonObject["type"]?.jsonPrimitive?.contentOrNull
+                toolCalls.forEach { toolCall ->
+                    val toolCallObject = toolCall.jsonObject
+                    val type = toolCallObject["type"]?.jsonPrimitive?.contentOrNull
                     if (!type.isNullOrEmpty() && type != "function") error("tool call type not supported: $type")
-                    val toolCallId = toolCalls.jsonObject["id"]?.jsonPrimitive?.contentOrNull
-                    val toolName =
-                        toolCalls.jsonObject["function"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull
-                    val arguments =
-                        toolCalls.jsonObject["function"]?.jsonObject?.get("arguments")?.jsonPrimitive?.contentOrNull
-                    add(
+                    val streamedTool = if (choiceIndex != null && toolCallAssembler != null) {
+                        toolCallAssembler.resolve(choiceIndex, toolCallObject)
+                    } else {
+                        val toolCallId = toolCallObject["id"]?.jsonPrimitive?.contentOrNull
+                            ?.takeIf { it.isNotBlank() } ?: return@forEach
                         UIMessagePart.Tool(
-                            toolCallId = toolCallId ?: "",
-                            toolName = toolName ?: "",
-                            input = arguments ?: "",
-                            output = emptyList()
+                            toolCallId = toolCallId,
+                            toolName = toolCallObject["function"]?.jsonObject?.get("name")
+                                ?.jsonPrimitive?.contentOrNull ?: "",
+                            input = toolCallObject["function"]?.jsonObject?.get("arguments")
+                                ?.jsonPrimitive?.contentOrNull ?: "",
+                            output = emptyList(),
                         )
-                    )
+                    }
+                    streamedTool?.let(::add)
                 }
                 if (content.isNotEmpty()) add(UIMessagePart.Text(content))
                 images.forEach { image ->

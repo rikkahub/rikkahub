@@ -552,6 +552,7 @@ private fun ExportedChatMessage(
                         if (block.steps.isNotEmpty()) {
                             ChainOfThought(
                                 steps = block.steps,
+                                stepKey = ThinkingStep::sourceIndex,
                                 collapsedVisibleCount = block.steps.size
                             ) { step ->
                                 when (step) {

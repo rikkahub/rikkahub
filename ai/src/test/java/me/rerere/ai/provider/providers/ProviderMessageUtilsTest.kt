@@ -10,6 +10,28 @@ import kotlin.time.Clock
 
 class ProviderMessageUtilsTest {
 
+    @Test
+    fun `duplicate historical tool call IDs are made unique`() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(createExecutedTool("client-0-0", "workspace_read_file")),
+            ),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(createExecutedTool("client-0-0", "workspace_write_file")),
+            ),
+        )
+
+        val ids = messages.withUniqueToolCallIds()
+            .flatMap { it.getTools() }
+            .map { it.toolCallId }
+
+        assertEquals(2, ids.distinct().size)
+        assertEquals("client-0-0", ids.first())
+        assertTrue(ids.last().startsWith("client-0-0-history-1-0"))
+    }
+
     // ==================== groupPartsByToolBoundary Tests ====================
 
     @Test

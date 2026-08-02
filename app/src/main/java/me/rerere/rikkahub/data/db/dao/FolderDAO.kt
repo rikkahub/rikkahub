@@ -29,6 +29,6 @@ interface FolderDAO {
     @Delete
     suspend fun delete(folder: FolderEntity)
 
-    @Query("DELETE FROM conversation_folder WHERE id = :id")
-    suspend fun deleteById(id: String)
+    @Query("DELETE FROM conversation_folder WHERE id = :id AND assistant_id = :assistantId")
+    suspend fun deleteById(id: String, assistantId: String)
 }

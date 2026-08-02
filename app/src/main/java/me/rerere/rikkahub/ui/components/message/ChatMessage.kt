@@ -115,8 +115,8 @@ fun ChatMessage(
     onToggleFavorite: (() -> Unit)? = null,
     onTranslate: ((UIMessage, Locale) -> Unit)? = null,
     onClearTranslation: (UIMessage) -> Unit = {},
-    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
-    onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onToolApproval: ToolApprovalHandler? = null,
+    onToolAnswer: ToolAnswerHandler? = null,
 ) {
     val message = node.messages[node.selectIndex]
     val settings = LocalSettings.current.displaySetting
@@ -270,8 +270,8 @@ private fun MessagePartsBlock(
     parts: List<UIMessagePart>,
     annotations: List<UIMessageAnnotation>,
     loading: Boolean,
-    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
-    onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onToolApproval: ToolApprovalHandler? = null,
+    onToolAnswer: ToolAnswerHandler? = null,
     onUserMessageClick: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -287,9 +287,9 @@ private fun MessagePartsBlock(
             partsState.forEach { part ->
                 if (part is UIMessagePart.Tool && part.toolName == "search_web" && part.isExecuted) {
                     val outputText = part.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
-                    val items =
-                        runCatching { JsonInstant.parseToJsonElement(outputText).jsonObject["items"]?.jsonArray }.getOrNull()
-                            ?: return@forEach
+                    val items = runCatching {
+                        JsonInstant.parseToJsonElement(outputText).jsonObject["items"]?.jsonArray
+                    }.getOrNull() ?: return@forEach
                     items.forEach { item ->
                         val id = item.jsonObject["id"]?.jsonPrimitive?.content ?: return@forEach
                         val url = item.jsonObject["url"]?.jsonPrimitive?.content ?: return@forEach
@@ -322,32 +322,31 @@ private fun MessagePartsBlock(
                     ChainOfThought(
                         modifier = Modifier.animateContentSize(),
                         steps = block.steps,
+                        stepKey = ThinkingStep::sourceIndex,
                         collapsedAdaptiveWidth = isReasoningOnlyBlock,
                         cardColors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+                                alpha = settings.displaySetting.bubbleOpacity,
+                            ),
                         ),
                     ) { step ->
                         when (step) {
                             is ThinkingStep.ReasoningStep -> {
-                                key(step.reasoning.createdAt) {
-                                    ChatMessageReasoningStep(
-                                        reasoning = step.reasoning,
-                                        model = model,
-                                        assistant = assistant,
-                                        collapsedAdaptiveWidth = isReasoningOnlyBlock,
-                                    )
-                                }
+                                ChatMessageReasoningStep(
+                                    reasoning = step.reasoning,
+                                    model = model,
+                                    assistant = assistant,
+                                    collapsedAdaptiveWidth = isReasoningOnlyBlock,
+                                )
                             }
 
                             is ThinkingStep.ToolStep -> {
-                                key(step.tool.toolCallId.ifBlank { step.hashCode().toString() }) {
-                                    ChatMessageToolStep(
-                                        tool = step.tool,
-                                        loading = loading && !step.tool.isExecuted,
-                                        onToolApproval = onToolApproval,
-                                        onToolAnswer = onToolAnswer,
-                                    )
-                                }
+                                ChatMessageToolStep(
+                                    tool = step.tool,
+                                    loading = loading && !step.tool.isExecuted,
+                                    onToolApproval = onToolApproval,
+                                    onToolAnswer = onToolAnswer,
+                                )
                             }
                         }
                     }
@@ -362,7 +361,9 @@ private fun MessagePartsBlock(
                                 Surface(
                                     modifier = Modifier.animateContentSize(),
                                     shape = RoundedCornerShape(16.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = settings.displaySetting.bubbleOpacity),
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(
+                                        alpha = settings.displaySetting.bubbleOpacity,
+                                    ),
                                     onClick = { onUserMessageClick?.invoke() },
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
@@ -381,7 +382,9 @@ private fun MessagePartsBlock(
                                     Surface(
                                         modifier = Modifier.animateContentSize(),
                                         shape = RoundedCornerShape(16.dp),
-                                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(
+                                            alpha = settings.displaySetting.bubbleOpacity,
+                                        ),
                                     ) {
                                         Column(modifier = Modifier.padding(8.dp)) {
                                             MarkdownBlock(

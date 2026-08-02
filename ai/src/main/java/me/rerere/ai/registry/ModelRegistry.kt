@@ -1,7 +1,9 @@
 package me.rerere.ai.registry
 
 import me.rerere.ai.provider.Modality
+import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ModelCapabilityProfile
 
 fun interface ModelData<T> {
     fun getData(modelId: String): T
@@ -595,6 +597,18 @@ object ModelRegistry {
             if (ModelAbility.TOOL in abilities) add(ModelAbility.TOOL)
             if (ModelAbility.REASONING in abilities) add(ModelAbility.REASONING)
         }
+    }
+
+    /** Compatibility profile for known model IDs. Token limits remain unknown unless an adapter supplies them. */
+    val MODEL_CAPABILITY_PROFILE = ModelData { modelId ->
+        ModelCapabilityProfile.fromLegacy(
+            Model(
+                modelId = modelId,
+                inputModalities = MODEL_INPUT_MODALITIES.getData(modelId),
+                outputModalities = MODEL_OUTPUT_MODALITIES.getData(modelId),
+                abilities = MODEL_ABILITIES.getData(modelId),
+            )
+        )
     }
 
     private fun resolveModels(modelId: String): List<ModelDefinition> {

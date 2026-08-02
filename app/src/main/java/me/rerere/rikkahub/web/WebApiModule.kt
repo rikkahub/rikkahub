@@ -64,10 +64,9 @@ fun Application.configureWebApi(
     conversationRepo: ConversationRepository,
     folderRepo: FolderRepository,
     settingsStore: SettingsStore,
-    filesManager: FilesManager
+    filesManager: FilesManager,
+    jwtEnabled: Boolean = settingsStore.settingsFlow.value.webServerJwtEnabled,
 ) {
-    val jwtEnabled = settingsStore.settingsFlow.value.webServerJwtEnabled
-
     install(ContentNegotiation) {
         json(JsonInstant)
     }
@@ -169,7 +168,7 @@ fun Application.configureWebApi(
 
             if (jwtEnabled) {
                 authenticate("auth-jwt") {
-                    conversationRoutes(chatService, conversationRepo, folderRepo, settingsStore)
+                    conversationRoutes(chatService, conversationRepo, folderRepo, settingsStore, filesManager)
                     folderRoutes(chatService, folderRepo, settingsStore)
                     eventsRoutes(chatService, conversationRepo, folderRepo, settingsStore)
                     settingsRoutes(settingsStore)
@@ -177,7 +176,7 @@ fun Application.configureWebApi(
                     assetsRoutes(context)
                 }
             } else {
-                conversationRoutes(chatService, conversationRepo, folderRepo, settingsStore)
+                conversationRoutes(chatService, conversationRepo, folderRepo, settingsStore, filesManager)
                 folderRoutes(chatService, folderRepo, settingsStore)
                 eventsRoutes(chatService, conversationRepo, folderRepo, settingsStore)
                 settingsRoutes(settingsStore)

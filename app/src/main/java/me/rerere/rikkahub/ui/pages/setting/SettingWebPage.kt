@@ -109,9 +109,9 @@ fun SettingWebPage() {
             putExtra(WebServerService.EXTRA_PORT, settings.webServerPort)
             putExtra(WebServerService.EXTRA_LOCALHOST_ONLY, settings.webServerLocalhostOnly)
         }
-        context.startForegroundService(intent)
         scope.launch {
             settingsStore.update { it.copy(webServerEnabled = true) }
+            context.startForegroundService(intent)
         }
     }
 

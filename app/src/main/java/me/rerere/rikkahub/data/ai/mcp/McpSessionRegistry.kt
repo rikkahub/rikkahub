@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import me.rerere.ai.core.InputSchema
 import me.rerere.rikkahub.AppScope
@@ -45,6 +46,7 @@ private const val TAG = "McpSessionRegistry"
 private const val MAX_RECONNECT_ATTEMPTS = 5
 private const val BASE_RECONNECT_DELAY_MS = 1000L
 private const val MAX_RECONNECT_DELAY_MS = 30000L
+private const val AUTHORIZATION_PROBE_TIMEOUT_MS = 5_000L
 
 /** 单个 MCP Server 的全部运行时状态。 */
 private class McpSession(initialConfig: McpServerConfig) {
@@ -128,7 +130,9 @@ internal class McpSessionRegistry(
                 return@forEach
             }
 
-            val mustReconnect = !hasSameConnectionParameters(existing.config, newConfig)
+            val mustReconnect =
+                !hasSameConnectionParameters(existing.config, newConfig) ||
+                    !hasSameFrozenConnectionIdentity(existing.config, newConfig)
             existing.config = newConfig
             if (mustReconnect) {
                 appScope.launch { addClient(newConfig) }
@@ -140,7 +144,10 @@ internal class McpSessionRegistry(
         val session = sessions[serverId]
             ?: throw McpClientUnavailableException("No MCP session for server $serverId")
         val freshConfig = oauthCoordinator.ensureFreshToken(session.config)
-        if (!hasSameConnectionParameters(session.connectedConfig, freshConfig)) {
+        if (
+            !hasSameConnectionParameters(session.connectedConfig, freshConfig) ||
+            !hasSameFrozenConnectionIdentity(session.connectedConfig, freshConfig)
+        ) {
             session.config = freshConfig
             addClient(freshConfig)
         }
@@ -166,6 +173,74 @@ internal class McpSessionRegistry(
         }
     }
 
+    /** Executes only against the connection captured when the Run was planned; reconnects wait. */
+    suspend fun callFrozenTool(
+        expectedConfig: McpServerConfig,
+        toolName: String,
+        args: JsonObject,
+    ): CallToolResult {
+        var session = sessions[expectedConfig.id]
+            ?: throw McpClientUnavailableException("No MCP session for server ${expectedConfig.id}")
+        val freshConfig = oauthCoordinator.ensureFreshTokenForFrozen(expectedConfig, toolName)
+        if (
+            !hasSameFrozenConnectionIdentity(freshConfig, expectedConfig) ||
+            !hasSameFrozenToolPolicy(freshConfig, expectedConfig, toolName)
+        ) {
+            throw McpClientUnavailableException("MCP policy changed after the run was planned")
+        }
+        if (
+            !hasSameConnectionParameters(session.connectedConfig, freshConfig) ||
+            !hasSameFrozenConnectionIdentity(session.connectedConfig, freshConfig)
+        ) {
+            addClient(freshConfig)
+            session = sessions[expectedConfig.id]
+                ?: throw McpClientUnavailableException("No MCP session for server ${expectedConfig.id}")
+        }
+        var calledConfig: McpServerConfig? = null
+        return try {
+            session.lifecycleMutex.withLock {
+                val currentConfig = settingsStore.settingsFlow.value.mcpServers.find { it.id == expectedConfig.id }
+                if (
+                    !hasSameFrozenConnectionIdentity(currentConfig, expectedConfig) ||
+                    !hasSameFrozenToolPolicy(currentConfig, expectedConfig, toolName)
+                ) {
+                    throw McpClientUnavailableException("MCP policy changed after the run was planned")
+                }
+                val connectedConfig = session.connectedConfig
+                    ?: throw McpClientUnavailableException("MCP client ${expectedConfig.id} is not connected")
+                if (
+                    !hasSameFrozenConnectionIdentity(connectedConfig, expectedConfig) ||
+                    !hasSameConnectionParameters(connectedConfig, currentConfig)
+                ) {
+                    throw McpClientUnavailableException("MCP connection changed after the run was planned")
+                }
+                val sdkClient = session.client
+                    ?: throw McpClientUnavailableException("MCP client ${expectedConfig.id} is not connected")
+                calledConfig = connectedConfig
+                sdkClient.callTool(
+                    request = CallToolRequest(
+                        params = CallToolRequestParams(name = toolName, arguments = args),
+                    ),
+                    options = RequestOptions(timeout = 120.seconds),
+                )
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            val authConfig = calledConfig
+            val needsAuthorization = authConfig != null && withTimeoutOrNull(AUTHORIZATION_PROBE_TIMEOUT_MS) {
+                oauthCoordinator.needsAuthorization(authConfig, error)
+            } == true
+            if (
+                needsAuthorization &&
+                hasSameConnectionParameters(session.connectedConfig, authConfig)
+            ) {
+                statusStore.update(expectedConfig.id, McpStatus.NeedsAuthorization)
+            }
+            throw error
+        }
+    }
+
     suspend fun addClient(configInput: McpServerConfig) {
         // SettingsStore 是配置真源。旧任务排队后可能晚于新配置执行，不能再写回旧快照。
         val desiredConfig = settingsStore.settingsFlow.value.mcpServers.find { it.id == configInput.id }
@@ -180,12 +255,36 @@ internal class McpSessionRegistry(
 
         val session = sessions.computeIfAbsent(desiredConfig.id) { McpSession(desiredConfig) }
         session.config = desiredConfig
-        connectSession(
-            session = session,
-            requestedConfig = desiredConfig,
-            cancelPendingReconnect = true,
-            forceReconnect = false,
-        )
+        val result = try {
+            connectSession(
+                session = session,
+                requestedConfig = desiredConfig,
+                cancelPendingReconnect = true,
+                forceReconnect = false,
+            )
+        } catch (error: CancellationException) {
+            withContext(NonCancellable) {
+                val latest = settingsStore.settingsFlow.value.mcpServers.find { it.id == desiredConfig.id }
+                if (latest == null || !latest.commonOptions.enable || latest.commonOptions.name.isBlank()) {
+                    if (sessions.remove(desiredConfig.id, session)) {
+                        closeSession(session)
+                        statusStore.remove(desiredConfig.id)
+                    }
+                }
+            }
+            throw error
+        } catch (error: McpClientUnavailableException) {
+            ConnectResult.Stale
+        }
+        if (result == ConnectResult.Stale) {
+            val latest = settingsStore.settingsFlow.value.mcpServers.find { it.id == desiredConfig.id }
+            if (latest == null || !latest.commonOptions.enable || latest.commonOptions.name.isBlank()) {
+                if (sessions.remove(desiredConfig.id, session)) {
+                    closeSession(session)
+                    statusStore.remove(desiredConfig.id)
+                }
+            }
+        }
     }
 
     suspend fun removeClient(config: McpServerConfig) {
@@ -218,10 +317,22 @@ internal class McpSessionRegistry(
             }
 
             val config = oauthCoordinator.ensureFreshToken(session.config)
+            val latestConfig = settingsStore.settingsFlow.value.mcpServers.find { it.id == requestedConfig.id }
+            if (
+                sessions[requestedConfig.id] !== session ||
+                latestConfig == null ||
+                !latestConfig.commonOptions.enable ||
+                latestConfig.commonOptions.name.isBlank() ||
+                !hasSameFrozenConnectionIdentity(session.config, config) ||
+                !hasSameConnectionParameters(latestConfig, config)
+            ) {
+                return@withLock ConnectResult.Stale
+            }
             session.config = config
             if (!forceReconnect &&
                 session.client != null &&
-                hasSameConnectionParameters(session.connectedConfig, config)
+                hasSameConnectionParameters(session.connectedConfig, config) &&
+                hasSameFrozenConnectionIdentity(session.connectedConfig, config)
             ) {
                 return@withLock ConnectResult.Success
             }
@@ -239,7 +350,14 @@ internal class McpSessionRegistry(
             try {
                 sdkClient.connect(transport)
                 val syncedConfig = syncTools(session, sdkClient, config)
-                if (sessions[config.id] !== session ||
+                val latestSyncedConfig = settingsStore.settingsFlow.value.mcpServers.find { it.id == config.id }
+                if (
+                    sessions[config.id] !== session ||
+                    latestSyncedConfig == null ||
+                    !latestSyncedConfig.commonOptions.enable ||
+                    latestSyncedConfig.commonOptions.name.isBlank() ||
+                    !hasSameFrozenConnectionIdentity(session.config, syncedConfig) ||
+                    !hasSameConnectionParameters(latestSyncedConfig, syncedConfig) ||
                     !hasSameConnectionParameters(config, syncedConfig)
                 ) {
                     closeClient(sdkClient, config.commonOptions.name)
@@ -256,6 +374,9 @@ internal class McpSessionRegistry(
             } catch (e: CancellationException) {
                 closeClient(sdkClient, config.commonOptions.name)
                 throw e
+            } catch (e: McpClientUnavailableException) {
+                closeClient(sdkClient, config.commonOptions.name)
+                ConnectResult.Stale
             } catch (e: Exception) {
                 closeClient(sdkClient, config.commonOptions.name)
                 Log.e(TAG, "Failed to connect MCP server ${config.id}", e)
@@ -284,7 +405,7 @@ internal class McpSessionRegistry(
                 val connectedConfig = session.connectedConfig ?: return@withLock
                 statusStore.update(config.id, McpStatus.Connecting)
                 try {
-                    val syncedConfig = syncTools(session, sdkClient, session.config)
+                    val syncedConfig = syncTools(session, sdkClient, connectedConfig)
                     session.config = syncedConfig
                     if (hasSameConnectionParameters(connectedConfig, syncedConfig)) {
                         session.connectedConfig = syncedConfig
@@ -313,19 +434,24 @@ internal class McpSessionRegistry(
     ): McpServerConfig {
         val serverTools = sdkClient.listTools().tools
         Log.i(TAG, "Synced ${serverTools.size} tools from ${connectionConfig.id}")
-        var updatedConfig = connectionConfig
+        var updatedConfig: McpServerConfig? = null
         settingsStore.update { old ->
             old.copy(
                 mcpServers = old.mcpServers.map { storedConfig ->
                     if (storedConfig.id != connectionConfig.id) return@map storedConfig
+                    if (!hasSameFrozenConnectionIdentity(storedConfig, connectionConfig)) {
+                        return@map storedConfig
+                    }
                     val tools = mergeTools(storedConfig.commonOptions.tools, serverTools)
                     storedConfig.clone(commonOptions = storedConfig.commonOptions.copy(tools = tools))
                         .also { updatedConfig = it }
                 }
             )
         }
-        session.config = updatedConfig
-        return updatedConfig
+        val persisted = updatedConfig
+            ?: throw McpClientUnavailableException("MCP configuration changed while synchronizing tools")
+        session.config = persisted
+        return persisted
     }
 
     private fun installTransportCallbacks(
@@ -479,6 +605,63 @@ internal fun McpServerConfig.connectionKey(): McpConnectionKey = McpConnectionKe
     clientName = commonOptions.name,
     headers = resolvedHeaders(),
 )
+
+/** Stable Run identity: OAuth bearer/refresh material may rotate, but authority and policy may not. */
+internal data class McpFrozenConnectionKey(
+    val transportType: String,
+    val serverUrl: String,
+    val clientName: String,
+    val enabled: Boolean,
+    val headers: List<Pair<String, String>>,
+    val oauthIdentity: McpOAuthState?,
+)
+
+internal fun McpServerConfig.frozenConnectionKey(): McpFrozenConnectionKey = McpFrozenConnectionKey(
+    transportType = when (this) {
+        is McpServerConfig.SseTransportServer -> "sse"
+        is McpServerConfig.StreamableHTTPServer -> "streamable_http"
+    },
+    serverUrl = serverUrl,
+    clientName = commonOptions.name,
+    enabled = commonOptions.enable,
+    headers = commonOptions.headers,
+    oauthIdentity = commonOptions.oauth?.copy(
+        accessToken = null,
+        refreshToken = null,
+        expiresAt = 0L,
+        scope = canonicalOAuthScope(commonOptions.oauth?.scope),
+    ),
+)
+
+internal fun hasSameFrozenConnectionIdentity(
+    left: McpServerConfig?,
+    right: McpServerConfig?,
+): Boolean = left != null && right != null && left.frozenConnectionKey() == right.frozenConnectionKey()
+
+internal fun hasSameAuthorizationAuthority(
+    left: McpServerConfig?,
+    right: McpServerConfig?,
+): Boolean = left != null && right != null &&
+    left.clone(commonOptions = left.commonOptions.copy(oauth = null)).frozenConnectionKey() ==
+    right.clone(commonOptions = right.commonOptions.copy(oauth = null)).frozenConnectionKey()
+
+internal fun canonicalOAuthScope(scope: String?): String? = scope
+    ?.split(Regex("\\s+"))
+    ?.filter(String::isNotBlank)
+    ?.distinct()
+    ?.sorted()
+    ?.joinToString(" ")
+    ?.ifBlank { null }
+
+internal fun hasSameFrozenToolPolicy(
+    left: McpServerConfig?,
+    right: McpServerConfig?,
+    toolName: String,
+): Boolean {
+    val leftTool = left?.commonOptions?.tools?.singleOrNull { it.name == toolName } ?: return false
+    val rightTool = right?.commonOptions?.tools?.singleOrNull { it.name == toolName } ?: return false
+    return leftTool.enable && rightTool.enable && leftTool.needsApproval == rightTool.needsApproval
+}
 
 private fun hasSameConnectionParameters(
     left: McpServerConfig?,

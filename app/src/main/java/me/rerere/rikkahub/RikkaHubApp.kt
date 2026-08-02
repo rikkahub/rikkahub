@@ -11,6 +11,9 @@ import androidx.compose.runtime.tooling.ComposeStackTraceMode
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -31,14 +34,20 @@ import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.WebServerService
+import me.rerere.rikkahub.service.ChatNotificationManager
+import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.data.repository.AgentRunRepository
+import me.rerere.rikkahub.data.artifacts.ToolArtifactStore
+import me.rerere.rikkahub.data.artifacts.ToolArtifactCleanupWorker
 import me.rerere.workspace.WorkspaceManager
 import org.koin.android.ext.android.get
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.androidx.workmanager.koin.workManagerFactory
+import java.util.concurrent.TimeUnit
 import org.koin.core.context.startKoin
 
 private const val TAG = "RikkaHubApp"
@@ -72,6 +81,10 @@ class RikkaHubApp : Application() {
 
         // cleanup stale tool output files
         cleanupToolOutputs()
+        cleanupToolArtifacts()
+        scheduleToolArtifactCleanup()
+
+        interruptActiveAgentRuns()
 
         // cleanup workspace temp dirs (proot + rootfs /tmp)
         cleanupWorkspaceTempDirs()
@@ -95,8 +108,7 @@ class RikkaHubApp : Application() {
         get<AppScope>().launch {
             runCatching {
                 val store = get<SettingsStore>()
-                val current = store.settingsFlowRaw.first()
-                store.update(current.copy(launchCount = current.launchCount + 1))
+                store.update { current -> current.copy(launchCount = current.launchCount + 1) }
                 Log.i(TAG, "incrementLaunchCount: ${store.settingsFlowRaw.first().launchCount}")
             }.onFailure {
                 Log.e(TAG, "incrementLaunchCount failed", it)
@@ -141,6 +153,40 @@ class RikkaHubApp : Application() {
                     dir.deleteRecursively()
                 }
             }
+        }
+    }
+
+    private fun cleanupToolArtifacts() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching { get<ToolArtifactStore>().cleanup() }
+                .onFailure { Log.e(TAG, "cleanupToolArtifacts failed", it) }
+        }
+    }
+
+    private fun scheduleToolArtifactCleanup() {
+        runCatching {
+            val request = PeriodicWorkRequestBuilder<ToolArtifactCleanupWorker>(1, TimeUnit.DAYS).build()
+            WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+                ToolArtifactCleanupWorker.UNIQUE_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                request,
+            )
+        }.onFailure { Log.e(TAG, "scheduleToolArtifactCleanup failed", it) }
+    }
+
+    private fun interruptActiveAgentRuns() {
+        val repository = get<AgentRunRepository>()
+        repository.beginStartupRecovery()
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                repository.interruptActiveRunsOnStartup { interruptedRuns ->
+                    val conversationIds = get<ChatService>()
+                        .reconcileInterruptedRunsOnStartup(interruptedRuns)
+                    val notificationManager = get<ChatNotificationManager>()
+                    conversationIds.forEach(notificationManager::reconcileInterruptedGeneration)
+                }
+            }
+                .onFailure { Log.e(TAG, "interruptActiveAgentRuns failed", it) }
         }
     }
 

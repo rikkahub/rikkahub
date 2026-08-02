@@ -46,7 +46,7 @@ class WebServerService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 val port = intent.getIntExtra(EXTRA_PORT, 8080)
-                val localhostOnly = intent.getBooleanExtra(EXTRA_LOCALHOST_ONLY, false)
+                val localhostOnly = intent.getBooleanExtra(EXTRA_LOCALHOST_ONLY, true)
                 if (!startForegroundCompat()) {
                     stopSelf()
                     return START_NOT_STICKY
@@ -127,6 +127,11 @@ class WebServerService : Service() {
                     }
 
                     wasRunning && !state.isRunning && !state.isLoading -> {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        stopSelf()
+                    }
+
+                    state.error != null && !state.isLoading -> {
                         stopForeground(STOP_FOREGROUND_REMOVE)
                         stopSelf()
                     }

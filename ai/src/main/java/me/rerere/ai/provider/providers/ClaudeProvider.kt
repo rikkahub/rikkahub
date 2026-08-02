@@ -1,14 +1,8 @@
 package me.rerere.ai.provider.providers
 
 import android.content.Context
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.buffer
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -31,7 +25,10 @@ import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
-import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ModelCapabilityProfile
+import me.rerere.ai.provider.ToolCallIdStability
+import me.rerere.ai.provider.effectiveCapabilityProfile
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
@@ -44,6 +41,13 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
+import me.rerere.ai.util.BoundedStreamBridge
+import me.rerere.ai.util.ProviderStreamErrorCode
+import me.rerere.ai.util.ProviderStreamException
+import me.rerere.ai.util.providerStreamFailure
+import me.rerere.ai.util.providerRequestFailure
+import me.rerere.ai.util.ProviderStreamTerminationReason
+import me.rerere.ai.util.boundedStreamFlow
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
@@ -63,10 +67,13 @@ import okhttp3.sse.EventSourceListener
 import okhttp3.sse.EventSources
 import kotlin.time.Clock
 
-private const val TAG = "ClaudeProvider"
 private const val ANTHROPIC_VERSION = "2023-06-01"
 
-class ClaudeProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Claude> {
+class ClaudeProvider(
+    private val client: OkHttpClient,
+    context: Context? = null,
+    private val streamQueueCapacity: Int = BoundedStreamBridge.DEFAULT_CAPACITY,
+) : Provider<ProviderSetting.Claude> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
 
     override suspend fun listModels(providerSetting: ProviderSetting.Claude): List<Model> =
@@ -80,7 +87,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) {
-                error("Failed to get models: ${response.code} ${response.body?.string()}")
+                error("Failed to get models: status=${response.code}")
             }
 
             val bodyStr = response.body?.string() ?: ""
@@ -92,9 +99,19 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
                 val displayName = modelObj["display_name"]?.jsonPrimitive?.contentOrNull ?: id
 
+                val knownProfile = ModelRegistry.MODEL_CAPABILITY_PROFILE.getData(id)
                 Model(
                     modelId = id,
                     displayName = displayName,
+                    capabilityProfile = ModelCapabilityProfile(
+                        toolCalling = knownProfile.toolCalling,
+                        streaming = true,
+                        reasoning = knownProfile.reasoning,
+                        multimodalInput = knownProfile.multimodalInput,
+                        multimodalOutput = knownProfile.multimodalOutput,
+                        // The list endpoint advertises no per-model tool contract.
+                        toolCallIdStability = ToolCallIdStability.UNKNOWN,
+                    ),
                 )
             }
         }
@@ -121,11 +138,9 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
-
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+            throw providerRequestFailure(response)
         }
 
         val bodyStr = response.body?.string() ?: ""
@@ -157,7 +172,10 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         providerSetting: ProviderSetting.Claude,
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): Flow<MessageChunk> = callbackFlow {
+    ): Flow<MessageChunk> = boundedStreamFlow(
+        capacity = streamQueueCapacity,
+    ) { bridge ->
+        var completed = false
         val requestBody = buildMessageRequest(providerSetting, messages, params, stream = true)
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/messages")
@@ -169,12 +187,6 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
-        Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
-
-        requestBody["messages"]!!.jsonArray.forEach {
-            Log.i(TAG, "streamText: $it")
-        }
-
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -182,90 +194,89 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                 type: String?,
                 data: String
             ) {
-                Log.d(TAG, "onEvent: type=$type, data=$data")
                 if (data == "[DONE]") {
+                    completed = true
+                    bridge.complete()
                     return
                 }
 
-                val dataJson = json.parseToJsonElement(data).jsonObject
-                val deltaMessage = parseMessage(buildJsonArray {
-                    val contentBlockObj = dataJson["content_block"]?.jsonObject
-                    val deltaObj = dataJson["delta"]?.jsonObject
-                    if (contentBlockObj != null) {
-                        add(contentBlockObj)
-                    }
-                    if (deltaObj != null) {
-                        add(deltaObj)
-                    }
-                })
-                val tokenUsage = parseTokenUsage(dataJson)
-                val messageChunk = MessageChunk(
-                    id = id ?: "",
-                    model = "",
-                    choices = listOf(
-                        UIMessageChoice(
-                            index = 0,
-                            delta = deltaMessage,
-                            message = null,
-                            finishReason = null
+                try {
+                    val dataJson = json.parseToJsonElement(data).jsonObject
+                    if (type == "error" || dataJson["type"]?.jsonPrimitive?.contentOrNull == "error") {
+                        val providerError = dataJson["error"]?.parseErrorDetail()
+                            ?: RuntimeException("Provider returned a stream error")
+                        bridge.fail(
+                            ProviderStreamException(
+                                ProviderStreamErrorCode.STREAM_UPSTREAM_FAILURE,
+                                "Provider returned a stream error",
+                                providerError,
+                            )
                         )
-                    ),
-                    usage = tokenUsage
-                )
-
-                trySend(messageChunk).onFailure { e ->
-                    Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
-                }
-
-                when (type) {
-                    "message_stop" -> {
-                        Log.d(TAG, "Stream ended")
-                        close()
+                        return
                     }
-
-                    "error" -> {
-                        val eventData = json.parseToJsonElement(data).jsonObject
-                        val error = eventData["error"]?.parseErrorDetail()
-                        close(error)
+                    val deltaMessage = parseMessage(buildJsonArray {
+                        val contentBlockObj = dataJson["content_block"]?.jsonObject
+                        val deltaObj = dataJson["delta"]?.jsonObject
+                        if (contentBlockObj != null) add(contentBlockObj)
+                        if (deltaObj != null) add(deltaObj)
+                    })
+                    val tokenUsage = parseTokenUsage(dataJson)
+                    if (!bridge.emit(
+                            MessageChunk(
+                                id = id ?: "",
+                                model = "",
+                                choices = listOf(
+                                    UIMessageChoice(
+                                        index = 0,
+                                        delta = deltaMessage,
+                                        message = null,
+                                        finishReason = null,
+                                    )
+                                ),
+                                usage = tokenUsage,
+                            )
+                        )
+                    ) return
+                    if (type == "message_stop") {
+                        completed = true
+                        bridge.complete()
                     }
+                } catch (error: Throwable) {
+                    bridge.fail(
+                        ProviderStreamException(
+                            ProviderStreamErrorCode.STREAM_MALFORMED_EVENT,
+                            "Malformed provider stream event",
+                            error,
+                        ),
+                        ProviderStreamTerminationReason.MALFORMED_EVENT,
+                    )
                 }
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                var exception = t
-
-                t?.printStackTrace()
-                Log.e(TAG, "onFailure: ${t?.javaClass?.name} ${t?.message} / $response")
+                var exception: Throwable = t ?: RuntimeException("Provider stream failed")
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        Log.i(TAG, "Error response: $bodyElement")
                         exception = bodyElement.parseErrorDetail()
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
-                    e.printStackTrace()
-                } finally {
-                    close(exception)
+                    if (t == null) exception = e
                 }
+                bridge.fail(providerStreamFailure(exception, response?.code, response?.message))
             }
 
             override fun onClosed(eventSource: EventSource) {
-                close()
+                if (!completed) bridge.failIncomplete()
             }
         }
 
         val eventSource = EventSources.createFactory(client)
             .newEventSource(request, listener)
-
-        awaitClose {
-            Log.d(TAG, "Closing eventSource")
-            eventSource.cancel()
-        }
-        // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
-    }.buffer(Channel.UNLIMITED)
+        bridge.attachUpstreamCanceller(eventSource::cancel)
+    }
 
     private fun buildMessageRequest(
         providerSetting: ProviderSetting.Claude,
@@ -314,7 +325,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             // 处理 thinking
             // Anthropic 新 API: adaptive 模式 + output_config.effort 控制强度
             // 旧的 type=enabled + budget_tokens 在 Opus 4.7+ 上已不支持
-            if (params.model.abilities.contains(ModelAbility.REASONING)) {
+            if (params.model.effectiveCapabilityProfile().reasoning) {
                 when (params.reasoningLevel) {
                     ReasoningLevel.OFF -> {
                         put("thinking", buildJsonObject { put("type", "disabled") })
@@ -340,7 +351,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             }
 
             // 处理工具
-            if (params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()) {
+            if (params.model.effectiveCapabilityProfile().toolCalling && params.tools.isNotEmpty()) {
                 putJsonArray("tools") {
                     params.tools.forEachIndexed { index, tool ->
                         add(buildJsonObject {
@@ -367,7 +378,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         promptCaching: Boolean,
         promptCacheTtl: ClaudePromptCacheTtl
     ) = buildJsonArray {
-        messages
+        messages.withUniqueToolCallIds()
             .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
             .forEach { message ->
                 if (message.role == MessageRole.ASSISTANT) {
@@ -487,7 +498,6 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     put("data", encoded.base64)
                 })
             }.onFailure {
-                Log.w(TAG, "encode image failed: $url", it)
                 put("type", "text")
                 put("text", "")
             }
@@ -548,10 +558,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     }
                 }
 
-                "redacted_thinking" -> {
-                    val data = block["data"]?.jsonPrimitiveOrNull?.contentOrNull
-                    println(data)
-                }
+                "redacted_thinking" -> Unit
 
                 "tool_use" -> {
                     val id = block["id"]?.jsonPrimitive?.contentOrNull ?: ""

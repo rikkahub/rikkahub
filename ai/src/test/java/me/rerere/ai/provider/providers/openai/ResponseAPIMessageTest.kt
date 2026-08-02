@@ -1,6 +1,7 @@
 package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -12,6 +13,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ModelCapabilityProfile
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
@@ -396,6 +398,62 @@ class ResponseAPIMessageTest {
         )
 
         assertFalse("tools key should not be written", requestBody.containsKey("tools"))
+    }
+
+    @Test
+    fun `provider contract omits function tools when capability profile disables them`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "text-only",
+                    capabilityProfile = ModelCapabilityProfile(toolCalling = false),
+                ),
+                tools = listOf(createFunctionTool("get_weather")),
+            ),
+        )
+
+        assertFalse("unsupported function tools must not reach the provider", requestBody.containsKey("tools"))
+    }
+
+    @Test
+    fun `streamed response tool round uses call id rather than response item id`() {
+        val added = api.parseResponseDelta(
+            Json.parseToJsonElement(
+                """{"type":"response.output_item.added","item":{"id":"fc_item_1","type":"function_call","call_id":"call_weather","name":"weather","arguments":""}}"""
+            ).jsonObject
+        )!!
+        val argumentsDone = api.parseResponseDelta(
+            Json.parseToJsonElement(
+                """{"type":"response.function_call_arguments.done","item_id":"fc_item_1","call_id":"call_weather","arguments":"{\"city\":\"Shanghai\"}"}"""
+            ).jsonObject
+        )!!
+        val completed = api.parseResponseDelta(
+            Json.parseToJsonElement(
+                """{"type":"response.completed","response":{"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}}"""
+            ).jsonObject
+        )!!
+
+        var message = UIMessage(role = MessageRole.ASSISTANT, parts = emptyList())
+        message += added
+        message += argumentsDone
+
+        val tool = message.getTools().single()
+        assertEquals("call_weather", tool.toolCallId)
+        assertEquals("weather", tool.toolName)
+        assertEquals("{\"city\":\"Shanghai\"}", tool.input)
+        assertEquals(5, completed.usage?.totalTokens)
+    }
+
+    @Test
+    fun `streamed response function call without call id is not emitted`() {
+        val delta = api.parseResponseDelta(
+            Json.parseToJsonElement(
+                """{"type":"response.output_item.added","item":{"id":"fc_item_1","type":"function_call","name":"weather"}}"""
+            ).jsonObject
+        )
+
+        assertEquals(null, delta)
     }
 
     // ==================== Helper Functions ====================

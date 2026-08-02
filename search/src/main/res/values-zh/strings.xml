@@ -4,6 +4,5 @@
   <string name="click_to_get_api_key">点击获取API Key</string>
   <string name="searxng_desc_1">settings.yml内需要开启json format支持:</string>
   <string name="searxng_desc_2">search:\n  formats:\n    - html\n    - json</string>
-  <string name="custom_js_desc">由 QuickJS 驱动的自定义搜索提供程序。实现 search(query, resultSize) 函数，并可选择实现 scrape(urls) 函数。使用 fetch(url, options?) 进行 HTTP 请求。</string>
 </resources>
 

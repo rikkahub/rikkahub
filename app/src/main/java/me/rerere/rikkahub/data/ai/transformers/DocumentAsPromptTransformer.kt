@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.data.ai.transformers
 
-import androidx.core.net.toFile
 import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -10,6 +9,7 @@ import me.rerere.document.DocxParser
 import me.rerere.document.EpubParser
 import me.rerere.document.PdfParser
 import me.rerere.document.PptxParser
+import me.rerere.rikkahub.data.files.FileUtils
 import java.io.File
 
 object DocumentAsPromptTransformer : InputMessageTransformer {
@@ -24,8 +24,14 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
                         val documents = filterIsInstance<UIMessagePart.Document>()
                         if (documents.isNotEmpty()) {
                             documents.forEach { document ->
-                                val content = readDocumentContent(document)
-                                val path = resolveWorkspacePath(document)
+                                val file = FileUtils.resolveUploadFile(ctx.context.filesDir, document.url.toUri())
+                                if (file == null || !file.isFile) {
+                                    remove(document)
+                                    add(0, UIMessagePart.Text("[ERROR, untrusted document reference: ${document.fileName}]"))
+                                    return@forEach
+                                }
+                                val content = readDocumentContent(document, file)
+                                val path = resolveWorkspacePath(file)
                                 val pathAttr = path?.let { " path=\"$it\"" } ?: ""
                                 val prompt = """
                                   <UploadFile name="${document.fileName}"$pathAttr>
@@ -61,15 +67,9 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
 
     // 上传文件保存在 filesDir/upload 下, 该目录通过 proot 挂载到 workspace 的 /upload
     // 返回文件在 workspace 内的绝对路径, 便于 AI 用 workspace 工具直接读取原始文件
-    private fun resolveWorkspacePath(document: UIMessagePart.Document): String? {
-        val file = runCatching { document.url.toUri().toFile() }.getOrNull() ?: return null
-        if (file.parentFile?.name != "upload") return null
-        return "/upload/${file.name}"
-    }
+    private fun resolveWorkspacePath(file: File): String = "/upload/${file.name}"
 
-    private fun readDocumentContent(document: UIMessagePart.Document): String {
-        val file = runCatching { document.url.toUri().toFile() }.getOrNull()
-            ?: return "[ERROR, invalid file uri: ${document.fileName}]"
+    private fun readDocumentContent(document: UIMessagePart.Document, file: File): String {
         if (!file.exists() || !file.isFile) {
             return "[ERROR, file not found: ${document.fileName}]"
         }

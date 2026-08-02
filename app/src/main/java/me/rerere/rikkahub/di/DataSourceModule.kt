@@ -30,6 +30,9 @@ import me.rerere.rikkahub.data.db.migrations.Migration_11_12
 import me.rerere.rikkahub.data.db.migrations.Migration_13_14
 import me.rerere.rikkahub.data.db.migrations.Migration_14_15
 import me.rerere.rikkahub.data.db.migrations.Migration_15_16
+import me.rerere.rikkahub.data.db.migrations.Migration_25_26
+import me.rerere.rikkahub.data.db.migrations.Migration_26_27
+import me.rerere.rikkahub.data.db.migrations.Migration_27_28
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.search.SearchService
@@ -42,6 +45,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.io.File
 
 val dataSourceModule = module {
     single {
@@ -52,7 +56,7 @@ val dataSourceModule = module {
         val context: Context = get()
         Room.databaseBuilder(context, AppDatabase::class.java, "rikka_hub")
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16)
+            .addMigrations(Migration_6_7, Migration_11_12, Migration_13_14, Migration_14_15, Migration_15_16, Migration_25_26, Migration_26_27, Migration_27_28)
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     val dictDir = SimpleDictManager.extractDict(context)
@@ -112,7 +116,7 @@ val dataSourceModule = module {
             .build()
     }
 
-    single { TemplateTransformer(engine = get(), settingsStore = get()) }
+    single { TemplateTransformer() }
 
     single {
         get<AppDatabase>().conversationDao()
@@ -147,17 +151,100 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().agentRunDao()
+    }
+
+    single {
         MessageFtsManager(get())
     }
 
     single { McpManager(settingsStore = get(), appScope = get(), filesManager = get(), appEventBus = get()) }
+
+    single<me.rerere.rikkahub.data.ai.agent.hooks.AgentHook> {
+        me.rerere.rikkahub.data.ai.agent.hooks.CompositeAgentHook(
+            hooks = listOf(
+                me.rerere.rikkahub.data.ai.agent.hooks.LoggingAgentHook(),
+            )
+        )
+    }
+
+    single<me.rerere.rikkahub.data.ai.agent.compact.CompactPolicy> {
+        me.rerere.rikkahub.data.ai.agent.compact.DefaultCompactPolicy
+    }
+
+    single<me.rerere.rikkahub.data.artifacts.ToolArtifactStore> {
+        val context: Context = get()
+        me.rerere.rikkahub.data.artifacts.FileToolArtifactStore(File(context.filesDir, "tool_artifacts"))
+    }
+
+    single<me.rerere.rikkahub.data.ai.agent.context.ContextGovernor> {
+        me.rerere.rikkahub.data.ai.agent.context.ArtifactContextGovernor(get())
+    }
+
+    single {
+        me.rerere.rikkahub.data.ai.agent.AgentLoop(
+            context = get(),
+            providerManager = get(),
+            json = get(),
+            hooks = get(),
+            contextGovernor = get(),
+        )
+    }
 
     single {
         GenerationHandler(
             context = get(),
             providerManager = get(),
             json = get(),
-            memoryRepo = get()
+            agentLoop = get(),
+        )
+    }
+
+    single {
+        me.rerere.rikkahub.data.ai.agent.prompt.ProjectDocsLoader(workspaceRepository = get())
+    }
+
+    single {
+        me.rerere.rikkahub.data.ai.agent.prompt.ProjectDocsTransformer(
+            workspaceRepository = get(),
+            loader = get(),
+        )
+    }
+
+    single {
+        me.rerere.rikkahub.data.ai.agent.tools.ToolRegistry(
+            providers = listOf(
+                me.rerere.rikkahub.data.ai.agent.tools.providers.SearchToolProvider(),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.LocalToolProvider(localTools = get()),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.ConversationToolProvider(conversationRepo = get()),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.WorkspaceToolProvider(workspaceRepository = get()),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.ArtifactToolProvider(
+                    artifactStore = get(),
+                    json = get(),
+                    agentRunRepository = get(),
+                ),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.ExploreSubagentToolProvider(
+                    subagentRunner = { get() },
+                    json = get(),
+                    projectDocsTransformer = get(),
+                ),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.SkillToolProvider(skillManager = get()),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.McpToolProvider(
+                    mcpToolExecutor = get<me.rerere.rikkahub.data.ai.mcp.McpManager>(),
+                ),
+                me.rerere.rikkahub.data.ai.agent.tools.providers.MemoryToolProvider(
+                    json = get(),
+                    memoryRepo = get(),
+                ),
+            )
+        )
+    }
+
+    single<me.rerere.rikkahub.data.ai.agent.subagent.SubagentRunner> {
+        me.rerere.rikkahub.data.ai.agent.subagent.DefaultSubagentRunner(
+            agentLoop = get(),
+            toolRegistry = get(),
+            agentRunRepository = get(),
         )
     }
 

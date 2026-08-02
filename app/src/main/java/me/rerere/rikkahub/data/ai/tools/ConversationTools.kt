@@ -10,8 +10,9 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.db.fts.MessageSearchResult
 import me.rerere.rikkahub.data.db.fts.MessageSearchSort
-import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.toLocalDate
 import kotlin.uuid.Uuid
@@ -21,8 +22,9 @@ import kotlin.uuid.Uuid
  * statically injecting recent chats into the system prompt (which would break prompt caching).
  */
 fun createConversationTools(
-    conversationRepo: ConversationRepository,
     assistantId: Uuid,
+    getRecentConversations: suspend (Uuid, Int) -> List<Conversation>,
+    searchMessages: suspend (Uuid, String, MessageSearchSort) -> List<MessageSearchResult>,
 ): List<Tool> = listOf(
     Tool(
         name = "recent_chats",
@@ -47,10 +49,7 @@ fun createConversationTools(
         },
         execute = {
             val limit = (it.jsonObject["limit"]?.jsonPrimitive?.intOrNull ?: 10).coerceIn(1, 30)
-            val recent = conversationRepo.getRecentConversations(
-                assistantId = assistantId,
-                limit = limit,
-            )
+            val recent = getRecentConversations(assistantId, limit)
             val payload = buildJsonArray {
                 recent.forEach { conversation ->
                     add(buildJsonObject {
@@ -92,8 +91,7 @@ fun createConversationTools(
             val query = it.jsonObject["query"]?.jsonPrimitive?.contentOrNull
                 ?: error("query is required")
             val limit = (it.jsonObject["limit"]?.jsonPrimitive?.intOrNull ?: 15).coerceIn(1, 50)
-            val results = conversationRepo
-                .searchMessages(query, MessageSearchSort.RELEVANCE)
+            val results = searchMessages(assistantId, query, MessageSearchSort.RELEVANCE)
                 .take(limit)
             val payload = buildJsonArray {
                 results.forEach { result ->

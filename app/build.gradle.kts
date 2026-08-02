@@ -295,6 +295,9 @@ dependencies {
 
     // tests
     testImplementation(libs.junit)
+    testImplementation("io.ktor:ktor-server-test-host:3.5.1")
+    testImplementation("org.mockito:mockito-core:5.20.0")
+    testRuntimeOnly("org.slf4j:slf4j-simple:2.0.18")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -302,4 +305,8 @@ dependencies {
     androidTestImplementation(libs.androidx.room.testing)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+}
+
+configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
+    exclude(group = "uk.uuid.slf4j", module = "slf4j-android")
 }

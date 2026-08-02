@@ -12,19 +12,36 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import io.pebbletemplates.pebble.PebbleEngine
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
+import me.rerere.rikkahub.data.ai.mcp.McpOAuthState
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
+import me.rerere.rikkahub.data.ai.mcp.hasSameFrozenConnectionIdentity
+import me.rerere.rikkahub.data.ai.mcp.serverUrl
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
@@ -35,6 +52,8 @@ import me.rerere.asr.ASRProviderSetting
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV1Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV2Migration
 import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV3Migration
+import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV4Migration
+import me.rerere.rikkahub.data.datastore.migration.PreferenceStoreV5Migration
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
@@ -46,7 +65,6 @@ import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.theme.CustomTheme
 import me.rerere.rikkahub.ui.theme.PresetThemes
 import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.toMutableStateFlow
 import me.rerere.search.SearchCommonOptions
 import me.rerere.search.SearchServiceOptions
 import me.rerere.tts.provider.TTSProviderSetting
@@ -55,6 +73,7 @@ import org.koin.core.component.get
 import kotlin.uuid.Uuid
 
 private const val TAG = "PreferencesStore"
+private const val SETTINGS_REVISION_HISTORY_LIMIT = 128
 
 private val Context.settingsStore by preferencesDataStore(
     name = "settings",
@@ -62,7 +81,9 @@ private val Context.settingsStore by preferencesDataStore(
         listOf(
             PreferenceStoreV1Migration(),
             PreferenceStoreV2Migration(),
-            PreferenceStoreV3Migration()
+            PreferenceStoreV3Migration(),
+            PreferenceStoreV4Migration(),
+            PreferenceStoreV5Migration(),
         )
     }
 )
@@ -238,7 +259,7 @@ class SettingsStore(
                 webServerPort = preferences[WEB_SERVER_PORT] ?: 8080,
                 webServerJwtEnabled = preferences[WEB_SERVER_JWT_ENABLED] == true,
                 webServerAccessPassword = preferences[WEB_SERVER_ACCESS_PASSWORD] ?: "",
-                webServerLocalhostOnly = preferences[WEB_SERVER_LOCALHOST_ONLY] == true,
+                webServerLocalhostOnly = preferences[WEB_SERVER_LOCALHOST_ONLY] != false,
                 backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: BackupReminderConfig(),
@@ -288,6 +309,10 @@ class SettingsStore(
             val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
             val validQuickMessageIds = settings.quickMessages.map { it.id }.toSet()
             val asrProviders = settings.asrProviders.distinctBy { it.id }
+            val (searchServices, searchServiceSelected) = SearchServiceOptions.migrateDisabledCustomJs(
+                settings.searchServices,
+                settings.searchServiceSelected,
+            )
             settings.copy(
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
                     when (provider) {
@@ -335,22 +360,60 @@ class SettingsStore(
                 modeInjections = settings.modeInjections.distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
                 quickMessages = settings.quickMessages.distinctBy { it.id },
+                searchServices = searchServices,
+                searchServiceSelected = searchServiceSelected,
             )
         }
         .onEach {
             get<PebbleEngine>().templateCache.invalidateAll()
         }
 
-    val settingsFlow = settingsFlowRaw
-        .distinctUntilChanged()
-        .toMutableStateFlow(scope, Settings.dummy())
+    private val updateMutex = Mutex()
+    private val revisionState = SettingsRevisionState()
+    private val authoritativeSettings: Settings
+        get() = revisionState.current
+    val settingsFlow = revisionState.flow
+
+    init {
+        scope.launch {
+            settingsFlowRaw.distinctUntilChanged().collect { emitted ->
+                updateMutex.withLock {
+                    when {
+                        authoritativeSettings.init -> {
+                            publishAuthoritative(emitted)
+                        }
+                        else -> Unit // Every post-initialization write is published by persistSettings.
+                    }
+                }
+            }
+        }
+    }
 
     suspend fun update(settings: Settings) {
+        revisionState.awaitReady()
+        updateMutex.withLock {
+            val merged = revisionState.prepareWholeUpdate(settings)
+            if (settings.revision != authoritativeSettings.revision) {
+                Log.d(TAG, "Merged stale whole-settings update from revision ${settings.revision}")
+            }
+            persistSettings(merged)
+        }
+    }
+
+    /** Explicit full replacement for restore/import paths that do not originate from [settingsFlow]. */
+    suspend fun replace(settings: Settings) {
+        revisionState.awaitReady()
+        updateMutex.withLock {
+            persistSettings(settings)
+        }
+    }
+
+    private suspend fun persistSettings(settings: Settings) {
         if(settings.init) {
             Log.w(TAG, "Cannot update dummy settings")
             return
         }
-        settingsFlow.value = settings
+        withContext(NonCancellable) {
         dataStore.edit { preferences ->
             preferences[DYNAMIC_COLOR] = settings.dynamicColor
             preferences[THEME_ID] = settings.themeId
@@ -413,16 +476,21 @@ class SettingsStore(
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
         }
+            // Re-read through the same migration/normalization pipeline used at startup so memory
+            // and disk cannot diverge after a whole-settings write.
+            publishAuthoritative(settingsFlowRaw.first())
+        }
     }
 
     suspend fun update(fn: (Settings) -> Settings) {
-        update(fn(settingsFlow.value))
+        revisionState.awaitReady()
+        updateMutex.withLock {
+            persistSettings(fn(authoritativeSettings))
+        }
     }
 
     suspend fun updateAssistant(assistantId: Uuid) {
-        dataStore.edit { preferences ->
-            preferences[SELECT_ASSISTANT] = assistantId.toString()
-        }
+        update { settings -> settings.copy(assistantId = assistantId) }
     }
 
     suspend fun updateAssistantModel(assistantId: Uuid, modelId: Uuid) {
@@ -503,12 +571,589 @@ class SettingsStore(
             )
         }
     }
+
+    private fun publishAuthoritative(settings: Settings) {
+        revisionState.publish(settings)
+    }
 }
+
+/**
+ * Owns the revision watermark and the bounded history needed to merge UI snapshots that were
+ * captured before a preceding write completed. Calls that mutate this state are serialized by
+ * [SettingsStore.updateMutex]; [awaitReady] is safe to call before taking that mutex.
+ */
+internal class SettingsRevisionState(
+    private val historyLimit: Int = SETTINGS_REVISION_HISTORY_LIMIT,
+) {
+    init {
+        require(historyLimit > 0) { "Settings revision history must not be empty" }
+    }
+
+    @Volatile
+    var current: Settings = Settings.dummy()
+        private set
+
+    private var revision = 0L
+    private val history = LinkedHashMap<Long, Settings>()
+    val flow = MutableStateFlow(current)
+
+    suspend fun awaitReady() {
+        if (current.init) {
+            flow.first { settings -> !settings.init }
+        }
+    }
+
+    fun prepareWholeUpdate(incoming: Settings): Settings {
+        check(!current.init) { "Settings are not initialized" }
+        require(!incoming.init) { "Dummy settings cannot be persisted" }
+        return when {
+            incoming.revision == current.revision -> incoming
+            incoming.revision > current.revision -> {
+                throw IllegalArgumentException(
+                    "Settings revision ${incoming.revision} is newer than ${current.revision}"
+                )
+            }
+
+            else -> {
+                val base = history[incoming.revision]
+                    ?: throw IllegalStateException(
+                        "Settings revision ${incoming.revision} is no longer available for merge"
+                    )
+                mergeStaleSettings(base = base, incoming = incoming, current = current)
+            }
+        }
+    }
+
+    fun publish(settings: Settings) {
+        require(!settings.init) { "Dummy settings cannot be authoritative" }
+        check(revision < Long.MAX_VALUE) { "Settings revision exhausted" }
+        val stamped = settings.copy(revision = ++revision)
+        current = stamped
+        history[stamped.revision] = stamped
+        while (history.size > historyLimit) {
+            history.remove(history.keys.first())
+        }
+        flow.value = stamped
+    }
+}
+
+/** Applies only the fields changed by [incoming] since [base] onto [current]. */
+internal fun mergeStaleSettings(
+    base: Settings,
+    incoming: Settings,
+    current: Settings,
+): Settings = current.copy(
+    dynamicColor = mergeChanged(base.dynamicColor, incoming.dynamicColor, current.dynamicColor),
+    themeId = mergeChanged(base.themeId, incoming.themeId, current.themeId),
+    customThemes = mergeStableSerializableList(
+        base.customThemes,
+        incoming.customThemes,
+        current.customThemes,
+        CustomTheme.serializer(),
+        CustomTheme::id,
+    ),
+    developerMode = mergeChanged(base.developerMode, incoming.developerMode, current.developerMode),
+    displaySetting = mergeSerializableValue(
+        base.displaySetting,
+        incoming.displaySetting,
+        current.displaySetting,
+        DisplaySetting.serializer(),
+    ),
+    favoriteModels = mergeIdentityList(base.favoriteModels, incoming.favoriteModels, current.favoriteModels),
+    chatModelId = mergeChanged(base.chatModelId, incoming.chatModelId, current.chatModelId),
+    fastModelId = mergeChanged(base.fastModelId, incoming.fastModelId, current.fastModelId),
+    titleModelId = mergeChanged(base.titleModelId, incoming.titleModelId, current.titleModelId),
+    imageGenerationModelId = mergeChanged(
+        base.imageGenerationModelId,
+        incoming.imageGenerationModelId,
+        current.imageGenerationModelId,
+    ),
+    titlePrompt = mergeChanged(base.titlePrompt, incoming.titlePrompt, current.titlePrompt),
+    translateModeId = mergeChanged(base.translateModeId, incoming.translateModeId, current.translateModeId),
+    translatePrompt = mergeChanged(base.translatePrompt, incoming.translatePrompt, current.translatePrompt),
+    translateThinkingBudget = mergeChanged(
+        base.translateThinkingBudget,
+        incoming.translateThinkingBudget,
+        current.translateThinkingBudget,
+    ),
+    enableSuggestion = mergeChanged(
+        base.enableSuggestion,
+        incoming.enableSuggestion,
+        current.enableSuggestion,
+    ),
+    suggestionModelId = mergeChanged(
+        base.suggestionModelId,
+        incoming.suggestionModelId,
+        current.suggestionModelId,
+    ),
+    suggestionPrompt = mergeChanged(base.suggestionPrompt, incoming.suggestionPrompt, current.suggestionPrompt),
+    ocrModelId = mergeChanged(base.ocrModelId, incoming.ocrModelId, current.ocrModelId),
+    ocrPrompt = mergeChanged(base.ocrPrompt, incoming.ocrPrompt, current.ocrPrompt),
+    compressModelId = mergeChanged(base.compressModelId, incoming.compressModelId, current.compressModelId),
+    compressPrompt = mergeChanged(base.compressPrompt, incoming.compressPrompt, current.compressPrompt),
+    assistantId = mergeChanged(base.assistantId, incoming.assistantId, current.assistantId),
+    providers = mergeStaleProviders(base.providers, incoming.providers, current.providers),
+    assistants = mergeStableSerializableList(
+        base.assistants,
+        incoming.assistants,
+        current.assistants,
+        Assistant.serializer(),
+        Assistant::id,
+    ),
+    assistantTags = mergeStableSerializableList(
+        base.assistantTags,
+        incoming.assistantTags,
+        current.assistantTags,
+        Tag.serializer(),
+        Tag::id,
+    ),
+    searchServices = mergeStableSerializableList(
+        base.searchServices,
+        incoming.searchServices,
+        current.searchServices,
+        SearchServiceOptions.serializer(),
+        SearchServiceOptions::id,
+    ),
+    searchCommonOptions = mergeSerializableValue(
+        base.searchCommonOptions,
+        incoming.searchCommonOptions,
+        current.searchCommonOptions,
+        SearchCommonOptions.serializer(),
+    ),
+    searchServiceSelected = mergeChanged(
+        base.searchServiceSelected,
+        incoming.searchServiceSelected,
+        current.searchServiceSelected,
+    ),
+    mcpServers = mergeStaleMcpServers(base.mcpServers, incoming.mcpServers, current.mcpServers),
+    webDavConfig = mergeSerializableValue(
+        base.webDavConfig,
+        incoming.webDavConfig,
+        current.webDavConfig,
+        WebDavConfig.serializer(),
+    ),
+    s3Config = mergeSerializableValue(
+        base.s3Config,
+        incoming.s3Config,
+        current.s3Config,
+        S3Config.serializer(),
+    ),
+    ttsProviders = mergeStableSerializableList(
+        base.ttsProviders,
+        incoming.ttsProviders,
+        current.ttsProviders,
+        TTSProviderSetting.serializer(),
+        TTSProviderSetting::id,
+    ),
+    selectedTTSProviderId = mergeChanged(
+        base.selectedTTSProviderId,
+        incoming.selectedTTSProviderId,
+        current.selectedTTSProviderId,
+    ),
+    asrProviders = mergeStableSerializableList(
+        base.asrProviders,
+        incoming.asrProviders,
+        current.asrProviders,
+        ASRProviderSetting.serializer(),
+        ASRProviderSetting::id,
+    ),
+    selectedASRProviderId = mergeChanged(
+        base.selectedASRProviderId,
+        incoming.selectedASRProviderId,
+        current.selectedASRProviderId,
+    ),
+    modeInjections = mergeStableSerializableList(
+        base.modeInjections,
+        incoming.modeInjections,
+        current.modeInjections,
+        PromptInjection.ModeInjection.serializer(),
+        PromptInjection.ModeInjection::id,
+    ),
+    lorebooks = mergeStableSerializableList(
+        base.lorebooks,
+        incoming.lorebooks,
+        current.lorebooks,
+        Lorebook.serializer(),
+        Lorebook::id,
+    ),
+    quickMessages = mergeStableSerializableList(
+        base.quickMessages,
+        incoming.quickMessages,
+        current.quickMessages,
+        QuickMessage.serializer(),
+        QuickMessage::id,
+    ),
+    webServerEnabled = mergeChanged(
+        base.webServerEnabled,
+        incoming.webServerEnabled,
+        current.webServerEnabled,
+    ),
+    webServerPort = mergeChanged(base.webServerPort, incoming.webServerPort, current.webServerPort),
+    webServerJwtEnabled = mergeChanged(
+        base.webServerJwtEnabled,
+        incoming.webServerJwtEnabled,
+        current.webServerJwtEnabled,
+    ),
+    webServerAccessPassword = mergeChanged(
+        base.webServerAccessPassword,
+        incoming.webServerAccessPassword,
+        current.webServerAccessPassword,
+    ),
+    webServerLocalhostOnly = mergeChanged(
+        base.webServerLocalhostOnly,
+        incoming.webServerLocalhostOnly,
+        current.webServerLocalhostOnly,
+    ),
+    backupReminderConfig = mergeSerializableValue(
+        base.backupReminderConfig,
+        incoming.backupReminderConfig,
+        current.backupReminderConfig,
+        BackupReminderConfig.serializer(),
+    ),
+    launchCount = mergeChanged(base.launchCount, incoming.launchCount, current.launchCount),
+    sponsorAlertDismissedAt = mergeChanged(
+        base.sponsorAlertDismissedAt,
+        incoming.sponsorAlertDismissedAt,
+        current.sponsorAlertDismissedAt,
+    ),
+)
+
+private fun <T> mergeChanged(base: T, incoming: T, current: T): T =
+    if (incoming != base) incoming else current
+
+/**
+ * Applies the membership/order delta from [incoming] while retaining independent additions,
+ * removals, reorders, and item edits already present in [current].
+ */
+private fun <T : Any, K> mergeStableList(
+    base: List<T>,
+    incoming: List<T>,
+    current: List<T>,
+    idOf: (T) -> K,
+    equivalent: (T, T) -> Boolean,
+    mergeItem: (base: T, incoming: T, current: T) -> T,
+): List<T> {
+    val incomingUnchanged = base.size == incoming.size && base.zip(incoming).all { (left, right) ->
+        idOf(left) == idOf(right) && equivalent(left, right)
+    }
+    if (incomingUnchanged) return current
+
+    val baseById = base.associateBy(idOf)
+    val incomingById = incoming.associateBy(idOf)
+    val currentById = current.associateBy(idOf)
+    val baseIds = base.map(idOf)
+    val incomingIds = incoming.map(idOf)
+    val currentIds = current.map(idOf)
+    val orderedIds = LinkedHashSet<K>().apply {
+        addAll(if (incomingIds == baseIds) currentIds else incomingIds)
+        addAll(incomingIds.filter { it !in baseById })
+        addAll(currentIds.filter { it !in baseById })
+    }
+
+    return orderedIds.mapNotNull { id ->
+        val baseItem = baseById[id]
+        val incomingItem = incomingById[id]
+        val currentItem = currentById[id]
+        when {
+            baseItem == null -> currentItem ?: incomingItem
+            incomingItem == null -> null // The stale writer explicitly removed this original item.
+            currentItem == null -> null // A newer removal must not be resurrected by a stale edit.
+            equivalent(incomingItem, baseItem) -> currentItem
+            else -> mergeItem(baseItem, incomingItem, currentItem)
+        }
+    }
+}
+
+private fun <T : Any> mergeIdentityList(base: List<T>, incoming: List<T>, current: List<T>): List<T> =
+    mergeStableList(
+        base = base,
+        incoming = incoming,
+        current = current,
+        idOf = { it },
+        equivalent = { left, right -> left == right },
+        mergeItem = { _, changed, _ -> changed },
+    )
+
+private fun <T : Any, K> mergeStableSerializableList(
+    base: List<T>,
+    incoming: List<T>,
+    current: List<T>,
+    serializer: KSerializer<T>,
+    idOf: (T) -> K,
+): List<T> = mergeStableList(
+    base = base,
+    incoming = incoming,
+    current = current,
+    idOf = idOf,
+    equivalent = { left, right -> serializedValue(left, serializer) == serializedValue(right, serializer) },
+    mergeItem = { baseItem, incomingItem, currentItem ->
+        mergeSerializableValue(baseItem, incomingItem, currentItem, serializer)
+    },
+)
+
+private fun mergeStaleProviders(
+    base: List<ProviderSetting>,
+    incoming: List<ProviderSetting>,
+    current: List<ProviderSetting>,
+): List<ProviderSetting> = mergeStableList(
+    base = base,
+    incoming = incoming,
+    current = current,
+    idOf = ProviderSetting::id,
+    equivalent = { left, right ->
+        serializedValue(left, ProviderSetting.serializer()) ==
+            serializedValue(right, ProviderSetting.serializer())
+    },
+    mergeItem = { baseItem, incomingItem, currentItem ->
+        val merged = mergeSerializableValue(
+            baseItem,
+            incomingItem,
+            currentItem,
+            ProviderSetting.serializer(),
+        )
+        val transientSource = currentItem.takeIf { it::class == merged::class }
+            ?: incomingItem.takeIf { it::class == merged::class }
+            ?: merged
+        merged.copyProvider(
+            builtIn = transientSource.builtIn,
+            description = transientSource.description,
+            shortDescription = transientSource.shortDescription,
+        )
+    },
+)
+
+private fun <T : Any> mergeSerializableValue(
+    base: T,
+    incoming: T,
+    current: T,
+    serializer: KSerializer<T>,
+): T {
+    val baseJson = serializedValue(base, serializer)
+    val incomingJson = serializedValue(incoming, serializer)
+    val currentJson = serializedValue(current, serializer)
+    if (incomingJson == baseJson) return current
+    if (currentJson == baseJson) return incoming
+
+    // A transport/provider kind change is an authority change. Never synthesize a hybrid subtype.
+    if (incoming::class != base::class) return incoming
+    if (current::class != base::class) return current
+
+    val merged = checkNotNull(mergeJsonValue(baseJson, incomingJson, currentJson))
+    return JsonInstant.decodeFromJsonElement(serializer, merged)
+}
+
+private fun <T> serializedValue(value: T, serializer: KSerializer<T>): JsonElement =
+    JsonInstant.encodeToJsonElement(serializer, value)
+
+/** Null means a missing object key; [kotlinx.serialization.json.JsonNull] remains a real value. */
+private fun mergeJsonValue(
+    base: JsonElement?,
+    incoming: JsonElement?,
+    current: JsonElement?,
+): JsonElement? {
+    if (incoming == base) return current
+    if (current == base) return incoming
+    if (base == null) return current ?: incoming // Concurrent additions with the same key prefer authority.
+    if (incoming == null || current == null) return null
+
+    return when {
+        base is JsonObject && incoming is JsonObject && current is JsonObject -> {
+            val keys = LinkedHashSet<String>().apply {
+                addAll(incoming.keys)
+                addAll(current.keys)
+                addAll(base.keys)
+            }
+            JsonObject(
+                buildMap {
+                    keys.forEach { key ->
+                        mergeJsonValue(base[key], incoming[key], current[key])?.let { put(key, it) }
+                    }
+                }
+            )
+        }
+
+        base is JsonArray && incoming is JsonArray && current is JsonArray -> {
+            mergeJsonArray(base, incoming, current)
+        }
+
+        else -> incoming // Same leaf changed on both sides: the explicit stale write wins.
+    }
+}
+
+private fun mergeJsonArray(base: JsonArray, incoming: JsonArray, current: JsonArray): JsonArray {
+    if (listOf(base, incoming, current).all { stableJsonObjectIds(it) != null }) {
+        val merged = mergeStableList(
+            base = base,
+            incoming = incoming,
+            current = current,
+            idOf = { element -> ((element as JsonObject).getValue("id") as JsonPrimitive).toString() },
+            equivalent = { left, right -> left == right },
+            mergeItem = { baseItem, incomingItem, currentItem ->
+                mergeJsonValue(baseItem, incomingItem, currentItem) ?: incomingItem
+            },
+        )
+        return JsonArray(merged)
+    }
+
+    val allUniquePrimitives = listOf(base, incoming, current).all { array ->
+        array.all { it is JsonPrimitive } && array.distinct().size == array.size
+    }
+    return if (allUniquePrimitives) {
+        JsonArray(mergeIdentityList(base, incoming, current))
+    } else {
+        incoming
+    }
+}
+
+private fun stableJsonObjectIds(array: JsonArray): List<String>? {
+    val ids = array.map { element ->
+        val objectValue = element as? JsonObject ?: return null
+        val id = objectValue["id"] as? JsonPrimitive ?: return null
+        id.toString()
+    }
+    return ids.takeIf { it.distinct().size == it.size }
+}
+
+/**
+ * Merges MCP servers by stable id. A current deletion wins over a stale edit, while servers added
+ * after the stale snapshot are retained. OAuth bearer material is reconciled separately below.
+ */
+internal fun mergeStaleMcpServers(
+    base: List<McpServerConfig>,
+    incoming: List<McpServerConfig>,
+    current: List<McpServerConfig>,
+): List<McpServerConfig> {
+    if (incoming == base) return current
+
+    val baseById = base.associateBy(McpServerConfig::id)
+    val incomingById = incoming.associateBy(McpServerConfig::id)
+    val currentById = current.associateBy(McpServerConfig::id)
+    val orderedIds = buildList {
+        addAll(incoming.map(McpServerConfig::id))
+        addAll(current.asSequence().filter { it.id !in baseById }.map(McpServerConfig::id))
+    }.distinct()
+
+    return orderedIds.mapNotNull { id ->
+        val incomingServer = incomingById[id] ?: return@mapNotNull null
+        val baseServer = baseById[id]
+        val currentServer = currentById[id]
+        when {
+            baseServer == null && currentServer == null -> incomingServer
+            baseServer == null -> currentServer // Concurrent id collision: keep the established authority.
+            currentServer == null -> null // A server removed after the snapshot must not be resurrected.
+            incomingServer == baseServer -> currentServer
+            else -> mergeStaleMcpServer(baseServer, incomingServer, currentServer)
+        }
+    }
+}
+
+private data class OAuthMerge(
+    val state: McpOAuthState?,
+    val explicitCredentialClear: Boolean = false,
+)
+
+private fun mergeStaleMcpServer(
+    base: McpServerConfig,
+    incoming: McpServerConfig,
+    current: McpServerConfig,
+): McpServerConfig {
+    val oauthMerge = mergeStaleOAuth(
+        base = base.commonOptions.oauth,
+        incoming = incoming.commonOptions.oauth,
+        current = current.commonOptions.oauth,
+    )
+    val commonOptions = McpCommonOptions(
+        enable = mergeChanged(
+            base.commonOptions.enable,
+            incoming.commonOptions.enable,
+            current.commonOptions.enable,
+        ),
+        name = mergeChanged(
+            base.commonOptions.name,
+            incoming.commonOptions.name,
+            current.commonOptions.name,
+        ),
+        headers = mergeChanged(
+            base.commonOptions.headers,
+            incoming.commonOptions.headers,
+            current.commonOptions.headers,
+        ),
+        tools = mergeChanged(
+            base.commonOptions.tools,
+            incoming.commonOptions.tools,
+            current.commonOptions.tools,
+        ),
+        oauth = oauthMerge.state,
+    )
+    val transportTemplate = if (incoming::class != base::class) incoming else current
+    val mergedUrl = mergeChanged(base.serverUrl, incoming.serverUrl, current.serverUrl)
+    val provisional = when (transportTemplate) {
+        is McpServerConfig.SseTransportServer -> transportTemplate.copy(
+            id = base.id,
+            commonOptions = commonOptions,
+            url = mergedUrl,
+        )
+
+        is McpServerConfig.StreamableHTTPServer -> transportTemplate.copy(
+            id = base.id,
+            commonOptions = commonOptions,
+            url = mergedUrl,
+        )
+    }
+    val selectedOAuth = provisional.commonOptions.oauth ?: return provisional
+    val safeOAuth = when {
+        oauthMerge.explicitCredentialClear -> selectedOAuth
+        hasSameFrozenConnectionIdentity(provisional, current) -> {
+            val latest = current.commonOptions.oauth
+            selectedOAuth.copy(
+                accessToken = latest?.accessToken,
+                refreshToken = latest?.refreshToken,
+                expiresAt = latest?.expiresAt ?: 0L,
+            )
+        }
+
+        hasSameFrozenConnectionIdentity(provisional, base) -> selectedOAuth
+        else -> selectedOAuth.withoutCredentials()
+    }
+    return provisional.clone(commonOptions = provisional.commonOptions.copy(oauth = safeOAuth))
+}
+
+private fun mergeStaleOAuth(
+    base: McpOAuthState?,
+    incoming: McpOAuthState?,
+    current: McpOAuthState?,
+): OAuthMerge {
+    if (incoming == base) return OAuthMerge(current)
+    if (base != null && current == null) return OAuthMerge(null)
+    if (base.hasCredentials() && incoming != null && !incoming.hasCredentials()) {
+        return OAuthMerge(incoming, explicitCredentialClear = true)
+    }
+
+    val incomingDefinition = incoming?.withoutCredentials()
+    val baseDefinition = base?.withoutCredentials()
+    return if (incomingDefinition == baseDefinition) {
+        // Credential-only changes from a stale whole snapshot may contain an obsolete bearer.
+        OAuthMerge(current)
+    } else {
+        OAuthMerge(incoming)
+    }
+}
+
+private fun McpOAuthState?.hasCredentials(): Boolean =
+    this != null && (!accessToken.isNullOrBlank() || !refreshToken.isNullOrBlank())
+
+private fun McpOAuthState.withoutCredentials(): McpOAuthState = copy(
+    accessToken = null,
+    refreshToken = null,
+    expiresAt = 0L,
+)
 
 @Serializable
 data class Settings(
     @Transient
     val init: Boolean = false,
+    @Transient
+    val revision: Long = 0L,
     val dynamicColor: Boolean = true,
     val themeId: String = PresetThemes[0].id,
     val customThemes: List<CustomTheme> = emptyList(),
@@ -552,7 +1197,7 @@ data class Settings(
     val webServerPort: Int = 8080,
     val webServerJwtEnabled: Boolean = false,
     val webServerAccessPassword: String = "",
-    val webServerLocalhostOnly: Boolean = false,
+    val webServerLocalhostOnly: Boolean = true,
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,

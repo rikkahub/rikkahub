@@ -1,9 +1,17 @@
 package me.rerere.ai.provider.providers
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import me.rerere.ai.core.InputSchema
+import me.rerere.ai.core.Tool
+import me.rerere.ai.provider.BuiltInTools
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelCapabilityProfile
+import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -413,6 +421,53 @@ class GoogleProviderMessageTest {
             response?.containsKey("result") == true)
         assertTrue("Result should contain expected output",
             response?.get("result")?.jsonPrimitive?.content?.contains("Expected output value") == true)
+    }
+
+    @Test
+    fun `google function calls use a deterministic client execution identity`() {
+        val functionCall = buildJsonObject {
+            put("name", "weather")
+            put("args", buildJsonObject { put("city", "Shanghai") })
+        }
+
+        val first = provider.clientToolCallId(0, functionCall)
+        val repeated = provider.clientToolCallId(0, functionCall)
+        val nextPart = provider.clientToolCallId(1, functionCall)
+
+        assertEquals(first, repeated)
+        assertTrue(first.startsWith("google-client-"))
+        assertTrue(first != nextPart)
+    }
+
+    @Test
+    fun `agent function declarations take precedence over Gemini built-in tools`() {
+        val tool = Tool(
+            name = "workspace_read_file",
+            description = "Read a workspace file",
+            parameters = { InputSchema.Obj(buildJsonObject { put("path", buildJsonObject { put("type", "string") }) }) },
+            execute = { emptyList() },
+        )
+        val params = TextGenerationParams(
+            model = Model(
+                modelId = "gemini-2.5-flash",
+                capabilityProfile = ModelCapabilityProfile(toolCalling = true),
+                tools = setOf(BuiltInTools.Search),
+            ),
+            tools = listOf(tool),
+        )
+
+        val method = GoogleProvider::class.java.getDeclaredMethod(
+            "buildCompletionRequestBody",
+            List::class.java,
+            TextGenerationParams::class.java,
+        ).apply { isAccessible = true }
+        val body = method.invoke(provider, listOf(UIMessage.user("read the file")), params) as kotlinx.serialization.json.JsonObject
+        val tools = body["tools"]!!.jsonArray
+
+        assertEquals(1, tools.size)
+        assertEquals("workspace_read_file", tools.single().jsonObject["functionDeclarations"]!!
+            .jsonArray.single().jsonObject["name"]!!.jsonPrimitive.content)
+        assertTrue(tools.single().jsonObject["googleSearch"] == null)
     }
 
     // ==================== Helper Functions ====================

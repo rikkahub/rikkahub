@@ -3,8 +3,7 @@ package me.rerere.rikkahub.data.ai.transformers
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
-import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.workspace.Workspace
 import me.rerere.workspace.WorkspaceShellStatus
 
 /**
@@ -13,17 +12,14 @@ import me.rerere.workspace.WorkspaceShellStatus
  * 当助手绑定了一个 shell 已就绪的 workspace 时, 在系统提示词中追加一段引导,
  * 让模型了解 workspace 环境与 workspace_* 工具的使用方式。
  */
-class WorkspaceReminderTransformer(
-    private val workspaceRepository: WorkspaceRepository,
-) : InputMessageTransformer {
+class WorkspaceReminderTransformer : InputMessageTransformer {
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
-        val workspaceId = ctx.assistant.workspaceId?.toString() ?: return messages
-        val workspace = workspaceRepository.getById(workspaceId) ?: return messages
+        val workspace = ctx.workspace ?: return messages
         // 与 ChatService.createWorkspaceToolsIfReady 保持一致: 仅在 shell 就绪时注入
-        if (workspace.shellStatus != WorkspaceShellStatus.READY.name) return messages
+        if (workspace.shellStatus != WorkspaceShellStatus.READY) return messages
 
         val prompt = buildWorkspacePrompt(workspace, ctx.workspaceCwd)
 
@@ -39,7 +35,7 @@ class WorkspaceReminderTransformer(
     }
 }
 
-private fun buildWorkspacePrompt(workspace: WorkspaceEntity, cwd: String? = null): String = buildString {
+private fun buildWorkspacePrompt(workspace: Workspace, cwd: String? = null): String = buildString {
     appendLine("<workspace>")
     appendLine("You have access to a persistent Linux workspace named \"${workspace.name}\", running in a sandboxed proot rootfs environment.")
     appendLine("- The workspace files area is mounted at `/workspace`. Use it as your working directory; files written there persist across turns of this conversation.")

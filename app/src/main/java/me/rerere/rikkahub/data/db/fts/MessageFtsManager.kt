@@ -9,6 +9,7 @@ import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import java.time.Instant
+import kotlin.uuid.Uuid
 
 data class MessageSearchResult(
     val nodeId: String,
@@ -20,9 +21,9 @@ data class MessageSearchResult(
 )
 
 enum class MessageSearchSort(val orderBy: String) {
-    RELEVANCE("rank, update_at DESC"),
-    NEWEST_FIRST("update_at DESC, rank"),
-    OLDEST_FIRST("update_at ASC, rank"),
+    RELEVANCE("message_fts.rank, message_fts.update_at DESC"),
+    NEWEST_FIRST("message_fts.update_at DESC, message_fts.rank"),
+    OLDEST_FIRST("message_fts.update_at ASC, message_fts.rank"),
 }
 
 private const val TAG = "MessageFtsManager"
@@ -65,18 +66,30 @@ class MessageFtsManager(private val database: AppDatabase) {
     suspend fun search(
         keyword: String,
         sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
+        assistantId: Uuid? = null,
     ): List<MessageSearchResult> = withContext(Dispatchers.IO) {
         val results = mutableListOf<MessageSearchResult>()
+        val assistantFilter = if (assistantId == null) "" else """
+            INNER JOIN conversationentity ON conversationentity.id = message_fts.conversation_id
+        """.trimIndent()
+        val assistantWhere = if (assistantId == null) "" else " AND conversationentity.assistant_id = ?"
+        val args = if (assistantId == null) {
+            arrayOf(keyword)
+        } else {
+            arrayOf(keyword, assistantId.toString())
+        }
         val cursor = db.query(
             """
-            SELECT node_id, message_id, conversation_id, title, update_at,
+            SELECT message_fts.node_id, message_fts.message_id, message_fts.conversation_id,
+                   message_fts.title, message_fts.update_at,
                    simple_snippet(message_fts, 0, '[', ']', '...', 30) AS snippet
             FROM message_fts
-            WHERE text MATCH jieba_query(?)
+            $assistantFilter
+            WHERE message_fts.text MATCH jieba_query(?)$assistantWhere
             ORDER BY ${sort.orderBy}
             LIMIT 50
             """.trimIndent(),
-            arrayOf(keyword)
+            args
         )
         Log.i(TAG, "search: $keyword")
         cursor.use {

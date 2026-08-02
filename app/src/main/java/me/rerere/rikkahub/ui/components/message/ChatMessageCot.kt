@@ -7,12 +7,16 @@ import me.rerere.ai.ui.UIMessagePart
  * 思考步骤类型，用于分组 Reasoning 和 Tool
  */
 sealed interface ThinkingStep {
+    val sourceIndex: Int
+
     data class ReasoningStep(
         val reasoning: UIMessagePart.Reasoning,
+        override val sourceIndex: Int,
     ) : ThinkingStep
 
     data class ToolStep(
         val tool: UIMessagePart.Tool,
+        override val sourceIndex: Int,
     ) : ThinkingStep
 }
 
@@ -42,11 +46,11 @@ fun List<UIMessagePart>.groupMessageParts(): List<MessagePartBlock> {
     this.fastForEachIndexed { index, part ->
         when (part) {
             is UIMessagePart.Reasoning -> {
-                currentThinkingSteps.add(ThinkingStep.ReasoningStep(part))
+                currentThinkingSteps.add(ThinkingStep.ReasoningStep(part, sourceIndex = index))
             }
 
             is UIMessagePart.Tool -> {
-                currentThinkingSteps.add(ThinkingStep.ToolStep(part))
+                currentThinkingSteps.add(ThinkingStep.ToolStep(part, sourceIndex = index))
             }
 
             else -> {

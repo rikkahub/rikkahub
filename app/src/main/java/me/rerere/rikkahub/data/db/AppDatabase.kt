@@ -7,6 +7,8 @@ import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import me.rerere.ai.core.TokenUsage
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
+import me.rerere.rikkahub.data.db.dao.AgentRunDAO
+import me.rerere.rikkahub.data.db.dao.AgentTraceEventDAO
 import me.rerere.rikkahub.data.db.dao.FavoriteDAO
 import me.rerere.rikkahub.data.db.dao.FolderDAO
 import me.rerere.rikkahub.data.db.dao.GenMediaDAO
@@ -15,6 +17,10 @@ import me.rerere.rikkahub.data.db.dao.MemoryDAO
 import me.rerere.rikkahub.data.db.dao.MessageNodeDAO
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
+import me.rerere.rikkahub.data.db.entity.AgentApprovalEntity
+import me.rerere.rikkahub.data.db.entity.AgentRunEntity
+import me.rerere.rikkahub.data.db.entity.AgentStepEntity
+import me.rerere.rikkahub.data.db.entity.AgentTraceEvent
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
 import me.rerere.rikkahub.data.db.entity.FolderEntity
 import me.rerere.rikkahub.data.db.entity.GenMediaEntity
@@ -22,6 +28,7 @@ import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.data.db.entity.MemoryEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.db.entity.ToolExecutionEntity
 import me.rerere.rikkahub.data.db.migrations.Migration_16_17
 import me.rerere.rikkahub.data.db.migrations.Migration_22_23
 import me.rerere.rikkahub.data.db.migrations.Migration_8_9
@@ -37,8 +44,13 @@ import me.rerere.rikkahub.utils.JsonInstant
         FavoriteEntity::class,
         WorkspaceEntity::class,
         FolderEntity::class,
+        AgentRunEntity::class,
+        AgentStepEntity::class,
+        ToolExecutionEntity::class,
+        AgentApprovalEntity::class,
+        AgentTraceEvent::class,
     ],
-    version = 24,
+    version = 28,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3),
@@ -58,6 +70,7 @@ import me.rerere.rikkahub.utils.JsonInstant
         AutoMigration(from = 21, to = 22),
         AutoMigration(from = 22, to = 23, spec = Migration_22_23::class),
         AutoMigration(from = 23, to = 24),
+        AutoMigration(from = 24, to = 25),
     ]
 )
 @TypeConverters(TokenUsageConverter::class)
@@ -77,6 +90,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun workspaceDao(): WorkspaceDAO
 
     abstract fun folderDao(): FolderDAO
+
+    abstract fun agentRunDao(): AgentRunDAO
+
+    abstract fun agentTraceEventDao(): AgentTraceEventDAO
 }
 
 object TokenUsageConverter {

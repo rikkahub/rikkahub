@@ -12,10 +12,13 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.analytics.FirebaseAnalytics
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -59,21 +62,20 @@ class ChatVM(
     private val favoriteRepository: FavoriteRepository,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
-    val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
+    private val conversationSession = chatService.acquireConversationSessionHandle(_conversationId)
+    val conversation: StateFlow<Conversation> = conversationSession.conversation
     var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
 
     // 聊天输入状态 - 保存在 ViewModel 中避免 TransactionTooLargeException
     val inputState = ChatInputState()
 
     // 异步任务 (从ChatService获取，响应式)
-    val conversationJob: StateFlow<Job?> =
-        chatService
-            .getGenerationJobStateFlow(_conversationId)
-            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val conversationJob: StateFlow<Job?> = conversationSession.generationJob
 
-    val processingStatus: StateFlow<String?> =
-        chatService
-            .getProcessingStatusFlow(_conversationId)
+    val processingStatus: StateFlow<String?> = conversationSession.processingStatus
+
+    private val _stoppingRunId = MutableStateFlow<String?>(null)
+    val stoppingRunId: StateFlow<String?> = _stoppingRunId.asStateFlow()
 
     val conversationJobs = chatService
         .getConversationJobs()
@@ -81,8 +83,6 @@ class ChatVM(
 
     init {
         // 添加对话引用
-        chatService.addConversationReference(_conversationId)
-
         // 初始化对话
         viewModelScope.launch {
             chatService.initializeConversation(_conversationId)
@@ -95,7 +95,7 @@ class ChatVM(
     override fun onCleared() {
         super.onCleared()
         // 移除对话引用
-        chatService.removeConversationReference(_conversationId)
+        conversationSession.close()
     }
 
     // 用户设置
@@ -230,25 +230,38 @@ class ChatVM(
     }
 
     fun handleToolApproval(
-        toolCallId: String,
+        tool: UIMessagePart.Tool,
         approved: Boolean,
         reason: String = ""
-    ) {
+    ): Job {
         analytics.logEvent("ai_tool_approval", null)
-        chatService.handleToolApproval(_conversationId, toolCallId, approved, reason)
+        return chatService.handleToolApproval(_conversationId, tool, approved, reason)
     }
 
     fun handleToolAnswer(
-        toolCallId: String,
+        tool: UIMessagePart.Tool,
         answer: String,
-    ) {
+    ): Job {
         analytics.logEvent("ai_tool_answer", null)
-        chatService.handleToolApproval(_conversationId, toolCallId, approved = true, answer = answer)
+        return chatService.handleToolApproval(_conversationId, tool, approved = true, answer = answer)
     }
 
-    fun stopGeneration() {
+    fun stopGeneration(runId: String?) {
+        if (runId == null || !_stoppingRunId.compareAndSet(expect = null, update = runId)) return
         viewModelScope.launch {
-            chatService.stopGeneration(_conversationId)
+            try {
+                chatService.stopGeneration(_conversationId, runId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                chatService.addError(
+                    error = error,
+                    conversationId = _conversationId,
+                    title = context.getString(R.string.error_title_operation),
+                )
+            } finally {
+                _stoppingRunId.compareAndSet(expect = runId, update = null)
+            }
         }
     }
 
@@ -267,7 +280,13 @@ class ChatVM(
 
     fun deleteConversation(conversation: Conversation): Job =
         viewModelScope.launch {
-            conversationRepo.deleteConversation(conversation)
+            if (!chatService.deleteConversation(conversation.id)) {
+                chatService.addError(
+                    IllegalStateException("Conversation generation did not stop in time"),
+                    conversation.id,
+                    context.getString(R.string.error_title_operation),
+                )
+            }
         }
 
     fun updatePinnedStatus(conversation: Conversation) {

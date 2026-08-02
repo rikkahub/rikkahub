@@ -15,7 +15,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.cache.LruCache
 import me.rerere.common.cache.SingleFileCacheStore
-import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import org.koin.core.component.KoinComponent
@@ -65,7 +65,7 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
                         parts = message.parts.map { part ->
                             when {
                                 part is UIMessagePart.Image && part.url.startsWith("file:") -> {
-                                    UIMessagePart.Text(performOcr(part))
+                                    UIMessagePart.Text(performOcr(part, ctx.settings))
                                 }
 
                                 else -> part
@@ -79,14 +79,13 @@ object OcrTransformer : InputMessageTransformer, KoinComponent {
         }
     }
 
-    suspend fun performOcr(part: UIMessagePart.Image): String = runCatching {
+    suspend fun performOcr(part: UIMessagePart.Image, settings: Settings): String = runCatching {
         // Check cache first
         cache.get(part.url)?.let { cachedResult ->
             Log.i(TAG, "performOcr: Using cached result for ${part.url}")
             return cachedResult
         }
 
-        val settings = get<SettingsStore>().settingsFlow.value
         val model = settings.findModelById(settings.ocrModelId) ?: return "[Image]"
         val providerSetting = model.findProvider(settings.providers) ?: return "[Image]"
         val provider = get<ProviderManager>().getProviderByType(providerSetting)

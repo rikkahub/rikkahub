@@ -57,6 +57,9 @@ interface ConversationDAO {
     @Query("SELECT EXISTS(SELECT 1 FROM conversationentity WHERE id = :id)")
     suspend fun existsById(id: String): Boolean
 
+    @Query("SELECT EXISTS(SELECT 1 FROM conversationentity WHERE id = :id)")
+    fun observeExistsById(id: String): Flow<Boolean>
+
     @Insert
     suspend fun insert(conversation: ConversationEntity)
 
@@ -84,8 +87,8 @@ interface ConversationDAO {
     @Query("UPDATE conversationentity SET folder_id = :folderId WHERE id = :id")
     suspend fun updateFolderId(id: String, folderId: String)
 
-    @Query("UPDATE conversationentity SET folder_id = '' WHERE folder_id = :folderId")
-    suspend fun clearFolder(folderId: String)
+    @Query("UPDATE conversationentity SET folder_id = '' WHERE folder_id = :folderId AND assistant_id = :assistantId")
+    suspend fun clearFolder(folderId: String, assistantId: String)
 
     @Query("SELECT COUNT(*) FROM conversationentity")
     suspend fun countAll(): Int

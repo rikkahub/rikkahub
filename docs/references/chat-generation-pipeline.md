@@ -2,6 +2,9 @@
 
 本文档描述从用户发送消息到 AI 回复完成的完整数据流，涉及的核心类与处理阶段。
 
+> **演进设计**（规划中，默认行为不变）：见 [agent-runtime-design.md](./agent-runtime-design.md)  
+> 目标：对齐 Claude Code / Codex 的权限、Plan Mode、项目指令等产品层设计，同时 **全量保留** 现有 RikkaHub 能力。
+
 ## 核心类概览
 
 | 类                          | 职责                          |
@@ -207,10 +210,21 @@ Live Update 通知内容根据当前生成状态动态更新：
 ```
 app/src/main/java/me/rerere/rikkahub/
 ├── service/
-│   ├── ChatService.kt              # 编排入口
+│   ├── ChatService.kt              # 编排入口（ToolRegistry + AgentMode）
 │   └── ConversationSession.kt      # 会话状态容器
 └── data/ai/
-    ├── GenerationHandler.kt        # 核心生成逻辑
+    ├── GenerationHandler.kt        # 兼容门面 → AgentLoop
+    ├── agent/                      # Agent Runtime（见 agent-runtime-design.md）
+    │   ├── AgentLoop.kt
+    │   ├── AgentMode.kt
+    │   ├── tools/ToolRegistry.kt
+    │   ├── permission/PermissionPolicy.kt
+    │   ├── prompt/ProjectDocsLoader.kt
+    │   ├── hooks/AgentHook.kt
+    │   ├── compact/CompactPolicy.kt
+    │   └── subagent/               # Explore 子代理（explore_subagent 工具）
+    │         ├── Subagent.kt
+    │         └── DefaultSubagentRunner.kt
     ├── transformers/
     │   ├── Transformer.kt          # 接口定义与扩展函数
     │   ├── PromptInjectionTransformer.kt

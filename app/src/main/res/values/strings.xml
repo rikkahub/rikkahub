@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
   <string name="about_page_github">Github</string>
   <string name="about_page_license">License</string>
   <string name="about_page_system">System</string>
@@ -227,6 +227,10 @@
   <string name="cancel">Cancel</string>
   <string name="cancel_edit">Cancel Edit</string>
   <string name="chain_of_thought_collapse">Collapse</string>
+  <string name="chain_of_thought_collapse_step">Collapse step</string>
+  <string name="chain_of_thought_collapsed">Collapsed</string>
+  <string name="chain_of_thought_expand_step">Expand step</string>
+  <string name="chain_of_thought_expanded">Expanded</string>
   <string name="chain_of_thought_show_more_steps">Show %d more steps</string>
   <string name="chat_input_placeholder">Chat with AI</string>
   <string name="chat_input_unsupported_file_type">Unsupported file type: %s</string>
@@ -234,6 +238,8 @@
   <string name="chat_message_add_favorite">Add Favorite</string>
   <string name="chat_message_remove_favorite">Remove Favorite</string>
   <string name="chat_message_tool_approve">Approve</string>
+  <string name="chat_message_tool_approval_submitting">Submitting approval…</string>
+  <string name="chat_message_tool_answer_submitting">Submitting answer…</string>
   <string name="chat_message_tool_ask_questions">Ask %d questions</string>
   <string name="chat_message_tool_call_generic">Called tool %1$s</string>
   <string name="chat_message_tool_call_label">Called tool %1$s</string>
@@ -1160,6 +1166,80 @@
   <string name="assistant_page_workspace">Workspace</string>
   <string name="assistant_page_workspace_desc">After binding, the Agent can use this workspace\'s files and sandbox capabilities</string>
   <string name="assistant_page_workspace_unbound">Not bound</string>
+  <string name="assistant_page_agent_permission_mode">Agent permissions</string>
+  <string name="agent_permission_mode_auto_review">Automatic review</string>
+  <string name="agent_permission_mode_auto_review_desc">Automatically request confirmation based on tool risk and side effects</string>
+  <string name="agent_permission_mode_full_access">Full access</string>
+  <string name="agent_permission_mode_full_access_desc">Run every available tool without approval. Workspace tools stay inside the path/PRoot sandbox; MCP and external tools use their own security boundaries.</string>
+  <string name="agent_permission_mode_confirm_critical">Confirm critical actions</string>
+  <string name="agent_permission_mode_confirm_critical_desc">Run normal workspace edits directly and ask before critical or sensitive actions</string>
+  <string name="agent_mode_auto" tools:ignore="MissingTranslation">Auto</string>
+  <string name="chat_page_open_agent">Open Agent controls</string>
+  <string name="chat_page_agent_title">Agent</string>
+  <string name="chat_page_agent_desc">Bind a workspace, choose permissions, and enable MCP tools. The Agent runs automatically when your request needs tools.</string>
+  <string name="agent_run_stopping">Stopping Agent run…</string>
+  <string name="agent_run_entry_pending">Agent run is preparing. Open details</string>
+  <string name="agent_run_entry_working">Agent run is running. Open details</string>
+  <string name="agent_run_entry_attention">Agent run needs attention. Open details</string>
+  <string name="agent_run_entry_succeeded">Agent run succeeded. Open details</string>
+  <string name="agent_run_entry_failed">Agent run failed. Open details</string>
+  <string name="agent_run_entry_stopped">Agent run stopped. Open details</string>
+  <string name="agent_run_detail_back">Back to previous run</string>
+  <string name="agent_run_detail_loading">Loading run telemetry…</string>
+  <string name="agent_run_detail_missing">This run is no longer available. It may have been deleted with the conversation.</string>
+  <string name="agent_run_detail_title">Run details</string>
+  <string name="agent_run_detail_identity">Run %1$s · %2$s · %3$s</string>
+  <string name="agent_run_elapsed">Elapsed %1$s</string>
+  <string name="agent_run_detail_open_approval">Open the approval card in chat</string>
+  <string name="agent_run_approval_location_success">Approval card located. Approve or deny it in chat.</string>
+  <string name="agent_run_approval_location_missing">The pending approval card could not be found. Check its status in chat.</string>
+  <string name="agent_run_children_section">Child runs</string>
+  <string name="agent_run_child_duration">Duration: %1$s</string>
+  <string name="agent_run_child_open_details">Open child run %1$s: %2$s</string>
+  <string name="agent_run_timeline_section">Steps, tools, and trace</string>
+  <string name="agent_run_timeline_empty">No step or tool telemetry has been recorded yet.</string>
+  <string name="agent_run_timeline_duration">Duration: %1$s</string>
+  <string name="agent_run_timeline_summary">Summary: %1$s</string>
+  <string name="agent_run_timeline_output_summary">Output summary: %1$s</string>
+  <string name="agent_run_timeline_failure">Failure: %1$s</string>
+  <string name="agent_run_timeline_approval">Approval: %1$s</string>
+  <string name="agent_run_timeline_approval_reason">Approval reason: %1$s</string>
+  <string name="agent_run_timeline_expand">Show details</string>
+  <string name="agent_run_timeline_collapse">Hide details</string>
+  <string name="agent_run_timeline_expanded">Details expanded</string>
+  <string name="agent_run_timeline_collapsed">Details collapsed</string>
+  <plurals name="agent_run_new_activity">
+    <item quantity="one">%d new activity</item>
+    <item quantity="other">%d new activities</item>
+  </plurals>
+  <string name="agent_intent_answer" tools:ignore="MissingTranslation">Answer</string>
+  <string name="agent_intent_explore" tools:ignore="MissingTranslation">Explore</string>
+  <string name="agent_intent_execute" tools:ignore="MissingTranslation">Execute</string>
+  <string name="agent_intent_clarify" tools:ignore="MissingTranslation">Needs confirmation</string>
+  <string name="agent_intent_unknown" tools:ignore="MissingTranslation">Unknown</string>
+  <string name="agent_routing_auto_label" tools:ignore="MissingTranslation">Auto · %1$s</string>
+  <string name="agent_routing_legacy_label" tools:ignore="MissingTranslation">Legacy · %1$s</string>
+  <string name="agent_routing_unavailable_label" tools:ignore="MissingTranslation">Auto · Unavailable</string>
+  <string name="agent_routing_label" tools:ignore="MissingTranslation">Routing</string>
+  <string name="agent_routing_section" tools:ignore="MissingTranslation">AUTO routing snapshot</string>
+  <string name="agent_routing_trust" tools:ignore="MissingTranslation">Input trust</string>
+  <string name="agent_routing_trust_user_direct" tools:ignore="MissingTranslation">Direct user input</string>
+  <string name="agent_routing_trust_derived" tools:ignore="MissingTranslation">Derived, untrusted input</string>
+  <string name="agent_routing_reason" tools:ignore="MissingTranslation">Reason code</string>
+  <string name="agent_routing_reason_unknown" tools:ignore="MissingTranslation">Unknown routing reason</string>
+  <string name="agent_routing_tool_count" tools:ignore="MissingTranslation">Frozen tool count</string>
+  <string name="agent_routing_tools" tools:ignore="MissingTranslation">Frozen tools</string>
+  <string name="agent_routing_tools_none" tools:ignore="MissingTranslation">None</string>
+  <string name="agent_routing_permission_digest" tools:ignore="MissingTranslation">Permission digest</string>
+  <string name="agent_routing_policy_version" tools:ignore="MissingTranslation">Policy version</string>
+  <string name="agent_routing_legacy" tools:ignore="MissingTranslation">Compatibility</string>
+  <string name="agent_routing_legacy_description" tools:ignore="MissingTranslation">Created before AUTO routing; shown with its frozen legacy mode.</string>
+  <string name="agent_routing_degraded" tools:ignore="MissingTranslation">Degraded state</string>
+  <string name="agent_routing_degraded_malformed" tools:ignore="MissingTranslation">Snapshot could not be decoded.</string>
+  <string name="agent_routing_degraded_too_large" tools:ignore="MissingTranslation">Snapshot exceeds the supported audit size.</string>
+  <string name="agent_routing_degraded_unsupported" tools:ignore="MissingTranslation">Snapshot version is not supported.</string>
+  <string name="agent_routing_degraded_invalid" tools:ignore="MissingTranslation">Snapshot is incomplete or invalid.</string>
+  <string name="agent_routing_unknown" tools:ignore="MissingTranslation">Unknown</string>
   <string name="workspace_page_title">Workspace</string>
   <string name="workspace_page_create">Create Workspace</string>
   <string name="workspace_page_rename">Rename Workspace</string>
@@ -1260,6 +1340,20 @@
   <string name="log_page_record_requests_desc">Capture request headers, bodies, and response metadata</string>
   <string name="chat_message_tool_recent_chats">View recent chats</string>
   <string name="chat_message_tool_conversation_search">Search history: %1$s</string>
+  <string name="chat_message_tool_explore_subagent">Explore subagent</string>
+  <string name="chat_message_tool_explore_subagent_task">Explore: %1$s</string>
+  <string name="chat_message_tool_explore_subagent_running">Investigating…</string>
+  <string name="chat_message_tool_explore_subagent_panel_title">Explore trajectory</string>
+  <string name="chat_message_tool_explore_subagent_task_label">Task</string>
+  <string name="chat_message_tool_explore_subagent_trace">Tool timeline</string>
+  <string name="chat_message_tool_explore_subagent_trace_empty">No tool steps recorded</string>
+  <string name="chat_message_tool_explore_subagent_report">Report</string>
+  <string name="chat_message_tool_explore_subagent_meta">%1$d steps · %2$d tools</string>
+  <string name="chat_message_tool_explore_subagent_steps">%1$d steps</string>
+  <string name="chat_message_tool_explore_subagent_status_ok">OK</string>
+  <string name="chat_message_tool_explore_subagent_status_fail">Failed</string>
+  <string name="chat_message_tool_explore_subagent_input">Input</string>
+  <string name="chat_message_tool_explore_subagent_output">Output</string>
   <string name="assistant_page_local_tools_screen_time_title">Screen Time</string>
   <string name="assistant_page_local_tools_screen_time_desc">Let the AI read your app screen usage time</string>
   <string name="assistant_page_local_tools_screen_time_permission_required">Please grant the Usage access permission in settings to use screen time</string>

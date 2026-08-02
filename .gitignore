@@ -11,3 +11,6 @@ local.properties
 .cursor
 .history
 .kotlin
+_apk_dl/
+build_ksp.log
+

@@ -16,6 +16,7 @@ import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
+import me.rerere.workspace.WorkspaceSearchMatch
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import java.io.ByteArrayOutputStream
@@ -55,6 +56,18 @@ class WorkspaceRepository(
     }
 
     suspend fun getById(id: String): WorkspaceEntity? = dao.getById(id)
+
+    /** Bounded filesystem search backed by WorkspaceFileSystem, never by the workspace shell. */
+    suspend fun searchFiles(
+        workspaceId: String,
+        query: String,
+        path: String = "",
+        includeGlob: String? = null,
+        expectedRoot: String? = null,
+    ): List<WorkspaceSearchMatch> = withContext(Dispatchers.IO) {
+        val workspace = requireWorkspace(workspaceId, expectedRoot)
+        manager.grep(workspace.root, query, path, regex = false, includeGlob = includeGlob)
+    }
 
     suspend fun create(name: String): WorkspaceEntity {
         val id = Uuid.random().toString()
@@ -153,8 +166,9 @@ class WorkspaceRepository(
     suspend fun readText(
         id: String,
         path: String,
+        expectedRoot: String? = null,
     ): String = withContext(Dispatchers.IO) {
-        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        val workspace = requireWorkspace(id, expectedRoot)
         manager.ensureWorkspace(workspace.root)
         manager.readText(workspace.root, path)
     }
@@ -232,8 +246,9 @@ class WorkspaceRepository(
     suspend fun rootfsFileSize(
         id: String,
         path: String,
+        expectedRoot: String? = null,
     ): Long = withContext(Dispatchers.IO) {
-        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        val workspace = requireWorkspace(id, expectedRoot)
         manager.ensureWorkspace(workspace.root)
         manager.rootfsFileSize(workspace.root, path)
     }
@@ -243,10 +258,24 @@ class WorkspaceRepository(
         id: String,
         path: String,
         outputStream: OutputStream,
+        expectedRoot: String? = null,
     ) = withContext(Dispatchers.IO) {
-        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        val workspace = requireWorkspace(id, expectedRoot)
         manager.ensureWorkspace(workspace.root)
         manager.exportRootfsFile(workspace.root, path, outputStream)
+    }
+
+    /** Writes a Rootfs guest path through the same normalized mapping used for reads. */
+    suspend fun writeRootfsText(
+        id: String,
+        path: String,
+        text: String,
+        overwrite: Boolean = true,
+        expectedRoot: String? = null,
+    ): WorkspaceFileEntry = withContext(Dispatchers.IO) {
+        val workspace = requireWorkspace(id, expectedRoot)
+        manager.ensureWorkspace(workspace.root)
+        manager.writeRootfsText(workspace.root, path, text, overwrite)
     }
 
     suspend fun deleteFile(
@@ -278,9 +307,10 @@ class WorkspaceRepository(
         command: String,
         cwd: String = "",
         timeoutMillis: Long = WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS,
+        expectedRoot: String? = null,
         stdin: ByteArray? = null,
     ): WorkspaceCommandResult {
-        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        val workspace = requireWorkspace(id, expectedRoot)
         // runInterruptible 让协程取消转化为线程中断，从而打断阻塞的 Process.waitFor 并杀掉进程
         return runInterruptible(Dispatchers.IO) {
             manager.ensureWorkspace(workspace.root)
@@ -330,6 +360,17 @@ class WorkspaceRepository(
             shellStatus = shellStatus,
             updatedAt = System.currentTimeMillis(),
         )
+    }
+
+    private suspend fun requireWorkspace(id: String, expectedRoot: String?): WorkspaceEntity {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        check(expectedRoot == null || workspace.root == expectedRoot) {
+            "Workspace identity changed after the operation was authorized"
+        }
+        check(expectedRoot == null || workspace.shellStatus == WorkspaceShellStatus.READY.name) {
+            "Workspace shell is no longer ready"
+        }
+        return workspace
     }
 
     companion object {

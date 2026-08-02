@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.ui
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -33,17 +35,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowRight01
-import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.rikkahub.R
@@ -61,6 +65,7 @@ private val LocalCardColor = staticCompositionLocalOf { Color.White }
  * @param modifier 外层卡片的修饰符
  * @param cardColors 卡片配色
  * @param steps 需要渲染的步骤数据列表
+ * @param stepKey 返回步骤稳定且唯一的身份，用于保持展开与动画状态
  * @param collapsedVisibleCount 折叠时保留可见的尾部步骤数
  * @param collapsedAdaptiveWidth 是否在折叠态下使用内容自适应宽度
  * @param content 每个步骤的具体 UI，由 [ChainOfThoughtScope] 提供步骤构建能力
@@ -72,6 +77,7 @@ fun <T> ChainOfThought(
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
     ),
     steps: List<T>,
+    stepKey: (T) -> Any,
     collapsedVisibleCount: Int = 2,
     collapsedAdaptiveWidth: Boolean = false,
     content: @Composable ChainOfThoughtScope.(T) -> Unit
@@ -103,6 +109,18 @@ fun <T> ChainOfThought(
 
                 // 显示展开/折叠按钮（统一在顶部）
                 if (canCollapse) {
+                    val showMoreLabel = stringResource(
+                        R.string.chain_of_thought_show_more_steps,
+                        steps.size - collapsedVisibleCount,
+                    )
+                    val collapseLabel = stringResource(R.string.chain_of_thought_collapse)
+                    val expandedLabel = stringResource(R.string.chain_of_thought_expanded)
+                    val collapsedLabel = stringResource(R.string.chain_of_thought_collapsed)
+                    val arrowRotation by animateFloatAsState(
+                        targetValue = if (expanded) 180f else 0f,
+                        animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+                        label = "chain_of_thought_group_arrow",
+                    )
                     Row(
                         modifier = Modifier
                             .then(
@@ -113,7 +131,13 @@ fun <T> ChainOfThought(
                                 }
                             )
                             .clip(MaterialTheme.shapes.small)
-                            .clickable { expanded = !expanded }
+                            .clickable(
+                                onClickLabel = if (expanded) collapseLabel else showMoreLabel,
+                                onClick = { expanded = !expanded },
+                            )
+                            .semantics {
+                                stateDescription = if (expanded) expandedLabel else collapsedLabel
+                            }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -123,9 +147,9 @@ fun <T> ChainOfThought(
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                imageVector = if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
+                                imageVector = HugeIcons.ArrowDown01,
                                 contentDescription = null,
-                                modifier = Modifier.size(16.dp),
+                                modifier = Modifier.size(16.dp).rotate(arrowRotation),
                                 tint = MaterialTheme.colorScheme.primary,
                             )
                         }
@@ -134,12 +158,9 @@ fun <T> ChainOfThought(
                         Text(
                             modifier = Modifier.padding(start = 8.dp),
                             text = if (expanded) {
-                                stringResource(R.string.chain_of_thought_collapse)
+                                collapseLabel
                             } else {
-                                stringResource(
-                                    R.string.chain_of_thought_show_more_steps,
-                                    steps.size - collapsedVisibleCount
-                                )
+                                showMoreLabel
                             },
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
@@ -163,7 +184,9 @@ fun <T> ChainOfThought(
                 ) {
                     Column {
                         visibleSteps.fastForEach { step ->
-                            scope.content(step)
+                            key(stepKey(step)) {
+                                scope.content(step)
+                            }
                         }
                     }
                 }
@@ -291,6 +314,15 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
     ) {
         val hasContent = content != null
         val shouldFillMaxWidth = !collapsedAdaptiveWidth || contentVisible
+        val expandStepLabel = stringResource(R.string.chain_of_thought_expand_step)
+        val collapseStepLabel = stringResource(R.string.chain_of_thought_collapse_step)
+        val expandedLabel = stringResource(R.string.chain_of_thought_expanded)
+        val collapsedLabel = stringResource(R.string.chain_of_thought_collapsed)
+        val arrowRotation by animateFloatAsState(
+            targetValue = if (expanded) 180f else 0f,
+            animationSpec = MaterialTheme.motionScheme.defaultSpatialSpec(),
+            label = "chain_of_thought_step_arrow",
+        )
 
         Column(
             modifier = Modifier.then(
@@ -319,7 +351,13 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
                         } else if (hasContent) {
                             Modifier
                                 .clip(MaterialTheme.shapes.small)
-                                .clickable { onExpandedChange(!expanded) }
+                                .clickable(
+                                    onClickLabel = if (expanded) collapseStepLabel else expandStepLabel,
+                                    onClick = { onExpandedChange(!expanded) },
+                                )
+                                .semantics {
+                                    stateDescription = if (expanded) expandedLabel else collapsedLabel
+                                }
                         } else {
                             Modifier
                         }
@@ -385,9 +423,9 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
                     )
                 } else if (hasContent) {
                     Icon(
-                        imageVector = if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
+                        imageVector = HugeIcons.ArrowDown01,
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(16.dp).rotate(arrowRotation),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -459,6 +497,7 @@ private fun ChainOfThoughtPreview() {
                         StepData("Step without icon", null, null),
                         StepData("Final step", HugeIcons.Sparkles, "Done"),
                     ),
+                    stepKey = StepData::label,
                     collapsedVisibleCount = 2,
                 ) { step ->
                     val iconComposable: (@Composable () -> Unit)? = step.icon?.let {

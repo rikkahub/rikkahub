@@ -7,6 +7,7 @@ import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.util.Log
 import android.webkit.MimeTypeMap
+import androidx.core.net.toFile
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
@@ -40,6 +41,13 @@ object FileUtils {
             return null
         }
         return canonicalFile.relativeTo(canonicalFilesDir).path.replace(File.separatorChar, '/')
+    }
+
+    fun resolveUploadFile(filesDir: File, uri: Uri): File? {
+        if (uri.scheme != "file") return null
+        val uploadDir = runCatching { File(filesDir, FileFolders.UPLOAD).canonicalFile }.getOrNull() ?: return null
+        val file = runCatching { uri.toFile().canonicalFile }.getOrNull() ?: return null
+        return file.takeIf { it.parentFile == uploadDir }
     }
 
     fun getFileNameFromUri(context: Context, uri: Uri): String? {

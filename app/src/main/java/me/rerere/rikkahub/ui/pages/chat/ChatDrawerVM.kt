@@ -167,8 +167,12 @@ class ChatDrawerVM(
             return false
         }
         viewModelScope.launch {
+            val assistantId = assistantIdFlow.first()
+            val folder = folderRepo.getFolderById(folderId)
+                ?.takeIf { it.assistantId == assistantId }
+                ?: return@launch
             // 经 ChatService 删除：会同步清空活跃 session 内存态的 folderId，避免整对象保存写回已删文件夹
-            chatService.deleteFolder(folderId)
+            chatService.deleteFolder(folder)
             if (_selectedFolderId.value == folderId) {
                 _selectedFolderId.value = null
             }

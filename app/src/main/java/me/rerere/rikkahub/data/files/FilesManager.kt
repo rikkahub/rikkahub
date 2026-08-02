@@ -99,6 +99,14 @@ class FilesManager(
 
     suspend fun getByRelativePath(relativePath: String): ManagedFileEntity? = repository.getByPath(relativePath)
 
+    suspend fun isManagedUploadDocumentUri(url: String): Boolean {
+        val file = FileUtils.resolveUploadFile(context.filesDir, Uri.parse(url)) ?: return false
+        if (!file.isFile) return false
+        val relativePath = "${FileFolders.UPLOAD}/${file.name}"
+        val entity = repository.getByPath(relativePath) ?: return false
+        return entity.folder == FileFolders.UPLOAD && getFile(entity).canonicalFile == file
+    }
+
     fun getFile(entity: ManagedFileEntity): File =
         File(context.filesDir, entity.relativePath)
 

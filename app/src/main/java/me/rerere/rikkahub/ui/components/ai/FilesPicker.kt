@@ -63,9 +63,11 @@ import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.Package01
 import me.rerere.hugeicons.stroke.Settings02
+import me.rerere.hugeicons.stroke.Tick02
 import me.rerere.hugeicons.stroke.Video01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.ai.agent.permission.AgentPermissionMode
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -91,6 +93,7 @@ internal fun FilesPicker(
     assistant: Assistant,
     state: ChatInputState,
     mcpManager: McpManager,
+    agentOnly: Boolean = false,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateConversation: (Conversation) -> Unit,
@@ -116,49 +119,64 @@ internal fun FilesPicker(
             .fillMaxWidth()
             .padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
-            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.Start),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            TakePicButton(onLaunchCamera = onTakePic)
+        if (agentOnly) {
+            Text(
+                text = stringResource(R.string.chat_page_agent_title),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Text(
+                text = stringResource(R.string.chat_page_agent_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().wrapContentWidth(Alignment.CenterHorizontally),
+                horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.Start),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                TakePicButton(onLaunchCamera = onTakePic)
 
-            ImagePickButton(onClick = onPickImage)
+                ImagePickButton(onClick = onPickImage)
 
-            if (provider != null && provider is ProviderSetting.Google) {
-                VideoPickButton(onClick = onPickVideo)
+                if (provider != null && provider is ProviderSetting.Google) {
+                    VideoPickButton(onClick = onPickVideo)
 
-                AudioPickButton(onClick = onPickAudio)
+                    AudioPickButton(onClick = onPickAudio)
+                }
+
+                FilePickButton(onClick = onPickFile)
             }
 
-            FilePickButton(onClick = onPickFile)
-        }
-
-        HorizontalDivider(
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        if (workspaces.isNotEmpty()) {
-            WorkspacePickerListItem(
-                assistant = assistant,
-                conversation = conversation,
-                workspaces = workspaces,
-                onUpdateAssistant = onUpdateAssistant,
-                onUpdateConversation = onUpdateConversation,
-                onNavigateToDetail = { id ->
-                    onDismiss()
-                    navController.navigate(Screen.WorkspaceDetail(id))
-                },
-                onNavigateToTerminal = { id ->
-                    onDismiss()
-                    navController.navigate(Screen.WorkspaceTerminal(id))
-                },
-                onNavigateToManage = {
-                    onDismiss()
-                    navController.navigate(Screen.Workspaces)
-                },
+            HorizontalDivider(
+                modifier = Modifier.fillMaxWidth()
             )
         }
+
+        WorkspacePickerListItem(
+            assistant = assistant,
+            conversation = conversation,
+            workspaces = workspaces,
+            onUpdateAssistant = onUpdateAssistant,
+            onUpdateConversation = onUpdateConversation,
+            onNavigateToDetail = { id ->
+                onDismiss()
+                navController.navigate(Screen.WorkspaceDetail(id))
+            },
+            onNavigateToTerminal = { id ->
+                onDismiss()
+                navController.navigate(Screen.WorkspaceTerminal(id))
+            },
+            onNavigateToManage = {
+                onDismiss()
+                navController.navigate(Screen.Workspaces)
+            },
+        )
+
+        AgentPermissionModePickerListItem(
+            assistant = assistant,
+            onUpdateAssistant = onUpdateAssistant,
+        )
 
         if (settings.mcpServers.isNotEmpty()) {
             McpPickerListItem(
@@ -239,7 +257,7 @@ internal fun FilesPicker(
                 },
         )
 
-        // Workspace CWD
+        // Workspace CWD. AUTO routing is informational in the chat bar and is not duplicated here.
         val boundWorkspace = remember(workspaces, assistant.workspaceId) {
             workspaces.find { it.id == assistant.workspaceId?.toString() }
         }
@@ -297,6 +315,98 @@ internal fun FilesPicker(
             onCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
         })
     }
+}
+
+@Composable
+private fun AgentPermissionModePickerListItem(
+    assistant: Assistant,
+    onUpdateAssistant: (Assistant) -> Unit,
+) {
+    var showSheet by remember { mutableStateOf(false) }
+
+    ListItem(
+        leadingContent = {
+            Icon(
+                imageVector = HugeIcons.Settings02,
+                contentDescription = stringResource(R.string.assistant_page_agent_permission_mode),
+            )
+        },
+        headlineContent = {
+            Text(stringResource(R.string.assistant_page_agent_permission_mode))
+        },
+        supportingContent = {
+            Text(agentPermissionModeLabel(assistant.agentPermissionMode))
+        },
+        colors = ListItemDefaults.colors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+        ),
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.large)
+            .clickable { showSheet = true },
+    )
+
+    if (showSheet) {
+        ModalBottomSheet(onDismissRequest = { showSheet = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.assistant_page_agent_permission_mode),
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+                AgentPermissionMode.entries.forEach { mode ->
+                    val selected = mode == assistant.agentPermissionMode
+                    ListItem(
+                        headlineContent = { Text(agentPermissionModeLabel(mode)) },
+                        supportingContent = { Text(agentPermissionModeDescription(mode)) },
+                        trailingContent = if (selected) {
+                            {
+                                Icon(
+                                    imageVector = HugeIcons.Tick02,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                        colors = ListItemDefaults.colors(
+                            containerColor = if (selected) {
+                                MaterialTheme.colorScheme.surfaceContainerHigh
+                            } else {
+                                Color.Transparent
+                            },
+                        ),
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.large)
+                            .clickable {
+                                onUpdateAssistant(assistant.copy(agentPermissionMode = mode))
+                                showSheet = false
+                            },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun agentPermissionModeLabel(mode: AgentPermissionMode): String = when (mode) {
+    AgentPermissionMode.AUTO_REVIEW -> stringResource(R.string.agent_permission_mode_auto_review)
+    AgentPermissionMode.FULL_ACCESS -> stringResource(R.string.agent_permission_mode_full_access)
+    AgentPermissionMode.CONFIRM_CRITICAL -> stringResource(R.string.agent_permission_mode_confirm_critical)
+}
+
+@Composable
+private fun agentPermissionModeDescription(mode: AgentPermissionMode): String = when (mode) {
+    AgentPermissionMode.AUTO_REVIEW -> stringResource(R.string.agent_permission_mode_auto_review_desc)
+    AgentPermissionMode.FULL_ACCESS -> stringResource(R.string.agent_permission_mode_full_access_desc)
+    AgentPermissionMode.CONFIRM_CRITICAL -> stringResource(R.string.agent_permission_mode_confirm_critical_desc)
 }
 
 @Composable
@@ -379,6 +489,10 @@ private fun WorkspacePickerListItem(
             onManage = {
                 showSheet = false
                 onNavigateToManage()
+            },
+            onOpenDetails = { workspaceId ->
+                showSheet = false
+                onNavigateToDetail(workspaceId)
             },
             onDismiss = { showSheet = false },
         )

@@ -17,6 +17,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -37,22 +38,25 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.ai.agent.permission.AgentPermissionMode
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
+import me.rerere.rikkahub.ui.components.ai.WorkspaceSelectSheet
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.TagsInput
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.hooks.heroAnimation
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.toFixed
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.math.roundToInt
-import kotlin.uuid.Uuid
 import me.rerere.rikkahub.data.model.Tag as DataTag
 
 @Composable
@@ -106,6 +110,9 @@ internal fun AssistantBasicContent(
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
+    val navController = LocalNavController.current
+    var showWorkspaceSheet by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -190,20 +197,33 @@ internal fun AssistantBasicContent(
                 modifier = Modifier.padding(8.dp),
             ) {
                 val selectedWorkspace = workspaces.find { it.id == assistant.workspaceId?.toString() }
+                OutlinedButton(
+                    onClick = { showWorkspaceSheet = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(selectedWorkspace?.name ?: stringResource(R.string.workspace_no_binding))
+                }
+            }
+
+            HorizontalDivider()
+
+            FormItem(
+                label = {
+                    Text(stringResource(R.string.assistant_page_agent_permission_mode))
+                },
+                description = {
+                    Text(permissionModeDescription(assistant.agentPermissionMode))
+                },
+                modifier = Modifier.padding(8.dp),
+            ) {
                 Select(
-                    options = listOf<WorkspaceEntity?>(null) + workspaces,
-                    selectedOption = selectedWorkspace,
-                    onOptionSelected = { workspace ->
-                        onUpdate(
-                            assistant.copy(
-                                workspaceId = workspace?.id?.let { Uuid.parse(it) }
-                            )
-                        )
+                    options = AgentPermissionMode.entries,
+                    selectedOption = assistant.agentPermissionMode,
+                    onOptionSelected = { mode ->
+                        onUpdate(assistant.copy(agentPermissionMode = mode))
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    optionToString = { workspace ->
-                        workspace?.name ?: stringResource(R.string.workspace_no_binding)
-                    },
+                    optionToString = { mode -> permissionModeLabel(mode) },
                 )
             }
 
@@ -315,6 +335,47 @@ internal fun AssistantBasicContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
+                    Text(stringResource(R.string.assistant_page_context_message_limit))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_context_message_limit_desc))
+                }
+            ) {
+                Slider(
+                    value = assistant.contextMessageLimit.toFloat(),
+                    onValueChange = { value ->
+                        onUpdate(assistant.copy(contextMessageLimit = snapContextMessageLimit(value)))
+                    },
+                    valueRange = 0f..512f,
+                    steps = 0,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                Text(
+                    text = if (assistant.contextMessageLimit > 0) {
+                        stringResource(
+                            R.string.assistant_page_context_message_limit_count,
+                            assistant.contextMessageLimit,
+                        )
+                    } else {
+                        stringResource(R.string.assistant_page_context_message_limit_unlimited)
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
+                )
+
+                if (assistant.contextMessageLimit > 0) {
+                    Text(
+                        text = stringResource(R.string.assistant_page_context_message_limit_warning),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
                     Text(stringResource(R.string.assistant_page_top_p))
                 },
                 description = {
@@ -361,49 +422,6 @@ internal fun AssistantBasicContent(
                         supportingText = {
                             Text("0 - 1")
                         }
-                    )
-                }
-            }
-            HorizontalDivider()
-            FormItem(
-                modifier = Modifier.padding(8.dp),
-                label = {
-                    Text(stringResource(R.string.assistant_page_context_message_limit))
-                },
-                description = {
-                    Text(
-                        text = stringResource(R.string.assistant_page_context_message_limit_desc),
-                    )
-                }
-            ) {
-                Slider(
-                    value = assistant.contextMessageLimit.toFloat(),
-                    onValueChange = { value ->
-                        onUpdate(
-                            assistant.copy(
-                                contextMessageLimit = snapContextMessageLimit(value)
-                            )
-                        )
-                    },
-                    valueRange = 0f..512f,
-                    steps = 0,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Text(
-                    text = if (assistant.contextMessageLimit > 0) stringResource(
-                        R.string.assistant_page_context_message_limit_count,
-                        assistant.contextMessageLimit
-                    ) else stringResource(R.string.assistant_page_context_message_limit_unlimited),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
-                )
-
-                if (assistant.contextMessageLimit > 0) {
-                    Text(
-                        text = stringResource(R.string.assistant_page_context_message_limit_warning),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
                     )
                 }
             }
@@ -560,20 +578,49 @@ internal fun AssistantBasicContent(
                 }
             }
         }
+
+        if (showWorkspaceSheet) {
+            WorkspaceSelectSheet(
+                assistant = assistant,
+                workspaces = workspaces,
+                onSelect = { workspaceId ->
+                    onUpdate(
+                        assistant.copy(
+                            workspaceId = workspaceId?.let(kotlin.uuid.Uuid::parse),
+                        ),
+                    )
+                    showWorkspaceSheet = false
+                },
+                onManage = {
+                    showWorkspaceSheet = false
+                    navController.navigate(Screen.Workspaces)
+                },
+                onOpenDetails = { workspaceId ->
+                    showWorkspaceSheet = false
+                    navController.navigate(Screen.WorkspaceDetail(workspaceId))
+                },
+                onDismiss = { showWorkspaceSheet = false },
+            )
+        }
     }
 }
 
-/**
- * 上下文限制的最小有效值
- *
- * 低于此值时截断点几乎每轮都在移动, 提示词缓存命中率跌破 90%,
- * 且保留的上下文通常达不到可缓存的最小长度, 限制本身失去意义
- */
+@Composable
+private fun permissionModeLabel(mode: AgentPermissionMode): String = when (mode) {
+    AgentPermissionMode.AUTO_REVIEW -> stringResource(R.string.agent_permission_mode_auto_review)
+    AgentPermissionMode.FULL_ACCESS -> stringResource(R.string.agent_permission_mode_full_access)
+    AgentPermissionMode.CONFIRM_CRITICAL -> stringResource(R.string.agent_permission_mode_confirm_critical)
+}
+
+@Composable
+private fun permissionModeDescription(mode: AgentPermissionMode): String = when (mode) {
+    AgentPermissionMode.AUTO_REVIEW -> stringResource(R.string.agent_permission_mode_auto_review_desc)
+    AgentPermissionMode.FULL_ACCESS -> stringResource(R.string.agent_permission_mode_full_access_desc)
+    AgentPermissionMode.CONFIRM_CRITICAL -> stringResource(R.string.agent_permission_mode_confirm_critical_desc)
+}
+
 private const val MIN_CONTEXT_MESSAGE_LIMIT = 20
 
-/**
- * 把滑块取值吸附到 0(不限制) 或不低于 [MIN_CONTEXT_MESSAGE_LIMIT] 的有效档位
- */
 private fun snapContextMessageLimit(value: Float): Int {
     val raw = value.roundToInt()
     return when {

@@ -12,10 +12,12 @@ import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
@@ -55,6 +57,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -74,6 +77,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalScrollCaptureInProgress
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -88,6 +94,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
@@ -95,6 +102,8 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.message.ChatMessage
+import me.rerere.rikkahub.ui.components.message.ToolAnswerHandler
+import me.rerere.rikkahub.ui.components.message.ToolApprovalHandler
 import me.rerere.rikkahub.ui.components.ui.ErrorCardsDisplay
 import me.rerere.rikkahub.ui.components.ui.ListSelectableItem
 import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
@@ -108,6 +117,80 @@ import kotlin.uuid.Uuid
 private const val TAG = "ChatList"
 private const val LoadingIndicatorKey = "LoadingIndicator"
 private const val ScrollBottomKey = "ScrollBottomKey"
+
+internal data class AgentProcessingStatusPresentation(
+    val visible: Boolean,
+    val displayedText: String?,
+    val retainedText: String?,
+)
+
+internal fun agentProcessingStatusPresentation(
+    currentStatus: String?,
+    retainedStatus: String?,
+): AgentProcessingStatusPresentation {
+    val visibleStatus = currentStatus?.takeIf(String::isNotBlank)
+    val nextRetainedStatus = visibleStatus ?: retainedStatus
+    return AgentProcessingStatusPresentation(
+        visible = visibleStatus != null,
+        displayedText = visibleStatus ?: retainedStatus,
+        retainedText = nextRetainedStatus,
+    )
+}
+
+@Composable
+internal fun AgentProcessingStatus(
+    status: String?,
+    modifier: Modifier = Modifier,
+) {
+    var retainedStatus by remember { mutableStateOf(status?.takeIf(String::isNotBlank)) }
+    val presentation = agentProcessingStatusPresentation(
+        currentStatus = status,
+        retainedStatus = retainedStatus,
+    )
+    val motionScheme = MaterialTheme.motionScheme
+    SideEffect {
+        if (retainedStatus != presentation.retainedText) {
+            retainedStatus = presentation.retainedText
+        }
+    }
+
+    AnimatedVisibility(
+        visible = presentation.visible,
+        modifier = modifier,
+        enter = expandHorizontally(
+            animationSpec = motionScheme.defaultSpatialSpec(),
+            expandFrom = Alignment.Start,
+        ) + fadeIn(),
+        exit = shrinkHorizontally(
+            animationSpec = motionScheme.defaultSpatialSpec(),
+            shrinkTowards = Alignment.Start,
+        ) + fadeOut(),
+    ) {
+        AnimatedContent(
+            targetState = presentation.displayedText,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            transitionSpec = {
+                (fadeIn() + slideInVertically(
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                    initialOffsetY = { it / 3 },
+                )) togetherWith (fadeOut() + slideOutVertically(
+                    animationSpec = motionScheme.defaultSpatialSpec(),
+                    targetOffsetY = { -it / 3 },
+                ))
+            },
+            contentKey = { it },
+            label = "agent_processing_status",
+        ) { text ->
+            if (text != null) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun ChatList(
@@ -131,8 +214,8 @@ fun ChatList(
     onTranslate: ((UIMessage, java.util.Locale) -> Unit)? = null,
     onClearTranslation: (UIMessage) -> Unit = {},
     onJumpToMessage: (Int) -> Unit = {},
-    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
-    onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onToolApproval: ToolApprovalHandler? = null,
+    onToolAnswer: ToolAnswerHandler? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
 ) {
@@ -203,8 +286,8 @@ private fun ChatListNormal(
     onTranslate: ((UIMessage, java.util.Locale) -> Unit)?,
     onClearTranslation: (UIMessage) -> Unit,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
-    onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    onToolApproval: ToolApprovalHandler? = null,
+    onToolAnswer: ToolAnswerHandler? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
 ) {
@@ -278,7 +361,7 @@ private fun ChatListNormal(
         if (settings.displaySetting.enableAutoScroll) {
             LaunchedEffect(state) {
                 snapshotFlow { state.layoutInfo.visibleItemsInfo }.collect { visibleItemsInfo ->
-                    // println("is bottom = ${visibleItemsInfo.isAtBottom()}, scroll = ${state.isScrollInProgress}, can_scroll = ${state.canScrollForward}, loading = $loading")
+                    // Debug facts: bottom state, scroll progress, forward-scroll availability, and loading.
                     if (!state.isScrollInProgress && loadingState) {
                         if (visibleItemsInfo.isAtBottom()) {
                             state.requestScrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
@@ -304,7 +387,9 @@ private fun ChatListNormal(
         ChatFontProvider(displaySetting = settings.displaySetting) {
             LazyColumn(
                 state = state,
-                contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
+                contentPadding = PaddingValues(16.dp) + PaddingValues(
+                    bottom = 32.dp + innerPadding.calculateBottomPadding(),
+                ),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
@@ -369,7 +454,10 @@ private fun ChatListNormal(
                 }
             }
 
-            if (!loading && assistant?.allowConversationSystemPrompt == true && onConversationSystemPromptChange != null) {
+            if (
+                !loading && assistant?.allowConversationSystemPrompt == true &&
+                onConversationSystemPromptChange != null
+            ) {
                 item(key = "ConversationSystemPrompt") {
                     ConversationSystemPromptButton(
                         customSystemPrompt = conversation.customSystemPrompt,
@@ -388,15 +476,7 @@ private fun ChatListNormal(
                         RabbitLoadingIndicator(
                             modifier = Modifier.size(28.dp)
                         )
-                        AnimatedVisibility(
-                            visible = processingStatus != null,
-                        ) {
-                            Text(
-                                text = processingStatus ?: "",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                        AgentProcessingStatus(status = processingStatus)
                     }
                 }
             }
@@ -510,7 +590,8 @@ private fun ChatListNormal(
 
             // 消息快速跳转
             MessageJumper(
-                show = isRecentScroll && !state.isScrollInProgress && settings.displaySetting.showMessageJumper && !captureProgress,
+                show = isRecentScroll && !state.isScrollInProgress &&
+                    settings.displaySetting.showMessageJumper && !captureProgress,
                 onLeft = settings.displaySetting.messageJumperOnLeft,
                 scope = scope,
                 state = state
@@ -653,7 +734,9 @@ private fun ChatListPreview(
 
         // 消息预览
         LazyColumn(
-            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
+            contentPadding = PaddingValues(16.dp) + PaddingValues(
+                bottom = 32.dp + innerPadding.calculateBottomPadding(),
+            ),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxWidth()
@@ -675,7 +758,11 @@ private fun ChatListPreview(
                 ) {
                     Surface(
                         shape = MaterialTheme.shapes.medium,
-                        color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                        color = if (isUser) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        },
                     ) {
                         Row(
                             modifier = Modifier

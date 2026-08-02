@@ -46,15 +46,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import me.rerere.highlight.LocalCodeHighlighter
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.richtext.HighlightCodeVisualTransformation
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
-import me.rerere.rikkahub.ui.theme.JetbrainsMono
-import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.plus
 import me.rerere.search.SearchCommonOptions
 import me.rerere.search.SearchResult
@@ -220,7 +216,7 @@ private fun SearchServiceOptionsEditor(
             SerperOptions(options) { onUpdateOptions(it) }
         }
         is SearchServiceOptions.CustomJsOptions -> {
-            CustomJsOptions(options) { onUpdateOptions(it) }
+            Text("Custom JavaScript search has been removed. Select another service.")
         }
     }
 }
@@ -915,80 +911,3 @@ internal fun GrokOptions(
     }
 }
 
-@Composable
-internal fun CustomJsOptions(
-    options: SearchServiceOptions.CustomJsOptions,
-    onUpdateOptions: (SearchServiceOptions.CustomJsOptions) -> Unit
-) {
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_name))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.name,
-            onValueChange = {
-                onUpdateOptions(options.copy(name = it))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.search_detail_custom_search_placeholder)) }
-        )
-    }
-
-    val highlighter = LocalCodeHighlighter.current
-    val darkMode = LocalDarkMode.current
-
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_search_script))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.searchScript,
-            onValueChange = {
-                onUpdateOptions(options.copy(searchScript = it))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 8,
-            maxLines = 20,
-            visualTransformation = HighlightCodeVisualTransformation(
-                language = "javascript",
-                highlighter = highlighter,
-                darkMode = darkMode
-            ),
-            textStyle = MaterialTheme.typography.bodySmall.merge(fontFamily = JetbrainsMono),
-        )
-    }
-
-    FormItem(
-        label = {
-            Text(stringResource(R.string.search_detail_scrape_script))
-        },
-        description = {
-            Text(stringResource(R.string.search_detail_scrape_script_desc))
-        }
-    ) {
-        OutlinedTextField(
-            value = options.scrapeScript,
-            onValueChange = {
-                onUpdateOptions(options.copy(scrapeScript = it))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = 4,
-            maxLines = 20,
-            placeholder = {
-                Text(
-                    text = SearchServiceOptions.CustomJsOptions.DEFAULT_SCRAPE_SCRIPT.trimIndent(),
-                    style = MaterialTheme.typography.bodySmall.merge(fontFamily = JetbrainsMono),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                )
-            },
-            visualTransformation = HighlightCodeVisualTransformation(
-                language = "javascript",
-                highlighter = highlighter,
-                darkMode = darkMode
-            ),
-            textStyle = MaterialTheme.typography.bodySmall.merge(fontFamily = JetbrainsMono),
-        )
-    }
-}

@@ -244,11 +244,17 @@ class RouteActivity : ComponentActivity() {
         LaunchedEffect(tts) {
             eventBus.events.collect { event ->
                 when (event) {
-                    is AppEvent.Speak -> tts.speak(event.text)
+                    is AppEvent.Speak -> if (event.providerFrozen) {
+                        tts.speakWithProvider(event.text, event.provider)
+                    } else {
+                        tts.speak(event.text)
+                    }
                     is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
                     is AppEvent.McpOAuthCallback -> Unit // 由 McpManager 消费
+                    is AppEvent.ChatGenerationStarted -> Unit // 由 ChatNotificationManager 消费
                     is AppEvent.ChatGenerationUpdate -> Unit // 由 ChatNotificationManager 消费
                     is AppEvent.ChatGenerationEnded -> Unit // 由 ChatNotificationManager 消费
+                    is AppEvent.ChatGenerationDeleted -> Unit // 由 ChatNotificationManager 消费
                 }
             }
         }

@@ -10,13 +10,13 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.WebDavConfig
-import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.sync.importer.ChatboxImporter
 import me.rerere.rikkahub.data.sync.importer.CherryStudioProviderImporter
-import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
-import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.S3Sync
+import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
+import me.rerere.rikkahub.data.sync.webdav.WebDavSync
+import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.utils.UiState
 import java.io.File
 
@@ -26,7 +26,7 @@ class BackupVM(
     private val settingsStore: SettingsStore,
     private val webDavSync: WebDavSync,
     private val s3Sync: S3Sync,
-    private val conversationRepository: ConversationRepository,
+    private val chatService: ChatService,
 ) : ViewModel() {
     val settings = settingsStore.settingsFlow.stateIn(
         scope = viewModelScope,
@@ -105,11 +105,10 @@ class BackupVM(
             assistantId = settings.value.assistantId,
             providers = settings.value.providers,
             onConversation = { conversation ->
-                if (conversationRepository.existsConversationById(conversation.id)) {
-                    skippedExistingConversations++
-                } else {
-                    conversationRepository.insertConversation(conversation)
+                if (chatService.restoreImportedConversation(conversation)) {
                     importedConversations++
+                } else {
+                    skippedExistingConversations++
                 }
             }
         )

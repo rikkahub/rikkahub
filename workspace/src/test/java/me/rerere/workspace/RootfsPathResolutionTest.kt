@@ -8,6 +8,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.Paths
 
 class RootfsPathResolutionTest {
     @get:Rule
@@ -74,6 +76,81 @@ class RootfsPathResolutionTest {
     }
 
     @Test
+    fun normalizedTraversalResolvesToItsActualBindMount() {
+        manager = createManager()
+
+        val location = manager.resolveRootfsPath(root, "/workspace/../../skills/note.txt")
+        val entry = manager.writeRootfsText(root, "/workspace/../../skills/note.txt", "hello")
+
+        assertEquals(skillsDir, location.rootDir)
+        assertEquals("note.txt", location.relativePath)
+        assertEquals("/skills/note.txt", entry.path)
+        assertEquals("hello", File(skillsDir, "note.txt").readText())
+    }
+
+    @Test
+    fun normalizedWorkspaceWriteUsesFilesArea() {
+        manager = createManager()
+
+        val entry = manager.writeRootfsText(root, "/workspace//notes/./today.txt", "hello")
+
+        assertEquals("/workspace/notes/today.txt", entry.path)
+        assertEquals("hello", File(manager.filesDir(root), "notes/today.txt").readText())
+    }
+
+    @Test
+    fun writeRejectsAbsoluteGuestSymlinkWithoutTouchingGuestTarget() {
+        manager = createManager()
+        val guestTarget = File(manager.filesDir(root), "hostname").apply { writeText("workspace") }
+        val link = File(manager.linuxDir(root), "etc/hostname")
+        link.parentFile!!.mkdirs()
+        Files.createSymbolicLink(link.toPath(), Paths.get("/workspace/hostname"))
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            manager.writeRootfsText(root, "/etc/hostname", "changed")
+        }
+
+        assertTrue(error.message!!.contains("Symbolic links are not supported"))
+        assertTrue(error.message!!.contains("workspace_shell"))
+        assertEquals("workspace", guestTarget.readText())
+    }
+
+    @Test
+    fun editReadRejectsRelativeGuestSymlink() {
+        manager = createManager()
+        val etcDir = File(manager.linuxDir(root), "etc").apply { mkdirs() }
+        File(etcDir, "real-hostname").writeText("rikkahub")
+        Files.createSymbolicLink(File(etcDir, "hostname").toPath(), java.nio.file.Path.of("real-hostname"))
+
+        val error = assertThrows(IllegalStateException::class.java) {
+            manager.rootfsFileSize(root, "/etc/hostname")
+        }
+
+        assertTrue(error.message!!.contains("Symbolic links are not supported"))
+        assertEquals("rikkahub", File(etcDir, "real-hostname").readText())
+    }
+
+    @Test
+    fun normalizedTmpTraversalWritesToRootfsInsteadOfTmp() {
+        manager = createManager()
+
+        val entry = manager.writeRootfsText(root, "/tmp/../etc/hostname", "rikkahub\n")
+
+        assertEquals("/etc/hostname", entry.path)
+        assertEquals("rikkahub\n", File(manager.linuxDir(root), "etc/hostname").readText())
+    }
+
+    @Test
+    fun workspacePrefixDoesNotMatchWorkspaceSibling() {
+        manager = createManager()
+
+        val location = manager.resolveRootfsPath(root, "/workspace2/note.txt")
+
+        assertEquals(manager.linuxDir(root), location.rootDir)
+        assertEquals("workspace2/note.txt", location.relativePath)
+    }
+
+    @Test
     fun unknownAbsolutePathFallsBackToRootfsInterior() {
         manager = createManager()
         File(manager.linuxDir(root), "etc").mkdirs()
@@ -85,14 +162,11 @@ class RootfsPathResolutionTest {
     }
 
     @Test
-    fun traversalOutOfBindMountIsRejected() {
+    fun traversalOutOfBindMountResolvesInsideRootfs() {
         manager = createManager()
-        tempFolder.newFile("secret.txt").writeText("secret")
+        File(manager.linuxDir(root), "secret.txt").writeText("secret")
 
-        val error = assertThrows(IllegalArgumentException::class.java) {
-            manager.rootfsFileSize(root, "/skills/../secret.txt")
-        }
-        assertTrue(error.message!!.contains("escapes workspace root"))
+        assertEquals(6L, manager.rootfsFileSize(root, "/skills/../secret.txt"))
     }
 
     @Test
