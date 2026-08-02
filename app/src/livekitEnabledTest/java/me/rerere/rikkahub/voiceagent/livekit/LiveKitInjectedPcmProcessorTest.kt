@@ -2,6 +2,7 @@ package me.rerere.rikkahub.voiceagent.livekit
 
 import io.livekit.android.audio.NoAudioHandler
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import me.rerere.rikkahub.voiceagent.VoiceAgentTransport
@@ -26,6 +27,28 @@ class LiveKitInjectedPcmProcessorTest {
     }
 
     @Test
+    fun `PCM16 fixture samples become normalized floats in the native capture buffer`() = runTest {
+        val fixture = fixtureSource(pcm16(16_384, -16_384))
+        val source = activeSource()
+        val processor = LiveKitInjectedPcmProcessor(source)
+        val activation = source.activate(RUN_HASH, fixture, this)
+        processor.initializeAudioProcessing(sampleRateHz = 48_000, numChannels = 1)
+
+        fixture.startInitial()
+        advanceUntilIdle()
+
+        assertArrayEquals(
+            floatArrayOf(0.5f, 0.5f, 0.5f, -0.5f, -0.5f, -0.5f),
+            processFloats(processor, sampleCount = 6),
+            0.0f,
+        )
+        assertTrue(source.injectionComplete())
+
+        activation.close()
+        fixture.close()
+    }
+
+    @Test
     fun `16 kHz fixture keeps real time pacing in a 48 kHz capture buffer`() = runTest {
         val fixture = fixtureSource(pcm16(0x0102, 0x0304))
         val source = activeSource()
@@ -37,8 +60,16 @@ class LiveKitInjectedPcmProcessorTest {
         advanceUntilIdle()
 
         assertArrayEquals(
-            pcm16(0x0102, 0x0102, 0x0102, 0x0304, 0x0304, 0x0304),
-            process(processor, size = 12),
+            floatArrayOf(
+                normalized(0x0102),
+                normalized(0x0102),
+                normalized(0x0102),
+                normalized(0x0304),
+                normalized(0x0304),
+                normalized(0x0304),
+            ),
+            processFloats(processor, sampleCount = 6),
+            0.0f,
         )
         assertTrue(source.injectionComplete())
 
@@ -47,7 +78,7 @@ class LiveKitInjectedPcmProcessorTest {
     }
 
     @Test
-    fun `mono fixture duplicates each sample into negotiated output channels`() = runTest {
+    fun `capture callback receives one float stream even when capture reports stereo`() = runTest {
         val fixture = fixtureSource(pcm16(0x0102))
         val source = activeSource()
         val processor = LiveKitInjectedPcmProcessor(source)
@@ -57,7 +88,11 @@ class LiveKitInjectedPcmProcessorTest {
         fixture.startInitial()
         advanceUntilIdle()
 
-        assertArrayEquals(pcm16(0x0102, 0x0102), process(processor, size = 4))
+        assertArrayEquals(
+            floatArrayOf(normalized(0x0102)),
+            processFloats(processor, sampleCount = 1),
+            0.0f,
+        )
         activation.close()
         fixture.close()
     }
@@ -72,17 +107,25 @@ class LiveKitInjectedPcmProcessorTest {
 
         fixture.startInitial()
         advanceUntilIdle()
-        assertArrayEquals(pcm16(0x0102), process(processor, size = 2))
+        assertArrayEquals(
+            floatArrayOf(normalized(0x0102)),
+            processFloats(processor, sampleCount = 1),
+            0.0f,
+        )
 
         processor.resetAudioProcessing(newRate = 16_000)
 
-        assertArrayEquals(pcm16(0x0304), process(processor, size = 2))
+        assertArrayEquals(
+            floatArrayOf(normalized(0x0304)),
+            processFloats(processor, sampleCount = 1),
+            0.0f,
+        )
         activation.close()
         fixture.close()
     }
 
     @Test
-    fun `fixture bytes remain ordered across differently sized SDK buffers`() = runTest {
+    fun `fixture samples remain ordered across differently sized SDK buffers`() = runTest {
         val fixture = fixtureSource(pcm16(0x0201, 0x0403, 0x0605))
         val source = activeSource()
         val processor = LiveKitInjectedPcmProcessor(source)
@@ -91,11 +134,23 @@ class LiveKitInjectedPcmProcessorTest {
         fixture.startInitial()
         advanceUntilIdle()
 
-        assertArrayEquals(pcm16(0x0201), process(processor, 2))
+        assertArrayEquals(
+            floatArrayOf(normalized(0x0201)),
+            processFloats(processor, 1),
+            0.0f,
+        )
         assertFalse(source.injectionComplete())
-        assertArrayEquals(pcm16(0x0403), process(processor, 2))
+        assertArrayEquals(
+            floatArrayOf(normalized(0x0403)),
+            processFloats(processor, 1),
+            0.0f,
+        )
         assertFalse(source.injectionComplete())
-        assertArrayEquals(pcm16(0x0605, 0), process(processor, 4))
+        assertArrayEquals(
+            floatArrayOf(normalized(0x0605), 0.0f),
+            processFloats(processor, 2),
+            0.0f,
+        )
         assertTrue(source.injectionComplete())
 
         activation.close()
@@ -103,21 +158,31 @@ class LiveKitInjectedPcmProcessorTest {
     }
 
     @Test
-    fun `active processor zero fills before ready and overwrites every hardware byte after ready`() = runTest {
+    fun `active processor zero fills before ready and overwrites every hardware float after ready`() = runTest {
         val fixture = fixtureSource(pcm16(0x0c0b, 0x0e0d))
         val source = activeSource()
         val processor = LiveKitInjectedPcmProcessor(source)
         val activation = source.activate(RUN_HASH, fixture, this)
 
-        assertArrayEquals(pcm16(0, 0), process(processor, 4))
+        assertArrayEquals(
+            floatArrayOf(0.0f, 0.0f),
+            processFloats(processor, 2),
+            0.0f,
+        )
         fixture.startInitial()
         advanceUntilIdle()
-        val hardware = byteArrayOf(99, 99, 99, 99, 99, 99)
-        val buffer = ByteBuffer.wrap(hardware)
+        val buffer = ByteBuffer.allocate(3 * Float.SIZE_BYTES).order(ByteOrder.nativeOrder())
+        repeat(3) { buffer.putFloat(99.0f) }
+        buffer.clear()
         processor.processAudio(numBands = 1, numFrames = 3, buffer = buffer)
 
-        assertArrayEquals(pcm16(0x0c0b, 0x0e0d, 0), hardware)
-        assertEquals(6, buffer.position())
+        buffer.flip()
+        assertArrayEquals(
+            floatArrayOf(normalized(0x0c0b), normalized(0x0e0d), 0.0f),
+            FloatArray(3) { buffer.float },
+            0.0f,
+        )
+        assertEquals(3 * Float.SIZE_BYTES, buffer.limit())
         assertTrue(source.injectionComplete())
         activation.close()
         fixture.close()
@@ -219,11 +284,18 @@ class LiveKitInjectedPcmProcessorTest {
         requestedTransport = VoiceAgentTransport.LiveKitExperimental,
     )
 
-    private fun process(processor: LiveKitInjectedPcmProcessor, size: Int): ByteArray {
-        val bytes = ByteArray(size) { 99 }
-        processor.processAudio(1, size / 2, ByteBuffer.wrap(bytes))
-        return bytes
+    private fun processFloats(
+        processor: LiveKitInjectedPcmProcessor,
+        sampleCount: Int,
+    ): FloatArray {
+        val buffer = ByteBuffer.allocateDirect(sampleCount * Float.SIZE_BYTES)
+            .order(ByteOrder.nativeOrder())
+        processor.processAudio(1, sampleCount, buffer)
+        buffer.flip()
+        return FloatArray(sampleCount) { buffer.float }
     }
+
+    private fun normalized(sample: Int): Float = sample.toShort().toFloat() / 32_768.0f
 
     private fun pcm16(vararg samples: Int): ByteArray =
         ByteArray(samples.size * PCM16_BYTES_PER_SAMPLE).also { bytes ->

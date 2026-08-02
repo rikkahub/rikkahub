@@ -2,6 +2,7 @@ package me.rerere.rikkahub.voiceagent.livekit
 
 import io.livekit.android.audio.AudioProcessorInterface
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.ArrayDeque
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -25,7 +26,7 @@ internal class LiveKitAutomationPcmSource(
     private var captureJob: Job? = null
     private var injectionEnded = false
     private var outputSampleRateHz = FIXTURE_SAMPLE_RATE_HZ
-    private var outputChannels = 1
+    private var outputChannelCount = 1
     private var resamplePhase = 0
     private var currentSample: Short? = null
 
@@ -126,9 +127,9 @@ internal class LiveKitAutomationPcmSource(
         require(sampleRateHz > 0) { "LiveKit capture sample rate must be positive" }
         require(numChannels > 0) { "LiveKit capture channel count must be positive" }
         synchronized(lock) {
-            if (outputSampleRateHz == sampleRateHz && outputChannels == numChannels) return
+            if (outputSampleRateHz == sampleRateHz && outputChannelCount == numChannels) return
             outputSampleRateHz = sampleRateHz
-            outputChannels = numChannels
+            outputChannelCount = numChannels
             resetResamplingLocked()
         }
     }
@@ -141,13 +142,11 @@ internal class LiveKitAutomationPcmSource(
                 staleJob = clearOwnerLocked(owner.generation)
                 return@synchronized
             }
-            val outputFrameBytes = outputChannels * PCM16_BYTES_PER_SAMPLE
-            while (buffer.remaining() >= outputFrameBytes) {
+            // WebRTC exposes its native float* capture plane through this ByteBuffer.
+            buffer.order(ByteOrder.nativeOrder())
+            while (buffer.remaining() >= FLOAT_BYTES_PER_SAMPLE) {
                 val sample = currentSample ?: readSampleLocked().also { currentSample = it }
-                repeat(outputChannels) {
-                    buffer.put((sample?.toInt() ?: 0).toByte())
-                    buffer.put(((sample?.toInt() ?: 0) ushr 8).toByte())
-                }
+                buffer.putFloat(sample?.toFloat()?.div(PCM16_SCALE) ?: 0.0f)
                 if (sample != null) {
                     resamplePhase += FIXTURE_SAMPLE_RATE_HZ
                     while (resamplePhase >= outputSampleRateHz) {
@@ -238,7 +237,8 @@ internal class LiveKitAutomationPcmSource(
 
     private companion object {
         const val FIXTURE_SAMPLE_RATE_HZ = 16_000
-        const val PCM16_BYTES_PER_SAMPLE = 2
+        const val FLOAT_BYTES_PER_SAMPLE = Float.SIZE_BYTES
+        const val PCM16_SCALE = 32_768.0f
     }
 }
 
