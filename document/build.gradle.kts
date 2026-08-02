@@ -4,6 +4,10 @@ plugins {
 
 android {
     namespace = "me.rerere.document"
+
+    defaultConfig {
+        consumerProguardFiles("consumer-rules.pro")
+    }
 }
 
 dependencies {
