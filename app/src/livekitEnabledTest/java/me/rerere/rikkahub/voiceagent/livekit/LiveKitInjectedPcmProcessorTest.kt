@@ -60,15 +60,19 @@ class LiveKitInjectedPcmProcessorTest {
         advanceUntilIdle()
 
         assertArrayEquals(
+            floatArrayOf(normalized(0x0102), normalized(0x0102)),
+            processFloats(processor, sampleCount = 2),
+            0.0f,
+        )
+        assertFalse(source.injectionComplete())
+        assertArrayEquals(
             floatArrayOf(
-                normalized(0x0102),
-                normalized(0x0102),
                 normalized(0x0102),
                 normalized(0x0304),
                 normalized(0x0304),
                 normalized(0x0304),
             ),
-            processFloats(processor, sampleCount = 6),
+            processFloats(processor, sampleCount = 4),
             0.0f,
         )
         assertTrue(source.injectionComplete())
@@ -122,6 +126,39 @@ class LiveKitInjectedPcmProcessorTest {
         )
         activation.close()
         fixture.close()
+    }
+
+    @Test
+    fun `deactivation discards an unfinished resampling phase before reactivation`() = runTest {
+        val firstFixture = fixtureSource(pcm16(0x0102))
+        val source = activeSource()
+        val processor = LiveKitInjectedPcmProcessor(source)
+        val firstActivation = source.activate(RUN_HASH, firstFixture, this)
+        processor.initializeAudioProcessing(sampleRateHz = 48_000, numChannels = 1)
+
+        firstFixture.startInitial()
+        advanceUntilIdle()
+        assertArrayEquals(
+            floatArrayOf(normalized(0x0102)),
+            processFloats(processor, sampleCount = 1),
+            0.0f,
+        )
+        firstActivation.close()
+        firstFixture.close()
+
+        val secondFixture = fixtureSource(pcm16(0x0304))
+        val secondActivation = source.activate(RUN_HASH, secondFixture, this)
+        secondFixture.startInitial()
+        advanceUntilIdle()
+
+        assertArrayEquals(
+            floatArrayOf(normalized(0x0304)),
+            processFloats(processor, sampleCount = 1),
+            0.0f,
+        )
+
+        secondActivation.close()
+        secondFixture.close()
     }
 
     @Test
@@ -289,9 +326,9 @@ class LiveKitInjectedPcmProcessorTest {
         sampleCount: Int,
     ): FloatArray {
         val buffer = ByteBuffer.allocateDirect(sampleCount * Float.SIZE_BYTES)
-            .order(ByteOrder.nativeOrder())
         processor.processAudio(1, sampleCount, buffer)
         buffer.flip()
+        buffer.order(ByteOrder.nativeOrder())
         return FloatArray(sampleCount) { buffer.float }
     }
 
