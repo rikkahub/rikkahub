@@ -1147,20 +1147,17 @@ def request(selected_job=job, selected_room=room, selected_agent=agent):
     }
 
 
-def ready(selected_job=job, selected_room=room, selected_agent=agent):
+def ready(selected_job=job, selected_room=room):
     return {
-        "message": "published ready topic",
-        "agent_name": selected_agent,
+        "message": "voice_session_ready",
         "job_id": selected_job,
         "room": selected_room,
-        "topic": "voice.ready.v1",
     }
 
 
-def marker(selected_job=job, selected_room=room, selected_agent=agent):
+def marker(selected_job=job, selected_room=room):
     return {
         "message": "voice_user_transcript_final",
-        "agent_name": selected_agent,
         "job_id": selected_job,
         "room": selected_room,
     }
@@ -1199,10 +1196,23 @@ elif scenario == "marker_present":
     rows = [request(), ready(), marker()]
 elif scenario == "marker_absent":
     rows = [request(), ready()]
+elif scenario == "marker_without_ready":
+    rows = [request(), marker()]
 elif scenario == "registration_only":
     rows = [{"message": "registered worker", "agent_name": agent}]
 elif scenario == "missing_ready":
     rows = [request()]
+elif scenario == "legacy_synthetic_ready":
+    rows = [
+        request(),
+        {
+            "message": "published ready topic",
+            "agent_name": agent,
+            "job_id": job,
+            "room": room,
+            "topic": "voice.ready.v1",
+        },
+    ]
 elif scenario == "two_jobs":
     rows = [request(), ready(), request(other_job, other_room), ready(other_job, other_room)]
 elif scenario == "mismatched_ready":
@@ -1304,7 +1314,7 @@ assert_classifier_privacy() {
   assert_not_contains "$combined_output" "worker-private-room"
   assert_not_contains "$combined_output" "worker-private-sentinel"
   assert_not_contains "$combined_output" "received job request"
-  assert_not_contains "$combined_output" "voice.ready.v1"
+  assert_not_contains "$combined_output" "voice_session_ready"
   assert_not_contains "$combined_output" "voice_user_transcript_final"
   assert_not_contains "$combined_output" "$transcript_fixture"
   assert_not_contains "$combined_output" "$worker_fixture"
@@ -1495,13 +1505,18 @@ assert_worker_result marker_present complete marker-present 3 1 \
   bridge-breakage android-transcript-evidence 2
 assert_worker_result marker_absent complete marker-absent 2 0 \
   absent-at-worker final-user-transcript 2
+assert_worker_result marker_without_ready complete marker-present 2 1 \
+  bridge-breakage android-transcript-evidence 2
+assert_worker_result marker_before_ready complete marker-present 3 1 \
+  bridge-breakage android-transcript-evidence 2
+assert_worker_result mismatched_marker complete marker-absent 2 0 \
+  absent-at-worker final-user-transcript 2
 for unknown_worker_scenario in \
   registration_only \
   missing_ready \
+  legacy_synthetic_ready \
   two_jobs \
   mismatched_ready \
-  mismatched_marker \
-  marker_before_ready \
   ready_before_request \
   missing_attribution \
   malformed_json \

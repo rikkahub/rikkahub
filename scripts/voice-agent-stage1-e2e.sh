@@ -167,7 +167,7 @@ COUNT_FIELDS = {
 BOOLEAN_FIELDS = {"interrupted", "userSpeaking", "agentSpeaking"}
 TARGET_AGENT = "rikka-livekit-experimental"
 JOB_REQUEST = "received job request"
-READY_TOPIC = "voice.ready.v1"
+READY_MARKER = "voice_session_ready"
 TRANSCRIPT_MARKER = "voice_user_transcript_final"
 
 
@@ -381,7 +381,7 @@ def worker_rows(path):
                 )
                 if type(row) is not dict:
                     raise InvalidEvidence()
-                for field in {"message", "agent_name", "job_id", "room", "topic"} & set(row):
+                for field in {"message", "agent_name", "job_id", "room"} & set(row):
                     if type(row[field]) is not str:
                         raise InvalidEvidence()
                 if not row.get("message"):
@@ -398,63 +398,43 @@ def classify_worker(path, capture_status):
         return "unknown", 0, 0
     try:
         rows = worker_rows(path)
-        relevant = []
         requests = []
+        children = []
         for index, row in enumerate(rows):
             message = row["message"]
-            kinds = []
             if message == JOB_REQUEST:
-                kinds.append("request")
-            if row.get("topic") == READY_TOPIC:
-                kinds.append("ready")
-            if message == TRANSCRIPT_MARKER:
-                kinds.append("marker")
-            if not kinds:
-                continue
-            agent_name = row.get("agent_name")
-            if not agent_name:
-                raise InvalidEvidence()
-            if agent_name != TARGET_AGENT:
-                continue
-            if len(kinds) != 1:
-                raise InvalidEvidence()
-            job_id = row.get("job_id")
-            room = row.get("room")
-            if not job_id or not room:
-                raise InvalidEvidence()
-            kind = kinds[0]
-            relevant.append((index, kind, job_id, room))
-            if kind == "request":
+                if row.get("agent_name") != TARGET_AGENT:
+                    continue
+                job_id, room = row.get("job_id"), row.get("room")
+                if not job_id or not room:
+                    raise InvalidEvidence()
                 requests.append((index, job_id, room))
+            elif message in {READY_MARKER, TRANSCRIPT_MARKER}:
+                job_id, room = row.get("job_id"), row.get("room")
+                if not job_id or not room:
+                    raise InvalidEvidence()
+                children.append((index, message, job_id, room))
         if len(requests) != 1:
             raise InvalidEvidence()
         request_index, selected_job, selected_room = requests[0]
-        if any(
-            job_id != selected_job or room != selected_room
-            for _, _, job_id, room in relevant
-        ):
-            raise InvalidEvidence()
-        ready_indices = [
-            index for index, kind, _, _ in relevant if kind == "ready"
+        selected = [
+            (index, message)
+            for index, message, job_id, room in children
+            if job_id == selected_job and room == selected_room
         ]
-        if not ready_indices or any(index <= request_index for index in ready_indices):
+        if any(index <= request_index for index, _ in selected):
             raise InvalidEvidence()
-        ready_index = min(ready_indices)
-        marker_indices = [
-            index for index, kind, _, _ in relevant if kind == "marker"
-        ]
-        if any(index <= ready_index for index in marker_indices):
+        ready_indices = [index for index, message in selected if message == READY_MARKER]
+        marker_indices = [index for index, message in selected if message == TRANSCRIPT_MARKER]
+
+        if marker_indices:
+            classification = "marker-present"
+        elif len(ready_indices) == 1:
+            classification = "marker-absent"
+        else:
             raise InvalidEvidence()
-        activity_count = sum(
-            1
-            for index, row in enumerate(rows)
-            if index >= request_index
-            and row.get("agent_name") == TARGET_AGENT
-            and row.get("job_id") == selected_job
-            and row.get("room") == selected_room
-        )
+        activity_count = 1 + len(selected)
         marker_count = len(marker_indices)
-        classification = "marker-present" if marker_count else "marker-absent"
         return classification, activity_count, marker_count
     except BaseException:
         return "unknown", 0, 0
