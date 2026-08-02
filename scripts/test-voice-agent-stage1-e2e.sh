@@ -399,6 +399,8 @@ elif tail[:3] == ["shell", "am", "start"]:
         else:
             state["app_foreground"] = True
             if state["run_state"] == "active" and os.environ.get("FAKE_ADB_LIFECYCLE_MODE") != "stale":
+                if os.environ.get("FAKE_ADB_LIFECYCLE_MODE") == "transient":
+                    emit("lifecycle_observed", lifecycle="background")
                 emit("lifecycle_observed", lifecycle="foreground")
     save()
     print("Status: ok")
@@ -3279,6 +3281,12 @@ stale_lifecycle_status=$?
 set -e
 [[ "$stale_lifecycle_status" -ne 0 ]] || fail "stale pre-action lifecycle observation was accepted"
 assert_contains "$stale_lifecycle_output" "timed out waiting for fresh lifecycle_observed"
+unset FAKE_ADB_LIFECYCLE_MODE
+
+reset_fake
+export FAKE_ADB_LIFECYCLE_MODE=transient
+transient_lifecycle_output="$(run_scenario direct_gemini stable_wifi speaker foreground steady 20 2>&1)"
+assert_contains "$transient_lifecycle_output" "stage1.run=complete"
 unset FAKE_ADB_LIFECYCLE_MODE
 
 reset_fake
