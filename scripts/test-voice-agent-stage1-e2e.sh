@@ -534,6 +534,13 @@ elif tail[:3] == ["shell", "am", "broadcast"]:
             sys.exit(76)
         completed(0, "status=ok\naction=prepare")
     elif action.endswith(".STATUS"):
+        if (
+            os.environ.get("FAKE_ADB_STATUS_TRANSPORT_FAIL_ONCE") == "1"
+            and not state.get("status_transport_failed_once")
+        ):
+            state["status_transport_failed_once"] = True
+            save()
+            sys.exit(75)
         if os.environ.get("FAKE_ADB_STATUS_MALFORMED") == "1":
             print("Broadcast completed: result=0")
             sys.exit(0)
@@ -933,7 +940,8 @@ reset_fake() {
   unset FAKE_ADB_ROUTE_MODE FAKE_ADB_LIFECYCLE_MODE FAKE_CLOCK_MODE FAKE_ADB_INITIAL_RUN
   unset FAKE_ADB_UNVALIDATED_AFTER_RESTORE FAKE_ADB_STATUS_COLD_START
   unset FAKE_ADB_BACKGROUND_NETWORK_BLOCKED
-  unset FAKE_ADB_STATUS_MALFORMED FAKE_ADB_STAGE_VISIBILITY_DELAY
+  unset FAKE_ADB_STATUS_MALFORMED FAKE_ADB_STATUS_TRANSPORT_FAIL_ONCE
+  unset FAKE_ADB_STAGE_VISIBILITY_DELAY
   unset FAKE_ADB_ARM_MALFORMED FAKE_ADB_SUPPRESS_CAPTURE_ATTESTATION
   unset FAKE_ADB_PROBE_TIMELINE FAKE_CLOCK_STEP FAKE_ADB_TRACE_SNAPSHOT_CLOCK_ADVANCE
   unset FAKE_ADB_INITIAL_VOICE_TRACE_ID FAKE_ADB_INITIAL_VOICE_TRACE_ABSENT
@@ -2090,6 +2098,14 @@ assert_contains "$malformed_status_output" "automation status returned malformed
 [[ "$(command_count "automation.STATUS")" == "1" ]] \
   || fail "preflight retried malformed STATUS output"
 unset FAKE_ADB_STATUS_MALFORMED
+
+reset_fake
+export FAKE_ADB_STATUS_TRANSPORT_FAIL_ONCE=1
+retry_status_output="$(runner_env bash "$RUNNER" --preflight </dev/null)"
+assert_contains "$retry_status_output" "stage1.automation_receiver=ready"
+[[ "$(command_count "automation.STATUS")" == "2" ]] \
+  || fail "preflight did not retry one STATUS transport failure exactly once"
+unset FAKE_ADB_STATUS_TRANSPORT_FAIL_ONCE
 
 reset_fake
 export FAKE_ADB_SVC_WIFI_USAGE_STATUS=1

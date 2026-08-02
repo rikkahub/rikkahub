@@ -765,12 +765,19 @@ control_broadcast() {
   local completed_output
   local result_code
   local raw_data
-  if ! output="$(adb_command shell am broadcast --user 0 \
-    -n "$VOICE_STAGE1_PACKAGE/$CONTROL_RECEIVER_CLASS" \
-    -a "$CONTROL_ACTION_PREFIX.$action" "$@")"; then
-    fail "automation ${action,,} broadcast failed"
-    return 1
-  fi
+  local attempt=1
+  local max_attempts=1
+  [[ "$action" == "STATUS" ]] && max_attempts=3
+  while ! output="$(adb_command shell am broadcast --user 0 \
+      -n "$VOICE_STAGE1_PACKAGE/$CONTROL_RECEIVER_CLASS" \
+      -a "$CONTROL_ACTION_PREFIX.$action" "$@")"; do
+    if (( attempt >= max_attempts )); then
+      fail "automation ${action,,} broadcast failed"
+      return 1
+    fi
+    attempt=$((attempt + 1))
+    sleep_poll
+  done
   completed_output="$(printf '%s\n' "$output" | awk '
     capture { print; next }
     /^Broadcast completed:/ { capture=1; print }
