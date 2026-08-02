@@ -828,8 +828,24 @@ if [[ "$command_name" == "ln" && -n "${FAKE_PRIVATE_PUBLISH_RACE:-}" ]]; then
   case "$source_path:$FAKE_PRIVATE_PUBLISH_RACE" in
     */.voice-stage1-events.*:automation|*/.voice-stage1-transcript.*:transcript)
       if [[ ! -e "$destination" && ! -L "$destination" ]]; then
-        printf 'synthetic-late-destination\n' > "$destination"
-        "$FAKE_REAL_CHMOD" 640 "$destination"
+        case "${FAKE_PRIVATE_PUBLISH_RACE_KIND:-regular}" in
+          regular)
+            printf 'synthetic-late-destination\n' > "$destination"
+            "$FAKE_REAL_CHMOD" 640 "$destination"
+            ;;
+          directory)
+            "$FAKE_REAL_MKDIR" -- "$destination"
+            printf 'synthetic-preserved-entry\n' > "$destination/preserved-entry"
+            "$FAKE_REAL_CHMOD" 750 "$destination"
+            "$FAKE_REAL_CHMOD" 640 "$destination/preserved-entry"
+            ;;
+          directory_symlink)
+            "$FAKE_REAL_LN" -s -- "$FAKE_PRIVATE_PUBLISH_RACE_SYMLINK_TARGET" "$destination"
+            ;;
+          *)
+            exit 89
+            ;;
+        esac
       fi
       ;;
   esac
@@ -918,7 +934,9 @@ reset_fake() {
   unset FAKE_ADB_CURRENT_VOICE_TRACE_ID FAKE_ADB_VOICE_EVENTS
   unset FAKE_ADB_VOICE_EVENTS_EXISTS FAKE_ADB_VOICE_EVENTS_REGULAR
   unset FAKE_ADB_VOICE_EVENTS_SYMLINK FAKE_ADB_NOISY_PRIVATE_FAILURE
-  unset FAKE_PRIVATE_FILE_FAIL FAKE_PRIVATE_PUBLISH_RACE FAKE_PRIVATE_REOPEN_FAIL
+  unset FAKE_PRIVATE_FILE_FAIL FAKE_PRIVATE_PUBLISH_RACE
+  unset FAKE_PRIVATE_PUBLISH_RACE_KIND FAKE_PRIVATE_PUBLISH_RACE_SYMLINK_TARGET
+  unset FAKE_PRIVATE_REOPEN_FAIL
   unset FAKE_PRIVATE_REOPEN_FAILURE_TARGET FAKE_PRIVATE_REOPEN_MARKER
   unset FAKE_PRIVATE_REMOVE_FAIL FAKE_PRIVATE_SIGNAL_AFTER_CHMOD
   unset FAKE_PRIVATE_SIGNAL_MARKER
@@ -2512,6 +2530,88 @@ assert_late_publication_race_preserved() {
 
 assert_late_publication_race_preserved automation
 assert_late_publication_race_preserved transcript
+
+assert_no_private_evidence_child() {
+  local directory="$1"
+  local child
+  child="$(find "$directory" -maxdepth 1 \
+    \( -name '.voice-stage1-events.*' -o -name '.voice-stage1-transcript.*' \) \
+    -print -quit)"
+  [[ -z "$child" ]] || fail "late directory contains an unintended private evidence child"
+}
+
+assert_late_directory_publication_race_preserved() {
+  local family="$1"
+  local destination_kind="$2"
+  local automation_parent="$TMP_DIR/PRIVATE-LATE-DIRECTORY-SENTINEL-$family-$destination_kind-automation"
+  local transcript_parent="$TMP_DIR/PRIVATE-LATE-DIRECTORY-SENTINEL-$family-$destination_kind-transcript"
+  local automation_output="$automation_parent/events.jsonl"
+  local transcript_output="$transcript_parent/events.ndjson"
+  local raced_output="$automation_output"
+  local late_directory="$automation_output"
+  local expected_diagnostic="stage1: unable to fetch finalized automation events"
+  local transport="direct_gemini"
+  local target_metadata=""
+  local target_entry_metadata=""
+  local output
+  local status
+  reset_fake
+  mkdir -p "$automation_parent" "$transcript_parent"
+  export VOICE_STAGE1_TEST_EVENT_OUTPUT="$automation_output"
+  if [[ "$family" == "transcript" ]]; then
+    enable_transcript_collection
+    export VOICE_STAGE1_TRANSCRIPT_EVENT_OUTPUT="$transcript_output"
+    raced_output="$transcript_output"
+    late_directory="$transcript_output"
+    expected_diagnostic="stage1: unable to collect sanitized transcript evidence"
+    transport="livekit_experimental"
+  fi
+  if [[ "$destination_kind" == "directory_symlink" ]]; then
+    late_directory="$raced_output.target"
+    mkdir -- "$late_directory"
+    printf 'synthetic-preserved-entry\n' > "$late_directory/preserved-entry"
+    chmod 750 "$late_directory"
+    chmod 640 "$late_directory/preserved-entry"
+    target_metadata="$(path_metadata "$late_directory")"
+    target_entry_metadata="$(path_metadata "$late_directory/preserved-entry")"
+    export FAKE_PRIVATE_PUBLISH_RACE_SYMLINK_TARGET="$late_directory"
+  fi
+  export FAKE_PRIVATE_PUBLISH_RACE="$family"
+  export FAKE_PRIVATE_PUBLISH_RACE_KIND="$destination_kind"
+  set +e
+  output="$(run_scenario "$transport" stable_wifi speaker foreground steady 20 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] ||
+    fail "late $family $destination_kind destination race was accepted"
+  assert_equals "$expected_diagnostic" "$output"
+  assert_not_contains "$output" "PRIVATE-LATE-DIRECTORY-SENTINEL"
+  if [[ "$destination_kind" == "directory_symlink" ]]; then
+    [[ -L "$raced_output" ]] || fail "late $family directory symlink was replaced"
+    assert_equals "$late_directory" "$(readlink -- "$raced_output")"
+    assert_equals "$target_metadata" "$(path_metadata "$late_directory")"
+    assert_equals "$target_entry_metadata" "$(path_metadata "$late_directory/preserved-entry")"
+  else
+    [[ -d "$raced_output" && ! -L "$raced_output" ]] ||
+      fail "late $family directory was replaced"
+  fi
+  assert_equals "synthetic-preserved-entry" "$(cat "$late_directory/preserved-entry")"
+  [[ "$(stat -c %a "$late_directory")" == "750" ]] ||
+    fail "late $family $destination_kind metadata changed"
+  [[ "$(stat -c %a "$late_directory/preserved-entry")" == "640" ]] ||
+    fail "late $family $destination_kind entry metadata changed"
+  assert_no_private_evidence_child "$late_directory"
+  assert_no_unpublished_evidence_temps "$automation_parent" "$transcript_parent"
+  if [[ "$family" == "transcript" ]]; then
+    [[ ! -e "$automation_output" && ! -L "$automation_output" ]] ||
+      fail "transcript $destination_kind race published automation output"
+  fi
+}
+
+assert_late_directory_publication_race_preserved automation directory
+assert_late_directory_publication_race_preserved automation directory_symlink
+assert_late_directory_publication_race_preserved transcript directory
+assert_late_directory_publication_race_preserved transcript directory_symlink
 
 assert_failed_private_reopen_is_contained() {
   local family="$1"

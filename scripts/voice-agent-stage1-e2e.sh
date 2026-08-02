@@ -474,7 +474,7 @@ private_mkdir() { (umask 077; mkdir -p -- "$1") 2>/dev/null; }
 private_mktemp() { mktemp "$1" 2>/dev/null; }
 private_chmod() { chmod 600 -- "$1" 2>/dev/null; }
 private_publish_temp() {
-  ln -- "$1" "$2" 2>/dev/null || return 1
+  ln -T -- "$1" "$2" 2>/dev/null || return 1
   rm -- "$1" 2>/dev/null
 }
 private_remove_temp() { rm -f -- "$1" 2>/dev/null; }
