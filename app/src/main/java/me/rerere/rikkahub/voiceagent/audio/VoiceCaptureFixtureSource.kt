@@ -57,6 +57,8 @@ internal object VoiceCaptureFixtureArming {
     const val EXTRA_TOKEN = "token"
     const val EXTRA_CHUNK_BYTES = "chunk_bytes"
     const val EXTRA_CHUNK_DELAY_MS = "chunk_delay_ms"
+    const val EXTRA_EXPECTED_SIZE = "expected_size"
+    const val EXTRA_EXPECTED_SHA256 = "expected_sha256"
     const val DEFAULT_CHUNK_BYTES = 3_200
     const val DEFAULT_CHUNK_DELAY_MS = 100L
 

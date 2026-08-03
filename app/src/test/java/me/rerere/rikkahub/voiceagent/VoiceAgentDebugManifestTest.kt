@@ -5,6 +5,8 @@ import android.content.Intent
 import io.mockk.every
 import io.mockk.mockk
 import java.io.File
+import java.nio.file.Files
+import java.security.MessageDigest
 import kotlin.io.path.createTempDirectory
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
@@ -172,6 +174,64 @@ class VoiceAgentDebugManifestTest {
         source.close()
     }
 
+    @Test
+    fun `stage request rejects fixture content that does not match the immutable snapshot`() {
+        val filesDir = createTempDirectory("voice-fixture-integrity").toFile()
+        File(filesDir, "voice-fixtures/request-2.pcm").apply {
+            parentFile?.mkdirs()
+            writeBytes(byteArrayOf(99, 99, 99, 99, 99))
+        }
+        val token = VoiceCaptureFixtureArming.arm(
+            initial = fixture("initial.pcm", byteArrayOf(9, 10)),
+            staged = emptyList(),
+        )
+        val source = VoiceCaptureFixtureArming.claim(token, delays = {}).getOrThrow()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            VoiceCaptureFixtureDebugReceiver().stage(
+                context = context(filesDir),
+                intent = stageIntent(
+                    token = token,
+                    path = "voice-fixtures/request-2.pcm",
+                    chunkBytes = 2,
+                    chunkDelayMs = 0,
+                    expectedBytes = byteArrayOf(1, 2, 3, 4, 5),
+                ),
+            )
+        }
+
+        source.close()
+    }
+
+    @Test
+    fun `stage request does not follow a substituted fixture symlink`() {
+        val filesDir = createTempDirectory("voice-fixture-nofollow").toFile()
+        val fixtureDir = File(filesDir, "voice-fixtures").apply { mkdirs() }
+        val expectedBytes = byteArrayOf(1, 2, 3, 4, 5)
+        val replacement = File(fixtureDir, "replacement.pcm").apply { writeBytes(expectedBytes) }
+        Files.createSymbolicLink(File(fixtureDir, "request-2.pcm").toPath(), replacement.toPath())
+        val token = VoiceCaptureFixtureArming.arm(
+            initial = fixture("initial.pcm", byteArrayOf(9, 10)),
+            staged = emptyList(),
+        )
+        val source = VoiceCaptureFixtureArming.claim(token, delays = {}).getOrThrow()
+
+        assertThrows(Exception::class.java) {
+            VoiceCaptureFixtureDebugReceiver().stage(
+                context = context(filesDir),
+                intent = stageIntent(
+                    token = token,
+                    path = "voice-fixtures/request-2.pcm",
+                    chunkBytes = 2,
+                    chunkDelayMs = 0,
+                    expectedBytes = expectedBytes,
+                ),
+            )
+        }
+
+        source.close()
+    }
+
     private fun findReceiver(name: String): Element {
         return findManifestElement(tagName = "receiver", name = name)
     }
@@ -208,6 +268,7 @@ class VoiceAgentDebugManifestTest {
         path: String,
         chunkBytes: Int,
         chunkDelayMs: Long,
+        expectedBytes: ByteArray = byteArrayOf(1, 2, 3, 4, 5),
     ): Intent = mockk {
         every { getStringExtra("token") } returns token
         every { getStringExtra("path") } returns path
@@ -217,6 +278,8 @@ class VoiceAgentDebugManifestTest {
         every {
             getLongExtra("chunk_delay_ms", any())
         } returns chunkDelayMs
+        every { getLongExtra("expected_size", any()) } returns expectedBytes.size.toLong()
+        every { getStringExtra("expected_sha256") } returns expectedBytes.sha256()
     }
 
     private fun fixture(path: String, bytes: ByteArray) = VoiceCaptureFixture(
@@ -225,6 +288,10 @@ class VoiceAgentDebugManifestTest {
         chunkBytes = 2,
         chunkDelayMs = 0,
     )
+
+    private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256")
+        .digest(this)
+        .joinToString(prefix = "sha256:", separator = "") { "%02x".format(it.toInt() and 0xff) }
 
     private companion object {
         const val STAGE_ACTION =

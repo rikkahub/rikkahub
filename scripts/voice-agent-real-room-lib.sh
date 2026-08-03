@@ -139,19 +139,24 @@ PY
 
 snapshot_fixture() {
   local source_path="$1"
-  local metadata_file
+  local -n snapshot_out="$2"
+  local -n size_out="$3"
+  local -n hash_out="$4"
+  local snapshot_path
+  local metadata
+  local -a fixture_metadata=()
   ensure_local_temp_dir
-  FIXTURE_SNAPSHOT="$LOCAL_TEMP_DIR/fixture.pcm"
-  metadata_file="$LOCAL_TEMP_DIR/fixture.metadata"
-  register_temp_file "$FIXTURE_SNAPSHOT"
-  register_temp_file "$metadata_file"
-  if ! python3 - "$source_path" "$FIXTURE_SNAPSHOT" "$metadata_file" 2>/dev/null <<'PY'
+  snapshot_path="$(mktemp "$LOCAL_TEMP_DIR/fixture.XXXXXX.pcm" 2>/dev/null)" ||
+    die 'invalid fixture'
+  chmod 600 -- "$snapshot_path" 2>/dev/null || die 'invalid fixture'
+  register_temp_file "$snapshot_path"
+  if ! metadata="$(python3 - "$source_path" "$snapshot_path" 2>/dev/null <<'PY'
 import hashlib
 import os
 import stat
 import sys
 
-source_path, snapshot_path, metadata_path = sys.argv[1:]
+source_path, snapshot_path = sys.argv[1:]
 if not os.path.isabs(source_path) or os.path.normpath(source_path) != source_path:
     raise SystemExit(1)
 if os.path.realpath(source_path) != source_path:
@@ -175,7 +180,18 @@ try:
     ):
         raise SystemExit(1)
     digest = hashlib.sha256()
-    output_descriptor = os.open(snapshot_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    snapshot_before = os.lstat(snapshot_path)
+    if stat.S_ISLNK(snapshot_before.st_mode) or not stat.S_ISREG(snapshot_before.st_mode):
+        raise SystemExit(1)
+    if stat.S_IMODE(snapshot_before.st_mode) != 0o600 or snapshot_before.st_size != 0:
+        raise SystemExit(1)
+    output_descriptor = os.open(
+        snapshot_path,
+        os.O_WRONLY | os.O_TRUNC | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+    )
+    snapshot_opened = os.fstat(output_descriptor)
+    if (snapshot_opened.st_dev, snapshot_opened.st_ino) != (snapshot_before.st_dev, snapshot_before.st_ino):
+        raise SystemExit(1)
     with os.fdopen(output_descriptor, "wb") as output:
         while True:
             block = os.read(descriptor, 65536)
@@ -197,29 +213,29 @@ if (after.st_dev, after.st_ino, after.st_mode, after.st_size, after.st_mtime_ns,
     before.st_ctime_ns,
 ):
     raise SystemExit(1)
-with open(metadata_path, "x", encoding="ascii") as metadata:
-    metadata.write(str(before.st_size) + "\n")
-    metadata.write("sha256:" + digest.hexdigest() + "\n")
+snapshot_after = os.lstat(snapshot_path)
+if (snapshot_after.st_dev, snapshot_after.st_ino) != (snapshot_before.st_dev, snapshot_before.st_ino):
+    raise SystemExit(1)
+print(str(before.st_size))
+print("sha256:" + digest.hexdigest())
 PY
-  then
+)"; then
     die 'invalid fixture'
   fi
-  mapfile -t fixture_metadata < "$metadata_file"
+  mapfile -t fixture_metadata <<< "$metadata"
   [[ "${#fixture_metadata[@]}" == 2 ]] || die 'invalid fixture'
-  FIXTURE_SIZE="${fixture_metadata[0]}"
-  FIXTURE_HASH="${fixture_metadata[1]}"
-  [[ "$FIXTURE_SIZE" =~ ^[1-9][0-9]*$ ]] || die 'invalid fixture'
-  validate_hash "$FIXTURE_HASH" 'fixture hash'
+  [[ "${fixture_metadata[0]}" =~ ^[1-9][0-9]*$ ]] || die 'invalid fixture'
+  validate_hash "${fixture_metadata[1]}" 'fixture hash'
+  snapshot_out="$snapshot_path"
+  size_out="${fixture_metadata[0]}"
+  hash_out="${fixture_metadata[1]}"
 }
 
 decode_state() {
   local state_path="$1"
-  local values_file
+  local snapshot
   local -a values=()
-  ensure_local_temp_dir
-  values_file="$LOCAL_TEMP_DIR/state.values"
-  register_temp_file "$values_file"
-  if ! python3 - "$state_path" >"$values_file" 2>/dev/null <<'PY'
+  if ! snapshot="$(python3 - "$state_path" 2>/dev/null <<'PY'
 import json
 import os
 import stat
@@ -290,28 +306,22 @@ if any(type(state[key]) is not str for key in keys[1:]):
     raise SystemExit(1)
 for key in keys:
     value = str(state[key]).encode("utf-8")
-    sys.stdout.buffer.write(value + b"\0")
+    sys.stdout.buffer.write(value + b"\n")
 PY
-  then
+)"; then
     die 'invalid state'
   fi
-  mapfile -d '' -t values < "$values_file"
+  mapfile -t values <<< "$snapshot"
   [[ "${#values[@]}" == 9 && "${values[0]}" == 1 ]] || die 'invalid state'
-  SERIAL="${values[1]}"
-  PACKAGE="${values[2]}"
-  CONVERSATION_ID="${values[3]}"
-  RUN_HASH="${values[4]}"
-  COMPARISON_HASH="${values[5]}"
-  FIXTURE_TOKEN="${values[6]}"
-  TRACE_ID="${values[7]}"
   [[ "${values[8]}" == "$TRANSPORT_EXPECTED" ]] || die 'invalid state'
-  validate_identifier "$SERIAL" 'serial'
-  validate_package "$PACKAGE"
-  validate_identifier "$CONVERSATION_ID" 'conversation id'
-  validate_hash "$RUN_HASH" 'run hash'
-  validate_hash "$COMPARISON_HASH" 'comparison hash'
-  validate_identifier "$FIXTURE_TOKEN" 'fixture token'
-  validate_identifier "$TRACE_ID" 'trace id'
+  validate_identifier "${values[1]}" 'serial'
+  [[ "${values[2]}" == "$PACKAGE_EXPECTED" ]] || die 'invalid package'
+  validate_identifier "${values[3]}" 'conversation id'
+  validate_hash "${values[4]}" 'run hash'
+  validate_hash "${values[5]}" 'comparison hash'
+  validate_identifier "${values[6]}" 'fixture token'
+  validate_identifier "${values[7]}" 'trace id'
+  printf '%s\n' "${values[@]:1:7}"
 }
 
 parse_options() {
@@ -347,7 +357,6 @@ decode_broadcast_data() {
   printf '%s' "$raw"
 }
 
-BROADCAST_DATA=''
 broadcast_read() {
   local receiver="$1"
   local action="$2"
@@ -367,19 +376,20 @@ broadcast_read() {
   result_code="${BASH_REMATCH[1]}"
   raw_data="${BASH_REMATCH[2]}"
   [[ "$result_code" == 0 ]] || die 'receiver rejected request'
-  BROADCAST_DATA="$(decode_broadcast_data "$raw_data")"
+  decode_broadcast_data "$raw_data"
 }
 
-STATUS_RUN_STATE=''
-STATUS_RUN_HASH=''
-STATUS_COMPARISON_HASH=''
-STATUS_TRANSPORT=''
-STATUS_EVENT_COUNT=''
-STATUS_NETWORK=''
-STATUS_VALIDATED=''
 parse_status_data() {
+  local data="$1"
   local -a lines=()
-  mapfile -t lines <<< "$BROADCAST_DATA"
+  local run_state
+  local run_hash
+  local comparison_hash
+  local transport
+  local event_count
+  local network
+  local validated
+  mapfile -t lines <<< "$data"
   [[ "${#lines[@]}" == 9 ]] || return 1
   [[ "${lines[0]}" == 'status=ok' && "${lines[1]}" == 'action=status' ]] ||
     return 1
@@ -387,22 +397,36 @@ parse_status_data() {
      "${lines[4]}" == comparison_hash=* && "${lines[5]}" == requested_transport=* &&
      "${lines[6]}" == event_count=* && "${lines[7]}" == network=* &&
      "${lines[8]}" == validated=* ]] || return 1
-  STATUS_RUN_STATE="${lines[2]#run_state=}"
-  STATUS_RUN_HASH="${lines[3]#run_hash=}"
-  STATUS_COMPARISON_HASH="${lines[4]#comparison_hash=}"
-  STATUS_TRANSPORT="${lines[5]#requested_transport=}"
-  STATUS_EVENT_COUNT="${lines[6]#event_count=}"
-  STATUS_NETWORK="${lines[7]#network=}"
-  STATUS_VALIDATED="${lines[8]#validated=}"
-  [[ "$STATUS_RUN_STATE" =~ ^(idle|active|finalized)$ ]] || return 1
-  [[ "$STATUS_EVENT_COUNT" =~ ^[0-9]+$ ]] || return 1
-  [[ "$STATUS_NETWORK" =~ ^(wifi|cellular|none)$ ]] || return 1
-  [[ "$STATUS_VALIDATED" == true ]] || return 1
+  run_state="${lines[2]#run_state=}"
+  run_hash="${lines[3]#run_hash=}"
+  comparison_hash="${lines[4]#comparison_hash=}"
+  transport="${lines[5]#requested_transport=}"
+  event_count="${lines[6]#event_count=}"
+  network="${lines[7]#network=}"
+  validated="${lines[8]#validated=}"
+  [[ "$run_state" =~ ^(idle|active|finalized)$ ]] || return 1
+  [[ "$event_count" =~ ^[0-9]+$ ]] || return 1
+  [[ "$network" =~ ^(wifi|cellular|none)$ ]] || return 1
+  [[ "$validated" == true ]] || return 1
+  case "$run_state" in
+    idle)
+      [[ "$run_hash" == none && "$comparison_hash" == none && "$transport" == none ]] || return 1
+      ;;
+    active|finalized)
+      [[ "$run_hash" =~ ^sha256:[0-9a-f]{64}$ &&
+         "$comparison_hash" =~ ^sha256:[0-9a-f]{64}$ &&
+         "$transport" == "$TRANSPORT_EXPECTED" ]] || return 1
+      ;;
+  esac
+  printf '%s\n' "$run_state" "$run_hash" "$comparison_hash" "$transport" \
+    "$event_count" "$network" "$validated"
 }
 
 read_status() {
-  broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.STATUS"
-  parse_status_data || die 'unexpected status response'
+  local data
+  data="$(broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.STATUS")" ||
+    die 'unexpected status response'
+  parse_status_data "$data" || die 'unexpected status response'
 }
 
 ensure_device_and_package() {
@@ -492,7 +516,8 @@ fi
 }
 
 compute_remote_owner_hash() {
-  REMOTE_OWNER_HASH="$(python3 - "$SERIAL" "$PACKAGE" "$CONVERSATION_ID" \
+  local owner_hash
+  owner_hash="$(python3 - "$SERIAL" "$PACKAGE" "$CONVERSATION_ID" \
     "$RUN_HASH" "$COMPARISON_HASH" 2>/dev/null <<'PY'
 import hashlib
 import sys
@@ -500,10 +525,13 @@ import sys
 print("sha256:" + hashlib.sha256("\0".join(sys.argv[1:]).encode()).hexdigest())
 PY
 )" || die 'fixture ownership failed'
-  validate_hash "$REMOTE_OWNER_HASH" 'fixture ownership'
+  validate_hash "$owner_hash" 'fixture ownership'
+  printf '%s' "$owner_hash"
 }
 
 create_owned_remote_directory() {
+  local remote_directory="$1"
+  local owner_hash="$2"
   local result
   result="$(adb_read shell run-as "$PACKAGE" sh -c '
 set -eu
@@ -535,17 +563,24 @@ marker=$directory/.voice-step-owner
   [ "$(cat "$marker")" = "$owner" ] || exit 1
 trap - EXIT HUP INT TERM
 printf created
-' sh "$REMOTE_FIXTURE_DIR" "$REMOTE_OWNER_HASH" </dev/null)" ||
+' sh "$remote_directory" "$owner_hash" </dev/null)" ||
     die 'fixture staging failed'
   [[ "$result" == created ]] || die 'fixture staging failed'
   START_FIXTURE_DIR_CREATED=1
 }
 
 stage_owned_snapshot() {
+  local remote_directory="$1"
+  local remote_path="$2"
+  local owner_hash="$3"
+  local fixture_snapshot="$4"
+  local fixture_size="$5"
+  local fixture_hash="$6"
   local metadata
   metadata="$(adb_read shell run-as "$PACKAGE" sh -c '
 set -eu
 : voice-step-stage-owned-fixture
+: voice-step-descriptor-owned-stage
 directory=$1
 destination=$2
 owner=$3
@@ -559,82 +594,124 @@ marker=$directory/.voice-step-owner
   [ "$(cat "$marker")" = "$owner" ] || exit 1
 case "$destination" in "$directory"/*.pcm) ;; *) exit 1 ;; esac
 [ ! -e "$destination" ] && [ ! -L "$destination" ] || exit 1
-temporary=
+descriptor_inode=
 published=0
 cleanup() {
-  [ -z "$temporary" ] || rm -f -- "$temporary"
-  [ "$published" = 0 ] || rm -f -- "$destination"
+  if [ "$published" = 0 ] && [ -n "$descriptor_inode" ] && \
+      [ ! -L "$destination" ] && [ -f "$destination" ] && \
+      [ "$(stat -c %d:%i "$destination" 2>/dev/null || :)" = "$descriptor_inode" ]; then
+    rm -f -- "$destination"
+  fi
+  exec 3>&-
 }
 trap cleanup EXIT HUP INT TERM
-temporary=$(mktemp "$directory/.voice-step-stage.XXXXXX") || exit 1
-chmod 600 -- "$temporary" || exit 1
-cat > "$temporary" || exit 1
-[ -f "$temporary" ] && [ ! -L "$temporary" ] && \
-  [ "$(stat -c %a "$temporary")" = 600 ] && [ "$(stat -c %h "$temporary")" = 1 ] || exit 1
-ln -- "$temporary" "$destination" || exit 1
-published=1
+set -C
+umask 077
+exec 3> "$destination" || exit 1
+set +C
+descriptor=/proc/self/fd/3
+descriptor_inode=$(stat -Lc %d:%i "$descriptor") || exit 1
+cat >&3 || exit 1
+[ -f "$descriptor" ] && [ "$(stat -Lc %a "$descriptor")" = 600 ] && \
+  [ "$(stat -Lc %h "$descriptor")" = 1 ] || exit 1
 [ -f "$destination" ] && [ ! -L "$destination" ] && \
-  [ "$(stat -c %a "$destination")" = 600 ] && [ "$(stat -c %h "$destination")" = 2 ] && \
-  [ "$(stat -c %d:%i "$temporary")" = "$(stat -c %d:%i "$destination")" ] || exit 1
-rm -- "$temporary" || exit 1
-temporary=
-[ "$(stat -c %h "$destination")" = 1 ] || exit 1
-metadata=$(printf "%s\nsha256:%s\n" "$(stat -c %s "$destination")" \
-  "$(sha256sum "$destination" | cut -d " " -f 1)") || exit 1
-published=0
+  [ "$(stat -c %d:%i "$destination")" = "$descriptor_inode" ] || exit 1
+metadata=$(printf "%s\nsha256:%s\n" "$(stat -Lc %s "$descriptor")" \
+  "$(sha256sum "$descriptor" | cut -d " " -f 1)") || exit 1
+[ "$(stat -c %d:%i "$destination")" = "$descriptor_inode" ] || exit 1
+published=1
+exec 3>&-
 trap - EXIT HUP INT TERM
 printf "%s\n" "$metadata"
-' sh "$REMOTE_FIXTURE_DIR" "$REMOTE_FIXTURE_PATH" "$REMOTE_OWNER_HASH" \
-    < "$FIXTURE_SNAPSHOT")" || die 'fixture staging failed'
-  [[ "$metadata" == "$FIXTURE_SIZE"$'\n'"$FIXTURE_HASH" ]] ||
+' sh "$remote_directory" "$remote_path" "$owner_hash" \
+    < "$fixture_snapshot")" || die 'fixture staging failed'
+  [[ "$metadata" == "$fixture_size"$'\n'"$fixture_hash" ]] ||
     die 'fixture staging verification failed'
 }
 
 remove_owned_remote_directory() {
+  local remote_directory="$1"
+  local owner_hash="$2"
   local result
   result="$(adb_read shell run-as "$PACKAGE" sh -c '
 set -eu
 : voice-step-remove-owned-directory
 directory=$1
 owner=$2
-marker=$directory/.voice-step-owner
-[ -d "${directory%/*}" ] && [ ! -L "${directory%/*}" ] || exit 1
-[ "$(readlink -f "${directory%/*}")" = "$(readlink -f files)/voice-real-room" ] || exit 1
-[ -d "$directory" ] && [ ! -L "$directory" ] && \
-  [ "$(stat -c %a "$directory")" = 700 ] || exit 1
-[ -f "$marker" ] && [ ! -L "$marker" ] && \
-  [ "$(stat -c %a "$marker")" = 600 ] && [ "$(stat -c %h "$marker")" = 1 ] && \
-  [ "$(cat "$marker")" = "$owner" ] || exit 1
-rm -rf -- "$directory" || exit 1
-[ ! -e "$directory" ] && [ ! -L "$directory" ] || exit 1
+parent=${directory%/*}
+name=${directory##*/}
+[ "$parent" = files/voice-real-room ] || exit 1
+[ -d "$parent" ] && [ ! -L "$parent" ] || exit 1
+[ "$(readlink -f "$parent")" = "$(readlink -f files)/voice-real-room" ] || exit 1
+cd -- "$parent" || exit 1
+[ -d "$name" ] && [ ! -L "$name" ] && [ "$(stat -c %a "$name")" = 700 ] || exit 1
+directory_inode=$(stat -c %d:%i "$name") || exit 1
+cd -- "$name" || exit 1
+[ "$(stat -c %d:%i .)" = "$directory_inode" ] || exit 1
+exec 4< . || exit 1
+[ "$(stat -Lc %d:%i /proc/self/fd/4)" = "$directory_inode" ] || exit 1
+[ -f .voice-step-owner ] && [ ! -L .voice-step-owner ] || exit 1
+exec 3< .voice-step-owner || exit 1
+marker_inode=$(stat -Lc %d:%i /proc/self/fd/3) || exit 1
+[ "$(stat -Lc %a /proc/self/fd/3)" = 600 ] && \
+  [ "$(stat -Lc %h /proc/self/fd/3)" = 1 ] && [ "$(cat <&3)" = "$owner" ] && \
+  [ "$(stat -c %d:%i .voice-step-owner)" = "$marker_inode" ] || exit 1
+exec 3<&-
+for entry in .[!.]* ..?* *; do
+  [ -e "$entry" ] || [ -L "$entry" ] || continue
+  rm -rf -- "$entry" || exit 1
+done
+cd .. || exit 1
+[ "$(stat -c %d:%i "$name" 2>/dev/null || :)" = "$directory_inode" ] || exit 1
+rmdir -- "$name" || exit 1
+[ ! -e "$name" ] && [ ! -L "$name" ] || exit 1
+[ "$(stat -Lc %d:%i /proc/self/fd/4)" = "$directory_inode" ] && \
+  [ "$(stat -Lc %h /proc/self/fd/4)" = 0 ] || exit 1
+exec 4<&-
 printf removed
-' sh "$REMOTE_FIXTURE_DIR" "$REMOTE_OWNER_HASH" </dev/null)" || return 1
+' sh "$remote_directory" "$owner_hash" </dev/null)" || return 1
   [[ "$result" == removed ]] || return 2
 }
 
 stage_snapshot() {
-  compute_remote_owner_hash
-  create_owned_remote_directory
-  stage_owned_snapshot
+  local remote_directory="$1"
+  local remote_path="$2"
+  local fixture_snapshot="$3"
+  local fixture_size="$4"
+  local fixture_hash="$5"
+  REMOTE_OWNER_HASH="$(compute_remote_owner_hash)"
+  create_owned_remote_directory "$remote_directory" "$REMOTE_OWNER_HASH"
+  stage_owned_snapshot "$remote_directory" "$remote_path" "$REMOTE_OWNER_HASH" \
+    "$fixture_snapshot" "$fixture_size" "$fixture_hash"
 }
 
 inject_fixture_once() {
-  local role="$1"
-  REMOTE_FIXTURE_DIR="files/voice-real-room/${RUN_HASH#sha256:}"
-  REMOTE_FIXTURE_PATH="$REMOTE_FIXTURE_DIR/${role}-${FIXTURE_HASH#sha256:}.pcm"
-  compute_remote_owner_hash
-  stage_owned_snapshot
-  broadcast_read "$FIXTURE_RECEIVER" "$FIXTURE_STAGE_ACTION" \
+  local fixture_snapshot="$1"
+  local fixture_size="$2"
+  local fixture_hash="$3"
+  local role="$4"
+  local remote_directory
+  local remote_path
+  local owner_hash
+  local reply
+  remote_directory="files/voice-real-room/${RUN_HASH#sha256:}"
+  remote_path="$remote_directory/${role}-${fixture_hash#sha256:}.pcm"
+  owner_hash="$(compute_remote_owner_hash)"
+  stage_owned_snapshot "$remote_directory" "$remote_path" "$owner_hash" \
+    "$fixture_snapshot" "$fixture_size" "$fixture_hash"
+  reply="$(broadcast_read "$FIXTURE_RECEIVER" "$FIXTURE_STAGE_ACTION" \
     --es token "$FIXTURE_TOKEN" \
-    --es path "$REMOTE_FIXTURE_PATH" \
+    --es path "$remote_path" \
+    --el expected_size "$fixture_size" \
+    --es expected_sha256 "$fixture_hash" \
     --ei chunk_bytes "$FIXTURE_CHUNK_BYTES" \
-    --el chunk_delay_ms "$FIXTURE_CHUNK_DELAY_MS"
-  [[ "$BROADCAST_DATA" == $'status=ok\naction=stage\naccepted=true' ]] ||
+    --el chunk_delay_ms "$FIXTURE_CHUNK_DELAY_MS")"
+  [[ "$reply" == $'status=ok\naction=stage\naccepted=true' ]] ||
     die 'unexpected receiver response'
-  broadcast_read "$FIXTURE_RECEIVER" "$FIXTURE_TRIGGER_ACTION" \
+  reply="$(broadcast_read "$FIXTURE_RECEIVER" "$FIXTURE_TRIGGER_ACTION" \
     --es token "$FIXTURE_TOKEN" \
-    --es path "$REMOTE_FIXTURE_PATH"
-  [[ "$BROADCAST_DATA" == $'status=ok\naction=trigger\naccepted=true' ]] ||
+    --es path "$remote_path")"
+  [[ "$reply" == $'status=ok\naction=trigger\naccepted=true' ]] ||
     die 'unexpected receiver response'
 }
 
@@ -661,6 +738,7 @@ LC_ALL=C stat -c "%F|%h|%u|%a|%d|%i|%s|%y|%z" "$1"
 read_stable_artifact() {
   local source_path="$1"
   local destination="$2"
+  local -n stable_temp_out="$3"
   local parent
   local first
   local second
@@ -710,7 +788,7 @@ if len(content) != metadata.st_size or not content.endswith(b"\n"):
 PY
   rm -- "$second" 2>/dev/null || die 'capture temporary cleanup failed'
   forget_temp_file "$second"
-  STABLE_CAPTURE_TEMP="$first"
+  stable_temp_out="$first"
 }
 
 publish_owned_temp() {

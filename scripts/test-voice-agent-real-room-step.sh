@@ -20,7 +20,11 @@ LN_LOG="$TMP_DIR/ln.argv"
 FAKE_STATE="$TMP_DIR/fake-state.json"
 STDOUT_FILE="$TMP_DIR/stdout"
 STDERR_FILE="$TMP_DIR/stderr"
+HELPER_TEMP_ROOT="$TMP_DIR/helper-private-temp"
+mkdir "$HELPER_TEMP_ROOT"
+chmod 700 "$HELPER_TEMP_ROOT"
 TEST_COUNT=0
+declare -a LAST_PRIVATE_PATHS=()
 
 cleanup() {
   rm -rf -- "$TMP_DIR"
@@ -382,6 +386,11 @@ if command[:3] == ["shell", "run-as", EXPECTED_PACKAGE]:
                 raise SystemExit(1)
             if remote_path in state.get("remote_files", {}):
                 raise SystemExit(1)
+            if os.environ.get("FAKE_ADB_SUBSTITUTE_STAGE_BEFORE_STREAM") == "1":
+                state.setdefault("remote_files", {})[remote_path] = {"type": "symlink"}
+                save_state(state)
+                if "voice-step-descriptor-owned-stage" in script:
+                    raise SystemExit(1)
             content = sys.stdin.buffer.read()
             state.setdefault("remote_files", {})[remote_path] = {
                 "type": "regular",
@@ -467,16 +476,27 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
         status_destination = os.environ.get("FAKE_ADB_CREATE_DESTINATION_ON_STATUS")
         if status_destination:
             Path(status_destination).write_text("raced", encoding="utf-8")
+        state["status_reads"] = state.get("status_reads", 0) + 1
+        status_event_count = state.get("event_count", 17)
+        status_network = "wifi"
+        if os.environ.get("FAKE_ADB_STATUS_EVENT_COUNT_DRIFT") == "1" and state["status_reads"] > 1:
+            status_event_count += 1
+        if os.environ.get("FAKE_ADB_STATUS_NETWORK_DRIFT") == "1" and state["status_reads"] > 1:
+            status_network = "cellular"
+        save_state(state)
         data = "\n".join(
             [
                 "status=ok",
                 "action=status",
                 f'run_state={state["automation_state"]}',
-                f'run_hash={state["run_hash"] if state["automation_state"] != "idle" else "none"}',
+                "run_hash=" + (
+                    "invalid" if os.environ.get("FAKE_ADB_STATUS_INVALID_RUN_HASH") == "1"
+                    else state["run_hash"] if state["automation_state"] != "idle" else "none"
+                ),
                 f'comparison_hash={state["comparison_hash"] if state["automation_state"] != "idle" else "none"}',
                 f'requested_transport={state["transport"] if state["automation_state"] != "idle" else "none"}',
-                f'event_count={state.get("event_count", 17)}',
-                "network=wifi",
+                f"event_count={status_event_count}",
+                f"network={status_network}",
                 "validated=" + ("false" if os.environ.get("FAKE_ADB_VALIDATED_FALSE") == "1" else "true"),
             ]
         )
@@ -636,6 +656,9 @@ JSON
   unset FAKE_ADB_PREEXISTING_REMOTE_DIR FAKE_ADB_REMOTE_DESTINATION_TYPE
   unset FAKE_ADB_VALIDATED_FALSE FAKE_ADB_SUBSECOND_METADATA_CHANGE
   unset FAKE_ADB_PRIVATE_NOISE FAKE_ADB_DEVICE_LOST FAKE_ADB_RETAIN_FIXTURE_DIR
+  unset FAKE_ADB_STATUS_EVENT_COUNT_DRIFT FAKE_ADB_STATUS_NETWORK_DRIFT
+  unset FAKE_ADB_SUBSTITUTE_STAGE_BEFORE_STREAM
+  unset FAKE_ADB_STATUS_INVALID_RUN_HASH
 }
 
 make_fixture() {
@@ -745,10 +768,15 @@ PY
 }
 
 run_helper() {
+  local argument
+  LAST_PRIVATE_PATHS=("$TMP_DIR" "$FAKE_STATE" "$STDOUT_FILE" "$STDERR_FILE" "$HELPER_TEMP_ROOT")
+  for argument in "$@"; do
+    [[ "$argument" == /* ]] && LAST_PRIVATE_PATHS+=("$argument")
+  done
   : > "$STDOUT_FILE"
   : > "$STDERR_FILE"
   set +e
-  "$HELPER" "$@" >"$STDOUT_FILE" 2>"$STDERR_FILE"
+  TMPDIR="$HELPER_TEMP_ROOT" "$HELPER" "$@" >"$STDOUT_FILE" 2>"$STDERR_FILE"
   RUN_STATUS=$?
   set -e
 }
@@ -763,6 +791,11 @@ assert_private_output_absent() {
     fixture-secret PROMPT_SECRET TRANSCRIPT_SECRET ANSWER_SECRET \
     ADB_STDOUT_SECRET ADB_STDERR_SECRET; do
     [[ "$combined" != *"$marker"* ]] || fail "private-output test: helper disclosed a private value"
+  done
+  local private_path
+  for private_path in "$@" "${LAST_PRIVATE_PATHS[@]}"; do
+    [[ -z "$private_path" || "$combined" != *"$private_path"* ]] ||
+      fail "private-output test: helper disclosed a private path"
   done
 }
 
@@ -925,6 +958,14 @@ selected() {
 }
 
 run_general_validation_tests() {
+  printf '%s\n' "$TMP_DIR/private-path-probe" > "$STDOUT_FILE"
+  if (assert_private_output_absent "$TMP_DIR/private-path-probe") 2>/dev/null; then
+    fail "private-output test: actual invocation path checker did not reject a leak"
+  fi
+  : > "$STDOUT_FILE"
+  : > "$STDERR_FILE"
+  pass
+
   assert_rejected '' 'usage: voice-agent-real-room-step.sh OPERATION [options]'
   assert_rejected 'unknown' 'invalid operation'
   local operation
@@ -945,7 +986,33 @@ run_general_validation_tests() {
 
   reset_fake
   local fixture="$TMP_DIR/fixture-validation.pcm"
+  local second_fixture="$TMP_DIR/fixture-validation-second.pcm"
   make_fixture "$fixture"
+  make_second_fixture "$second_fixture"
+  if ! bash -s -- "$LIBRARY" "$fixture" "$second_fixture" "$TMP_DIR" <<'BASH'
+set -euo pipefail
+source "$1"
+LOCAL_TEMP_DIR=''
+declare -a OWNED_TEMP_FILES=()
+TMPDIR="$4"
+first_snapshot=''
+first_size=''
+first_hash=''
+second_snapshot=''
+second_size=''
+second_hash=''
+snapshot_fixture "$2" first_snapshot first_size first_hash
+snapshot_fixture "$3" second_snapshot second_size second_hash
+[[ "$first_snapshot" != "$second_snapshot" ]]
+[[ "$first_size" == 8 && "$second_size" == 8 && "$first_hash" != "$second_hash" ]]
+cmp -s -- "$first_snapshot" "$2"
+cmp -s -- "$second_snapshot" "$3"
+cleanup_local_temps
+BASH
+  then
+    fail "fixture-snapshot test: a later snapshot overwrote earlier immutable results"
+  fi
+  pass
   run_helper start --state relative-state --serial DEVICE_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id conversation-1 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
@@ -956,6 +1023,43 @@ run_general_validation_tests() {
 
   local state="$TMP_DIR/validation-state.json"
   write_valid_state "$state"
+  local second_state="$TMP_DIR/validation-state-second.json"
+  python3 - "$second_state" <<'PY'
+import json
+import os
+import sys
+
+payload = {
+    "schemaVersion": 1,
+    "serial": "DEVICE_SECRET_123",
+    "package": "me.rerere.rikkahub.debug",
+    "conversationId": "SECOND_CONVERSATION",
+    "runHash": "sha256:" + "c" * 64,
+    "comparisonHash": "sha256:" + "d" * 64,
+    "fixtureToken": "fixture-2",
+    "traceId": "trace-second",
+    "transport": "livekit_experimental",
+}
+descriptor = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, separators=(",", ":"))
+    handle.write("\n")
+PY
+  if ! bash -s -- "$LIBRARY" "$state" "$second_state" <<'BASH'
+set -euo pipefail
+TRANSPORT_EXPECTED=livekit_experimental
+PACKAGE_EXPECTED=me.rerere.rikkahub.debug
+source "$1"
+first="$(decode_state "$2")"
+second="$(decode_state "$3")"
+[[ "$first" == *$'CONVERSATION_SECRET_123\n'* ]]
+[[ "$second" == *$'SECOND_CONVERSATION\n'* ]]
+[[ "$first" != "$second" && "$first" == *$'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n'* ]]
+BASH
+  then
+    fail "state-snapshot test: a later decode overwrote earlier immutable results"
+  fi
+  pass
   run_helper capture --state "$state" --automation-output relative-output \
     --private-voice-output "$TMP_DIR/private.ndjson" \
     --sanitized-voice-output "$TMP_DIR/sanitized.ndjson"
@@ -1234,6 +1338,17 @@ assert state["remote_directory"] == directory
 assert state["owner_hash"].startswith("sha256:") and len(state["owner_hash"]) == 71
 assert state["remote_files"][fixture]["type"] == "regular"
 PY
+  python3 - "$ADB_LOG" <<'PY' || fail "start-integrity test: ARM omitted immutable fixture metadata"
+import sys
+
+data = open(sys.argv[1], "rb").read()
+commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
+arm = [command for command in commands if any(b"ARM_CAPTURE_FIXTURE" in value for value in command)]
+assert len(arm) == 1
+assert b"expected_size" in arm[0] and b"8" in arm[0]
+assert b"expected_sha256" in arm[0]
+assert b"sha256:66840dda154e8a113c31dd0ad32f7f3a366a80e8136979d8f5a101d3d29d6f72" in arm[0]
+PY
   pass
 
   reset_fake
@@ -1369,10 +1484,17 @@ trigger = [command for command in commands if any(b"TRIGGER_CAPTURE_FIXTURE" in 
 assert len(stream) == len(stage) == len(trigger) == 1
 assert stream[0][-2] == expected_path
 assert b"exec-in" not in stream[0]
+stream_script = next(value for value in stream[0] if b"voice-step-stage-owned-fixture" in value)
+assert b"voice-step-descriptor-owned-stage" in stream_script
+assert b"/proc/self/fd/3" in stream_script
+assert b"mktemp" not in stream_script and b'cat > "$temporary"' not in stream_script
 assert expected_path in stage[0] and expected_path in trigger[0]
 assert b"fixture-1" in stage[0] and b"fixture-1" in trigger[0]
 assert b"chunk_bytes" in stage[0] and b"3200" in stage[0]
 assert b"chunk_delay_ms" in stage[0] and b"100" in stage[0]
+assert b"expected_size" in stage[0] and b"8" in stage[0]
+assert b"expected_sha256" in stage[0]
+assert b"sha256:66840dda154e8a113c31dd0ad32f7f3a366a80e8136979d8f5a101d3d29d6f72" in stage[0]
 PY
     pass
   done
@@ -1452,6 +1574,22 @@ PY
     assert_private_output_absent
     pass
   done
+
+  reset_fake
+  activate_fake_run
+  rm -f -- "$state"
+  write_valid_state "$state"
+  make_fixture "$fixture"
+  export FAKE_ADB_SUBSTITUTE_STAGE_BEFORE_STREAM=1
+  run_helper inject --state "$state" --fixture "$fixture" --role request
+  [[ "$RUN_STATUS" -ne 0 ]] ||
+    fail "inject-prestream-substitution test: substituted destination accepted fixture bytes"
+  [[ "$(command_count voice-step-stage-owned-fixture)" == "1" &&
+     "$(command_count STAGE_CAPTURE_FIXTURE)" == "0" &&
+     "$(command_count TRIGGER_CAPTURE_FIXTURE)" == "0" ]] ||
+    fail "inject-prestream-substitution test: substitution reached receiver mutations"
+  assert_private_output_absent
+  pass
 }
 
 run_interrupt_tests() {
@@ -1675,6 +1813,38 @@ PY
   reset_fake
   finalize_fake_run false
   write_valid_state "$state"
+  export FAKE_ADB_STATUS_EVENT_COUNT_DRIFT=1
+  run_helper capture --state "$state" \
+    --automation-output "$automation" \
+    --private-voice-output "$private" \
+    --sanitized-voice-output "$sanitized"
+  [[ "$RUN_STATUS" -ne 0 ]] || fail "capture-status-event-drift test: changed event count succeeded"
+  [[ ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
+    fail "capture-status-event-drift test: changed status published a destination"
+  assert_no_capture_temps "$output_dir"
+  assert_private_output_absent
+  pass
+
+  rm -f -- "$automation" "$private" "$sanitized" "$state"
+  reset_fake
+  finalize_fake_run false
+  write_valid_state "$state"
+  export FAKE_ADB_STATUS_NETWORK_DRIFT=1
+  run_helper capture --state "$state" \
+    --automation-output "$automation" \
+    --private-voice-output "$private" \
+    --sanitized-voice-output "$sanitized"
+  [[ "$RUN_STATUS" -ne 0 ]] || fail "capture-status-network-drift test: changed network succeeded"
+  [[ ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
+    fail "capture-status-network-drift test: changed status published a destination"
+  assert_no_capture_temps "$output_dir"
+  assert_private_output_absent
+  pass
+
+  rm -f -- "$automation" "$private" "$sanitized" "$state"
+  reset_fake
+  finalize_fake_run false
+  write_valid_state "$state"
   export FAKE_ADB_ARTIFACT_CHANGES=1
   run_helper capture --state "$state" \
     --automation-output "$automation" \
@@ -1812,6 +1982,11 @@ commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
 removals = [command for command in commands if any(b"voice-step-remove-owned-directory" in value for value in command)]
 assert len(removals) == 1
 assert removals[0][-2] == b"files/voice-real-room/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+removal_script = next(value for value in removals[0] if b"voice-step-remove-owned-directory" in value)
+assert b'cd -- "$name"' in removal_script
+assert b"/proc/self/fd/3" in removal_script
+assert b"/proc/self/fd/4" in removal_script and b'stat -Lc %h /proc/self/fd/4' in removal_script
+assert b'rm -rf -- "$directory"' not in removal_script
 expected = "sha256:" + hashlib.sha256(
     ("DEVICE_SECRET_123\0me.rerere.rikkahub.debug\0CONVERSATION_SECRET_123\0sha256:" + "a" * 64 + "\0sha256:" + "b" * 64).encode()
 ).hexdigest()
@@ -1830,6 +2005,36 @@ PY
     fail "end-reachable-failure test: product evidence mismatch"
   [[ "$(command_count voice-step-reachable)" == 1 ]] ||
     fail "end-reachable-failure test: reachability was not independently checked"
+  pass
+
+  rm -f -- "$cleanup_output" "$state"
+  reset_fake
+  activate_fake_run
+  write_valid_state "$state"
+  export FAKE_ADB_FAIL_END=1
+  run_helper end --state "$state" --cleanup-output "$cleanup_output"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
+  [[ "$(<"$cleanup_output")" == '{"schemaVersion":1,"outcome":"product_failure","callStopped":false,"fixturesRemoved":false,"automationFinalized":false}' ]] ||
+    fail "end-active-status test: reachable active-state product evidence mismatch"
+  python3 - "$FAKE_STATE" <<'PY' || fail "end-active-status test: failed bound end mutated the active run"
+import json, sys
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["automation_state"] == "active"
+assert state["call_active"] is True
+assert state["remote_directory"] == "files/voice-real-room/" + "a" * 64
+PY
+  pass
+
+  rm -f -- "$cleanup_output" "$state"
+  reset_fake
+  activate_fake_run
+  write_valid_state "$state"
+  export FAKE_ADB_FAIL_END=1
+  export FAKE_ADB_STATUS_INVALID_RUN_HASH=1
+  run_helper end --state "$state" --cleanup-output "$cleanup_output"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
+    fail "end-malformed-status test: noncanonical STATUS published cleanup evidence"
+  assert_private_output_absent
   pass
 
   rm -f -- "$cleanup_output" "$state"

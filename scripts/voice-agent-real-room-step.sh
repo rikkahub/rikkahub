@@ -35,11 +35,7 @@ COMPARISON_HASH=''
 CONVERSATION_ID=''
 FIXTURE_TOKEN=''
 TRACE_ID=''
-FIXTURE_SNAPSHOT=''
-FIXTURE_SIZE=''
-FIXTURE_HASH=''
 REMOTE_FIXTURE_DIR=''
-REMOTE_FIXTURE_PATH=''
 REMOTE_OWNER_HASH=''
 LOCAL_TEMP_DIR=''
 STATE_PUBLICATION_TEMP=''
@@ -78,7 +74,7 @@ raw_start_cleanup() {
     START_PREPARE_ATTEMPTED=0
   fi
   if (( START_FIXTURE_DIR_CREATED == 1 )); then
-    remove_owned_remote_directory >/dev/null 2>&1 || cleanup_status=1
+    remove_owned_remote_directory "$REMOTE_FIXTURE_DIR" "$REMOTE_OWNER_HASH" >/dev/null 2>&1 || cleanup_status=1
     START_FIXTURE_DIR_CREATED=0
   fi
   return "$cleanup_status"
@@ -287,9 +283,12 @@ PY
 run_inject() {
   local fixture_path="$1"
   local role="$2"
+  local fixture_snapshot
+  local fixture_size
+  local fixture_hash
   validate_runtime
-  snapshot_fixture "$fixture_path"
-  inject_fixture_once "$role"
+  snapshot_fixture "$fixture_path" fixture_snapshot fixture_size fixture_hash
+  inject_fixture_once "$fixture_snapshot" "$fixture_size" "$fixture_hash" "$role"
   cleanup_local_temps || die 'cleanup failed'
   printf '%s\n' \
     'voice-step.status=ok' \
@@ -299,14 +298,18 @@ run_inject() {
 
 run_interrupt() {
   local fixture_path="$1"
+  local fixture_snapshot
+  local fixture_size
+  local fixture_hash
+  local reply
   validate_runtime
-  snapshot_fixture "$fixture_path"
-  broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.MARK" \
+  snapshot_fixture "$fixture_path" fixture_snapshot fixture_size fixture_hash
+  reply="$(broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.MARK" \
     --es boundary interrupt_started \
-    --es run_hash "$RUN_HASH"
-  [[ "$BROADCAST_DATA" == $'status=ok\naction=mark\nboundary=interrupt_started' ]] ||
+    --es run_hash "$RUN_HASH")"
+  [[ "$reply" == $'status=ok\naction=mark\nboundary=interrupt_started' ]] ||
     die 'unexpected receiver response'
-  inject_fixture_once interruption
+  inject_fixture_once "$fixture_snapshot" "$fixture_size" "$fixture_hash" interruption
   cleanup_local_temps || die 'cleanup failed'
   printf '%s\n' \
     'voice-step.status=ok' \
@@ -315,22 +318,25 @@ run_interrupt() {
 }
 
 run_status_operation() {
+  local status_snapshot
+  local -a status=()
   validate_runtime
-  read_status
-  [[ "$STATUS_RUN_STATE" == active && "$STATUS_RUN_HASH" == "$RUN_HASH" &&
-     "$STATUS_COMPARISON_HASH" == "$COMPARISON_HASH" &&
-     "$STATUS_TRANSPORT" == "$TRANSPORT_EXPECTED" ]] || die 'status binding mismatch'
+  status_snapshot="$(read_status)"
+  mapfile -t status <<< "$status_snapshot"
+  [[ "${status[0]}" == active && "${status[1]}" == "$RUN_HASH" &&
+     "${status[2]}" == "$COMPARISON_HASH" &&
+     "${status[3]}" == "$TRANSPORT_EXPECTED" ]] || die 'status binding mismatch'
   read_call_service_active
   read_status_artifacts
   cleanup_local_temps || die 'cleanup failed'
   printf '%s\n' \
     'voice-step.status=ok' \
     'voice-step.operation=status' \
-    "voice-step.run_state=$STATUS_RUN_STATE" \
+    "voice-step.run_state=${status[0]}" \
     'voice-step.call_state=active' \
-    "voice-step.event_count=$STATUS_EVENT_COUNT" \
-    "voice-step.network=$STATUS_NETWORK" \
-    "voice-step.validated=$STATUS_VALIDATED" \
+    "voice-step.event_count=${status[4]}" \
+    "voice-step.network=${status[5]}" \
+    "voice-step.validated=${status[6]}" \
     'voice-step.voice_events=present' \
     "voice-step.job_accepted_count=$STATUS_JOB_ACCEPTED_COUNT" \
     "voice-step.job_terminal_count=$STATUS_JOB_TERMINAL_COUNT" \
@@ -339,23 +345,26 @@ run_status_operation() {
 }
 
 run_finalize() {
+  local reply
+  local status_snapshot
+  local -a status=()
   validate_runtime
-  broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.FINALIZE_BOUND" \
+  reply="$(broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.FINALIZE_BOUND" \
     --es run_hash "$RUN_HASH" \
     --es comparison_hash "$COMPARISON_HASH" \
-    --es transport "$TRANSPORT_EXPECTED"
-  [[ "$BROADCAST_DATA" == $'status=ok\naction=finalize_bound' ]] || die 'unexpected receiver response'
-  read_status
-  [[ "$STATUS_RUN_STATE" == finalized && "$STATUS_RUN_HASH" == "$RUN_HASH" &&
-     "$STATUS_COMPARISON_HASH" == "$COMPARISON_HASH" &&
-     "$STATUS_TRANSPORT" == "$TRANSPORT_EXPECTED" ]] || die 'finalized status mismatch'
+    --es transport "$TRANSPORT_EXPECTED")"
+  [[ "$reply" == $'status=ok\naction=finalize_bound' ]] || die 'unexpected receiver response'
+  status_snapshot="$(read_status)"
+  mapfile -t status <<< "$status_snapshot"
+  [[ "${status[0]}" == finalized && "${status[1]}" == "$RUN_HASH" &&
+     "${status[2]}" == "$COMPARISON_HASH" &&
+     "${status[3]}" == "$TRANSPORT_EXPECTED" ]] || die 'finalized status mismatch'
   printf '%s\n' \
     'voice-step.status=ok' \
     'voice-step.operation=finalize' \
     'voice-step.automation=finalized'
 }
 
-STABLE_CAPTURE_TEMP=''
 run_capture() {
   local automation_output="$1"
   local private_output="$2"
@@ -366,24 +375,23 @@ run_capture() {
   local automation_temp
   local private_temp
   local sanitized_temp
+  local status_before
+  local status_after
+  local -a status=()
   validate_runtime
-  read_status
-  [[ "$STATUS_RUN_STATE" == finalized && "$STATUS_RUN_HASH" == "$RUN_HASH" &&
-     "$STATUS_COMPARISON_HASH" == "$COMPARISON_HASH" &&
-     "$STATUS_TRANSPORT" == "$TRANSPORT_EXPECTED" ]] || die 'finalized status mismatch'
+  status_before="$(read_status)"
+  mapfile -t status <<< "$status_before"
+  [[ "${status[0]}" == finalized && "${status[1]}" == "$RUN_HASH" &&
+     "${status[2]}" == "$COMPARISON_HASH" &&
+     "${status[3]}" == "$TRANSPORT_EXPECTED" ]] || die 'finalized status mismatch'
   automation_source="$(app_artifact_path "$APP_ARTIFACT_ROOT/${RUN_HASH#sha256:}" automation-events.jsonl)"
   private_source="$(app_artifact_path "$APP_ARTIFACT_ROOT/$TRACE_ID" voice-experience-private.ndjson)"
   sanitized_source="$(app_artifact_path "$APP_ARTIFACT_ROOT/$TRACE_ID" voice-experience-events.ndjson)"
-  read_stable_artifact "$automation_source" "$automation_output"
-  automation_temp="$STABLE_CAPTURE_TEMP"
-  read_stable_artifact "$private_source" "$private_output"
-  private_temp="$STABLE_CAPTURE_TEMP"
-  read_stable_artifact "$sanitized_source" "$sanitized_output"
-  sanitized_temp="$STABLE_CAPTURE_TEMP"
-  read_status
-  [[ "$STATUS_RUN_STATE" == finalized && "$STATUS_RUN_HASH" == "$RUN_HASH" &&
-     "$STATUS_COMPARISON_HASH" == "$COMPARISON_HASH" &&
-     "$STATUS_TRANSPORT" == "$TRANSPORT_EXPECTED" ]] || die 'finalized status mismatch'
+  read_stable_artifact "$automation_source" "$automation_output" automation_temp
+  read_stable_artifact "$private_source" "$private_output" private_temp
+  read_stable_artifact "$sanitized_source" "$sanitized_output" sanitized_temp
+  status_after="$(read_status)"
+  [[ "$status_after" == "$status_before" ]] || die 'status changed during capture'
   validate_absent_destination "$automation_output" || die 'output destination appeared'
   validate_absent_destination "$private_output" || die 'output destination appeared'
   validate_absent_destination "$sanitized_output" || die 'output destination appeared'
@@ -413,11 +421,16 @@ try_read_end_status() {
   result_code="${BASH_REMATCH[1]}"
   raw_data="${BASH_REMATCH[2]}"
   [[ "$result_code" == 0 ]] || return 20
-  BROADCAST_DATA="$(decode_broadcast_data "$raw_data")"
-  parse_status_data || return 20
-  [[ "$STATUS_RUN_STATE" == finalized && "$STATUS_RUN_HASH" == "$RUN_HASH" &&
-     "$STATUS_COMPARISON_HASH" == "$COMPARISON_HASH" &&
-     "$STATUS_TRANSPORT" == "$TRANSPORT_EXPECTED" ]] || return 20
+  parse_status_data "$(decode_broadcast_data "$raw_data")" || return 20
+}
+
+status_is_bound_finalized() {
+  local snapshot="$1"
+  local -a status=()
+  mapfile -t status <<< "$snapshot"
+  [[ "${#status[@]}" == 7 && "${status[0]}" == finalized &&
+     "${status[1]}" == "$RUN_HASH" && "${status[2]}" == "$COMPARISON_HASH" &&
+     "${status[3]}" == "$TRANSPORT_EXPECTED" ]]
 }
 
 probe_device_reachability() {
@@ -433,13 +446,18 @@ complete_reachable_product_failure() {
   local call_stopped="$2"
   local fixtures_removed="$3"
   local status_readback
-  if try_read_end_status; then
+  local status_snapshot=''
+  local automation_finalized=false
+  if status_snapshot="$(try_read_end_status)"; then
     status_readback=0
   else
     status_readback=$?
   fi
   case "$status_readback" in
-    0) complete_end_outcome "$destination" product_failure "$call_stopped" "$fixtures_removed" true ;;
+    0)
+      status_is_bound_finalized "$status_snapshot" && automation_finalized=true
+      complete_end_outcome "$destination" product_failure "$call_stopped" "$fixtures_removed" "$automation_finalized"
+      ;;
     10) complete_end_outcome "$destination" product_failure "$call_stopped" "$fixtures_removed" false ;;
     *) die 'ambiguous cleanup readback' ;;
   esac
@@ -544,9 +562,13 @@ run_end() {
   local wait_status
   local status_readback
   local removal_status
+  local status_snapshot=''
+  local automation_finalized=false
+  local remote_fixture_dir
+  local remote_owner_hash
   validate_runtime
-  REMOTE_FIXTURE_DIR="files/voice-real-room/${RUN_HASH#sha256:}"
-  compute_remote_owner_hash
+  remote_fixture_dir="files/voice-real-room/${RUN_HASH#sha256:}"
+  remote_owner_hash="$(compute_remote_owner_hash)"
   if ! adb_read shell am start-foreground-service \
     -n "$PACKAGE/$SERVICE_CLASS" \
     -a "$CALL_END_BOUND_ACTION" \
@@ -572,13 +594,16 @@ run_end() {
       die 'ambiguous cleanup readback'
       ;;
     30)
-      if try_read_end_status; then
+      if status_snapshot="$(try_read_end_status)"; then
         status_readback=0
       else
         status_readback=$?
       fi
       case "$status_readback" in
-        0) complete_end_outcome "$cleanup_output" product_failure false false true ;;
+        0)
+          status_is_bound_finalized "$status_snapshot" && automation_finalized=true
+          complete_end_outcome "$cleanup_output" product_failure false false "$automation_finalized"
+          ;;
         10) complete_failed_end_step "$cleanup_output" false false ;;
         *) die 'ambiguous cleanup readback' ;;
       esac
@@ -587,7 +612,7 @@ run_end() {
     0) ;;
     *) die 'ambiguous cleanup readback' ;;
   esac
-  if remove_owned_remote_directory; then
+  if remove_owned_remote_directory "$remote_fixture_dir" "$remote_owner_hash"; then
     removal_status=0
   else
     removal_status=$?
@@ -598,13 +623,19 @@ run_end() {
     2) complete_reachable_product_failure "$cleanup_output" true false; return ;;
     *) die 'ambiguous cleanup readback' ;;
   esac
-  if try_read_end_status; then
+  if status_snapshot="$(try_read_end_status)"; then
     status_readback=0
   else
     status_readback=$?
   fi
   case "$status_readback" in
-    0) complete_end_outcome "$cleanup_output" complete true true true ;;
+    0)
+      if status_is_bound_finalized "$status_snapshot"; then
+        complete_end_outcome "$cleanup_output" complete true true true
+      else
+        complete_end_outcome "$cleanup_output" product_failure true true false
+      fi
+      ;;
     10) complete_failed_end_step "$cleanup_output" true true ;;
     *) die 'ambiguous cleanup readback' ;;
   esac
@@ -690,11 +721,14 @@ wait_for_new_trace() {
 }
 
 run_preflight() {
+  local status_snapshot
+  local -a status=()
   validate_runtime
   ensure_device_and_package
   verify_package_contract
-  read_status
-  [[ "$STATUS_RUN_STATE" == idle || "$STATUS_RUN_STATE" == finalized ]] ||
+  status_snapshot="$(read_status)"
+  mapfile -t status <<< "$status_snapshot"
+  [[ "${status[0]}" == idle || "${status[0]}" == finalized ]] ||
     die 'automation is not ready'
   printf '%s\n' \
     'voice-step.status=ok' \
@@ -710,34 +744,45 @@ run_start() {
   local fixture_path="$2"
   local old_trace_present
   local old_trace_value
+  local reply
+  local status_snapshot
+  local -a status=()
+  local fixture_snapshot
+  local fixture_size
+  local fixture_hash
+  local remote_fixture_path
   validate_runtime
-  snapshot_fixture "$fixture_path"
+  snapshot_fixture "$fixture_path" fixture_snapshot fixture_size fixture_hash
   REMOTE_FIXTURE_DIR="files/voice-real-room/${RUN_HASH#sha256:}"
-  REMOTE_FIXTURE_PATH="$REMOTE_FIXTURE_DIR/request-${FIXTURE_HASH#sha256:}.pcm"
+  remote_fixture_path="$REMOTE_FIXTURE_DIR/request-${fixture_hash#sha256:}.pcm"
   ensure_device_and_package
   verify_package_contract
-  read_status
-  [[ "$STATUS_RUN_STATE" == idle || "$STATUS_RUN_STATE" == finalized ]] ||
+  status_snapshot="$(read_status)"
+  mapfile -t status <<< "$status_snapshot"
+  [[ "${status[0]}" == idle || "${status[0]}" == finalized ]] ||
     die 'automation is not ready'
   read_trace_pointer
   old_trace_present="$TRACE_POINTER_PRESENT"
   old_trace_value="$TRACE_POINTER_VALUE"
 
   START_CLEANUP_NEEDED=1
-  stage_snapshot
+  stage_snapshot "$REMOTE_FIXTURE_DIR" "$remote_fixture_path" \
+    "$fixture_snapshot" "$fixture_size" "$fixture_hash"
   START_PREPARE_ATTEMPTED=1
-  broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.PREPARE" \
+  reply="$(broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.PREPARE" \
     --es run_hash "$RUN_HASH" \
     --es comparison_hash "$COMPARISON_HASH" \
     --es transport "$TRANSPORT_EXPECTED" \
-    --es lifecycle foreground
-  [[ "$BROADCAST_DATA" == $'status=ok\naction=prepare' ]] || die 'unexpected receiver response'
+    --es lifecycle foreground)"
+  [[ "$reply" == $'status=ok\naction=prepare' ]] || die 'unexpected receiver response'
 
-  broadcast_read "$FIXTURE_RECEIVER" "$FIXTURE_ARM_ACTION" \
-    --es initial_path "$REMOTE_FIXTURE_PATH" \
+  reply="$(broadcast_read "$FIXTURE_RECEIVER" "$FIXTURE_ARM_ACTION" \
+    --es initial_path "$remote_fixture_path" \
+    --el expected_size "$fixture_size" \
+    --es expected_sha256 "$fixture_hash" \
     --ei chunk_bytes "$FIXTURE_CHUNK_BYTES" \
-    --el chunk_delay_ms "$FIXTURE_CHUNK_DELAY_MS"
-  if [[ "$BROADCAST_DATA" =~ ^status=ok$'\n'action=arm$'\n'token=(fixture-[1-9][0-9]*)$ ]]; then
+    --el chunk_delay_ms "$FIXTURE_CHUNK_DELAY_MS")"
+  if [[ "$reply" =~ ^status=ok$'\n'action=arm$'\n'token=(fixture-[1-9][0-9]*)$ ]]; then
     FIXTURE_TOKEN="${BASH_REMATCH[1]}"
   else
     die 'unexpected receiver response'
@@ -766,6 +811,33 @@ run_start() {
     'voice-step.status=ok' \
     'voice-step.operation=start' \
     'voice-step.call=active'
+}
+
+run_with_decoded_state() {
+  local requested_operation="$1"
+  local state_path="$2"
+  shift 2
+  local state_snapshot
+  local -a state=()
+  state_snapshot="$(decode_state "$state_path")"
+  mapfile -t state <<< "$state_snapshot"
+  [[ "${#state[@]}" == 7 ]] || die 'invalid state'
+  local SERIAL="${state[0]}"
+  local PACKAGE="${state[1]}"
+  local CONVERSATION_ID="${state[2]}"
+  local RUN_HASH="${state[3]}"
+  local COMPARISON_HASH="${state[4]}"
+  local FIXTURE_TOKEN="${state[5]}"
+  local TRACE_ID="${state[6]}"
+  case "$requested_operation" in
+    inject) run_inject "$@" ;;
+    interrupt) run_interrupt "$@" ;;
+    status) run_status_operation ;;
+    finalize) run_finalize ;;
+    capture) run_capture "$@" ;;
+    end) run_end "$@" ;;
+    *) die 'invalid operation' ;;
+  esac
 }
 
 operation="${1:-}"
@@ -807,26 +879,23 @@ case "$operation" in
       esac
     fi
     require_options --state --fixture --role
-    decode_state "${PARSED[--state]}"
-    run_inject "${PARSED[--fixture]}" "${PARSED[--role]}"
+    run_with_decoded_state inject "${PARSED[--state]}" \
+      "${PARSED[--fixture]}" "${PARSED[--role]}"
     ;;
   interrupt)
     parse_options '--state --fixture' "$@"
     require_options --state --fixture
-    decode_state "${PARSED[--state]}"
-    run_interrupt "${PARSED[--fixture]}"
+    run_with_decoded_state interrupt "${PARSED[--state]}" "${PARSED[--fixture]}"
     ;;
   status)
     parse_options '--state' "$@"
     require_options --state
-    decode_state "${PARSED[--state]}"
-    run_status_operation
+    run_with_decoded_state status "${PARSED[--state]}"
     ;;
   finalize)
     parse_options '--state' "$@"
     require_options --state
-    decode_state "${PARSED[--state]}"
-    run_finalize
+    run_with_decoded_state finalize "${PARSED[--state]}"
     ;;
   capture)
     parse_options '--state --automation-output --private-voice-output --sanitized-voice-output' "$@"
@@ -838,8 +907,7 @@ case "$operation" in
       "${PARSED[--automation-output]}" \
       "${PARSED[--private-voice-output]}" \
       "${PARSED[--sanitized-voice-output]}" || die 'output destinations must be distinct'
-    decode_state "${PARSED[--state]}"
-    run_capture \
+    run_with_decoded_state capture "${PARSED[--state]}" \
       "${PARSED[--automation-output]}" \
       "${PARSED[--private-voice-output]}" \
       "${PARSED[--sanitized-voice-output]}"
@@ -848,8 +916,7 @@ case "$operation" in
     parse_options '--state --cleanup-output' "$@"
     require_options --state --cleanup-output
     validate_absent_destination "${PARSED[--cleanup-output]}" || die 'invalid cleanup destination'
-    decode_state "${PARSED[--state]}"
-    run_end "${PARSED[--cleanup-output]}"
+    run_with_decoded_state end "${PARSED[--state]}" "${PARSED[--cleanup-output]}"
     ;;
   *)
     die 'invalid operation'
