@@ -455,7 +455,7 @@ if argv == ["devices", "-l"]:
         print("malformed device enumeration")
         raise SystemExit(0)
     print("List of devices attached")
-    if os.environ.get("FAKE_ADB_DEVICE_LOST") != "1":
+    if os.environ.get("FAKE_ADB_DEVICE_LOST") != "1" and not state.get("device_lost_after_force_stop"):
         device_state = os.environ.get("FAKE_ADB_DEVICE_ENUMERATION_STATE", "device")
         print(f'{state["serial"]} {device_state} product:phone model:Real device:real transport_id:1')
     if os.environ.get("FAKE_ADB_TWO_DEVICES") == "1":
@@ -468,6 +468,8 @@ serial = argv[1]
 command = argv[2:]
 if serial != state["serial"]:
     raise SystemExit(3)
+if state.get("device_lost_after_force_stop"):
+    raise SystemExit(1)
 
 if len(command) > 3 and command[:3] == ["shell", "sh", "-c"] and "voice-step-service-status" in command[3]:
     if os.environ.get("FAKE_ADB_AMBIGUOUS_SERVICE") == "1":
@@ -561,6 +563,10 @@ if command == [
     "shell", "cmd", "activity", "force-stop", "--user",
     str(state["android_user_id"]), EXPECTED_PACKAGE,
 ]:
+    if os.environ.get("FAKE_ADB_DEVICE_LOST") == "1":
+        state["device_lost_after_force_stop"] = True
+        save_state(state)
+        raise SystemExit(1)
     if os.environ.get("FAKE_ADB_FAIL_FORCE_STOP") == "1":
         raise SystemExit(1)
     stopped_false = os.environ.get("FAKE_ADB_FORCE_STOP_STOPPED_FALSE") == "1"
@@ -828,13 +834,15 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
                 raise SystemExit(1)
             if os.environ.get("FAKE_ADB_FAIL_RESTORATION") == "1":
                 raise SystemExit(1)
+            was_stopped = bool(state.get("package_stopped"))
             actor_pid = os.environ.get("FAKE_ADB_ACTOR_PID")
             if actor_pid:
                 os.kill(int(actor_pid), signal.SIGCONT)
                 state["actor_sigcont_observed"] = True
             state["package_stopped"] = False
-            state["automation_state"] = "idle"
-            state["restoration_count"] = state.get("restoration_count", 0) + 1
+            if was_stopped:
+                state["automation_state"] = "idle"
+                state["restoration_count"] = state.get("restoration_count", 0) + 1
             save_state(state)
             malformed = os.environ.get("FAKE_ADB_MALFORMED_RESTORATION")
             if malformed == "duplicate":
@@ -842,11 +850,11 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
             data = "\n".join([
                 "status=ok",
                 "action=status",
-                "run_state=finalized" if malformed == "wrong-state" else "run_state=idle",
-                "run_hash=none",
-                "comparison_hash=none",
-                "requested_transport=none",
-                "event_count=0",
+                "run_state=finalized" if malformed == "wrong-state" or not was_stopped else "run_state=idle",
+                "run_hash=" + (state["run_hash"] if not was_stopped else "none"),
+                "comparison_hash=" + (state["comparison_hash"] if not was_stopped else "none"),
+                "requested_transport=" + (state["transport"] if not was_stopped else "none"),
+                "event_count=" + (str(state.get("event_count", 17)) if not was_stopped else "0"),
                 "network=none",
                 "validated=true",
             ])
@@ -2822,6 +2830,14 @@ run_end_tests() {
   local expected_complete='{"schemaVersion":1,"outcome":"complete","callStopped":true,"fixturesRemoved":true,"automationFinalized":true}'
   local expected_product_failure='{"schemaVersion":1,"outcome":"product_failure","callStopped":true,"fixturesRemoved":false,"automationFinalized":true}'
   local expected_infrastructure='{"schemaVersion":1,"outcome":"infrastructure_interruption","callStopped":true,"fixturesRemoved":false,"automationFinalized":true}'
+  python3 - "$HELPER" <<'PY' || fail "exit-signal test: cleanup deferral was installed after EXIT removal"
+import sys
+
+source = open(sys.argv[1], encoding="utf-8").read()
+body = source.split("on_exit() {", 1)[1].split("\n}", 1)[0]
+assert body.index("trap defer_exit_cleanup_signal HUP INT TERM") < body.index("trap - EXIT")
+PY
+  pass
   reset_fake
   finalize_fake_run true
   write_valid_state "$state"
@@ -2939,6 +2955,16 @@ PY
     if [[ "$failure_mode" != force-stop ]]; then
       [[ "$(exact_command_count -s DEVICE_SECRET_123 shell am broadcast --user 0 --include-stopped-packages -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver -a me.rerere.rikkahub.voiceagent.automation.STATUS)" == 1 ]] ||
         fail "end-product-failure test: $failure_mode did not restore exactly once"
+    else
+      [[ "$(command_count --include-stopped-packages)" == 0 ]] ||
+        fail "end-product-failure test: rejected force-stop attempted false restoration"
+      python3 - "$FAKE_STATE" <<'PY' || fail "end-product-failure test: rejected force-stop changed runtime state"
+import json, sys
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["package_stopped"] is False
+assert state["automation_state"] == "finalized"
+assert state.get("restoration_count", 0) == 0
+PY
     fi
     pass
   done
@@ -2982,8 +3008,9 @@ PY
   run_helper end --state "$state" --cleanup-output "$cleanup_output"
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
   [[ "$(<"$cleanup_output")" == "$expected_product_failure" &&
-     "$(exact_command_count devices -l)" == 1 ]] ||
-    fail "end-classification test: transient shell failure was not independently classified"
+     "$(exact_command_count devices -l)" == 0 &&
+     "$(command_count --include-stopped-packages)" == 0 ]] ||
+    fail "end-classification test: canonical stopped=false was not direct product failure"
   pass
 
   rm -f -- "$cleanup_output" "$state"
@@ -3005,6 +3032,7 @@ PY
   write_valid_state "$state"
   export FAKE_ADB_FAIL_FORCE_STOP=1
   export FAKE_ADB_MALFORMED_DEVICE_ENUMERATION=1
+  export FAKE_ADB_MALFORMED_STOPPED_ROW=1
   run_helper end --state "$state" --cleanup-output "$cleanup_output"
   [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
     fail "end-classification test: malformed device enumeration published cleanup"
@@ -3016,6 +3044,7 @@ PY
   write_valid_state "$state"
   export FAKE_ADB_FAIL_FORCE_STOP=1
   export FAKE_ADB_DEVICE_ENUMERATION_STATE=error
+  export FAKE_ADB_MALFORMED_STOPPED_ROW=1
   run_helper end --state "$state" --cleanup-output "$cleanup_output"
   [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
     fail "end-classification test: unknown device state published cleanup"
@@ -3030,6 +3059,15 @@ PY
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
   [[ "$(<"$cleanup_output")" == "$expected_product_failure" ]] ||
     fail "end-classification test: canonical stopped=false was not product failure"
+  [[ "$(command_count --include-stopped-packages)" == 0 ]] ||
+    fail "end-classification test: canonical stopped=false attempted false restoration"
+  python3 - "$FAKE_STATE" <<'PY' || fail "end-classification test: stopped=false changed finalized runtime"
+import json, sys
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["package_stopped"] is False
+assert state["automation_state"] == "finalized"
+assert state.get("restoration_count", 0) == 0
+PY
   pass
 
   rm -f -- "$cleanup_output" "$state"

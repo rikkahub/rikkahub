@@ -115,10 +115,15 @@ raw_start_cleanup() {
       else
         cleanup_status=1
       fi
+    elif (( stopped_status == 1 )); then
+      PACKAGE_FORCE_STOP_OWNED=0
+      cleanup_status=1
     else
       cleanup_status=1
     fi
-    restore_force_stopped_package || cleanup_status=1
+    if (( PACKAGE_FORCE_STOP_OWNED == 1 )); then
+      restore_force_stopped_package || cleanup_status=1
+    fi
   fi
   return "$cleanup_status"
 }
@@ -126,8 +131,8 @@ raw_start_cleanup() {
 on_exit() {
   local status=$?
   local cleanup_status=0
-  trap - EXIT
   trap defer_exit_cleanup_signal HUP INT TERM
+  trap - EXIT
   set +e
   if (( status != 0 && START_CLEANUP_NEEDED == 1 )); then
     raw_start_cleanup || cleanup_status=1
@@ -586,6 +591,7 @@ run_end() {
   local metadata_after_cleanup
   local metadata_after_post_read
   local stopped_status
+  local force_stop_status=0
   local quiescence_status
   local cleanup_status
   validate_runtime
@@ -599,23 +605,39 @@ run_end() {
   [[ "$metadata_before" == "$metadata_after_baseline" ]] || die 'artifact source changed'
 
   PACKAGE_FORCE_STOP_OWNED=1
-  if ! adb_read shell cmd activity force-stop --user "$ANDROID_USER_ID" "$PACKAGE" \
-      </dev/null >/dev/null 2>&1; then
-    complete_failed_end_step "$cleanup_output" true false true
-    return
-  fi
+  adb_read shell cmd activity force-stop --user "$ANDROID_USER_ID" "$PACKAGE" \
+    </dev/null >/dev/null 2>&1 || force_stop_status=$?
   if read_package_stopped_state true; then
     stopped_status=0
   else
     stopped_status=$?
   fi
   case "$stopped_status" in
-    0) ;;
+    0)
+      if (( force_stop_status != 0 )); then
+        complete_failed_end_step "$cleanup_output" true false true
+        return
+      fi
+      ;;
     1)
-      complete_failed_end_step "$cleanup_output" true false true
+      PACKAGE_FORCE_STOP_OWNED=0
+      complete_end_outcome "$cleanup_output" product_failure true false true
       return
       ;;
-    *) die 'ambiguous package stopped-state readback' ;;
+    *)
+      if classify_device_access; then
+        die 'ambiguous package stopped-state readback'
+      else
+        case "$?" in
+          1)
+            complete_end_outcome "$cleanup_output" infrastructure_interruption \
+              true false true
+            return
+            ;;
+          *) die 'ambiguous package stopped-state readback' ;;
+        esac
+      fi
+      ;;
   esac
   if prove_package_quiescence; then
     quiescence_status=0
