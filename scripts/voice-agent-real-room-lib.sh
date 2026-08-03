@@ -86,6 +86,8 @@ validate_runtime() {
   require_command sha256sum
   require_command stat
   require_command cmp
+  require_command flock
+  require_command mkdir
   [[ -x "$READY" ]] || die 'device-ready helper unavailable'
 }
 
@@ -99,6 +101,79 @@ validate_hash() {
 
 validate_package() {
   [[ "$1" == "$PACKAGE_EXPECTED" ]] || die 'invalid package'
+}
+
+validate_android_user_id() {
+  [[ "$1" =~ ^(0|[1-9][0-9]*)$ ]] || die 'invalid Android user'
+}
+
+validate_package_uid() {
+  [[ "$1" =~ ^[1-9][0-9]*$ ]] || die 'invalid package UID'
+}
+
+validate_fixture_identity() {
+  [[ "$1" =~ ^[1-9][0-9]*:[1-9][0-9]*:40700:[1-9][0-9]*:[1-9][0-9]*$ ]] ||
+    die 'invalid fixture ownership receipt'
+}
+
+validate_fixture_nonce() {
+  [[ "$1" =~ ^[0-9a-f]{32}$ ]] || die 'invalid fixture ownership receipt'
+}
+
+acquire_host_operation_lock() {
+  local lock_root
+  local lock_key
+  local lock_path
+  lock_root="${VOICE_STEP_LOCK_ROOT:-${TMPDIR:-/tmp}/voice-real-room-locks}"
+  if ! mkdir -m 700 -- "$lock_root" 2>/dev/null; then
+    [[ -d "$lock_root" && ! -L "$lock_root" ]] || die 'host operation lock unavailable'
+  fi
+  chmod 700 -- "$lock_root" 2>/dev/null || die 'host operation lock unavailable'
+  python3 - "$lock_root" 2>/dev/null <<'PY' || die 'host operation lock unavailable'
+import os
+import stat
+import sys
+
+metadata = os.lstat(sys.argv[1])
+if (
+    stat.S_ISLNK(metadata.st_mode)
+    or not stat.S_ISDIR(metadata.st_mode)
+    or stat.S_IMODE(metadata.st_mode) != 0o700
+    or metadata.st_uid != os.geteuid()
+):
+    raise SystemExit(1)
+PY
+  lock_key="$(python3 - "$SERIAL" "$PACKAGE" 2>/dev/null <<'PY'
+import hashlib
+import sys
+
+print(hashlib.sha256("\0".join(sys.argv[1:]).encode()).hexdigest())
+PY
+)" || die 'host operation lock unavailable'
+  [[ "$lock_key" =~ ^[0-9a-f]{64}$ ]] || die 'host operation lock unavailable'
+  lock_path="$lock_root/$lock_key.lock"
+  exec {HOST_LOCK_FD}<>"$lock_path" || die 'host operation lock unavailable'
+  chmod 600 -- "$lock_path" 2>/dev/null || die 'host operation lock unavailable'
+  python3 - "$lock_path" "$HOST_LOCK_FD" 2>/dev/null <<'PY' || die 'host operation lock unavailable'
+import os
+import stat
+import sys
+
+path, descriptor = sys.argv[1], int(sys.argv[2])
+path_metadata = os.lstat(path)
+descriptor_metadata = os.fstat(descriptor)
+if (
+    stat.S_ISLNK(path_metadata.st_mode)
+    or not stat.S_ISREG(path_metadata.st_mode)
+    or stat.S_IMODE(path_metadata.st_mode) != 0o600
+    or path_metadata.st_uid != os.geteuid()
+    or path_metadata.st_nlink != 1
+    or (path_metadata.st_dev, path_metadata.st_ino) !=
+       (descriptor_metadata.st_dev, descriptor_metadata.st_ino)
+):
+    raise SystemExit(1)
+PY
+  flock -n "$HOST_LOCK_FD" 2>/dev/null || die 'host operation already active'
 }
 
 validate_absent_destination() {
@@ -246,10 +321,15 @@ keys = [
     "schemaVersion",
     "serial",
     "package",
+    "androidUserId",
+    "packageUid",
     "conversationId",
     "runHash",
     "comparisonHash",
     "fixtureToken",
+    "fixtureParentIdentity",
+    "fixtureDirectoryIdentity",
+    "fixtureOwnershipNonce",
     "traceId",
     "transport",
 ]
@@ -300,9 +380,12 @@ if (after.st_dev, after.st_ino, after.st_mode, after.st_size, after.st_mtime_ns,
 if not isinstance(payload, list) or [key for key, _ in payload] != keys:
     raise SystemExit(1)
 state = dict(payload)
-if type(state["schemaVersion"]) is not int or state["schemaVersion"] != 1:
+if type(state["schemaVersion"]) is not int or state["schemaVersion"] != 2:
     raise SystemExit(1)
-if any(type(state[key]) is not str for key in keys[1:]):
+if type(state["androidUserId"]) is not int or type(state["packageUid"]) is not int:
+    raise SystemExit(1)
+string_keys = [key for key in keys[1:] if key not in {"androidUserId", "packageUid"}]
+if any(type(state[key]) is not str for key in string_keys):
     raise SystemExit(1)
 for key in keys:
     value = str(state[key]).encode("utf-8")
@@ -312,16 +395,21 @@ PY
     die 'invalid state'
   fi
   mapfile -t values <<< "$snapshot"
-  [[ "${#values[@]}" == 9 && "${values[0]}" == 1 ]] || die 'invalid state'
-  [[ "${values[8]}" == "$TRANSPORT_EXPECTED" ]] || die 'invalid state'
+  [[ "${#values[@]}" == 14 && "${values[0]}" == 2 ]] || die 'invalid state'
+  [[ "${values[13]}" == "$TRANSPORT_EXPECTED" ]] || die 'invalid state'
   validate_identifier "${values[1]}" 'serial'
   [[ "${values[2]}" == "$PACKAGE_EXPECTED" ]] || die 'invalid package'
-  validate_identifier "${values[3]}" 'conversation id'
-  validate_hash "${values[4]}" 'run hash'
-  validate_hash "${values[5]}" 'comparison hash'
-  validate_identifier "${values[6]}" 'fixture token'
-  validate_identifier "${values[7]}" 'trace id'
-  printf '%s\n' "${values[@]:1:7}"
+  validate_android_user_id "${values[3]}"
+  validate_package_uid "${values[4]}"
+  validate_identifier "${values[5]}" 'conversation id'
+  validate_hash "${values[6]}" 'run hash'
+  validate_hash "${values[7]}" 'comparison hash'
+  validate_identifier "${values[8]}" 'fixture token'
+  validate_fixture_identity "${values[9]}"
+  validate_fixture_identity "${values[10]}"
+  validate_fixture_nonce "${values[11]}"
+  validate_identifier "${values[12]}" 'trace id'
+  printf '%s\n' "${values[@]:1:12}"
 }
 
 parse_options() {
@@ -349,12 +437,34 @@ require_options() {
   done
 }
 
-decode_broadcast_data() {
-  local raw="$1"
-  raw="${raw//\\n/$'\n'}"
-  raw="${raw//\\r/$'\r'}"
-  raw="${raw//\\\\/\\}"
-  printf '%s' "$raw"
+parse_ordered_broadcast_output() {
+  local output="$1"
+  local parsed
+  local result_code
+  local data
+  if ! parsed="$(printf '%s' "$output" | python3 -c '
+import re
+import sys
+
+text = sys.stdin.read()
+marker = "Broadcast completed: result="
+if text.count(marker) != 1:
+    raise SystemExit(1)
+prefix, record = text.split(marker, 1)
+if prefix and not prefix.endswith("\n"):
+    raise SystemExit(1)
+match = re.fullmatch(r"(-?[0-9]+), data=\"([^\x00\r]*)\"", record, re.DOTALL)
+if match is None:
+    raise SystemExit(1)
+sys.stdout.write(match.group(1) + "\n" + match.group(2))
+' 2>/dev/null)"; then
+    return 2
+  fi
+  [[ "$parsed" == *$'\n'* ]] || return 2
+  result_code="${parsed%%$'\n'*}"
+  data="${parsed#*$'\n'}"
+  [[ "$result_code" == 0 ]] || return 3
+  printf '%s' "$data"
 }
 
 broadcast_read() {
@@ -362,21 +472,22 @@ broadcast_read() {
   local action="$2"
   shift 2
   local output
-  local completed
-  local result_code
-  local raw_data
-  if ! output="$(adb_read shell am broadcast --user 0 \
+  local data
+  local parse_status
+  if ! output="$(adb_read shell am broadcast --user "$ANDROID_USER_ID" \
       -n "$PACKAGE/$receiver" -a "$action" "$@" 2>/dev/null)"; then
     die 'ADB command failed'
   fi
-  completed="$(printf '%s\n' "$output" | awk '/^Broadcast completed:/ { count++; line=$0 } END { if (count == 1) print line }')"
-  if [[ ! "$completed" =~ ^Broadcast\ completed:\ result=([-0-9]+),\ data=\"(.*)\"$ ]]; then
-    die 'unexpected receiver response'
+  if data="$(parse_ordered_broadcast_output "$output")"; then
+    parse_status=0
+  else
+    parse_status=$?
   fi
-  result_code="${BASH_REMATCH[1]}"
-  raw_data="${BASH_REMATCH[2]}"
-  [[ "$result_code" == 0 ]] || die 'receiver rejected request'
-  decode_broadcast_data "$raw_data"
+  case "$parse_status" in
+    0) printf '%s' "$data" ;;
+    3) die 'receiver rejected request' ;;
+    *) die 'unexpected receiver response' ;;
+  esac
 }
 
 parse_status_data() {
@@ -458,7 +569,65 @@ ensure_device_and_package() {
   esac
   package_path="$(adb_read shell pm path "$PACKAGE" 2>/dev/null)" || die 'debug package unavailable'
   [[ "$package_path" == package:* ]] || die 'debug package unavailable'
-  adb_read shell run-as "$PACKAGE" id </dev/null >/dev/null 2>&1 || die 'run-as unavailable'
+}
+
+validate_process_capability_readbacks() {
+  local process_rows="$1"
+  local isolated_rows="$2"
+  printf '%s\n' "$process_rows" | python3 -c '
+import re
+import sys
+
+lines = sys.stdin.read().splitlines()
+if not lines or lines[0] != "UID PID PPID STAT NAME":
+    raise SystemExit(1)
+for line in lines[1:]:
+    fields = line.split()
+    if len(fields) != 5:
+        raise SystemExit(1)
+    uid, pid, ppid, state, name = fields
+    if not uid.isdecimal() or not pid.isdecimal() or not ppid.isdecimal():
+        raise SystemExit(1)
+    if re.fullmatch(r"[A-Za-z+<NslL]+", state) is None or not name:
+        raise SystemExit(1)
+' 2>/dev/null || die 'package process readback unavailable'
+  [[ "$isolated_rows" =~ ^\[\]$ ||
+     "$isolated_rows" =~ ^\[[0-9]+(,\ [0-9]+)*\]$ ]] ||
+    die 'isolated process readback unavailable'
+}
+
+resolve_package_identity() {
+  local current_user
+  local package_row
+  local uid_rows
+  local process_rows
+  local isolated_rows
+  current_user="$(adb_read shell cmd activity get-current-user 2>/dev/null)" ||
+    die 'Android user readback failed'
+  current_user="${current_user//$'\r'/}"
+  validate_android_user_id "$current_user"
+  ANDROID_USER_ID="$current_user"
+
+  package_row="$(adb_read shell cmd package list packages --user "$ANDROID_USER_ID" \
+    -U --show-stopped "$PACKAGE" 2>/dev/null)" || die 'package identity readback failed'
+  if [[ "$package_row" =~ ^package:me\.rerere\.rikkahub\.debug\ stopped=(true|false)\ uid:([1-9][0-9]*)$ ]]; then
+    PACKAGE_UID="${BASH_REMATCH[2]}"
+  else
+    die 'package identity readback failed'
+  fi
+  validate_package_uid "$PACKAGE_UID"
+
+  uid_rows="$(adb_read shell cmd package list packages --user "$ANDROID_USER_ID" \
+    --uid "$PACKAGE_UID" 2>/dev/null)" || die 'package UID readback failed'
+  [[ "$uid_rows" == "package:$PACKAGE uid:$PACKAGE_UID" ]] || die 'package UID is shared'
+
+  process_rows="$(adb_read exec-out ps -A -n -o UID,PID,PPID,STAT,NAME 2>/dev/null)" ||
+    die 'package process readback unavailable'
+  isolated_rows="$(adb_read shell cmd activity get-isolated-pids "$PACKAGE_UID" 2>/dev/null)" ||
+    die 'isolated process readback unavailable'
+  validate_process_capability_readbacks "$process_rows" "$isolated_rows"
+  adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" id \
+    </dev/null >/dev/null 2>&1 || die 'run-as unavailable'
 }
 
 verify_package_contract() {
@@ -470,7 +639,7 @@ verify_package_contract() {
      "$package_dump" == *"$PACKAGE/$SERVICE_CLASS"* &&
      "$package_dump" == *"$PACKAGE/$CONTROL_RECEIVER"* &&
      "$package_dump" == *"$PACKAGE/$FIXTURE_RECEIVER"* ]] || die 'package contract mismatch'
-  protected_probe="$(adb_read shell run-as "$PACKAGE" sh -c '
+  protected_probe="$(adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
 : voice-step-protected-root
 root=$(readlink -f files) || exit 1
 [ -d "$root" ] || exit 1
@@ -486,7 +655,7 @@ printf ready
 read_trace_pointer() {
   local probe
   local value
-  probe="$(adb_read shell run-as "$PACKAGE" sh -c '
+  probe="$(adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
 : voice-step-trace-probe
 if [ -L "$1" ]; then
   printf invalid
@@ -503,7 +672,7 @@ fi
       TRACE_POINTER_VALUE=''
       ;;
     present)
-      value="$(adb_read exec-out run-as "$PACKAGE" cat "$LATEST_TRACE_PATH" 2>/dev/null)" ||
+      value="$(adb_read exec-out run-as "$PACKAGE" --user "$ANDROID_USER_ID" cat "$LATEST_TRACE_PATH" 2>/dev/null)" ||
         die 'trace readback failed'
       value="${value//$'\r'/}"
       value="${value//$'\n'/}"
@@ -533,7 +702,8 @@ create_owned_remote_directory() {
   local remote_directory="$1"
   local owner_hash="$2"
   local result
-  result="$(adb_read shell run-as "$PACKAGE" sh -c '
+  local -a receipt=()
+  result="$(adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
 set -eu
 : voice-step-create-owned-directory
 directory=$1
@@ -595,19 +765,40 @@ umask 077
 exec 3> .voice-step-owner || exit 1
 set +C
 marker_inode=$(stat -Lc %d:%i /proc/self/fd/3) || exit 1
-printf "%s\n" "$owner" >&3 || exit 1
+nonce=$(od -An -N16 -tx1 /dev/urandom | tr -d " \n") || exit 1
+[ "${#nonce}" = 32 ] || exit 1
+case "$nonce" in *[!0-9a-f]*) exit 1 ;; esac
+printf "%s\n%s\n" "$owner" "$nonce" >&3 || exit 1
 [ "$(stat -Lc %a /proc/self/fd/3)" = 600 ] && \
   [ "$(stat -Lc %h /proc/self/fd/3)" = 1 ] && \
-  [ "$(cat /proc/self/fd/3)" = "$owner" ] && \
+  [ "$(cat /proc/self/fd/3)" = "$(printf "%s\n%s" "$owner" "$nonce")" ] && \
   [ "$(stat -c %d:%i .voice-step-owner)" = "$marker_inode" ] || exit 1
 exec 3>&-
+parent_mode=$(printf "%o" "0x$(stat -Lc %f /proc/self/fd/5)") || exit 1
+directory_mode=$(printf "%o" "0x$(stat -Lc %f /proc/self/fd/4)") || exit 1
+parent_identity=$(printf "%s:%s:%s:%s:%s" \
+  "$(stat -Lc %d /proc/self/fd/5)" "$(stat -Lc %i /proc/self/fd/5)" "$parent_mode" \
+  "$(stat -Lc %u /proc/self/fd/5)" "$(stat -Lc %g /proc/self/fd/5)") || exit 1
+directory_identity=$(printf "%s:%s:%s:%s:%s" \
+  "$(stat -Lc %d /proc/self/fd/4)" "$(stat -Lc %i /proc/self/fd/4)" "$directory_mode" \
+  "$(stat -Lc %u /proc/self/fd/4)" "$(stat -Lc %g /proc/self/fd/4)") || exit 1
 trap - EXIT HUP INT TERM
 exec 4<&-
 exec 5<&-
-printf created
+printf "created\nparent_identity=%s\ndirectory_identity=%s\nownership_nonce=%s\n" \
+  "$parent_identity" "$directory_identity" "$nonce"
 ' sh "$remote_directory" "$owner_hash" </dev/null)" ||
     die 'fixture staging failed'
-  [[ "$result" == created ]] || die 'fixture staging failed'
+  mapfile -t receipt <<< "$result"
+  [[ "${#receipt[@]}" == 4 && "${receipt[0]}" == created &&
+     "${receipt[1]}" == parent_identity=* && "${receipt[2]}" == directory_identity=* &&
+     "${receipt[3]}" == ownership_nonce=* ]] || die 'fixture staging failed'
+  FIXTURE_PARENT_IDENTITY="${receipt[1]#parent_identity=}"
+  FIXTURE_DIRECTORY_IDENTITY="${receipt[2]#directory_identity=}"
+  FIXTURE_OWNERSHIP_NONCE="${receipt[3]#ownership_nonce=}"
+  validate_fixture_identity "$FIXTURE_PARENT_IDENTITY"
+  validate_fixture_identity "$FIXTURE_DIRECTORY_IDENTITY"
+  validate_fixture_nonce "$FIXTURE_OWNERSHIP_NONCE"
   START_FIXTURE_DIR_CREATED=1
 }
 
@@ -619,7 +810,7 @@ stage_owned_snapshot() {
   local fixture_size="$5"
   local fixture_hash="$6"
   local metadata
-  metadata="$(adb_read shell run-as "$PACKAGE" sh -c '
+  metadata="$(adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
 set -eu
 : voice-step-stage-owned-fixture
 : voice-step-descriptor-owned-stage
@@ -632,8 +823,9 @@ marker=$directory/.voice-step-owner
 [ -d "$directory" ] && [ ! -L "$directory" ] && \
   [ "$(stat -c %a "$directory")" = 700 ] || exit 1
 [ -f "$marker" ] && [ ! -L "$marker" ] && \
-  [ "$(stat -c %a "$marker")" = 600 ] && [ "$(stat -c %h "$marker")" = 1 ] && \
-  [ "$(cat "$marker")" = "$owner" ] || exit 1
+  [ "$(stat -c %a "$marker")" = 600 ] && [ "$(stat -c %h "$marker")" = 1 ] || exit 1
+marker_payload=$(cat "$marker") || exit 1
+case "$marker_payload" in "$owner"$'\n'[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;; *) exit 1 ;; esac
 case "$destination" in "$directory"/*.pcm) ;; *) exit 1 ;; esac
 [ ! -e "$destination" ] && [ ! -L "$destination" ] || exit 1
 descriptor_inode=
@@ -675,7 +867,7 @@ remove_owned_remote_directory() {
   local remote_directory="$1"
   local owner_hash="$2"
   local result
-  result="$(adb_read shell run-as "$PACKAGE" sh -c '
+  result="$(adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
 set -eu
 : voice-step-remove-owned-directory
 directory=$1
@@ -696,8 +888,10 @@ exec 4< . || exit 1
 exec 3< .voice-step-owner || exit 1
 marker_inode=$(stat -Lc %d:%i /proc/self/fd/3) || exit 1
 [ "$(stat -Lc %a /proc/self/fd/3)" = 600 ] && \
-  [ "$(stat -Lc %h /proc/self/fd/3)" = 1 ] && [ "$(cat <&3)" = "$owner" ] && \
+  [ "$(stat -Lc %h /proc/self/fd/3)" = 1 ] && \
   [ "$(stat -c %d:%i .voice-step-owner)" = "$marker_inode" ] || exit 1
+[ "$(awk "END { print NR }" /proc/self/fd/3)" = 2 ] || exit 1
+[ "$(sed -n "1p" /proc/self/fd/3)" = "$owner" ] || exit 1
 exec 3<&-
 for entry in .[!.]* ..?* *; do
   [ -e "$entry" ] || [ -L "$entry" ] || continue
@@ -764,10 +958,236 @@ read_call_service_active() {
   [[ "$services" == *"$PACKAGE/$SERVICE_CLASS"* ]] || die 'call service is not active'
 }
 
+read_automation_terminal_snapshot() {
+  local required_ending="$1"
+  local artifact_path
+  local snapshot_path
+  local validation_status
+  artifact_path="$(app_artifact_path "$APP_ARTIFACT_ROOT/${RUN_HASH#sha256:}" automation-events.jsonl)"
+  ensure_local_temp_dir
+  snapshot_path="$LOCAL_TEMP_DIR/automation-terminal.jsonl"
+  : > "$snapshot_path"
+  chmod 600 -- "$snapshot_path" 2>/dev/null || return 3
+  if [[ -z "${AUTOMATION_TERMINAL_TEMP_REGISTERED:-}" ]]; then
+    register_temp_file "$snapshot_path"
+    AUTOMATION_TERMINAL_TEMP_REGISTERED=1
+  fi
+  adb_read exec-out run-as "$PACKAGE" --user "$ANDROID_USER_ID" cat "$artifact_path" \
+    >"$snapshot_path" 2>/dev/null || return 3
+  set +e
+  python3 - "$snapshot_path" "$RUN_HASH" "$COMPARISON_HASH" \
+    "$TRANSPORT_EXPECTED" "$required_ending" 2>/dev/null <<'PY'
+import json
+import sys
+
+path, run_hash, comparison_hash, transport, ending = sys.argv[1:]
+keys = [
+    "schemaVersion", "monotonicMs", "wallClockMs", "runHash",
+    "comparisonHash", "requestedTransport", "observedTransport", "name",
+    "route", "network", "lifecycle", "playbackEpoch", "byteCount",
+    "rmsActive", "audioWindowMicros", "succeeded", "correlationKind",
+    "correlationHash", "requestedModelHash", "observedModelHash", "voiceHash",
+    "instructionHash", "directAccountConfigurationHash", "conversationHash",
+    "captureSource", "micBytes", "fixtureBytes",
+]
+
+try:
+    content = open(path, "rb").read()
+except OSError:
+    raise SystemExit(2)
+if not content or len(content) > 16 * 1024 * 1024 or not content.endswith(b"\n"):
+    raise SystemExit(2)
+try:
+    text = content.decode("utf-8")
+except UnicodeDecodeError:
+    raise SystemExit(2)
+rows = []
+for line in text.splitlines():
+    if not line:
+        raise SystemExit(2)
+    try:
+        pairs = json.loads(line, object_pairs_hook=lambda value: value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        raise SystemExit(2)
+    if not isinstance(pairs, list) or any(not isinstance(pair, tuple) for pair in pairs):
+        raise SystemExit(2)
+    if [key for key, _ in pairs] != keys:
+        raise SystemExit(2)
+    row = dict(pairs)
+    if json.dumps(row, separators=(",", ":"), ensure_ascii=False) != line:
+        raise SystemExit(2)
+    if (
+        type(row["schemaVersion"]) is not int
+        or row["schemaVersion"] != 1
+        or type(row["monotonicMs"]) is not int
+        or type(row["wallClockMs"]) is not int
+        or row["runHash"] != run_hash
+        or row["comparisonHash"] != comparison_hash
+        or row["requestedTransport"] != transport
+        or type(row["name"]) is not str
+    ):
+        raise SystemExit(2)
+    rows.append(row)
+
+if ending == "call-stopped":
+    if rows[-1]["name"] != "call_stopped":
+        raise SystemExit(1)
+    if rows[-1]["succeeded"] is not True:
+        raise SystemExit(2)
+elif ending == "finalized":
+    if len(rows) < 2 or [row["name"] for row in rows[-2:]] != ["call_stopped", "run_finalized"]:
+        raise SystemExit(2)
+    if rows[-2]["succeeded"] is not True:
+        raise SystemExit(2)
+else:
+    raise SystemExit(2)
+PY
+  validation_status=$?
+  set -e
+  return "$validation_status"
+}
+
+wait_for_durable_call_stopped() {
+  local attempt=0
+  local started=$SECONDS
+  local proof_status
+  while (( attempt < ${VOICE_STEP_MAX_WAIT_ATTEMPTS:-120} )); do
+    attempt=$((attempt + 1))
+    if read_automation_terminal_snapshot call-stopped; then
+      return 0
+    else
+      proof_status=$?
+    fi
+    case "$proof_status" in
+      1) ;;
+      2) die 'invalid durable call-stop evidence' ;;
+      3) die 'durable call-stop read failed' ;;
+      *) die 'invalid durable call-stop evidence' ;;
+    esac
+    if (( SECONDS - started >= ${VOICE_STEP_WAIT_TIMEOUT_SECONDS:-120} )); then
+      break
+    fi
+    sleep "${VOICE_STEP_POLL_SECONDS:-1}"
+  done
+  die 'call stop timed out'
+}
+
+read_package_stopped_state() {
+  local expected="$1"
+  local row
+  row="$(adb_read shell cmd package list packages --user "$ANDROID_USER_ID" \
+    -U --show-stopped "$PACKAGE" 2>/dev/null)" || return 1
+  [[ "$row" == "package:$PACKAGE stopped=$expected uid:$PACKAGE_UID" ]]
+}
+
+prove_package_quiescence() {
+  local iteration
+  local processes
+  local isolated
+  for iteration in 1 2; do
+    processes="$(adb_read exec-out ps -A -n -o UID,PID,PPID,STAT,NAME 2>/dev/null)" || return 1
+    isolated="$(adb_read shell cmd activity get-isolated-pids "$PACKAGE_UID" 2>/dev/null)" || return 1
+    validate_process_capability_readbacks "$processes" "$isolated"
+    printf '%s\n' "$processes" | python3 -c '
+import sys
+
+uid = sys.argv[1]
+for line in sys.stdin.read().splitlines()[1:]:
+    if line.split()[0] == uid:
+        raise SystemExit(1)
+' "$PACKAGE_UID" 2>/dev/null || return 2
+    [[ "$isolated" == '[]' ]] || return 2
+  done
+}
+
+remove_owned_remote_directory_quiescent() {
+  local remote_directory="$1"
+  local result
+  result="$(adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
+set -eu
+: voice-step-cleanup-broker
+directory=$1
+expected_parent=$2
+expected_directory=$3
+expected_nonce=$4
+expected_uid=$5
+parent=${directory%/*}
+name=${directory##*/}
+[ "$parent" = files/voice-real-room ] || exit 1
+[ -d "$parent" ] && [ ! -L "$parent" ] || exit 1
+cd -- "$parent" || exit 1
+exec 5< . || exit 1
+identity() {
+  descriptor=$1
+  mode=$(printf "%o" "0x$(stat -Lc %f "$descriptor")") || exit 1
+  printf "%s:%s:%s:%s:%s" \
+    "$(stat -Lc %d "$descriptor")" "$(stat -Lc %i "$descriptor")" "$mode" \
+    "$(stat -Lc %u "$descriptor")" "$(stat -Lc %g "$descriptor")"
+}
+[ "$(identity /proc/self/fd/5)" = "$expected_parent" ] || exit 1
+[ -d "$name" ] && [ ! -L "$name" ] || exit 1
+[ "$(identity "$name")" = "$expected_directory" ] || exit 1
+cd -- "$name" || exit 1
+exec 4< . || exit 1
+[ "$(identity /proc/self/fd/4)" = "$expected_directory" ] || exit 1
+[ "$(stat -Lc %u /proc/self/fd/4)" = "$expected_uid" ] || exit 1
+[ -f .voice-step-owner ] && [ ! -L .voice-step-owner ] || exit 1
+exec 3< .voice-step-owner || exit 1
+[ "$(stat -Lc %a /proc/self/fd/3)" = 600 ] && \
+  [ "$(stat -Lc %h /proc/self/fd/3)" = 1 ] && \
+  [ "$(stat -Lc %u /proc/self/fd/3)" = "$expected_uid" ] || exit 1
+[ "$(awk "END { print NR }" /proc/self/fd/3)" = 2 ] || exit 1
+owner_hash=$(sed -n "1p" /proc/self/fd/3) || exit 1
+marker_nonce=$(sed -n "2p" /proc/self/fd/3) || exit 1
+[ "${#owner_hash}" = 71 ] || exit 1
+case "$owner_hash" in sha256:*) ;; *) exit 1 ;; esac
+[ "$marker_nonce" = "$expected_nonce" ] || exit 1
+exec 3<&-
+for entry in .[!.]* ..?* *; do
+  [ -e "$entry" ] || [ -L "$entry" ] || continue
+  case "$entry" in .voice-step-owner|*.pcm) ;; *) exit 1 ;; esac
+  [ -f "$entry" ] && [ ! -L "$entry" ] && \
+    [ "$(stat -Lc %a "$entry")" = 600 ] && \
+    [ "$(stat -Lc %h "$entry")" = 1 ] && \
+    [ "$(stat -Lc %u "$entry")" = "$expected_uid" ] || exit 1
+  rm -f -- "$entry" || exit 1
+done
+cd /proc/self/fd/5 || exit 1
+[ "$(identity /proc/self/fd/5)" = "$expected_parent" ] || exit 1
+[ "$(identity "$name" 2>/dev/null || :)" = "$expected_directory" ] || exit 1
+rmdir -- "$name" || exit 1
+[ ! -e "$name" ] && [ ! -L "$name" ] || exit 1
+[ "$(stat -Lc %h /proc/self/fd/4)" = 0 ] || exit 1
+exec 4<&-
+exec 5<&-
+printf removed
+' sh "$remote_directory" "$FIXTURE_PARENT_IDENTITY" "$FIXTURE_DIRECTORY_IDENTITY" \
+    "$FIXTURE_OWNERSHIP_NONCE" "$PACKAGE_UID" </dev/null)" || return 1
+  [[ "$result" == removed ]] || return 2
+}
+
+restore_force_stopped_package() {
+  local output
+  local data
+  local status_snapshot
+  local -a status=()
+  output="$(adb_read shell am broadcast --user "$ANDROID_USER_ID" \
+    --include-stopped-packages -n "$PACKAGE/$CONTROL_RECEIVER" \
+    -a "$CONTROL_ACTION_PREFIX.STATUS" 2>/dev/null)" || return 1
+  data="$(parse_ordered_broadcast_output "$output")" || return 2
+  status_snapshot="$(parse_status_data "$data")" || return 2
+  mapfile -t status <<< "$status_snapshot"
+  [[ "${#status[@]}" == 7 && "${status[0]}" == idle && "${status[1]}" == none &&
+     "${status[2]}" == none && "${status[3]}" == none && "${status[4]}" == 0 &&
+     "${status[5]}" == none && "${status[6]}" == true ]] || return 2
+  read_package_stopped_state false || return 2
+  PACKAGE_FORCE_STOP_OWNED=0
+}
+
 read_source_metadata() {
   local source_path="$1"
   local metadata
-  metadata="$(adb_read shell run-as "$PACKAGE" sh -c '
+  metadata="$(adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
 : voice-step-source-metadata
 [ -f "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %a "$1")" = 600 ] || exit 1
 LC_ALL=C stat -c "%F|%h|%u|%a|%d|%i|%s|%y|%z" "$1"
@@ -799,10 +1219,10 @@ read_stable_artifact() {
   register_temp_file "$second"
   chmod 600 -- "$first" "$second" 2>/dev/null || die 'capture temporary storage failed'
   metadata_before="$(read_source_metadata "$source_path")"
-  adb_read exec-out run-as "$PACKAGE" cat "$source_path" >"$first" 2>/dev/null ||
+  adb_read exec-out run-as "$PACKAGE" --user "$ANDROID_USER_ID" cat "$source_path" >"$first" 2>/dev/null ||
     die 'artifact read failed'
   metadata_between="$(read_source_metadata "$source_path")"
-  adb_read exec-out run-as "$PACKAGE" cat "$source_path" >"$second" 2>/dev/null ||
+  adb_read exec-out run-as "$PACKAGE" --user "$ANDROID_USER_ID" cat "$source_path" >"$second" 2>/dev/null ||
     die 'artifact read failed'
   metadata_after="$(read_source_metadata "$source_path")"
   [[ "$metadata_before" == "$metadata_between" && "$metadata_before" == "$metadata_after" ]] ||
@@ -907,21 +1327,42 @@ publish_state() {
     die 'state publication failed'
   register_temp_file "$STATE_PUBLICATION_TEMP"
   chmod 600 -- "$STATE_PUBLICATION_TEMP" 2>/dev/null || die 'state publication failed'
-  if ! python3 - "$STATE_PUBLICATION_TEMP" "$SERIAL" "$PACKAGE" "$CONVERSATION_ID" \
-    "$RUN_HASH" "$COMPARISON_HASH" "$FIXTURE_TOKEN" "$TRACE_ID" 2>/dev/null <<'PY'
+  if ! python3 - "$STATE_PUBLICATION_TEMP" "$SERIAL" "$PACKAGE" "$ANDROID_USER_ID" \
+    "$PACKAGE_UID" "$CONVERSATION_ID" "$RUN_HASH" "$COMPARISON_HASH" "$FIXTURE_TOKEN" \
+    "$FIXTURE_PARENT_IDENTITY" "$FIXTURE_DIRECTORY_IDENTITY" "$FIXTURE_OWNERSHIP_NONCE" \
+    "$TRACE_ID" 2>/dev/null <<'PY'
 import json
 import os
 import sys
 
-path, serial, package, conversation, run_hash, comparison_hash, token, trace = sys.argv[1:]
+(
+    path,
+    serial,
+    package,
+    android_user_id,
+    package_uid,
+    conversation,
+    run_hash,
+    comparison_hash,
+    token,
+    parent_identity,
+    directory_identity,
+    ownership_nonce,
+    trace,
+) = sys.argv[1:]
 payload = {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "serial": serial,
     "package": package,
+    "androidUserId": int(android_user_id),
+    "packageUid": int(package_uid),
     "conversationId": conversation,
     "runHash": run_hash,
     "comparisonHash": comparison_hash,
     "fixtureToken": token,
+    "fixtureParentIdentity": parent_identity,
+    "fixtureDirectoryIdentity": directory_identity,
+    "fixtureOwnershipNonce": ownership_nonce,
     "traceId": trace,
     "transport": "livekit_experimental",
 }

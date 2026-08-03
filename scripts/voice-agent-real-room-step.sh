@@ -30,11 +30,16 @@ source "$REAL_ROOM_LIBRARY"
 
 SERIAL=''
 PACKAGE=''
+ANDROID_USER_ID=''
+PACKAGE_UID=''
 RUN_HASH=''
 COMPARISON_HASH=''
 CONVERSATION_ID=''
 FIXTURE_TOKEN=''
 TRACE_ID=''
+FIXTURE_PARENT_IDENTITY=''
+FIXTURE_DIRECTORY_IDENTITY=''
+FIXTURE_OWNERSHIP_NONCE=''
 REMOTE_FIXTURE_DIR=''
 REMOTE_OWNER_HASH=''
 LOCAL_TEMP_DIR=''
@@ -47,6 +52,8 @@ START_FIXTURE_DIR_CREATED=0
 START_COMMITTED=0
 STATE_PUBLICATION_CRITICAL=0
 PUBLICATION_SIGNAL=0
+HOST_LOCK_FD=''
+PACKAGE_FORCE_STOP_OWNED=0
 declare -a OWNED_TEMP_FILES=()
 declare -A PARSED=()
 
@@ -88,6 +95,9 @@ on_exit() {
   if (( status != 0 && START_CLEANUP_NEEDED == 1 )); then
     raw_start_cleanup || cleanup_status=1
   fi
+  if (( PACKAGE_FORCE_STOP_OWNED == 1 )); then
+    restore_force_stopped_package || cleanup_status=1
+  fi
   cleanup_local_temps || cleanup_status=1
   if (( status == 0 && cleanup_status != 0 )); then
     status=1
@@ -125,7 +135,7 @@ read_status_artifacts() {
   automation_path="$(app_artifact_path "$APP_ARTIFACT_ROOT/${RUN_HASH#sha256:}" automation-events.jsonl)"
   private_path="$(app_artifact_path "$APP_ARTIFACT_ROOT/$TRACE_ID" voice-experience-private.ndjson)"
   sanitized_path="$(app_artifact_path "$APP_ARTIFACT_ROOT/$TRACE_ID" voice-experience-events.ndjson)"
-  presence="$(adb_read shell run-as "$PACKAGE" sh -c '
+  presence="$(adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
 : voice-step-artifact-presence
 for path do
   [ -f "$path" ] && [ ! -L "$path" ] && [ -s "$path" ] || exit 1
@@ -141,7 +151,7 @@ done
   chmod 600 "$sanitized_temp"
   register_temp_file "$sanitized_temp"
   register_temp_file "$counts_temp"
-  adb_read exec-out run-as "$PACKAGE" cat "$sanitized_path" \
+  adb_read exec-out run-as "$PACKAGE" --user "$ANDROID_USER_ID" cat "$sanitized_path" \
     >"$sanitized_temp" 2>/dev/null || die 'sanitized artifact read failed'
   if ! python3 - "$sanitized_temp" >"$counts_temp" 2>/dev/null <<'PY'
 import json
@@ -349,6 +359,15 @@ run_finalize() {
   local status_snapshot
   local -a status=()
   validate_runtime
+  adb_read shell am start-foreground-service \
+    -n "$PACKAGE/$SERVICE_CLASS" \
+    -a "$CALL_END_BOUND_ACTION" \
+    --es conversationId "$CONVERSATION_ID" \
+    --es transport "$TRANSPORT_EXPECTED" \
+    --es run_hash "$RUN_HASH" \
+    --es comparison_hash "$COMPARISON_HASH" \
+    </dev/null >/dev/null 2>&1 || die 'bound call end failed'
+  wait_for_durable_call_stopped
   reply="$(broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.FINALIZE_BOUND" \
     --es run_hash "$RUN_HASH" \
     --es comparison_hash "$COMPARISON_HASH" \
@@ -359,6 +378,8 @@ run_finalize() {
   [[ "${status[0]}" == finalized && "${status[1]}" == "$RUN_HASH" &&
      "${status[2]}" == "$COMPARISON_HASH" &&
      "${status[3]}" == "$TRANSPORT_EXPECTED" ]] || die 'finalized status mismatch'
+  read_automation_terminal_snapshot finalized || die 'invalid durable final evidence'
+  cleanup_local_temps || die 'cleanup failed'
   printf '%s\n' \
     'voice-step.status=ok' \
     'voice-step.operation=finalize' \
@@ -405,34 +426,6 @@ run_capture() {
     'voice-step.artifacts=published'
 }
 
-try_read_end_status() {
-  local output
-  local completed
-  local result_code
-  local raw_data
-  if ! output="$(adb_read shell am broadcast --user 0 \
-      -n "$PACKAGE/$CONTROL_RECEIVER" -a "$CONTROL_ACTION_PREFIX.STATUS" 2>/dev/null)"; then
-    return 10
-  fi
-  completed="$(printf '%s\n' "$output" | awk '/^Broadcast completed:/ { count++; line=$0 } END { if (count == 1) print line }')"
-  if [[ ! "$completed" =~ ^Broadcast\ completed:\ result=([-0-9]+),\ data=\"(.*)\"$ ]]; then
-    return 20
-  fi
-  result_code="${BASH_REMATCH[1]}"
-  raw_data="${BASH_REMATCH[2]}"
-  [[ "$result_code" == 0 ]] || return 20
-  parse_status_data "$(decode_broadcast_data "$raw_data")" || return 20
-}
-
-status_is_bound_finalized() {
-  local snapshot="$1"
-  local -a status=()
-  mapfile -t status <<< "$snapshot"
-  [[ "${#status[@]}" == 7 && "${status[0]}" == finalized &&
-     "${status[1]}" == "$RUN_HASH" && "${status[2]}" == "$COMPARISON_HASH" &&
-     "${status[3]}" == "$TRANSPORT_EXPECTED" ]]
-}
-
 probe_device_reachability() {
   local result
   if ! result="$(adb_read shell echo voice-step-reachable </dev/null)"; then
@@ -441,32 +434,11 @@ probe_device_reachability() {
   [[ "$result" == voice-step-reachable ]] || return 20
 }
 
-complete_reachable_product_failure() {
-  local destination="$1"
-  local call_stopped="$2"
-  local fixtures_removed="$3"
-  local status_readback
-  local status_snapshot=''
-  local automation_finalized=false
-  if status_snapshot="$(try_read_end_status)"; then
-    status_readback=0
-  else
-    status_readback=$?
-  fi
-  case "$status_readback" in
-    0)
-      status_is_bound_finalized "$status_snapshot" && automation_finalized=true
-      complete_end_outcome "$destination" product_failure "$call_stopped" "$fixtures_removed" "$automation_finalized"
-      ;;
-    10) complete_end_outcome "$destination" product_failure "$call_stopped" "$fixtures_removed" false ;;
-    *) die 'ambiguous cleanup readback' ;;
-  esac
-}
-
 complete_failed_end_step() {
   local destination="$1"
   local call_stopped="$2"
   local fixtures_removed="$3"
+  local automation_finalized="$4"
   local reachability
   if probe_device_reachability; then
     reachability=0
@@ -474,54 +446,19 @@ complete_failed_end_step() {
     reachability=$?
   fi
   case "$reachability" in
-    0) complete_reachable_product_failure "$destination" "$call_stopped" "$fixtures_removed" ;;
-    10) complete_end_outcome "$destination" infrastructure_interruption "$call_stopped" "$fixtures_removed" false ;;
+    0)
+      if (( PACKAGE_FORCE_STOP_OWNED == 1 )); then
+        restore_force_stopped_package || die 'package restoration failed'
+      fi
+      complete_end_outcome "$destination" product_failure "$call_stopped" \
+        "$fixtures_removed" "$automation_finalized"
+      ;;
+    10)
+      complete_end_outcome "$destination" infrastructure_interruption \
+        "$call_stopped" "$fixtures_removed" "$automation_finalized"
+      ;;
     *) die 'ambiguous cleanup readback' ;;
   esac
-}
-
-probe_end_service() {
-  local result
-  if ! result="$(adb_read shell sh -c '
-: voice-step-service-status
-dump=$(dumpsys activity services "$2") || exit 1
-count=$(printf "%s\n" "$dump" | grep -F -c "$1")
-case "$count" in
-  0) printf stopped ;;
-  1) printf active ;;
-  *) printf invalid ;;
-esac
-' sh "$PACKAGE/$SERVICE_CLASS" "$PACKAGE" 2>/dev/null)"; then
-    return 10
-  fi
-  case "$result" in
-    active|stopped)
-      END_SERVICE_STATE="$result"
-      return 0
-      ;;
-    *) return 20 ;;
-  esac
-}
-
-wait_end_service() {
-  local attempt=0
-  local started=$SECONDS
-  local probe_status
-  while (( attempt < ${VOICE_STEP_MAX_WAIT_ATTEMPTS:-120} )); do
-    attempt=$((attempt + 1))
-    if probe_end_service; then
-      probe_status=0
-    else
-      probe_status=$?
-    fi
-    (( probe_status == 0 )) || return "$probe_status"
-    [[ "$END_SERVICE_STATE" == stopped ]] && return 0
-    if (( SECONDS - started >= ${VOICE_STEP_WAIT_TIMEOUT_SECONDS:-120} )); then
-      break
-    fi
-    sleep "${VOICE_STEP_POLL_SECONDS:-1}"
-  done
-  return 30
 }
 
 publish_end_record() {
@@ -559,86 +496,75 @@ complete_end_outcome() {
 
 run_end() {
   local cleanup_output="$1"
-  local wait_status
-  local status_readback
-  local removal_status
-  local status_snapshot=''
-  local automation_finalized=false
   local remote_fixture_dir
-  local remote_owner_hash
+  local automation_source
+  local baseline_temp
+  local post_cleanup_temp
+  local metadata_before
+  local metadata_after_baseline
+  local metadata_after_cleanup
+  local metadata_after_post_read
+  local quiescence_status
+  local cleanup_status
   validate_runtime
   remote_fixture_dir="files/voice-real-room/${RUN_HASH#sha256:}"
-  remote_owner_hash="$(compute_remote_owner_hash)"
-  if ! adb_read shell am start-foreground-service \
-    -n "$PACKAGE/$SERVICE_CLASS" \
-    -a "$CALL_END_BOUND_ACTION" \
-    --es conversationId "$CONVERSATION_ID" \
-    --es transport "$TRANSPORT_EXPECTED" \
-    --es run_hash "$RUN_HASH" \
-    --es comparison_hash "$COMPARISON_HASH" \
-    </dev/null >/dev/null 2>&1; then
-    complete_failed_end_step "$cleanup_output" false false
+  automation_source="$(app_artifact_path "$APP_ARTIFACT_ROOT/${RUN_HASH#sha256:}" automation-events.jsonl)"
+
+  read_automation_terminal_snapshot finalized || die 'invalid durable final evidence'
+  metadata_before="$(read_source_metadata "$automation_source")"
+  read_stable_artifact "$automation_source" "$cleanup_output" baseline_temp
+  metadata_after_baseline="$(read_source_metadata "$automation_source")"
+  [[ "$metadata_before" == "$metadata_after_baseline" ]] || die 'artifact source changed'
+
+  if ! adb_read shell cmd activity force-stop --user "$ANDROID_USER_ID" "$PACKAGE" \
+      </dev/null >/dev/null 2>&1; then
+    complete_failed_end_step "$cleanup_output" true false true
     return
   fi
-  if wait_end_service; then
-    wait_status=0
+  PACKAGE_FORCE_STOP_OWNED=1
+  read_package_stopped_state true || die 'ambiguous package stopped-state readback'
+  if prove_package_quiescence; then
+    quiescence_status=0
   else
-    wait_status=$?
+    quiescence_status=$?
   fi
-  case "$wait_status" in
-    10)
-      complete_failed_end_step "$cleanup_output" false false
+  case "$quiescence_status" in
+    0) ;;
+    1) complete_failed_end_step "$cleanup_output" true false true; return ;;
+    2)
+      restore_force_stopped_package || die 'package restoration failed'
+      complete_end_outcome "$cleanup_output" product_failure true false true
       return
       ;;
-    20)
-      die 'ambiguous cleanup readback'
-      ;;
-    30)
-      if status_snapshot="$(try_read_end_status)"; then
-        status_readback=0
-      else
-        status_readback=$?
-      fi
-      case "$status_readback" in
-        0)
-          status_is_bound_finalized "$status_snapshot" && automation_finalized=true
-          complete_end_outcome "$cleanup_output" product_failure false false "$automation_finalized"
-          ;;
-        10) complete_failed_end_step "$cleanup_output" false false ;;
-        *) die 'ambiguous cleanup readback' ;;
-      esac
+    *) die 'ambiguous package quiescence readback' ;;
+  esac
+
+  if remove_owned_remote_directory_quiescent "$remote_fixture_dir"; then
+    cleanup_status=0
+  else
+    cleanup_status=$?
+  fi
+  case "$cleanup_status" in
+    0) ;;
+    1)
+      complete_failed_end_step "$cleanup_output" true false true
       return
       ;;
-    0) ;;
-    *) die 'ambiguous cleanup readback' ;;
+    2) die 'ambiguous fixture cleanup readback' ;;
+    *) die 'ambiguous fixture cleanup readback' ;;
   esac
-  if remove_owned_remote_directory "$remote_fixture_dir" "$remote_owner_hash"; then
-    removal_status=0
-  else
-    removal_status=$?
-  fi
-  case "$removal_status" in
-    0) ;;
-    1) complete_failed_end_step "$cleanup_output" true false; return ;;
-    2) complete_reachable_product_failure "$cleanup_output" true false; return ;;
-    *) die 'ambiguous cleanup readback' ;;
-  esac
-  if status_snapshot="$(try_read_end_status)"; then
-    status_readback=0
-  else
-    status_readback=$?
-  fi
-  case "$status_readback" in
-    0)
-      if status_is_bound_finalized "$status_snapshot"; then
-        complete_end_outcome "$cleanup_output" complete true true true
-      else
-        complete_end_outcome "$cleanup_output" product_failure true true false
-      fi
-      ;;
-    10) complete_failed_end_step "$cleanup_output" true true ;;
-    *) die 'ambiguous cleanup readback' ;;
-  esac
+
+  metadata_after_cleanup="$(read_source_metadata "$automation_source")"
+  read_stable_artifact "$automation_source" "$cleanup_output" post_cleanup_temp
+  metadata_after_post_read="$(read_source_metadata "$automation_source")"
+  [[ "$metadata_before" == "$metadata_after_cleanup" &&
+     "$metadata_before" == "$metadata_after_post_read" ]] || die 'artifact source changed'
+  cmp -s -- "$baseline_temp" "$post_cleanup_temp" || die 'artifact source changed'
+  read_automation_terminal_snapshot finalized || die 'invalid durable final evidence'
+  read_package_stopped_state true || die 'ambiguous package stopped-state readback'
+
+  restore_force_stopped_package || die 'package restoration failed'
+  complete_end_outcome "$cleanup_output" complete true true true
 }
 
 wait_for_call_active() {
@@ -656,7 +582,7 @@ wait_for_call_active() {
   while (( attempt < ${VOICE_STEP_MAX_WAIT_ATTEMPTS:-120} )); do
     attempt=$((attempt + 1))
     : > "$events_file"
-    if adb_read exec-out run-as "$PACKAGE" cat "$events_path" \
+    if adb_read exec-out run-as "$PACKAGE" --user "$ANDROID_USER_ID" cat "$events_path" \
       >"$events_file" 2>/dev/null; then
       set +e
       python3 - "$events_file" "$RUN_HASH" "$COMPARISON_HASH" "$TRANSPORT_EXPECTED" 2>/dev/null <<'PY'
@@ -725,6 +651,7 @@ run_preflight() {
   local -a status=()
   validate_runtime
   ensure_device_and_package
+  resolve_package_identity
   verify_package_contract
   status_snapshot="$(read_status)"
   mapfile -t status <<< "$status_snapshot"
@@ -752,10 +679,12 @@ run_start() {
   local fixture_hash
   local remote_fixture_path
   validate_runtime
+  acquire_host_operation_lock
   snapshot_fixture "$fixture_path" fixture_snapshot fixture_size fixture_hash
   REMOTE_FIXTURE_DIR="files/voice-real-room/${RUN_HASH#sha256:}"
   remote_fixture_path="$REMOTE_FIXTURE_DIR/request-${fixture_hash#sha256:}.pcm"
   ensure_device_and_package
+  resolve_package_identity
   verify_package_contract
   status_snapshot="$(read_status)"
   mapfile -t status <<< "$status_snapshot"
@@ -821,14 +750,25 @@ run_with_decoded_state() {
   local -a state=()
   state_snapshot="$(decode_state "$state_path")"
   mapfile -t state <<< "$state_snapshot"
-  [[ "${#state[@]}" == 7 ]] || die 'invalid state'
+  [[ "${#state[@]}" == 12 ]] || die 'invalid state'
   local SERIAL="${state[0]}"
   local PACKAGE="${state[1]}"
-  local CONVERSATION_ID="${state[2]}"
-  local RUN_HASH="${state[3]}"
-  local COMPARISON_HASH="${state[4]}"
-  local FIXTURE_TOKEN="${state[5]}"
-  local TRACE_ID="${state[6]}"
+  local ANDROID_USER_ID="${state[2]}"
+  local PACKAGE_UID="${state[3]}"
+  local CONVERSATION_ID="${state[4]}"
+  local RUN_HASH="${state[5]}"
+  local COMPARISON_HASH="${state[6]}"
+  local FIXTURE_TOKEN="${state[7]}"
+  local FIXTURE_PARENT_IDENTITY="${state[8]}"
+  local FIXTURE_DIRECTORY_IDENTITY="${state[9]}"
+  local FIXTURE_OWNERSHIP_NONCE="${state[10]}"
+  local TRACE_ID="${state[11]}"
+  case "$requested_operation" in
+    inject|interrupt|status|finalize|capture|end)
+      validate_runtime
+      acquire_host_operation_lock
+      ;;
+  esac
   case "$requested_operation" in
     inject) run_inject "$@" ;;
     interrupt) run_interrupt "$@" ;;

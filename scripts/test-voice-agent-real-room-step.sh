@@ -24,9 +24,15 @@ HELPER_TEMP_ROOT="$TMP_DIR/helper-private-temp"
 mkdir "$HELPER_TEMP_ROOT"
 chmod 700 "$HELPER_TEMP_ROOT"
 TEST_COUNT=0
+ACTOR_PID=''
 declare -a LAST_PRIVATE_PATHS=()
 
 cleanup() {
+  if [[ -n "$ACTOR_PID" ]] && kill -0 "$ACTOR_PID" 2>/dev/null; then
+    kill -CONT "$ACTOR_PID" 2>/dev/null || true
+    kill -TERM "$ACTOR_PID" 2>/dev/null || true
+    wait "$ACTOR_PID" 2>/dev/null || true
+  fi
   rm -rf -- "$TMP_DIR"
 }
 trap cleanup EXIT HUP INT TERM
@@ -55,6 +61,9 @@ def record(path, argv):
 
 record(os.environ["FAKE_TIMEOUT_LOG"], sys.argv[1:])
 if os.environ.get("FAKE_TIMEOUT_EXIT") == "124":
+    raise SystemExit(124)
+exit_match = os.environ.get("FAKE_TIMEOUT_EXIT_MATCH")
+if exit_match and any(exit_match in argument for argument in sys.argv[1:]):
     raise SystemExit(124)
 if os.environ.get("FAKE_TIMEOUT_ENFORCE") == "1":
     executable = os.environ["REAL_TIMEOUT"]
@@ -106,6 +115,7 @@ cat > "$BIN_DIR/adb" <<'PY'
 import hashlib
 import json
 import os
+import shutil
 import signal
 import sys
 import time
@@ -116,6 +126,11 @@ CONTROL = "me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver"
 FIXTURE = "me.rerere.rikkahub.voiceagent.debug.VoiceCaptureFixtureDebugReceiver"
 SERVICE = "me.rerere.rikkahub.voiceagent.VoiceAgentCallService"
 STATE_PATH = Path(os.environ["FAKE_ADB_STATE"])
+ANDROID_USER_ID = 0
+PACKAGE_UID = 10123
+FIXTURE_PARENT_IDENTITY = "123:456:40700:10123:10123"
+FIXTURE_DIRECTORY_IDENTITY = "123:789:40700:10123:10123"
+FIXTURE_OWNERSHIP_NONCE = "0123456789abcdef0123456789abcdef"
 
 
 def record(path, argv):
@@ -138,8 +153,8 @@ def save_state(state):
 
 
 def complete(result, data):
-    escaped = data.replace("\\", "\\\\").replace("\r", "\\r").replace("\n", "\\n")
-    print(f'Broadcast completed: result={result}, data="{escaped}"')
+    suffix = " trailing-junk" if os.environ.get("FAKE_ADB_BROADCAST_TRAILING_JUNK") == "1" else ""
+    print(f'Broadcast completed: result={result}, data="{data}"{suffix}')
 
 
 def extras(arguments):
@@ -167,6 +182,41 @@ def owner_hash(state):
         state["comparison_hash"],
     ]
     return "sha256:" + hashlib.sha256("\0".join(values).encode()).hexdigest()
+
+
+def maybe_block(arguments):
+    needle = os.environ.get("FAKE_ADB_BLOCK_MATCH")
+    if not needle or not any(needle in value for value in arguments):
+        return
+    ready = os.environ.get("FAKE_ADB_BLOCK_READY")
+    release = os.environ.get("FAKE_ADB_BLOCK_RELEASE")
+    if not ready or not release:
+        raise SystemExit(97)
+    Path(ready).write_text("ready\n", encoding="utf-8")
+    deadline = time.monotonic() + 10
+    while not Path(release).exists():
+        if time.monotonic() >= deadline:
+            raise SystemExit(98)
+        time.sleep(0.01)
+
+
+def process_state(pid):
+    try:
+        for line in Path(f"/proc/{pid}/status").read_text(encoding="utf-8").splitlines():
+            if line.startswith("State:"):
+                return line.split()[1]
+    except (FileNotFoundError, ProcessLookupError):
+        return None
+    return None
+
+
+def wait_for_process_state(pid, expected):
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if process_state(pid) == expected:
+            return True
+        time.sleep(0.01)
+    return False
 
 
 def sanitized_events():
@@ -220,31 +270,69 @@ def sanitized_events():
     return "".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows)
 
 
+def automation_event(state, sequence, name, *, observed_transport=None, succeeded=None):
+    return {
+        "schemaVersion": 1,
+        "monotonicMs": sequence,
+        "wallClockMs": 1_800_000_000_000 + sequence,
+        "runHash": state["run_hash"],
+        "comparisonHash": state["comparison_hash"],
+        "requestedTransport": state["transport"],
+        "observedTransport": observed_transport,
+        "name": name,
+        "route": None,
+        "network": None,
+        "lifecycle": None,
+        "playbackEpoch": None,
+        "byteCount": None,
+        "rmsActive": None,
+        "audioWindowMicros": None,
+        "succeeded": succeeded,
+        "correlationKind": None,
+        "correlationHash": None,
+        "requestedModelHash": None,
+        "observedModelHash": None,
+        "voiceHash": None,
+        "instructionHash": None,
+        "directAccountConfigurationHash": None,
+        "conversationHash": None,
+        "captureSource": None,
+        "micBytes": None,
+        "fixtureBytes": None,
+    }
+
+
 def automation_events(state):
-    rows = [
-        {
-            "schemaVersion": 1,
-            "sequence": 1,
-            "name": "run_prepared",
-            "monotonicMs": 1,
-            "runHash": state["run_hash"],
-            "comparisonHash": state["comparison_hash"],
-            "requestedTransport": state["transport"],
-        }
-    ]
-    if state.get("call_active"):
+    rows = [automation_event(state, 1, "run_prepared")]
+    if state.get("call_active_recorded"):
         rows.append(
-            {
-                "schemaVersion": 1,
-                "sequence": 2,
-                "name": "call_active",
-                "monotonicMs": 2,
-                "runHash": state["run_hash"],
-                "comparisonHash": state["comparison_hash"],
-                "requestedTransport": state["transport"],
-                "observedTransport": state["transport"],
-            }
+            automation_event(
+                state,
+                2,
+                "call_active",
+                observed_transport=state["transport"],
+            )
         )
+    stop_visible_after = int(os.environ.get("FAKE_ADB_DURABLE_STOP_VISIBLE_AFTER", "0"))
+    stop_visible = state.get("automation_artifact_reads", 0) >= stop_visible_after
+    if state.get("call_stopped_recorded") and stop_visible:
+        rows.append(automation_event(state, 3, "call_stopped", succeeded=True))
+    if state.get("run_finalized_recorded"):
+        rows.append(automation_event(state, 4, "run_finalized"))
+    malformed = os.environ.get("FAKE_ADB_MALFORMED_DURABLE_ENDING")
+    if malformed == "stopped-false" and rows and rows[-1]["name"] in {"call_stopped", "run_finalized"}:
+        for row in rows:
+            if row["name"] == "call_stopped":
+                row["succeeded"] = False
+    elif malformed == "event-after-finalized" and any(row["name"] == "run_finalized" for row in rows):
+        rows.append(automation_event(state, 5, "network_observed", succeeded=True))
+    elif malformed == "binding-mismatch" and rows:
+        rows[-1]["comparisonHash"] = hash_value("c")
+    elif malformed == "missing-call-stopped":
+        rows = [row for row in rows if row["name"] != "call_stopped"]
+    elif malformed == "noncanonical-keys" and rows:
+        last = rows[-1]
+        rows[-1] = {"name": last["name"], **{key: value for key, value in last.items() if key != "name"}}
     return "".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows)
 
 
@@ -254,6 +342,8 @@ def artifact_content(path, state):
         return None
     if path.endswith("automation-events.jsonl"):
         content = automation_events(state).encode()
+        if os.environ.get("FAKE_ADB_POST_CLEANUP_ARTIFACT_CHANGE") == "1" and state.get("cleanup_broker_completed"):
+            content += b'{"changed_after_cleanup":true}\n'
         if os.environ.get("FAKE_ADB_EMPTY_ARTIFACT") == "automation-events.jsonl":
             return b""
         if os.environ.get("FAKE_ADB_INCOMPLETE_ARTIFACT") == "automation-events.jsonl":
@@ -288,6 +378,7 @@ record(os.environ["FAKE_ADB_LOG"], argv)
 if os.environ.get("FAKE_ADB_BLOCK") == "1":
     time.sleep(10)
 state = load_state()
+maybe_block(argv)
 
 if argv == ["devices", "-l"]:
     print("List of devices attached")
@@ -338,6 +429,75 @@ if command == ["shell", "getprop", "ro.kernel.qemu"]:
 if command == ["shell", "getprop", "ro.hardware"]:
     print("ranchu" if os.environ.get("FAKE_ADB_EMULATOR") == "1" else "physical-hardware")
     raise SystemExit(0)
+if command == ["shell", "cmd", "activity", "get-current-user"]:
+    if os.environ.get("FAKE_ADB_MALFORMED_ANDROID_USER") == "1":
+        print("UserInfo{0:Owner:13}")
+    else:
+        print(str(state["android_user_id"]))
+    raise SystemExit(0)
+if command == [
+    "shell", "cmd", "package", "list", "packages", "--user",
+    str(state["android_user_id"]), "-U", "--show-stopped", EXPECTED_PACKAGE,
+]:
+    if os.environ.get("FAKE_ADB_MALFORMED_STOPPED_ROW") == "1":
+        print(f"package:{EXPECTED_PACKAGE} uid:{state['package_uid']}")
+    else:
+        stopped = "true" if state.get("package_stopped") else "false"
+        print(f"package:{EXPECTED_PACKAGE} stopped={stopped} uid:{state['package_uid']}")
+    raise SystemExit(0)
+if command == [
+    "shell", "cmd", "package", "list", "packages", "--user",
+    str(state["android_user_id"]), "--uid", str(state["package_uid"]),
+]:
+    print(f"package:{EXPECTED_PACKAGE} uid:{state['package_uid']}")
+    if os.environ.get("FAKE_ADB_SHARED_UID") == "1":
+        print(f"package:com.example.shared uid:{state['package_uid']}")
+    raise SystemExit(0)
+if command == ["exec-out", "ps", "-A", "-n", "-o", "UID,PID,PPID,STAT,NAME"]:
+    state["process_readbacks"] = state.get("process_readbacks", 0) + 1
+    save_state(state)
+    malformed = os.environ.get("FAKE_ADB_MALFORMED_QUIESCENCE")
+    if malformed == "ps-header":
+        print("PID UID NAME")
+    else:
+        print("UID PID PPID STAT NAME")
+        if malformed == "ps-row":
+            print(f"{state['package_uid']} not-a-pid 1 S bad")
+        elif os.environ.get("FAKE_ADB_PACKAGE_PROCESS") == "1":
+            print(f"{state['package_uid']} 222 1 S {EXPECTED_PACKAGE}")
+        elif os.environ.get("FAKE_ADB_UNSTABLE_QUIESCENCE") == "1" and state["process_readbacks"] % 2 == 0:
+            print(f"{state['package_uid']} 223 1 S {EXPECTED_PACKAGE}:late")
+    raise SystemExit(0)
+if command == [
+    "shell", "cmd", "activity", "get-isolated-pids", str(state["package_uid"]),
+]:
+    state["isolated_readbacks"] = state.get("isolated_readbacks", 0) + 1
+    save_state(state)
+    if os.environ.get("FAKE_ADB_MALFORMED_QUIESCENCE") == "isolated":
+        print("none")
+    elif os.environ.get("FAKE_ADB_ISOLATED_PROCESS") == "1":
+        print("[321]")
+    else:
+        print("[]")
+    raise SystemExit(0)
+if command == [
+    "shell", "cmd", "activity", "force-stop", "--user",
+    str(state["android_user_id"]), EXPECTED_PACKAGE,
+]:
+    if os.environ.get("FAKE_ADB_FAIL_FORCE_STOP") == "1":
+        raise SystemExit(1)
+    state["package_stopped"] = True
+    state["call_active"] = False
+    state["force_stop_observed"] = True
+    actor_pid = os.environ.get("FAKE_ADB_ACTOR_PID")
+    if actor_pid:
+        pid = int(actor_pid)
+        os.kill(pid, signal.SIGSTOP)
+        if not wait_for_process_state(pid, "T"):
+            raise SystemExit(1)
+        state["actor_sigstop_observed"] = True
+    save_state(state)
+    raise SystemExit(0)
 if command == ["shell", "pm", "path", EXPECTED_PACKAGE]:
     print(f"package:/data/app/{EXPECTED_PACKAGE}/base.apk")
     raise SystemExit(0)
@@ -349,12 +509,17 @@ if command == ["shell", "dumpsys", "package", EXPECTED_PACKAGE]:
     print(f"  {EXPECTED_PACKAGE}/{CONTROL}")
     print(f"  {EXPECTED_PACKAGE}/{FIXTURE}")
     raise SystemExit(0)
-if command[:3] == ["shell", "run-as", EXPECTED_PACKAGE]:
+run_as_tail = None
+if command[:5] == ["shell", "run-as", EXPECTED_PACKAGE, "--user", str(state["android_user_id"])]:
+    run_as_tail = command[5:]
+elif command[:3] == ["shell", "run-as", EXPECTED_PACKAGE]:
+    run_as_tail = command[3:]
+if run_as_tail is not None:
     if os.environ.get("FAKE_ADB_NO_RUN_AS") == "1":
         raise SystemExit(1)
-    tail = command[3:]
+    tail = run_as_tail
     if tail == ["id"]:
-        print("uid=12345(u0_a123) gid=12345(u0_a123)")
+        print(f"uid={state['package_uid']}(u0_a123) gid={state['package_uid']}(u0_a123)")
         raise SystemExit(0)
     if tail and tail[0] == "mkdir":
         raise SystemExit(0)
@@ -372,6 +537,9 @@ if command[:3] == ["shell", "run-as", EXPECTED_PACKAGE]:
                 raise SystemExit(1)
             state["remote_directory"] = remote_dir
             state["owner_hash"] = ownership
+            state["fixture_parent_identity"] = FIXTURE_PARENT_IDENTITY
+            state["fixture_directory_identity"] = FIXTURE_DIRECTORY_IDENTITY
+            state["fixture_ownership_nonce"] = FIXTURE_OWNERSHIP_NONCE
             if os.environ.get("FAKE_ADB_SUBSTITUTE_RUN_DIRECTORY_BEFORE_CREATE_ROLLBACK") == "1":
                 state["moved_remote_directory"] = remote_dir + ".moved"
                 cleanup_markers = (
@@ -395,7 +563,12 @@ if command[:3] == ["shell", "run-as", EXPECTED_PACKAGE]:
                 save_state(state)
                 raise SystemExit(1)
             save_state(state)
-            print("created")
+            print("\n".join([
+                "created",
+                f"parent_identity={FIXTURE_PARENT_IDENTITY}",
+                f"directory_identity={FIXTURE_DIRECTORY_IDENTITY}",
+                f"ownership_nonce={FIXTURE_OWNERSHIP_NONCE}",
+            ]))
             raise SystemExit(0)
         if "voice-step-stage-owned-fixture" in script:
             remote_dir, remote_path, ownership = tail[-3:]
@@ -421,6 +594,75 @@ if command[:3] == ["shell", "run-as", EXPECTED_PACKAGE]:
             }
             save_state(state)
             print(f'{len(content)}\nsha256:{hashlib.sha256(content).hexdigest()}')
+            raise SystemExit(0)
+        if "voice-step-cleanup-broker" in script:
+            expected = [
+                "files/voice-real-room/" + "a" * 64,
+                state["fixture_parent_identity"],
+                state["fixture_directory_identity"],
+                state["fixture_ownership_nonce"],
+                str(state["package_uid"]),
+            ]
+            if tail[-5:] != expected:
+                state["cleanup_receipt_rejected"] = True
+                save_state(state)
+                raise SystemExit(1)
+            if (
+                not state.get("package_stopped")
+                or state.get("process_readbacks", 0) < 2
+                or state.get("isolated_readbacks", 0) < 2
+            ):
+                state["cleanup_before_quiescence_rejected"] = True
+                save_state(state)
+                raise SystemExit(1)
+            if os.environ.get("FAKE_ADB_FAIL_CLEANUP_BROKER") == "1":
+                raise SystemExit(1)
+            actor_trigger = os.environ.get("FAKE_ADB_ACTOR_TRIGGER")
+            actor_result = os.environ.get("FAKE_ADB_ACTOR_RESULT")
+            if actor_trigger:
+                Path(actor_trigger).write_text("attempt\n", encoding="utf-8")
+                time.sleep(0.1)
+                if actor_result and Path(actor_result).exists():
+                    state["actor_entered_cleanup_boundary"] = True
+                    save_state(state)
+                    raise SystemExit(1)
+            host_directory = os.environ.get("FAKE_REMOTE_DIRECTORY_PATH")
+            if host_directory:
+                directory = Path(host_directory)
+                parent = Path(os.environ["FAKE_REMOTE_PARENT_PATH"])
+                if directory.parent != parent or directory.is_symlink() or not directory.is_dir():
+                    raise SystemExit(1)
+                marker = directory / ".voice-step-owner"
+                if marker.is_symlink() or not marker.is_file():
+                    raise SystemExit(1)
+                if marker.read_text(encoding="utf-8") != state["fixture_ownership_nonce"] + "\n":
+                    raise SystemExit(1)
+                descriptor = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+                try:
+                    for entry in list(directory.iterdir()):
+                        if entry.is_dir() and not entry.is_symlink():
+                            shutil.rmtree(entry)
+                        else:
+                            entry.unlink()
+                    directory.rmdir()
+                    if directory.exists() or directory.is_symlink():
+                        raise SystemExit(1)
+                    link_count = os.fstat(descriptor).st_nlink
+                    if link_count != 0:
+                        raise SystemExit(1)
+                    state["cleanup_inode_link_count"] = link_count
+                finally:
+                    os.close(descriptor)
+            if os.environ.get("FAKE_ADB_RETAIN_FIXTURE_DIR") == "1":
+                print("retained")
+                raise SystemExit(0)
+            state["remote_directory"] = None
+            state["owner_hash"] = None
+            state["remote_files"] = {}
+            state["fixtures_removed"] = True
+            state["cleanup_broker_completed"] = True
+            save_state(state)
+            print("removed")
             raise SystemExit(0)
         if "voice-step-remove-owned-directory" in script:
             remote_dir, ownership = tail[-2:]
@@ -493,6 +735,41 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
         print("uncontrolled malformed receiver output")
         raise SystemExit(0)
     if action.endswith(".STATUS"):
+        restoring = "--include-stopped-packages" in command
+        if restoring:
+            expected = [
+                "shell", "am", "broadcast", "--user", str(state["android_user_id"]),
+                "--include-stopped-packages", "-n", f"{EXPECTED_PACKAGE}/{CONTROL}",
+                "-a", f"me.rerere.rikkahub.voiceagent.automation.STATUS",
+            ]
+            if command != expected or not state.get("package_stopped"):
+                raise SystemExit(1)
+            if os.environ.get("FAKE_ADB_FAIL_RESTORATION") == "1":
+                raise SystemExit(1)
+            actor_pid = os.environ.get("FAKE_ADB_ACTOR_PID")
+            if actor_pid:
+                os.kill(int(actor_pid), signal.SIGCONT)
+                state["actor_sigcont_observed"] = True
+            state["package_stopped"] = False
+            state["automation_state"] = "idle"
+            state["restoration_count"] = state.get("restoration_count", 0) + 1
+            save_state(state)
+            malformed = os.environ.get("FAKE_ADB_MALFORMED_RESTORATION")
+            if malformed == "duplicate":
+                complete(0, "status=ok\naction=status\nrun_state=idle\nrun_hash=none\ncomparison_hash=none\nrequested_transport=none\nevent_count=0\nnetwork=none\nvalidated=true")
+            data = "\n".join([
+                "status=ok",
+                "action=status",
+                "run_state=finalized" if malformed == "wrong-state" else "run_state=idle",
+                "run_hash=none",
+                "comparison_hash=none",
+                "requested_transport=none",
+                "event_count=0",
+                "network=none",
+                "validated=true",
+            ])
+            complete(0, data)
+            raise SystemExit(0)
         if os.environ.get("FAKE_ADB_FAIL_STATUS") == "1":
             raise SystemExit(1)
         status_destination = os.environ.get("FAKE_ADB_CREATE_DESTINATION_ON_STATUS")
@@ -543,6 +820,7 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
             complete(1, "status=error\nerror=invalid_state")
             raise SystemExit(0)
         state["automation_state"] = "finalized"
+        state["run_finalized_recorded"] = True
         save_state(state)
         data = "status=ok\naction=finalize_bound"
     elif action.endswith(".FINALIZE"):
@@ -574,6 +852,7 @@ if command[:3] == ["shell", "am", "start-foreground-service"]:
         raise SystemExit(1)
     if action.endswith(".START"):
         state["call_active"] = True
+        state["call_active_recorded"] = True
         state["trace_id"] = "trace-new"
         state["conversation_id"] = values.get("conversationId", state["conversation_id"])
     elif action.endswith(".END_BOUND"):
@@ -585,6 +864,7 @@ if command[:3] == ["shell", "am", "start-foreground-service"]:
         )
         if matches and os.environ.get("FAKE_ADB_SERVICE_STAYS_ACTIVE") != "1":
             state["call_active"] = False
+            state["call_stopped_recorded"] = True
     elif action.endswith(".END") and os.environ.get("FAKE_ADB_SERVICE_STAYS_ACTIVE") != "1":
         state["call_active"] = False
     save_state(state)
@@ -601,8 +881,13 @@ if command == ["shell", "dumpsys", "activity", "services", EXPECTED_PACKAGE]:
         print("ACTIVITY MANAGER SERVICES (dumpsys activity services)")
     raise SystemExit(0)
 
-if command[:4] == ["exec-out", "run-as", EXPECTED_PACKAGE, "cat"]:
-    remote_path = command[4]
+exec_out_run_as_tail = None
+if command[:5] == ["exec-out", "run-as", EXPECTED_PACKAGE, "--user", str(state["android_user_id"])]:
+    exec_out_run_as_tail = command[5:]
+elif command[:3] == ["exec-out", "run-as", EXPECTED_PACKAGE]:
+    exec_out_run_as_tail = command[3:]
+if exec_out_run_as_tail is not None and exec_out_run_as_tail[:1] == ["cat"]:
+    remote_path = exec_out_run_as_tail[1]
     if remote_path.endswith("latest-trace-id.txt"):
         if (
             os.environ.get("FAKE_ADB_SIGNAL_ON_TRACE") == "1"
@@ -620,19 +905,22 @@ if command[:4] == ["exec-out", "run-as", EXPECTED_PACKAGE, "cat"]:
             save_state(state)
         print(state.get("trace_id", "trace-old"))
         raise SystemExit(0)
+    state["artifact_reads"] = state.get("artifact_reads", 0) + 1
+    artifact_read = state["artifact_reads"]
+    if remote_path.endswith("automation-events.jsonl"):
+        state["automation_artifact_reads"] = state.get("automation_artifact_reads", 0) + 1
+    save_state(state)
     content = artifact_content(remote_path, state)
     if content is None:
         raise SystemExit(1)
-    state["artifact_reads"] = state.get("artifact_reads", 0) + 1
-    artifact_read = state["artifact_reads"]
     destination = os.environ.get("FAKE_ADB_CREATE_CAPTURE_DESTINATION")
     create_on_read = int(os.environ.get("FAKE_ADB_CREATE_CAPTURE_ON_READ", "0"))
     if destination and artifact_read == create_on_read:
         Path(destination).write_text("raced", encoding="utf-8")
     signal_on_read = int(os.environ.get("FAKE_ADB_SIGNAL_ON_ARTIFACT_READ", "0"))
-    save_state(state)
     if signal_on_read and artifact_read == signal_on_read:
-        os.kill(os.getppid(), signal.SIGTERM)
+        signal_name = os.environ.get("FAKE_ADB_ARTIFACT_SIGNAL", "TERM")
+        os.kill(os.getppid(), getattr(signal, "SIG" + signal_name))
         raise SystemExit(143)
     if os.environ.get("FAKE_ADB_ARTIFACT_CHANGES") == "1":
         if artifact_read % 2 == 0:
@@ -660,17 +948,23 @@ reset_fake() {
   : > "$TIMEOUT_LOG"
   : > "$LN_LOG"
   cat > "$FAKE_STATE" <<'JSON'
-{"serial":"DEVICE_SECRET_123","conversation_id":"CONVERSATION_SECRET_123","automation_state":"idle","run_hash":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","comparison_hash":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","transport":"livekit_experimental","fixture_token":"fixture-1","trace_id":"trace-old","call_active":false,"event_count":17,"remote_directory":null,"owner_hash":null,"remote_files":{}}
+{"serial":"DEVICE_SECRET_123","android_user_id":0,"package_uid":10123,"package_stopped":false,"conversation_id":"CONVERSATION_SECRET_123","automation_state":"idle","run_hash":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","comparison_hash":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","transport":"livekit_experimental","fixture_token":"fixture-1","trace_id":"trace-old","call_active":false,"call_active_recorded":false,"call_stopped_recorded":false,"run_finalized_recorded":false,"event_count":17,"remote_directory":null,"owner_hash":null,"fixture_parent_identity":"123:456:40700:10123:10123","fixture_directory_identity":"123:789:40700:10123:10123","fixture_ownership_nonce":"0123456789abcdef0123456789abcdef","remote_files":{}}
 JSON
   chmod 600 "$FAKE_STATE"
   unset FAKE_ADB_TWO_DEVICES FAKE_ADB_EMULATOR FAKE_ADB_NO_RUN_AS FAKE_TIMEOUT_EXIT
+  unset FAKE_TIMEOUT_EXIT_MATCH FAKE_ADB_MALFORMED_ANDROID_USER
+  unset FAKE_ADB_MALFORMED_STOPPED_ROW FAKE_ADB_SHARED_UID
+  unset FAKE_ADB_MALFORMED_QUIESCENCE FAKE_ADB_PACKAGE_PROCESS
+  unset FAKE_ADB_ISOLATED_PROCESS FAKE_ADB_UNSTABLE_QUIESCENCE
+  unset FAKE_ADB_FAIL_FORCE_STOP FAKE_ADB_FAIL_CLEANUP_BROKER
   unset FAKE_ADB_MALFORMED_BROADCAST FAKE_ADB_SIGNAL_ON_TRACE
   unset FAKE_ADB_CREATE_DESTINATION_ON_TRACE FAKE_ADB_STAGE_REJECT
   unset FAKE_ADB_TRIGGER_REJECT FAKE_ADB_SERVICE_STAYS_ACTIVE
   unset FAKE_ADB_ARTIFACT_CHANGES FAKE_ADB_MISSING_ARTIFACT FAKE_ADB_BAD_SANITIZED
   unset FAKE_ADB_EMPTY_ARTIFACT FAKE_ADB_INCOMPLETE_ARTIFACT
   unset FAKE_ADB_CREATE_CAPTURE_DESTINATION FAKE_ADB_CREATE_CAPTURE_ON_READ
-  unset FAKE_ADB_SIGNAL_ON_ARTIFACT_READ FAKE_ADB_FAIL_END FAKE_ADB_FAIL_REMOVE
+  unset FAKE_ADB_SIGNAL_ON_ARTIFACT_READ FAKE_ADB_ARTIFACT_SIGNAL
+  unset FAKE_ADB_FAIL_END FAKE_ADB_FAIL_REMOVE
   unset FAKE_ADB_FAIL_STATUS FAKE_ADB_AMBIGUOUS_SERVICE
   unset FAKE_ADB_CREATE_DESTINATION_ON_STATUS
   unset FAKE_ADB_BLOCK FAKE_TIMEOUT_ENFORCE FAKE_LN_RACE_DESTINATION
@@ -682,6 +976,13 @@ JSON
   unset FAKE_ADB_SUBSTITUTE_STAGE_BEFORE_STREAM
   unset FAKE_ADB_STATUS_INVALID_RUN_HASH
   unset FAKE_ADB_SUBSTITUTE_RUN_DIRECTORY_BEFORE_CREATE_ROLLBACK
+  unset FAKE_ADB_BLOCK_MATCH FAKE_ADB_BLOCK_READY FAKE_ADB_BLOCK_RELEASE
+  unset FAKE_ADB_DURABLE_STOP_VISIBLE_AFTER FAKE_ADB_MALFORMED_DURABLE_ENDING
+  unset FAKE_ADB_POST_CLEANUP_ARTIFACT_CHANGE
+  unset FAKE_ADB_FAIL_RESTORATION FAKE_ADB_MALFORMED_RESTORATION
+  unset FAKE_ADB_BROADCAST_TRAILING_JUNK
+  unset FAKE_ADB_ACTOR_PID FAKE_ADB_ACTOR_TRIGGER FAKE_ADB_ACTOR_RESULT
+  unset FAKE_REMOTE_PARENT_PATH FAKE_REMOTE_DIRECTORY_PATH
 }
 
 make_fixture() {
@@ -708,6 +1009,10 @@ with open(path, encoding="utf-8") as handle:
     state = json.load(handle)
 state["automation_state"] = "active"
 state["call_active"] = True
+state["call_active_recorded"] = True
+state["call_stopped_recorded"] = False
+state["run_finalized_recorded"] = False
+state["package_stopped"] = False
 state["trace_id"] = "trace-new"
 state["remote_directory"] = "files/voice-real-room/" + "a" * 64
 state["owner_hash"] = "sha256:" + hashlib.sha256(
@@ -739,6 +1044,10 @@ with open(path, encoding="utf-8") as handle:
     state = json.load(handle)
 state["automation_state"] = "finalized"
 state["call_active"] = sys.argv[2] == "true"
+state["call_active_recorded"] = True
+state["call_stopped_recorded"] = True
+state["run_finalized_recorded"] = True
+state["package_stopped"] = False
 state["trace_id"] = "trace-new"
 state["remote_directory"] = "files/voice-real-room/" + "a" * 64
 state["owner_hash"] = "sha256:" + hashlib.sha256(
@@ -773,13 +1082,18 @@ import os
 import sys
 
 payload = {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "serial": "DEVICE_SECRET_123",
     "package": sys.argv[2],
+    "androidUserId": 0,
+    "packageUid": 10123,
     "conversationId": "CONVERSATION_SECRET_123",
     "runHash": "sha256:" + "a" * 64,
     "comparisonHash": "sha256:" + "b" * 64,
     "fixtureToken": "fixture-1",
+    "fixtureParentIdentity": "123:456:40700:10123:10123",
+    "fixtureDirectoryIdentity": "123:789:40700:10123:10123",
+    "fixtureOwnershipNonce": "0123456789abcdef0123456789abcdef",
     "traceId": "trace-new",
     "transport": "livekit_experimental",
 }
@@ -890,6 +1204,17 @@ print(sum(needle in command for command in commands))
 PY
 }
 
+exact_command_count() {
+  python3 - "$ADB_LOG" "$@" <<'PY'
+import sys
+
+data = open(sys.argv[1], "rb").read()
+commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
+expected = [value.encode() for value in sys.argv[2:]]
+print(sum(command == expected for command in commands))
+PY
+}
+
 assert_bound_action_extras() {
   local action="$1"
   python3 - "$ADB_LOG" "$action" <<'PY' || fail "bound-action test: action or exact binding extras mismatch"
@@ -934,6 +1259,16 @@ for needle in needles:
 PY
 }
 
+wait_for_path() {
+  local path="$1"
+  local attempt
+  for attempt in {1..300}; do
+    [[ -e "$path" ]] && return 0
+    sleep 0.01
+  done
+  return 1
+}
+
 assert_no_adb_mutations() {
   python3 - "$ADB_LOG" <<'PY' || fail "validation-order test: ADB mutation occurred after failed validation"
 import sys
@@ -942,11 +1277,13 @@ data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
 mutation_tokens = {
     b"start-foreground-service",
+    b"force-stop",
     b"mkdir",
     b"rm",
     b"voice-step-create-owned-directory",
     b"voice-step-stage-owned-fixture",
     b"voice-step-remove-owned-directory",
+    b"voice-step-cleanup-broker",
 }
 mutation_actions = {
     b"me.rerere.rikkahub.voiceagent.automation.PREPARE",
@@ -1053,13 +1390,18 @@ import os
 import sys
 
 payload = {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "serial": "DEVICE_SECRET_123",
     "package": "me.rerere.rikkahub.debug",
+    "androidUserId": 0,
+    "packageUid": 10123,
     "conversationId": "SECOND_CONVERSATION",
     "runHash": "sha256:" + "c" * 64,
     "comparisonHash": "sha256:" + "d" * 64,
     "fixtureToken": "fixture-2",
+    "fixtureParentIdentity": "123:456:40700:10123:10123",
+    "fixtureDirectoryIdentity": "123:790:40700:10123:10123",
+    "fixtureOwnershipNonce": "fedcba9876543210fedcba9876543210",
     "traceId": "trace-second",
     "transport": "livekit_experimental",
 }
@@ -1075,12 +1417,13 @@ PACKAGE_EXPECTED=me.rerere.rikkahub.debug
 source "$1"
 first="$(decode_state "$2")"
 second="$(decode_state "$3")"
-[[ "$first" == *$'CONVERSATION_SECRET_123\n'* ]]
-[[ "$second" == *$'SECOND_CONVERSATION\n'* ]]
+[[ "$first" == *$'0\n10123\nCONVERSATION_SECRET_123\n'* ]]
+[[ "$second" == *$'0\n10123\nSECOND_CONVERSATION\n'* ]]
 [[ "$first" != "$second" && "$first" == *$'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n'* ]]
+[[ "$first" == *$'123:456:40700:10123:10123\n123:789:40700:10123:10123\n0123456789abcdef0123456789abcdef\n'* ]]
 BASH
   then
-    fail "state-snapshot test: a later decode overwrote earlier immutable results"
+    fail "state-v2-snapshot test: exact identity receipt did not decode immutably"
   fi
   pass
   run_helper capture --state "$state" --automation-output relative-output \
@@ -1292,10 +1635,23 @@ PY
 run_preflight_tests() {
   reset_fake
   run_helper preflight --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
+  [[ "$RUN_STATUS" -eq 0 ]] ||
+    fail "broadcast-framing test: literal multiline resultData was not consumed as one receiver record"
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=preflight\nvoice-step.device=ready\nvoice-step.package=ready\nvoice-step.automation=ready\nvoice-step.protected_path=ready'
   [[ "$(command_count devices)" == "2" ]] || fail "preflight-command test: device-ready helper was not reused after exact enumeration"
   [[ "$(command_count broadcast)" == "1" && "$(command_count .STATUS)" == "1" ]] ||
     fail "preflight-read-only test: STATUS was not the sole broadcast"
+  [[ "$(exact_command_count -s DEVICE_SECRET_123 shell cmd activity get-current-user)" == "1" ]] ||
+    fail "preflight-user test: exact Android user readback was not required once"
+  [[ "$(exact_command_count -s DEVICE_SECRET_123 shell cmd package list packages --user 0 -U --show-stopped me.rerere.rikkahub.debug)" == "1" ]] ||
+    fail "preflight-stopped-state test: exact package stopped-state row was not required once"
+  [[ "$(exact_command_count -s DEVICE_SECRET_123 shell cmd package list packages --user 0 --uid 10123)" == "1" ]] ||
+    fail "preflight-uid test: exact unique-UID readback was not required once"
+  [[ "$(exact_command_count -s DEVICE_SECRET_123 exec-out ps -A -n -o UID,PID,PPID,STAT,NAME)" == "1" &&
+     "$(exact_command_count -s DEVICE_SECRET_123 shell cmd activity get-isolated-pids 10123)" == "1" ]] ||
+    fail "preflight-process test: exact package-process capability readbacks were absent"
+  [[ "$(exact_command_count -s DEVICE_SECRET_123 shell run-as me.rerere.rikkahub.debug --user 0 id)" == "1" ]] ||
+    fail "preflight-run-as test: package access was not pinned to the resolved Android user"
   [[ "$(command_count start-foreground-service)" == "0" ]] || fail "preflight-read-only test: service was started"
   [[ "$(command_count mkdir)" == "0" ]] || fail "preflight-read-only test: remote directory was created"
   [[ "$(command_count rm)" == "0" ]] || fail "preflight-read-only test: remote file was removed"
@@ -1311,6 +1667,32 @@ json.dump(state, open(path, "w", encoding="utf-8"), separators=(",", ":"))
 PY
   run_helper preflight --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
   [[ "$RUN_STATUS" -ne 0 ]] || fail "preflight-idle test: active automation succeeded"
+  assert_no_adb_mutations
+  assert_private_output_absent
+  pass
+
+  local malformed_mode
+  for malformed_mode in android-user stopped-row shared-uid ps-header isolated; do
+    reset_fake
+    case "$malformed_mode" in
+      android-user) export FAKE_ADB_MALFORMED_ANDROID_USER=1 ;;
+      stopped-row) export FAKE_ADB_MALFORMED_STOPPED_ROW=1 ;;
+      shared-uid) export FAKE_ADB_SHARED_UID=1 ;;
+      ps-header) export FAKE_ADB_MALFORMED_QUIESCENCE=ps-header ;;
+      isolated) export FAKE_ADB_MALFORMED_QUIESCENCE=isolated ;;
+    esac
+    run_helper preflight --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
+    [[ "$RUN_STATUS" -ne 0 ]] || fail "preflight-capability test: malformed $malformed_mode readback succeeded"
+    assert_no_adb_mutations
+    assert_private_output_absent
+    pass
+  done
+
+  reset_fake
+  export FAKE_ADB_BROADCAST_TRAILING_JUNK=1
+  run_helper preflight --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
+  [[ "$RUN_STATUS" -ne 0 ]] ||
+    fail "broadcast-framing test: trailing junk after the literal multiline resultData succeeded"
   assert_no_adb_mutations
   assert_private_output_absent
   pass
@@ -1332,15 +1714,25 @@ run_start_tests() {
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as handle:
     state = json.load(handle)
-assert list(state) == ["schemaVersion", "serial", "package", "conversationId", "runHash", "comparisonHash", "fixtureToken", "traceId", "transport"]
+assert list(state) == [
+    "schemaVersion", "serial", "package", "androidUserId", "packageUid",
+    "conversationId", "runHash", "comparisonHash", "fixtureToken",
+    "fixtureParentIdentity", "fixtureDirectoryIdentity", "fixtureOwnershipNonce",
+    "traceId", "transport",
+]
 assert state == {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "serial": "DEVICE_SECRET_123",
     "package": "me.rerere.rikkahub.debug",
+    "androidUserId": 0,
+    "packageUid": 10123,
     "conversationId": "CONVERSATION_SECRET_123",
     "runHash": "sha256:" + "a" * 64,
     "comparisonHash": "sha256:" + "b" * 64,
     "fixtureToken": "fixture-1",
+    "fixtureParentIdentity": "123:456:40700:10123:10123",
+    "fixtureDirectoryIdentity": "123:789:40700:10123:10123",
+    "fixtureOwnershipNonce": "0123456789abcdef0123456789abcdef",
     "traceId": "trace-new",
     "transport": "livekit_experimental",
 }
@@ -1360,6 +1752,9 @@ fixture = directory + "/request-66840dda154e8a113c31dd0ad32f7f3a366a80e8136979d8
 assert state["remote_directory"] == directory
 assert state["owner_hash"].startswith("sha256:") and len(state["owner_hash"]) == 71
 assert state["remote_files"][fixture]["type"] == "regular"
+assert state["fixture_parent_identity"] == "123:456:40700:10123:10123"
+assert state["fixture_directory_identity"] == "123:789:40700:10123:10123"
+assert state["fixture_ownership_nonce"] == "0123456789abcdef0123456789abcdef"
 PY
   python3 - "$ADB_LOG" <<'PY' || fail "start-integrity test: ARM omitted immutable fixture metadata"
 import sys
@@ -1638,6 +2033,66 @@ PY
   pass
 }
 
+run_host_lock_test() {
+  local state="$TMP_DIR/host-lock-state.json"
+  local first_fixture="$TMP_DIR/host-lock-first.pcm"
+  local second_fixture="$TMP_DIR/host-lock-second.pcm"
+  local first_log="$TMP_DIR/host-lock-first.argv"
+  local second_log="$TMP_DIR/host-lock-second.argv"
+  local first_stdout="$TMP_DIR/host-lock-first.stdout"
+  local first_stderr="$TMP_DIR/host-lock-first.stderr"
+  local second_stdout="$TMP_DIR/host-lock-second.stdout"
+  local second_stderr="$TMP_DIR/host-lock-second.stderr"
+  local ready="$TMP_DIR/host-lock-entered"
+  local release="$TMP_DIR/host-lock-release"
+  local first_pid first_status second_status
+
+  reset_fake
+  activate_fake_run
+  write_valid_state "$state"
+  make_fixture "$first_fixture"
+  make_second_fixture "$second_fixture"
+  : > "$first_log"
+  : > "$second_log"
+  export FAKE_ADB_BLOCK_MATCH=voice-step-stage-owned-fixture
+  export FAKE_ADB_BLOCK_READY="$ready"
+  export FAKE_ADB_BLOCK_RELEASE="$release"
+
+  FAKE_ADB_LOG="$first_log" TMPDIR="$HELPER_TEMP_ROOT" "$HELPER" inject \
+    --state "$state" --fixture "$first_fixture" --role request \
+    >"$first_stdout" 2>"$first_stderr" &
+  first_pid=$!
+  if ! wait_for_path "$ready"; then
+    kill -TERM "$first_pid" 2>/dev/null || true
+    wait "$first_pid" 2>/dev/null || true
+    fail "host-lock test: first helper did not enter the controlled ADB boundary"
+  fi
+
+  set +e
+  FAKE_ADB_LOG="$second_log" "$REAL_TIMEOUT" 2s env TMPDIR="$HELPER_TEMP_ROOT" \
+    "$HELPER" inject --state "$state" --fixture "$second_fixture" --role follow_up \
+    >"$second_stdout" 2>"$second_stderr"
+  second_status=$?
+  set -e
+  [[ "$second_status" -ne 0 && "$second_status" -ne 124 ]] ||
+    fail "host-lock test: contending helper did not fail promptly"
+  [[ ! -s "$second_log" ]] ||
+    fail "host-lock test: contending helper reached ADB while the serial/package lock was held"
+
+  : > "$release"
+  set +e
+  wait "$first_pid"
+  first_status=$?
+  set -e
+  [[ "$first_status" -eq 0 ]] || fail "host-lock test: lock owner did not complete after release"
+  [[ "$(<"$first_stdout")" == $'voice-step.status=ok\nvoice-step.operation=inject\nvoice-step.fixture=accepted' ]] ||
+    fail "host-lock test: lock owner success output changed"
+  [[ ! -s "$first_stderr" && ! -s "$second_stdout" ]] ||
+    fail "host-lock test: concurrent execution leaked uncontrolled output"
+  unset FAKE_ADB_BLOCK_MATCH FAKE_ADB_BLOCK_READY FAKE_ADB_BLOCK_RELEASE
+  pass
+}
+
 run_interrupt_tests() {
   local state="$TMP_DIR/interrupt-state.json"
   local fixture="$TMP_DIR/interrupt-fixture.pcm"
@@ -1746,18 +2201,35 @@ run_finalize_tests() {
   reset_fake
   activate_fake_run
   write_valid_state "$state"
+  export FAKE_ADB_DURABLE_STOP_VISIBLE_AFTER=2
   run_helper finalize --state "$state"
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=finalize\nvoice-step.automation=finalized'
-  command_sequence_present FINALIZE_BOUND STATUS || fail "finalize-order test: finalized status was not read after FINALIZE_BOUND"
-  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "1" &&
+  command_sequence_present END_BOUND automation-events.jsonl FINALIZE_BOUND STATUS automation-events.jsonl ||
+    fail "finalize-order test: bound end, durable stop, finalize, status, and durable final proof changed"
+  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "1" &&
+     "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END)" == "0" &&
+     "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "1" &&
      "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE)" == "0" &&
      "$(command_count STATUS)" == "1" ]] ||
-    fail "finalize-retry test: bound finalize or status was retried"
-  python3 - "$ADB_LOG" <<'PY' || fail "finalize-binding test: exact binding extras were absent"
+    fail "finalize-retry test: terminal bound mutations or finalized status were retried"
+  assert_bound_action_extras 'me.rerere.rikkahub.voiceagent.action.END_BOUND'
+  python3 - "$ADB_LOG" <<'PY' || fail "finalize-binding/order test: exact binding or active-run STATUS exclusion failed"
 import sys
 data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
-command = next(command for command in commands if b"me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND" in command)
+end = next(index for index, command in enumerate(commands) if b"me.rerere.rikkahub.voiceagent.action.END_BOUND" in command)
+finalize = next(index for index, command in enumerate(commands) if b"me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND" in command)
+statuses = [index for index, command in enumerate(commands) if any(value.endswith(b".STATUS") for value in command)]
+artifact_reads = [
+    index for index, command in enumerate(commands)
+    if b"exec-out" in command and b"cat" in command and
+    any(value.endswith(b"automation-events.jsonl") for value in command)
+]
+assert end < finalize
+assert len([index for index in artifact_reads if end < index < finalize]) >= 2
+assert statuses and all(index > finalize for index in statuses)
+assert any(index > statuses[-1] for index in artifact_reads)
+command = commands[finalize]
 for key, value in {
     b"run_hash": b"sha256:" + b"a" * 64,
     b"comparison_hash": b"sha256:" + b"b" * 64,
@@ -1766,9 +2238,36 @@ for key, value in {
     index = command.index(key)
     assert command[index - 1] == b"--es" and command[index + 1] == value
 PY
-  [[ "$(command_count start-foreground-service)" == "0" ]] ||
-    fail "finalize-scope test: finalize ended the call"
+  python3 - "$FAKE_STATE" <<'PY' || fail "finalize-durable test: exact terminal events were not observed"
+import json, sys
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["call_stopped_recorded"] is True
+assert state["run_finalized_recorded"] is True
+assert state["automation_artifact_reads"] >= 3
+PY
   pass
+
+  local failure_mode
+  for failure_mode in end-rejected stop-timeout malformed-stop; do
+    reset_fake
+    activate_fake_run
+    rm -f -- "$state"
+    write_valid_state "$state"
+    case "$failure_mode" in
+      end-rejected) export FAKE_ADB_FAIL_END=1 ;;
+      stop-timeout) export FAKE_ADB_SERVICE_STAYS_ACTIVE=1 ;;
+      malformed-stop) export FAKE_ADB_MALFORMED_DURABLE_ENDING=stopped-false ;;
+    esac
+    run_helper finalize --state "$state"
+    [[ "$RUN_STATUS" -ne 0 ]] || fail "finalize-stop-proof test: $failure_mode succeeded"
+    [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "1" &&
+       "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "0" ]] ||
+      fail "finalize-stop-proof test: $failure_mode retried END or reached FINALIZE"
+    [[ "$(command_count STATUS)" == "0" ]] ||
+      fail "finalize-stop-proof test: active automation STATUS was sent for $failure_mode"
+    assert_private_output_absent
+    pass
+  done
 
   reset_fake
   activate_fake_run
@@ -1777,12 +2276,12 @@ PY
   export FAKE_ADB_MALFORMED_BROADCAST='me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND'
   run_helper finalize --state "$state"
   [[ "$RUN_STATUS" -ne 0 ]] || fail "finalize-reply test: malformed FINALIZE succeeded"
-  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "1" &&
+  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "1" &&
+     "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "1" &&
      "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE)" == "0" ]] ||
     fail "finalize-reply test: malformed bound FINALIZE was retried or fell back"
   assert_private_output_absent
   pass
-
 
   reset_fake
   activate_fake_run
@@ -1798,16 +2297,32 @@ json.dump(state, open(temporary, "w", encoding="utf-8"), separators=(",", ":"))
 os.replace(temporary, path)
 PY
   run_helper finalize --state "$state"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "finalize-stale test: stale state finalized a replacement run"
-  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "1" &&
+  [[ "$RUN_STATUS" -ne 0 ]] || fail "finalize-stale test: stale state stopped or finalized a replacement run"
+  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "1" &&
+     "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "0" &&
      "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE)" == "0" ]] ||
-    fail "finalize-stale test: bound rejection fell back to legacy finalize"
+    fail "finalize-stale test: bound end rejection reached a finalize mutation"
   python3 - "$FAKE_STATE" <<'PY' || fail "finalize-stale test: replacement run was mutated"
 import json, sys
 state = json.load(open(sys.argv[1], encoding="utf-8"))
 assert state["automation_state"] == "active"
 assert state["run_hash"] == "sha256:" + "c" * 64
+assert state["call_stopped_recorded"] is False
 PY
+  assert_private_output_absent
+  pass
+
+  reset_fake
+  activate_fake_run
+  rm -f -- "$state"
+  write_valid_state "$state"
+  export FAKE_ADB_MALFORMED_DURABLE_ENDING=event-after-finalized
+  run_helper finalize --state "$state"
+  [[ "$RUN_STATUS" -ne 0 ]] ||
+    fail "finalize-durable-ending test: event after run_finalized succeeded"
+  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "1" &&
+     "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "1" ]] ||
+    fail "finalize-durable-ending test: terminal mutations were retried"
   assert_private_output_absent
   pass
 }
@@ -1919,7 +2434,7 @@ PY
   assert_private_output_absent
   pass
 
-  rm -f -- "$state"
+  rm -f -- "$automation" "$private" "$sanitized" "$state"
   reset_fake
   finalize_fake_run false
   write_valid_state "$state"
@@ -2003,212 +2518,256 @@ PY
 run_end_tests() {
   local state="$TMP_DIR/end-state.json"
   local cleanup_output="$TMP_DIR/end-cleanup.json"
+  local expected_complete='{"schemaVersion":1,"outcome":"complete","callStopped":true,"fixturesRemoved":true,"automationFinalized":true}'
+  local expected_product_failure='{"schemaVersion":1,"outcome":"product_failure","callStopped":true,"fixturesRemoved":false,"automationFinalized":true}'
   reset_fake
   finalize_fake_run true
   write_valid_state "$state"
   run_helper end --state "$state" --cleanup-output "$cleanup_output"
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=complete'
-  [[ "$(<"$cleanup_output")" == '{"schemaVersion":1,"outcome":"complete","callStopped":true,"fixturesRemoved":true,"automationFinalized":true}' ]] ||
+  [[ "$(<"$cleanup_output")" == "$expected_complete" ]] ||
     fail "end-record test: complete cleanup record mismatch"
   [[ -f "$cleanup_output" && ! -L "$cleanup_output" && "$(stat -c '%a' "$cleanup_output")" == 600 ]] ||
     fail "end-publication test: cleanup record was not a mode-0600 regular file"
-  command_sequence_present '.END_BOUND' voice-step-service-status voice-step-remove-owned-directory STATUS ||
-    fail "end-order test: END, stop, removal, finalized status order changed"
-  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == 1 &&
+  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == 0 &&
      "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END)" == 0 &&
-     "$(command_count voice-step-remove-owned-directory)" == 1 ]] ||
-    fail "end-retry test: bound END or fixture removal retried"
-  assert_bound_action_extras 'me.rerere.rikkahub.voiceagent.action.END_BOUND'
-  python3 - "$ADB_LOG" <<'PY' || fail "end-ownership test: marker-bound fixture removal target widened"
-import hashlib
+     "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == 0 &&
+     "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE)" == 0 ]] ||
+    fail "end-scope test: teardown issued a call-end or finalize mutation"
+  [[ "$(exact_command_count -s DEVICE_SECRET_123 shell cmd activity force-stop --user 0 me.rerere.rikkahub.debug)" == 1 &&
+     "$(exact_command_count -s DEVICE_SECRET_123 exec-out ps -A -n -o UID,PID,PPID,STAT,NAME)" == 2 &&
+     "$(exact_command_count -s DEVICE_SECRET_123 shell cmd activity get-isolated-pids 10123)" == 2 &&
+     "$(command_count voice-step-cleanup-broker)" == 1 &&
+     "$(exact_command_count -s DEVICE_SECRET_123 shell am broadcast --user 0 --include-stopped-packages -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver -a me.rerere.rikkahub.voiceagent.automation.STATUS)" == 1 ]] ||
+    fail "end-command-count test: exact force-stop, stable quiescence, broker, or restoration count changed"
+  python3 - "$ADB_LOG" <<'PY' || fail "end-order/receipt test: teardown ordering or schema-v2 ownership receipt changed"
 import sys
 
 data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
-removals = [command for command in commands if any(b"voice-step-remove-owned-directory" in value for value in command)]
-assert len(removals) == 1
-assert removals[0][-2] == b"files/voice-real-room/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-removal_script = next(value for value in removals[0] if b"voice-step-remove-owned-directory" in value)
-assert b'cd -- "$name"' in removal_script
-assert b"/proc/self/fd/3" in removal_script
-assert b"/proc/self/fd/4" in removal_script and b'stat -Lc %h /proc/self/fd/4' in removal_script
-assert b'rm -rf -- "$directory"' not in removal_script
-expected = "sha256:" + hashlib.sha256(
-    ("DEVICE_SECRET_123\0me.rerere.rikkahub.debug\0CONVERSATION_SECRET_123\0sha256:" + "a" * 64 + "\0sha256:" + "b" * 64).encode()
-).hexdigest()
-assert removals[0][-1] == expected.encode()
+force_stop = next(i for i, command in enumerate(commands) if b"force-stop" in command)
+processes = [i for i, command in enumerate(commands) if command[-5:] == [b"ps", b"-A", b"-n", b"-o", b"UID,PID,PPID,STAT,NAME"]]
+isolated = [i for i, command in enumerate(commands) if b"get-isolated-pids" in command]
+brokers = [
+    (i, command) for i, command in enumerate(commands)
+    if any(b"voice-step-cleanup-broker" in value for value in command)
+]
+restorations = [
+    i for i, command in enumerate(commands)
+    if b"--include-stopped-packages" in command
+]
+artifact_reads = [
+    i for i, command in enumerate(commands)
+    if b"exec-out" in command and b"cat" in command and
+    any(value.endswith(b"automation-events.jsonl") for value in command)
+]
+assert len(processes) == len(isolated) == 2
+assert len(brokers) == len(restorations) == 1
+broker_index, broker = brokers[0]
+assert artifact_reads[0] < force_stop < processes[0] < isolated[0] < processes[1] < isolated[1] < broker_index
+assert any(broker_index < index < restorations[0] for index in artifact_reads)
+assert broker[-5:] == [
+    b"files/voice-real-room/" + b"a" * 64,
+    b"123:456:40700:10123:10123",
+    b"123:789:40700:10123:10123",
+    b"0123456789abcdef0123456789abcdef",
+    b"10123",
+]
+script = next(value for value in broker if b"voice-step-cleanup-broker" in value)
+assert b"/proc/self/fd/4" in script and b'stat -Lc %h /proc/self/fd/4' in script
+assert b'rm -rf -- "$directory"' not in script
 PY
-  pass
+  python3 - "$FAKE_STATE" <<'PY' || fail "end-state test: cleanup/restoration proof was incomplete"
+import json
+import sys
 
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run true
-  write_valid_state "$state"
-  export FAKE_ADB_FAIL_END=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
-  [[ "$(<"$cleanup_output")" == '{"schemaVersion":1,"outcome":"product_failure","callStopped":false,"fixturesRemoved":false,"automationFinalized":true}' ]] ||
-    fail "end-reachable-failure test: product evidence mismatch"
-  [[ "$(command_count voice-step-reachable)" == 1 ]] ||
-    fail "end-reachable-failure test: reachability was not independently checked"
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  activate_fake_run
-  write_valid_state "$state"
-  export FAKE_ADB_FAIL_END=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
-  [[ "$(<"$cleanup_output")" == '{"schemaVersion":1,"outcome":"product_failure","callStopped":false,"fixturesRemoved":false,"automationFinalized":false}' ]] ||
-    fail "end-active-status test: reachable active-state product evidence mismatch"
-  python3 - "$FAKE_STATE" <<'PY' || fail "end-active-status test: failed bound end mutated the active run"
-import json, sys
 state = json.load(open(sys.argv[1], encoding="utf-8"))
-assert state["automation_state"] == "active"
-assert state["call_active"] is True
-assert state["remote_directory"] == "files/voice-real-room/" + "a" * 64
+assert state["automation_state"] == "idle"
+assert state["package_stopped"] is False
+assert state["process_readbacks"] == 2
+assert state["isolated_readbacks"] == 2
+assert state["cleanup_broker_completed"] is True
+assert state["restoration_count"] == 1
+assert state["remote_directory"] is None
 PY
   pass
 
+  local malformed_mode
+  for malformed_mode in stopped-false event-after-finalized binding-mismatch missing-call-stopped noncanonical-keys; do
+    rm -f -- "$cleanup_output" "$state"
+    reset_fake
+    finalize_fake_run false
+    write_valid_state "$state"
+    export FAKE_ADB_MALFORMED_DURABLE_ENDING="$malformed_mode"
+    run_helper end --state "$state" --cleanup-output "$cleanup_output"
+    [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
+      fail "end-durable-ending test: malformed $malformed_mode evidence published cleanup"
+    [[ "$(command_count force-stop)" == 0 && "$(command_count voice-step-cleanup-broker)" == 0 ]] ||
+      fail "end-durable-ending test: malformed $malformed_mode evidence reached mutation"
+    assert_private_output_absent
+    pass
+  done
+
+  local failure_mode
+  for failure_mode in force-stop quiescence unstable-quiescence isolated broker; do
+    rm -f -- "$cleanup_output" "$state"
+    reset_fake
+    finalize_fake_run false
+    write_valid_state "$state"
+    case "$failure_mode" in
+      force-stop) export FAKE_ADB_FAIL_FORCE_STOP=1 ;;
+      quiescence) export FAKE_ADB_PACKAGE_PROCESS=1 ;;
+      unstable-quiescence) export FAKE_ADB_UNSTABLE_QUIESCENCE=1 ;;
+      isolated) export FAKE_ADB_ISOLATED_PROCESS=1 ;;
+      broker) export FAKE_ADB_FAIL_CLEANUP_BROKER=1 ;;
+    esac
+    run_helper end --state "$state" --cleanup-output "$cleanup_output"
+    assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
+    [[ "$(<"$cleanup_output")" == "$expected_product_failure" ]] ||
+      fail "end-product-failure test: $failure_mode lost durable final proof"
+    [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == 0 &&
+       "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == 0 ]] ||
+      fail "end-product-failure test: $failure_mode issued a terminal mutation"
+    if [[ "$failure_mode" != force-stop ]]; then
+      [[ "$(exact_command_count -s DEVICE_SECRET_123 shell am broadcast --user 0 --include-stopped-packages -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver -a me.rerere.rikkahub.voiceagent.automation.STATUS)" == 1 ]] ||
+        fail "end-product-failure test: $failure_mode did not restore exactly once"
+    fi
+    pass
+  done
+
   rm -f -- "$cleanup_output" "$state"
   reset_fake
-  activate_fake_run
+  finalize_fake_run false
   write_valid_state "$state"
-  export FAKE_ADB_FAIL_END=1
-  export FAKE_ADB_STATUS_INVALID_RUN_HASH=1
+  export FAKE_ADB_POST_CLEANUP_ARTIFACT_CHANGE=1
   run_helper end --state "$state" --cleanup-output "$cleanup_output"
   [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
-    fail "end-malformed-status test: noncanonical STATUS published cleanup evidence"
+    fail "end-post-cleanup-artifact test: changed durable bytes published cleanup"
+  [[ "$(command_count voice-step-cleanup-broker)" == 1 &&
+     "$(command_count --include-stopped-packages)" == 1 ]] ||
+    fail "end-post-cleanup-artifact test: cleanup or EXIT restoration did not run once"
   assert_private_output_absent
   pass
 
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run true
-  write_valid_state "$state"
-  export FAKE_ADB_FAIL_END=1
-  export FAKE_ADB_DEVICE_LOST=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=infrastructure_interruption'
-  [[ "$(<"$cleanup_output")" == '{"schemaVersion":1,"outcome":"infrastructure_interruption","callStopped":false,"fixturesRemoved":false,"automationFinalized":false}' ]] ||
-    fail "end-infrastructure test: device-loss evidence mismatch"
-  pass
+  local restoration_mode
+  for restoration_mode in failure malformed; do
+    rm -f -- "$cleanup_output" "$state"
+    reset_fake
+    finalize_fake_run false
+    write_valid_state "$state"
+    if [[ "$restoration_mode" == failure ]]; then
+      export FAKE_ADB_FAIL_RESTORATION=1
+    else
+      export FAKE_ADB_MALFORMED_RESTORATION=wrong-state
+    fi
+    run_helper end --state "$state" --cleanup-output "$cleanup_output"
+    [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
+      fail "end-restoration test: $restoration_mode reply published cleanup"
+    [[ "$(command_count --include-stopped-packages)" -ge 1 ]] ||
+      fail "end-restoration test: $restoration_mode path skipped bounded restoration"
+    assert_private_output_absent
+    pass
+  done
 
   rm -f -- "$cleanup_output" "$state"
   reset_fake
-  finalize_fake_run true
-  write_valid_state "$state"
-  export FAKE_ADB_FAIL_REMOVE=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
-  [[ "$(<"$cleanup_output")" == '{"schemaVersion":1,"outcome":"product_failure","callStopped":true,"fixturesRemoved":false,"automationFinalized":true}' ]] ||
-    fail "end-removal-failure test: proven cleanup booleans mismatch"
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run true
+  finalize_fake_run false
   write_valid_state "$state"
   export FAKE_ADB_RETAIN_FIXTURE_DIR=1
   run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
-  [[ "$(<"$cleanup_output")" == '{"schemaVersion":1,"outcome":"product_failure","callStopped":true,"fixturesRemoved":false,"automationFinalized":true}' ]] ||
-    fail "end-retained-directory test: retained ownership directory was reported removed"
-  python3 - "$FAKE_STATE" <<'PY' || fail "end-retained-directory test: remote directory did not remain"
-import json, sys
-state = json.load(open(sys.argv[1], encoding="utf-8"))
-assert state["remote_directory"] == "files/voice-real-room/" + "a" * 64
-PY
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run true
-  write_valid_state "$state"
-  python3 - "$FAKE_STATE" <<'PY'
-import json, os, sys
-path = sys.argv[1]
-state = json.load(open(path, encoding="utf-8"))
-state["owner_hash"] = "sha256:" + "d" * 64
-temporary = path + ".wrong-owner"
-json.dump(state, open(temporary, "w", encoding="utf-8"), separators=(",", ":"))
-os.replace(temporary, path)
-PY
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
-  [[ "$(<"$cleanup_output")" == '{"schemaVersion":1,"outcome":"product_failure","callStopped":true,"fixturesRemoved":false,"automationFinalized":true}' ]] ||
-    fail "end-owner-marker test: mismatched owner was reported removed"
-  python3 - "$FAKE_STATE" <<'PY' || fail "end-owner-marker test: mismatched owner directory was deleted"
-import json, sys
-state = json.load(open(sys.argv[1], encoding="utf-8"))
-assert state["remote_directory"] == "files/voice-real-room/" + "a" * 64
-assert state["owner_hash"] == "sha256:" + "d" * 64
-PY
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run true
-  write_valid_state "$state"
-  export FAKE_ADB_SERVICE_STAYS_ACTIVE=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
-  [[ "$(<"$cleanup_output")" == '{"schemaVersion":1,"outcome":"product_failure","callStopped":false,"fixturesRemoved":false,"automationFinalized":true}' ]] ||
-    fail "end-product-failure test: active-service evidence mismatch"
-  [[ "$(command_count 'rm')" == 0 ]] || fail "end-product-failure test: fixtures removed while service stayed active"
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run true
-  write_valid_state "$state"
-  python3 - "$FAKE_STATE" <<'PY'
-import json, os, sys
-path = sys.argv[1]
-state = json.load(open(path, encoding="utf-8"))
-state["conversation_id"] = "REPLACEMENT_CONVERSATION"
-temporary = path + ".replacement"
-json.dump(state, open(temporary, "w", encoding="utf-8"), separators=(",", ":"))
-os.replace(temporary, path)
-PY
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
-  [[ "$(<"$cleanup_output")" == '{"schemaVersion":1,"outcome":"product_failure","callStopped":false,"fixturesRemoved":false,"automationFinalized":true}' ]] ||
-    fail "end-stale test: replacement-call evidence mismatch"
-  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == 1 &&
-     "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END)" == 0 &&
-     "$(command_count voice-step-remove-owned-directory)" == 0 ]] ||
-    fail "end-stale test: stale rejection fell back or removed fixtures"
-  python3 - "$FAKE_STATE" <<'PY' || fail "end-stale test: replacement call was stopped"
-import json, sys
-state = json.load(open(sys.argv[1], encoding="utf-8"))
-assert state["call_active"] is True
-assert state["conversation_id"] == "REPLACEMENT_CONVERSATION"
-PY
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run true
-  write_valid_state "$state"
-  export FAKE_ADB_AMBIGUOUS_SERVICE=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
   [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
-    fail "end-ambiguous test: ambiguous service readback published cleanup evidence"
-  assert_private_output_absent
+    fail "end-retained-directory test: retained directory published cleanup evidence"
+  python3 - "$FAKE_STATE" <<'PY' || fail "end-retained-directory test: retained directory or restoration state changed"
+import json
+import sys
+
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["remote_directory"] == "files/voice-real-room/" + "a" * 64
+assert state["package_stopped"] is False
+assert state["restoration_count"] == 1
+PY
   pass
 
-  rm -f -- "$state"
+  local actor_trigger="$TMP_DIR/end-actor-trigger"
+  local actor_result="$TMP_DIR/end-actor-result"
+  local remote_parent="$TMP_DIR/end-remote-parent"
+  local remote_directory="$remote_parent/owned"
+  rm -f -- "$cleanup_output" "$state" "$actor_trigger" "$actor_result"
   reset_fake
-  finalize_fake_run true
+  finalize_fake_run false
+  write_valid_state "$state"
+  mkdir -p "$remote_directory"
+  printf '%s\n' '0123456789abcdef0123456789abcdef' > "$remote_directory/.voice-step-owner"
+  chmod 600 "$remote_directory/.voice-step-owner"
+  (
+    while [[ ! -e "$actor_trigger" ]]; do sleep 0.01; done
+    printf 'entered\n' > "$actor_result"
+  ) &
+  ACTOR_PID=$!
+  export FAKE_ADB_ACTOR_PID="$ACTOR_PID"
+  export FAKE_ADB_ACTOR_TRIGGER="$actor_trigger"
+  export FAKE_ADB_ACTOR_RESULT="$actor_result"
+  export FAKE_REMOTE_PARENT_PATH="$remote_parent"
+  export FAKE_REMOTE_DIRECTORY_PATH="$remote_directory"
+  run_helper end --state "$state" --cleanup-output "$cleanup_output"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=complete'
+  wait "$ACTOR_PID"
+  ACTOR_PID=''
+  [[ -e "$actor_result" && ! -e "$remote_directory" ]] ||
+    fail "end-live-actor test: actor did not resume after owned directory deletion"
+  python3 - "$FAKE_STATE" <<'PY' || fail "end-live-actor test: actor crossed the stopped cleanup boundary"
+import json
+import sys
+
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["actor_sigstop_observed"] is True
+assert state["actor_sigcont_observed"] is True
+assert not state.get("actor_entered_cleanup_boundary", False)
+assert state["cleanup_inode_link_count"] == 0
+PY
+  pass
+
+  rm -f -- "$cleanup_output" "$state"
+  reset_fake
+  finalize_fake_run false
   write_valid_state "$state"
   export FAKE_LN_RACE_DESTINATION="$cleanup_output"
   run_helper end --state "$state" --cleanup-output "$cleanup_output"
   [[ "$RUN_STATUS" -ne 0 ]] || fail "end-race test: late cleanup destination race succeeded"
   [[ "$(<"$cleanup_output")" == raced ]] || fail "end-race test: existing cleanup destination was overwritten"
+  python3 - "$FAKE_STATE" <<'PY' || fail "end-race test: publication happened before package restoration"
+import json
+import sys
+
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["package_stopped"] is False
+assert state["restoration_count"] == 1
+PY
   assert_private_output_absent
   pass
+
+  local signal_name
+  for signal_name in HUP INT TERM; do
+    rm -f -- "$cleanup_output" "$state"
+    reset_fake
+    finalize_fake_run false
+    write_valid_state "$state"
+    export FAKE_ADB_SIGNAL_ON_ARTIFACT_READ=4
+    export FAKE_ADB_ARTIFACT_SIGNAL="$signal_name"
+    run_helper end --state "$state" --cleanup-output "$cleanup_output"
+    [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
+      fail "end-signal test: $signal_name teardown published cleanup"
+    python3 - "$FAKE_STATE" "$signal_name" <<'PY' || fail "end-signal test: package restoration failed"
+import json
+import sys
+
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["package_stopped"] is False
+assert state["restoration_count"] == 1
+PY
+    assert_private_output_absent
+    pass
+  done
 }
 
 SELECT_ALL=0
@@ -2230,7 +2789,10 @@ if [[ "$SELECT_ALL" -eq 1 ]]; then
 fi
 selected preflight && run_preflight_tests
 selected start && run_start_tests
-selected inject && run_inject_tests
+if selected inject; then
+  run_inject_tests
+  run_host_lock_test
+fi
 selected interrupt && run_interrupt_tests
 selected status && run_status_tests
 selected finalize && run_finalize_tests
