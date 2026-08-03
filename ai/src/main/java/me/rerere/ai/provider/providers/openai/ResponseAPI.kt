@@ -355,7 +355,8 @@ class ResponseAPI(
                         contentBuffer.clear()
                     }
 
-                    // 输出 function_call + function_call_output
+                    // Responses API expects a parallel batch to contain all
+                    // function_call items before any function_call_output.
                     group.tools.forEach { tool ->
                         add(buildJsonObject {
                             put("type", "function_call")
@@ -364,6 +365,8 @@ class ResponseAPI(
                             // 使用 inputAsJson() 归一化，避免流式中断导致的残缺 JSON 被发送
                             put("arguments", tool.inputAsJson().toString())
                         })
+                    }
+                    group.tools.forEach { tool ->
                         add(buildJsonObject {
                             put("type", "function_call_output")
                             put("call_id", tool.toolCallId)
@@ -507,6 +510,7 @@ class ResponseAPI(
                 val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
                 val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
                 if (type == "function_call") {
+                    val callId = item["call_id"]?.jsonPrimitive?.contentOrNull ?: id
                     return MessageChunk(
                         id = id,
                         model = "",
@@ -518,7 +522,7 @@ class ResponseAPI(
                                     role = MessageRole.ASSISTANT,
                                     parts = listOf(
                                         UIMessagePart.Tool(
-                                            toolCallId = id,
+                                            toolCallId = callId,
                                             toolName = item["name"]?.jsonPrimitive?.content ?: "",
                                             input = item["arguments"]?.jsonPrimitive?.content
                                                 ?: "",
@@ -630,12 +634,12 @@ class ResponseAPI(
             }
 
             "response.function_call_arguments.done" -> {
-                val toolCallId =
+                val itemId =
                     jsonObject["item_id"]?.jsonPrimitive?.content ?: error("item_id not found")
                 val arguments =
                     jsonObject["arguments"]?.jsonPrimitive?.content ?: error("arguments not found")
                 return MessageChunk(
-                    id = toolCallId,
+                    id = itemId,
                     model = "",
                     choices = listOf(
                         UIMessageChoice(
@@ -644,7 +648,12 @@ class ResponseAPI(
                                 role = MessageRole.ASSISTANT,
                                 parts = listOf(
                                     UIMessagePart.Tool(
-                                        toolCallId = toolCallId,
+                                        // The preceding output_item.added event
+                                        // owns the semantic call_id. An
+                                        // arguments.done event only carries
+                                        // item_id, so leave the ID blank to
+                                        // merge into that just-added tool.
+                                        toolCallId = "",
                                         toolName = "",
                                         input = arguments,
                                         output = emptyList()
