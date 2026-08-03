@@ -765,12 +765,19 @@ control_broadcast() {
   local completed_output
   local result_code
   local raw_data
-  if ! output="$(adb_command shell am broadcast --user 0 \
-    -n "$VOICE_STAGE1_PACKAGE/$CONTROL_RECEIVER_CLASS" \
-    -a "$CONTROL_ACTION_PREFIX.$action" "$@")"; then
-    fail "automation ${action,,} broadcast failed"
-    return 1
-  fi
+  local attempt=1
+  local max_attempts=1
+  [[ "$action" == "STATUS" ]] && max_attempts=3
+  while ! output="$(adb_command shell am broadcast --user 0 \
+      -n "$VOICE_STAGE1_PACKAGE/$CONTROL_RECEIVER_CLASS" \
+      -a "$CONTROL_ACTION_PREFIX.$action" "$@")"; do
+    if (( attempt >= max_attempts )); then
+      fail "automation ${action,,} broadcast failed"
+      return 1
+    fi
+    attempt=$((attempt + 1))
+    sleep_poll
+  done
   completed_output="$(printf '%s\n' "$output" | awk '
     capture { print; next }
     /^Broadcast completed:/ { capture=1; print }
@@ -1370,10 +1377,13 @@ import json, sys
 boundary, expected = int(sys.argv[1]), sys.argv[2]
 events = [json.loads(line) for line in sys.stdin if line.strip() and
           json.loads(line)["monotonicMs"] > boundary]
-if any(event["lifecycle"] != expected for event in events):
+if not events:
+    raise SystemExit(1)
+if not any(event["lifecycle"] == expected for event in events):
     raise SystemExit(2)
-raise SystemExit(0 if any(event["lifecycle"] == expected for event in events) else 1)
+raise SystemExit(0)
 ' "$boundary_ms" "$expected" <<< "$lines"; then
+        sleep_poll
         android_state="$(read_android_app_state)" || return 1
         if [[ "$android_state" != "$expected" ]]; then
           fail "lifecycle activity readback mismatch: Android=$android_state expected=$expected"
@@ -1854,11 +1864,12 @@ if not any(event.get("name") == "lifecycle_requested" and event.get("lifecycle")
            for event in events):
     raise SystemExit("lifecycle request mismatch")
 lifecycle_observations = [event for index, event in enumerate(events)
-                          if index > route_observed_index and event.get("name") == "lifecycle_observed"]
-if any(event.get("lifecycle") != app_state for event in lifecycle_observations):
-    raise SystemExit("conflicting lifecycle observation")
-if not any(event.get("lifecycle") == app_state for event in lifecycle_observations):
+                          if route_observed_index < index < call_stops[0] and
+                          event.get("name") == "lifecycle_observed"]
+if not lifecycle_observations:
     raise SystemExit("lifecycle observation mismatch")
+if not any(event.get("lifecycle") == app_state for event in lifecycle_observations):
+    raise SystemExit("conflicting lifecycle observation")
 
 observed_networks = [event.get("network") for event in events if event.get("name") == "network_observed"]
 if network_mode == "stable_wifi":

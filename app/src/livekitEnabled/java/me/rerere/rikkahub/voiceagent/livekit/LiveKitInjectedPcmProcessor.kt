@@ -2,6 +2,7 @@ package me.rerere.rikkahub.voiceagent.livekit
 
 import io.livekit.android.audio.AudioProcessorInterface
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.ArrayDeque
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -24,6 +25,10 @@ internal class LiveKitAutomationPcmSource(
     private var activeOwner: ActiveOwner? = null
     private var captureJob: Job? = null
     private var injectionEnded = false
+    private var outputSampleRateHz = FIXTURE_SAMPLE_RATE_HZ
+    private var outputChannelCount = 1
+    private var resamplePhase = 0
+    private var currentSample: Short? = null
 
     val isActive: Boolean
         get() {
@@ -63,6 +68,7 @@ internal class LiveKitAutomationPcmSource(
                 activeOwner = next
                 queuedPcm.clear()
                 injectionEnded = false
+                resetResamplingLocked()
             }
         }
         val job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -111,10 +117,21 @@ internal class LiveKitAutomationPcmSource(
                 staleJob = clearOwnerLocked(owner.generation)
                 return@synchronized false
             }
-            injectionEnded && queuedPcm.isEmpty()
+            injectionEnded && queuedPcm.isEmpty() && currentSample == null
         }
         staleJob?.cancel()
         return complete
+    }
+
+    fun configureOutputFormat(sampleRateHz: Int, numChannels: Int) {
+        require(sampleRateHz > 0) { "LiveKit capture sample rate must be positive" }
+        require(numChannels > 0) { "LiveKit capture channel count must be positive" }
+        synchronized(lock) {
+            if (outputSampleRateHz == sampleRateHz && outputChannelCount == numChannels) return
+            outputSampleRateHz = sampleRateHz
+            outputChannelCount = numChannels
+            resetResamplingLocked()
+        }
     }
 
     fun replaceOrZero(buffer: ByteBuffer) {
@@ -125,19 +142,45 @@ internal class LiveKitAutomationPcmSource(
                 staleJob = clearOwnerLocked(owner.generation)
                 return@synchronized
             }
-            while (buffer.hasRemaining()) {
-                val queued = queuedPcm.peekFirst()
-                if (queued == null) {
-                    buffer.put(0)
-                } else {
-                    val byteCount = minOf(buffer.remaining(), queued.remaining)
-                    buffer.put(queued.bytes, queued.offset, byteCount)
-                    queued.offset += byteCount
-                    if (queued.remaining == 0) queuedPcm.removeFirst()
+            // WebRTC exposes its native float* capture plane through this ByteBuffer.
+            buffer.order(ByteOrder.nativeOrder())
+            while (buffer.remaining() >= FLOAT_BYTES_PER_SAMPLE) {
+                val sample = currentSample ?: readSampleLocked().also { currentSample = it }
+                buffer.putFloat(sample?.toFloat() ?: 0.0f)
+                if (sample != null) {
+                    resamplePhase += FIXTURE_SAMPLE_RATE_HZ
+                    while (resamplePhase >= outputSampleRateHz) {
+                        resamplePhase -= outputSampleRateHz
+                        currentSample = readSampleLocked()
+                        if (currentSample == null) {
+                            resamplePhase = 0
+                            break
+                        }
+                    }
                 }
             }
+            while (buffer.hasRemaining()) buffer.put(0)
         }
         staleJob?.cancel()
+    }
+
+    private fun readSampleLocked(): Short? {
+        val low = readByteLocked() ?: return null
+        val high = readByteLocked() ?: return null
+        return ((high.toInt() shl 8) or (low.toInt() and 0xff)).toShort()
+    }
+
+    private fun readByteLocked(): Byte? {
+        while (true) {
+            val queued = queuedPcm.peekFirst() ?: return null
+            if (queued.remaining == 0) {
+                queuedPcm.removeFirst()
+                continue
+            }
+            return queued.bytes[queued.offset++].also {
+                if (queued.remaining == 0) queuedPcm.removeFirst()
+            }
+        }
     }
 
     private fun markInjectionEnded(expectedGeneration: Long) {
@@ -163,7 +206,13 @@ internal class LiveKitAutomationPcmSource(
         activeOwner = null
         queuedPcm.clear()
         injectionEnded = false
+        resetResamplingLocked()
         return captureJob.also { captureJob = null }
+    }
+
+    private fun resetResamplingLocked() {
+        resamplePhase = 0
+        currentSample = null
     }
 
     private fun ActiveOwner.matchesCurrentStatus(): Boolean =
@@ -185,15 +234,28 @@ internal class LiveKitAutomationPcmSource(
         val remaining: Int
             get() = bytes.size - offset
     }
+
+    private companion object {
+        const val FIXTURE_SAMPLE_RATE_HZ = 16_000
+        const val FLOAT_BYTES_PER_SAMPLE = Float.SIZE_BYTES
+    }
 }
 
 internal class LiveKitInjectedPcmProcessor(
     private val source: LiveKitAutomationPcmSource,
 ) : AudioProcessorInterface {
+    private var currentChannelCount = 1
+
     override fun getName(): String = "rikka-stage1-pcm"
     override fun isEnabled(): Boolean = source.isActive
-    override fun initializeAudioProcessing(sampleRateHz: Int, numChannels: Int) = Unit
-    override fun resetAudioProcessing(newRate: Int) = Unit
+    override fun initializeAudioProcessing(sampleRateHz: Int, numChannels: Int) {
+        currentChannelCount = numChannels
+        source.configureOutputFormat(sampleRateHz, numChannels)
+    }
+
+    override fun resetAudioProcessing(newRate: Int) {
+        source.configureOutputFormat(newRate, currentChannelCount)
+    }
 
     override fun processAudio(numBands: Int, numFrames: Int, buffer: ByteBuffer) {
         source.replaceOrZero(buffer)
