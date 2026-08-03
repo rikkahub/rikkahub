@@ -65,6 +65,7 @@ class VoiceAgentCallService : Service() {
         when (intent?.action) {
             VoiceAgentCallContract.ACTION_START -> startCall(intent)
             VoiceAgentCallContract.ACTION_END -> lifecycle.endCall()
+            VoiceAgentCallContract.ACTION_END_BOUND -> endBoundCall(intent)
             else -> stopSelf()
         }
         return START_NOT_STICKY
@@ -93,6 +94,7 @@ class VoiceAgentCallService : Service() {
                         config = result.config,
                         transport = fields.transport,
                         captureFixtureToken = fields.captureFixtureToken,
+                        automationBinding = fields.automationBinding,
                     )
                 }
                 is VoiceAgentConfigResult.Unavailable -> {
@@ -111,6 +113,8 @@ class VoiceAgentCallService : Service() {
             captureFixtureToken = intent.getStringExtra(
                 VoiceAgentCallContract.EXTRA_CAPTURE_FIXTURE_TOKEN,
             ),
+            runHash = intent.getStringExtra(VoiceAgentCallContract.EXTRA_RUN_HASH),
+            comparisonHash = intent.getStringExtra(VoiceAgentCallContract.EXTRA_COMPARISON_HASH),
         )
         if (fields == null) {
             VoiceAgentLog.w(TAG, "start ignored: missing or invalid start fields")
@@ -119,6 +123,19 @@ class VoiceAgentCallService : Service() {
             )
         }
         return fields
+    }
+
+    private fun endBoundCall(intent: Intent) {
+        val extras = intent.extras
+        val stringExtras = mutableMapOf<String, String?>()
+        extras?.keySet()?.forEach { key ->
+            @Suppress("DEPRECATION")
+            stringExtras[key] = extras.get(key) as? String
+        }
+        val identity = decodeVoiceAgentBoundCallIdentity(stringExtras)
+        if (identity == null || !lifecycle.endCallIfMatches(identity)) {
+            VoiceAgentLog.w(TAG, "bound end ignored: missing, invalid, or stale identity")
+        }
     }
 
     private fun startForegroundFor(

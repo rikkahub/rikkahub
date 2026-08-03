@@ -6,6 +6,7 @@ set +x
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 READY="$ROOT_DIR/scripts/adb-device-ready.sh"
 ARTIFACT_HELPERS="$ROOT_DIR/scripts/voice-agent-e2e-artifacts.sh"
+REAL_ROOM_LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
 PACKAGE_EXPECTED='me.rerere.rikkahub.debug'
 CONTROL_RECEIVER='me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver'
 FIXTURE_RECEIVER='me.rerere.rikkahub.voiceagent.debug.VoiceCaptureFixtureDebugReceiver'
@@ -15,7 +16,7 @@ FIXTURE_ARM_ACTION='me.rerere.rikkahub.debug.voiceagent.ARM_CAPTURE_FIXTURE'
 FIXTURE_STAGE_ACTION='me.rerere.rikkahub.debug.voiceagent.STAGE_CAPTURE_FIXTURE'
 FIXTURE_TRIGGER_ACTION='me.rerere.rikkahub.debug.voiceagent.TRIGGER_CAPTURE_FIXTURE'
 CALL_START_ACTION='me.rerere.rikkahub.voiceagent.action.START'
-CALL_END_ACTION='me.rerere.rikkahub.voiceagent.action.END'
+CALL_END_BOUND_ACTION='me.rerere.rikkahub.voiceagent.action.END_BOUND'
 APP_ARTIFACT_ROOT='no_backup/voice-e2e'
 LATEST_TRACE_PATH="$APP_ARTIFACT_ROOT/latest-trace-id.txt"
 TRANSPORT_EXPECTED='livekit_experimental'
@@ -25,6 +26,7 @@ FIXTURE_CHUNK_DELAY_MS='100'
 # Only the path joiner is consumed. This preserves the existing artifact helper
 # contract without changing its behavior.
 source "$ARTIFACT_HELPERS"
+source "$REAL_ROOM_LIBRARY"
 
 SERIAL=''
 PACKAGE=''
@@ -38,6 +40,7 @@ FIXTURE_SIZE=''
 FIXTURE_HASH=''
 REMOTE_FIXTURE_DIR=''
 REMOTE_FIXTURE_PATH=''
+REMOTE_OWNER_HASH=''
 LOCAL_TEMP_DIR=''
 STATE_PUBLICATION_TEMP=''
 ERROR_REPORTED=0
@@ -45,78 +48,37 @@ START_CLEANUP_NEEDED=0
 START_PREPARE_ATTEMPTED=0
 START_CALL_ATTEMPTED=0
 START_FIXTURE_DIR_CREATED=0
+START_COMMITTED=0
+STATE_PUBLICATION_CRITICAL=0
+PUBLICATION_SIGNAL=0
 declare -a OWNED_TEMP_FILES=()
 declare -A PARSED=()
-
-die() {
-  ERROR_REPORTED=1
-  printf 'voice-step.error=%s\n' "$1" >&2
-  exit 1
-}
-
-adb_read() {
-  timeout --signal=TERM --kill-after=2s "${VOICE_STEP_ADB_TIMEOUT_SECONDS:-10}s" adb -s "$SERIAL" "$@"
-}
-
-adb_global_read() {
-  timeout --signal=TERM --kill-after=2s "${VOICE_STEP_ADB_TIMEOUT_SECONDS:-10}s" adb "$@"
-}
-
-register_temp_file() {
-  OWNED_TEMP_FILES+=("$1")
-}
-
-forget_temp_file() {
-  local target="$1"
-  local -a retained=()
-  local path
-  for path in "${OWNED_TEMP_FILES[@]}"; do
-    [[ "$path" == "$target" ]] || retained+=("$path")
-  done
-  OWNED_TEMP_FILES=("${retained[@]}")
-}
-
-ensure_local_temp_dir() {
-  if [[ -z "$LOCAL_TEMP_DIR" ]]; then
-    LOCAL_TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/voice-real-room-step.XXXXXX" 2>/dev/null)" ||
-      die 'local temporary storage failed'
-    chmod 700 -- "$LOCAL_TEMP_DIR" 2>/dev/null || die 'local temporary storage failed'
-  fi
-}
-
-cleanup_local_temps() {
-  local cleanup_status=0
-  local path
-  for path in "${OWNED_TEMP_FILES[@]}"; do
-    if [[ -e "$path" || -L "$path" ]]; then
-      rm -f -- "$path" 2>/dev/null || cleanup_status=1
-    fi
-  done
-  OWNED_TEMP_FILES=()
-  if [[ -n "$LOCAL_TEMP_DIR" && ( -e "$LOCAL_TEMP_DIR" || -L "$LOCAL_TEMP_DIR" ) ]]; then
-    rmdir -- "$LOCAL_TEMP_DIR" 2>/dev/null || cleanup_status=1
-  fi
-  LOCAL_TEMP_DIR=''
-  return "$cleanup_status"
-}
 
 raw_start_cleanup() {
   local cleanup_status=0
   if (( START_CALL_ATTEMPTED == 1 )); then
     adb_read shell am start-foreground-service \
       -n "$PACKAGE/$SERVICE_CLASS" \
-      -a "$CALL_END_ACTION" </dev/null >/dev/null 2>&1 || cleanup_status=1
+      -a "$CALL_END_BOUND_ACTION" \
+      --es conversationId "$CONVERSATION_ID" \
+      --es transport "$TRANSPORT_EXPECTED" \
+      --es run_hash "$RUN_HASH" \
+      --es comparison_hash "$COMPARISON_HASH" \
+      </dev/null >/dev/null 2>&1 || cleanup_status=1
     START_CALL_ATTEMPTED=0
   fi
   if (( START_PREPARE_ATTEMPTED == 1 )); then
     adb_read shell am broadcast --user 0 \
       -n "$PACKAGE/$CONTROL_RECEIVER" \
-      -a "$CONTROL_ACTION_PREFIX.FINALIZE" </dev/null >/dev/null 2>&1 || cleanup_status=1
+      -a "$CONTROL_ACTION_PREFIX.FINALIZE_BOUND" \
+      --es run_hash "$RUN_HASH" \
+      --es comparison_hash "$COMPARISON_HASH" \
+      --es transport "$TRANSPORT_EXPECTED" \
+      </dev/null >/dev/null 2>&1 || cleanup_status=1
     START_PREPARE_ATTEMPTED=0
   fi
   if (( START_FIXTURE_DIR_CREATED == 1 )); then
-    adb_read shell run-as "$PACKAGE" rm -rf -- "$REMOTE_FIXTURE_DIR" \
-      </dev/null >/dev/null 2>&1 || cleanup_status=1
+    remove_owned_remote_directory >/dev/null 2>&1 || cleanup_status=1
     START_FIXTURE_DIR_CREATED=0
   fi
   return "$cleanup_status"
@@ -143,497 +105,18 @@ on_exit() {
 }
 
 on_signal() {
+  if (( STATE_PUBLICATION_CRITICAL == 1 )); then
+    PUBLICATION_SIGNAL=1
+    return
+  fi
+  if (( START_COMMITTED == 1 )); then
+    START_CLEANUP_NEEDED=0
+  fi
   die 'interrupted'
 }
 
 trap on_exit EXIT
 trap on_signal HUP INT TERM
-
-require_command() {
-  command -v "$1" >/dev/null 2>&1 || die 'required command unavailable'
-}
-
-validate_positive_integer() {
-  [[ "$1" =~ ^[1-9][0-9]*$ ]] || die 'invalid timeout configuration'
-}
-
-validate_runtime() {
-  validate_positive_integer "${VOICE_STEP_ADB_TIMEOUT_SECONDS:-10}"
-  validate_positive_integer "${VOICE_STEP_WAIT_TIMEOUT_SECONDS:-120}"
-  validate_positive_integer "${VOICE_STEP_MAX_WAIT_ATTEMPTS:-120}"
-  [[ "${VOICE_STEP_POLL_SECONDS:-1}" =~ ^([0-9]+)(\.[0-9]+)?$ ]] ||
-    die 'invalid timeout configuration'
-  require_command timeout
-  require_command adb
-  require_command python3
-  require_command mktemp
-  require_command chmod
-  require_command ln
-  require_command rm
-  require_command dirname
-  require_command awk
-  require_command tr
-  require_command sleep
-  require_command sha256sum
-  require_command stat
-  require_command cmp
-  [[ -x "$READY" ]] || die 'device-ready helper unavailable'
-}
-
-validate_identifier() {
-  [[ "$1" =~ ^[A-Za-z0-9_-]{1,128}$ ]] || die "invalid $2"
-}
-
-validate_hash() {
-  [[ "$1" =~ ^sha256:[0-9a-f]{64}$ ]] || die "invalid $2"
-}
-
-validate_package() {
-  [[ "$1" == "$PACKAGE_EXPECTED" ]] || die 'invalid package'
-}
-
-validate_absent_destination() {
-  python3 - "$1" 2>/dev/null <<'PY'
-import os
-import stat
-import sys
-
-path = sys.argv[1]
-if not path or not os.path.isabs(path) or os.path.normpath(path) != path:
-    raise SystemExit(1)
-parent = os.path.dirname(path)
-name = os.path.basename(path)
-if not name or name in {".", ".."} or os.path.realpath(parent) != parent:
-    raise SystemExit(1)
-metadata = os.lstat(parent)
-if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
-    raise SystemExit(1)
-try:
-    os.lstat(path)
-except FileNotFoundError:
-    pass
-else:
-    raise SystemExit(1)
-PY
-}
-
-validate_distinct_destinations() {
-  python3 - "$@" 2>/dev/null <<'PY'
-import os
-import sys
-
-paths = [os.path.realpath(os.path.dirname(path)) + os.sep + os.path.basename(path) for path in sys.argv[1:]]
-if len(paths) != len(set(paths)):
-    raise SystemExit(1)
-PY
-}
-
-snapshot_fixture() {
-  local source_path="$1"
-  local metadata_file
-  ensure_local_temp_dir
-  FIXTURE_SNAPSHOT="$LOCAL_TEMP_DIR/fixture.pcm"
-  metadata_file="$LOCAL_TEMP_DIR/fixture.metadata"
-  register_temp_file "$FIXTURE_SNAPSHOT"
-  register_temp_file "$metadata_file"
-  if ! python3 - "$source_path" "$FIXTURE_SNAPSHOT" "$metadata_file" 2>/dev/null <<'PY'
-import hashlib
-import os
-import stat
-import sys
-
-source_path, snapshot_path, metadata_path = sys.argv[1:]
-if not os.path.isabs(source_path) or os.path.normpath(source_path) != source_path:
-    raise SystemExit(1)
-if os.path.realpath(source_path) != source_path:
-    raise SystemExit(1)
-before = os.lstat(source_path)
-if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
-    raise SystemExit(1)
-if stat.S_IMODE(before.st_mode) != 0o600 or before.st_size <= 0:
-    raise SystemExit(1)
-flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-descriptor = os.open(source_path, flags)
-try:
-    opened = os.fstat(descriptor)
-    if (opened.st_dev, opened.st_ino, opened.st_mode, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns) != (
-        before.st_dev,
-        before.st_ino,
-        before.st_mode,
-        before.st_size,
-        before.st_mtime_ns,
-        before.st_ctime_ns,
-    ):
-        raise SystemExit(1)
-    digest = hashlib.sha256()
-    output_descriptor = os.open(snapshot_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(output_descriptor, "wb") as output:
-        while True:
-            block = os.read(descriptor, 65536)
-            if not block:
-                break
-            output.write(block)
-            digest.update(block)
-        output.flush()
-        os.fsync(output.fileno())
-finally:
-    os.close(descriptor)
-after = os.lstat(source_path)
-if (after.st_dev, after.st_ino, after.st_mode, after.st_size, after.st_mtime_ns, after.st_ctime_ns) != (
-    before.st_dev,
-    before.st_ino,
-    before.st_mode,
-    before.st_size,
-    before.st_mtime_ns,
-    before.st_ctime_ns,
-):
-    raise SystemExit(1)
-with open(metadata_path, "x", encoding="ascii") as metadata:
-    metadata.write(str(before.st_size) + "\n")
-    metadata.write("sha256:" + digest.hexdigest() + "\n")
-PY
-  then
-    die 'invalid fixture'
-  fi
-  mapfile -t fixture_metadata < "$metadata_file"
-  [[ "${#fixture_metadata[@]}" == 2 ]] || die 'invalid fixture'
-  FIXTURE_SIZE="${fixture_metadata[0]}"
-  FIXTURE_HASH="${fixture_metadata[1]}"
-  [[ "$FIXTURE_SIZE" =~ ^[1-9][0-9]*$ ]] || die 'invalid fixture'
-  validate_hash "$FIXTURE_HASH" 'fixture hash'
-}
-
-decode_state() {
-  local state_path="$1"
-  local values_file
-  local -a values=()
-  ensure_local_temp_dir
-  values_file="$LOCAL_TEMP_DIR/state.values"
-  register_temp_file "$values_file"
-  if ! python3 - "$state_path" >"$values_file" 2>/dev/null <<'PY'
-import json
-import os
-import stat
-import sys
-
-path = sys.argv[1]
-keys = [
-    "schemaVersion",
-    "serial",
-    "package",
-    "conversationId",
-    "runHash",
-    "comparisonHash",
-    "fixtureToken",
-    "traceId",
-    "transport",
-]
-if not os.path.isabs(path) or os.path.normpath(path) != path or os.path.realpath(path) != path:
-    raise SystemExit(1)
-before = os.lstat(path)
-if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode) or stat.S_IMODE(before.st_mode) != 0o600:
-    raise SystemExit(1)
-flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-descriptor = os.open(path, flags)
-try:
-    opened = os.fstat(descriptor)
-    if (opened.st_dev, opened.st_ino, opened.st_mode, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns) != (
-        before.st_dev,
-        before.st_ino,
-        before.st_mode,
-        before.st_size,
-        before.st_mtime_ns,
-        before.st_ctime_ns,
-    ):
-        raise SystemExit(1)
-    if opened.st_size <= 0 or opened.st_size > 65536:
-        raise SystemExit(1)
-    with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
-        descriptor = -1
-        payload = json.load(handle, object_pairs_hook=lambda pairs: pairs)
-        after_open = os.fstat(handle.fileno())
-finally:
-    if descriptor >= 0:
-        os.close(descriptor)
-after = os.lstat(path)
-if (after.st_dev, after.st_ino, after.st_mode, after.st_size, after.st_mtime_ns, after.st_ctime_ns) != (
-    before.st_dev,
-    before.st_ino,
-    before.st_mode,
-    before.st_size,
-    before.st_mtime_ns,
-    before.st_ctime_ns,
-) or (after_open.st_dev, after_open.st_ino, after_open.st_mode, after_open.st_size, after_open.st_mtime_ns, after_open.st_ctime_ns) != (
-    before.st_dev,
-    before.st_ino,
-    before.st_mode,
-    before.st_size,
-    before.st_mtime_ns,
-    before.st_ctime_ns,
-):
-    raise SystemExit(1)
-if not isinstance(payload, list) or [key for key, _ in payload] != keys:
-    raise SystemExit(1)
-state = dict(payload)
-if type(state["schemaVersion"]) is not int or state["schemaVersion"] != 1:
-    raise SystemExit(1)
-if any(type(state[key]) is not str for key in keys[1:]):
-    raise SystemExit(1)
-for key in keys:
-    value = str(state[key]).encode("utf-8")
-    sys.stdout.buffer.write(value + b"\0")
-PY
-  then
-    die 'invalid state'
-  fi
-  mapfile -d '' -t values < "$values_file"
-  [[ "${#values[@]}" == 9 && "${values[0]}" == 1 ]] || die 'invalid state'
-  SERIAL="${values[1]}"
-  PACKAGE="${values[2]}"
-  CONVERSATION_ID="${values[3]}"
-  RUN_HASH="${values[4]}"
-  COMPARISON_HASH="${values[5]}"
-  FIXTURE_TOKEN="${values[6]}"
-  TRACE_ID="${values[7]}"
-  [[ "${values[8]}" == "$TRANSPORT_EXPECTED" ]] || die 'invalid state'
-  validate_identifier "$SERIAL" 'serial'
-  validate_package "$PACKAGE"
-  validate_identifier "$CONVERSATION_ID" 'conversation id'
-  validate_hash "$RUN_HASH" 'run hash'
-  validate_hash "$COMPARISON_HASH" 'comparison hash'
-  validate_identifier "$FIXTURE_TOKEN" 'fixture token'
-  validate_identifier "$TRACE_ID" 'trace id'
-}
-
-parse_options() {
-  local allowed="$1"
-  shift
-  PARSED=()
-  local option
-  while (( $# > 0 )); do
-    option="$1"
-    case " $allowed " in
-      *" $option "*) ;;
-      *) die 'unknown option' ;;
-    esac
-    [[ -z "${PARSED[$option]+present}" ]] || die 'repeated option'
-    (( $# >= 2 )) || die 'missing option value'
-    PARSED["$option"]="$2"
-    shift 2
-  done
-}
-
-require_options() {
-  local option
-  for option in "$@"; do
-    [[ -n "${PARSED[$option]+present}" && -n "${PARSED[$option]}" ]] || die 'missing required option'
-  done
-}
-
-decode_broadcast_data() {
-  local raw="$1"
-  raw="${raw//\\n/$'\n'}"
-  raw="${raw//\\r/$'\r'}"
-  raw="${raw//\\\\/\\}"
-  printf '%s' "$raw"
-}
-
-BROADCAST_DATA=''
-broadcast_read() {
-  local receiver="$1"
-  local action="$2"
-  shift 2
-  local output
-  local completed
-  local result_code
-  local raw_data
-  if ! output="$(adb_read shell am broadcast --user 0 \
-      -n "$PACKAGE/$receiver" -a "$action" "$@" 2>/dev/null)"; then
-    die 'ADB command failed'
-  fi
-  completed="$(printf '%s\n' "$output" | awk '/^Broadcast completed:/ { count++; line=$0 } END { if (count == 1) print line }')"
-  if [[ ! "$completed" =~ ^Broadcast\ completed:\ result=([-0-9]+),\ data=\"(.*)\"$ ]]; then
-    die 'unexpected receiver response'
-  fi
-  result_code="${BASH_REMATCH[1]}"
-  raw_data="${BASH_REMATCH[2]}"
-  [[ "$result_code" == 0 ]] || die 'receiver rejected request'
-  BROADCAST_DATA="$(decode_broadcast_data "$raw_data")"
-}
-
-STATUS_RUN_STATE=''
-STATUS_RUN_HASH=''
-STATUS_COMPARISON_HASH=''
-STATUS_TRANSPORT=''
-STATUS_EVENT_COUNT=''
-STATUS_NETWORK=''
-STATUS_VALIDATED=''
-parse_status_data() {
-  local -a lines=()
-  mapfile -t lines <<< "$BROADCAST_DATA"
-  [[ "${#lines[@]}" == 9 ]] || return 1
-  [[ "${lines[0]}" == 'status=ok' && "${lines[1]}" == 'action=status' ]] ||
-    return 1
-  [[ "${lines[2]}" == run_state=* && "${lines[3]}" == run_hash=* &&
-     "${lines[4]}" == comparison_hash=* && "${lines[5]}" == requested_transport=* &&
-     "${lines[6]}" == event_count=* && "${lines[7]}" == network=* &&
-     "${lines[8]}" == validated=* ]] || return 1
-  STATUS_RUN_STATE="${lines[2]#run_state=}"
-  STATUS_RUN_HASH="${lines[3]#run_hash=}"
-  STATUS_COMPARISON_HASH="${lines[4]#comparison_hash=}"
-  STATUS_TRANSPORT="${lines[5]#requested_transport=}"
-  STATUS_EVENT_COUNT="${lines[6]#event_count=}"
-  STATUS_NETWORK="${lines[7]#network=}"
-  STATUS_VALIDATED="${lines[8]#validated=}"
-  [[ "$STATUS_RUN_STATE" =~ ^(idle|active|finalized)$ ]] || return 1
-  [[ "$STATUS_EVENT_COUNT" =~ ^[0-9]+$ ]] || return 1
-  [[ "$STATUS_NETWORK" =~ ^(wifi|cellular|none)$ ]] || return 1
-  [[ "$STATUS_VALIDATED" =~ ^(true|false)$ ]] || return 1
-}
-
-read_status() {
-  broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.STATUS"
-  parse_status_data || die 'unexpected status response'
-}
-
-ensure_device_and_package() {
-  local devices_output
-  local authorized_count
-  local selected_count
-  local qemu
-  local hardware
-  local package_path
-  if ! devices_output="$(adb_global_read devices -l 2>/dev/null)"; then
-    die 'ADB command failed'
-  fi
-  authorized_count="$(printf '%s\n' "$devices_output" | awk '$2 == "device" { count++ } END { print count + 0 }')"
-  selected_count="$(printf '%s\n' "$devices_output" | awk -v serial="$SERIAL" '$1 == serial && $2 == "device" { count++ } END { print count + 0 }')"
-  [[ "$authorized_count" == 1 && "$selected_count" == 1 ]] || die 'device is not uniquely authorized'
-  if ! VOICE_AGENT_E2E_SERIAL="$SERIAL" \
-      ADB_DEVICE_READY_TIMEOUT_SECONDS="${VOICE_STEP_ADB_TIMEOUT_SECONDS:-10}" \
-      "$READY" "$SERIAL" >/dev/null 2>&1; then
-    die 'device is not ready'
-  fi
-  qemu="$(adb_read shell getprop ro.kernel.qemu 2>/dev/null | tr -d '\r[:space:]')" ||
-    die 'ADB command failed'
-  hardware="$(adb_read shell getprop ro.hardware 2>/dev/null | tr -d '\r[:space:]')" ||
-    die 'ADB command failed'
-  hardware="${hardware,,}"
-  [[ "$qemu" == '' || "$qemu" == 0 || "$qemu" == false ]] || die 'physical device required'
-  case "$hardware" in
-    *ranchu*|*goldfish*|*cuttlefish*) die 'physical device required' ;;
-  esac
-  package_path="$(adb_read shell pm path "$PACKAGE" 2>/dev/null)" || die 'debug package unavailable'
-  [[ "$package_path" == package:* ]] || die 'debug package unavailable'
-  adb_read shell run-as "$PACKAGE" id </dev/null >/dev/null 2>&1 || die 'run-as unavailable'
-}
-
-verify_package_contract() {
-  local package_dump
-  local protected_probe
-  package_dump="$(adb_read shell dumpsys package "$PACKAGE" 2>/dev/null)" || die 'package readback failed'
-  [[ "$package_dump" == *'DEBUGGABLE'* &&
-     "$package_dump" == *'VOICE_AGENT_LIVEKIT_EXPERIMENT_ENABLED=true'* &&
-     "$package_dump" == *"$PACKAGE/$SERVICE_CLASS"* &&
-     "$package_dump" == *"$PACKAGE/$CONTROL_RECEIVER"* &&
-     "$package_dump" == *"$PACKAGE/$FIXTURE_RECEIVER"* ]] || die 'package contract mismatch'
-  protected_probe="$(adb_read shell run-as "$PACKAGE" sh -c '
-: voice-step-protected-root
-root=$(readlink -f files) || exit 1
-[ -d "$root" ] || exit 1
-case "$root" in
-  /data/user/[0-9]*/me.rerere.rikkahub.debug/files|/data/data/me.rerere.rikkahub.debug/files) ;;
-  *) exit 1 ;;
-esac
-printf ready
-' 2>/dev/null)" || die 'protected path unavailable'
-  [[ "$protected_probe" == ready ]] || die 'protected path unavailable'
-}
-
-read_trace_pointer() {
-  local probe
-  local value
-  probe="$(adb_read shell run-as "$PACKAGE" sh -c '
-: voice-step-trace-probe
-if [ -L "$1" ]; then
-  printf invalid
-elif [ -e "$1" ]; then
-  [ -f "$1" ] || { printf invalid; exit; }
-  printf present
-else
-  printf absent
-fi
-' sh "$LATEST_TRACE_PATH" 2>/dev/null)" || die 'trace readback failed'
-  case "$probe" in
-    absent)
-      TRACE_POINTER_PRESENT=0
-      TRACE_POINTER_VALUE=''
-      ;;
-    present)
-      value="$(adb_read exec-out run-as "$PACKAGE" cat "$LATEST_TRACE_PATH" 2>/dev/null)" ||
-        die 'trace readback failed'
-      value="${value//$'\r'/}"
-      value="${value//$'\n'/}"
-      validate_identifier "$value" 'trace id'
-      TRACE_POINTER_PRESENT=1
-      TRACE_POINTER_VALUE="$value"
-      ;;
-    *) die 'trace readback failed' ;;
-  esac
-}
-
-stage_snapshot() {
-  adb_read shell run-as "$PACKAGE" mkdir -p "$REMOTE_FIXTURE_DIR" \
-    </dev/null >/dev/null 2>&1 || die 'fixture staging failed'
-  START_FIXTURE_DIR_CREATED=1
-  adb_read shell run-as "$PACKAGE" sh -c 'umask 077; cat > "$1"' sh "$REMOTE_FIXTURE_PATH" \
-    < "$FIXTURE_SNAPSHOT" >/dev/null 2>&1 || die 'fixture staging failed'
-  local metadata
-  metadata="$(adb_read shell run-as "$PACKAGE" sh -c '
-: voice-step-fixture-metadata
-[ -f "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %a "$1")" = 600 ] || exit 1
-printf "%s\nsha256:%s\n" "$(stat -c %s "$1")" "$(sha256sum "$1" | cut -d " " -f 1)"
-' sh "$REMOTE_FIXTURE_PATH" 2>/dev/null)" || die 'fixture staging verification failed'
-  [[ "$metadata" == "$FIXTURE_SIZE"$'\n'"$FIXTURE_HASH" ]] || die 'fixture staging verification failed'
-}
-
-stream_and_verify_snapshot() {
-  adb_read shell run-as "$PACKAGE" sh -c 'umask 077; cat > "$1"' sh "$REMOTE_FIXTURE_PATH" \
-    < "$FIXTURE_SNAPSHOT" >/dev/null 2>&1 || die 'fixture staging failed'
-  local metadata
-  metadata="$(adb_read shell run-as "$PACKAGE" sh -c '
-: voice-step-fixture-metadata
-[ -f "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %a "$1")" = 600 ] || exit 1
-printf "%s\nsha256:%s\n" "$(stat -c %s "$1")" "$(sha256sum "$1" | cut -d " " -f 1)"
-' sh "$REMOTE_FIXTURE_PATH" 2>/dev/null)" || die 'fixture staging verification failed'
-  [[ "$metadata" == "$FIXTURE_SIZE"$'\n'"$FIXTURE_HASH" ]] || die 'fixture staging verification failed'
-}
-
-inject_fixture_once() {
-  local role="$1"
-  REMOTE_FIXTURE_DIR="files/voice-real-room/${RUN_HASH#sha256:}"
-  REMOTE_FIXTURE_PATH="$REMOTE_FIXTURE_DIR/${role}-${FIXTURE_HASH#sha256:}.pcm"
-  stream_and_verify_snapshot
-  broadcast_read "$FIXTURE_RECEIVER" "$FIXTURE_STAGE_ACTION" \
-    --es token "$FIXTURE_TOKEN" \
-    --es path "$REMOTE_FIXTURE_PATH" \
-    --ei chunk_bytes "$FIXTURE_CHUNK_BYTES" \
-    --el chunk_delay_ms "$FIXTURE_CHUNK_DELAY_MS"
-  [[ "$BROADCAST_DATA" == $'status=ok\naction=stage\naccepted=true' ]] ||
-    die 'unexpected receiver response'
-  broadcast_read "$FIXTURE_RECEIVER" "$FIXTURE_TRIGGER_ACTION" \
-    --es token "$FIXTURE_TOKEN" \
-    --es path "$REMOTE_FIXTURE_PATH"
-  [[ "$BROADCAST_DATA" == $'status=ok\naction=trigger\naccepted=true' ]] ||
-    die 'unexpected receiver response'
-}
-
-read_call_service_active() {
-  local services
-  services="$(adb_read shell dumpsys activity services "$PACKAGE" 2>/dev/null)" ||
-    die 'call service readback failed'
-  [[ "$services" == *"$PACKAGE/$SERVICE_CLASS"* ]] || die 'call service is not active'
-}
 
 read_status_artifacts() {
   local automation_path
@@ -857,8 +340,11 @@ run_status_operation() {
 
 run_finalize() {
   validate_runtime
-  broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.FINALIZE"
-  [[ "$BROADCAST_DATA" == $'status=ok\naction=finalize' ]] || die 'unexpected receiver response'
+  broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.FINALIZE_BOUND" \
+    --es run_hash "$RUN_HASH" \
+    --es comparison_hash "$COMPARISON_HASH" \
+    --es transport "$TRANSPORT_EXPECTED"
+  [[ "$BROADCAST_DATA" == $'status=ok\naction=finalize_bound' ]] || die 'unexpected receiver response'
   read_status
   [[ "$STATUS_RUN_STATE" == finalized && "$STATUS_RUN_HASH" == "$RUN_HASH" &&
      "$STATUS_COMPARISON_HASH" == "$COMPARISON_HASH" &&
@@ -870,139 +356,6 @@ run_finalize() {
 }
 
 STABLE_CAPTURE_TEMP=''
-read_source_metadata() {
-  local source_path="$1"
-  local metadata
-  metadata="$(adb_read shell run-as "$PACKAGE" sh -c '
-: voice-step-source-metadata
-[ -f "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %a "$1")" = 600 ] || exit 1
-printf "regular:600:%s:%s:%s:%s\n" \
-  "$(stat -c %s "$1")" "$(stat -c %i "$1")" "$(stat -c %Y "$1")" "$(stat -c %Z "$1")"
-' sh "$source_path" 2>/dev/null)" || die 'artifact source unavailable'
-  [[ "$metadata" =~ ^regular:600:[1-9][0-9]*:[0-9]+:-?[0-9]+:-?[0-9]+$ ]] ||
-    die 'artifact source invalid'
-  printf '%s' "$metadata"
-}
-
-read_stable_artifact() {
-  local source_path="$1"
-  local destination="$2"
-  local parent
-  local first
-  local second
-  local metadata_before
-  local metadata_between
-  local metadata_after
-  local source_size
-  parent="$(dirname -- "$destination")" || die 'capture temporary storage failed'
-  first="$(mktemp "$parent/.voice-step-capture.XXXXXX" 2>/dev/null)" ||
-    die 'capture temporary storage failed'
-  second="$(mktemp "$parent/.voice-step-capture.XXXXXX" 2>/dev/null)" || {
-    register_temp_file "$first"
-    die 'capture temporary storage failed'
-  }
-  register_temp_file "$first"
-  register_temp_file "$second"
-  chmod 600 -- "$first" "$second" 2>/dev/null || die 'capture temporary storage failed'
-  metadata_before="$(read_source_metadata "$source_path")"
-  adb_read exec-out run-as "$PACKAGE" cat "$source_path" >"$first" 2>/dev/null ||
-    die 'artifact read failed'
-  metadata_between="$(read_source_metadata "$source_path")"
-  adb_read exec-out run-as "$PACKAGE" cat "$source_path" >"$second" 2>/dev/null ||
-    die 'artifact read failed'
-  metadata_after="$(read_source_metadata "$source_path")"
-  [[ "$metadata_before" == "$metadata_between" && "$metadata_before" == "$metadata_after" ]] ||
-    die 'artifact source changed'
-  source_size="$(printf '%s' "$metadata_before" | awk -F: '{print $3}')"
-  [[ "$(stat -c %s "$first" 2>/dev/null)" == "$source_size" &&
-     "$(stat -c %s "$second" 2>/dev/null)" == "$source_size" ]] ||
-    die 'artifact source changed'
-  cmp -s -- "$first" "$second" || die 'artifact source changed'
-  python3 - "$first" 2>/dev/null <<'PY' || die 'artifact source invalid'
-import os
-import stat
-import sys
-
-path = sys.argv[1]
-metadata = os.lstat(path)
-if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
-    raise SystemExit(1)
-if stat.S_IMODE(metadata.st_mode) != 0o600 or metadata.st_size <= 0:
-    raise SystemExit(1)
-with open(path, "rb") as handle:
-    content = handle.read()
-if len(content) != metadata.st_size or not content.endswith(b"\n"):
-    raise SystemExit(1)
-PY
-  rm -- "$second" 2>/dev/null || die 'capture temporary cleanup failed'
-  forget_temp_file "$second"
-  STABLE_CAPTURE_TEMP="$first"
-}
-
-publish_owned_temp() {
-  local temporary="$1"
-  local destination="$2"
-  local expected_size
-  local expected_hash
-  expected_size="$(stat -c %s "$temporary" 2>/dev/null)" || die 'publication failed'
-  expected_hash="$(sha256sum "$temporary" 2>/dev/null | awk '{print $1}')" || die 'publication failed'
-  [[ "$expected_size" =~ ^[1-9][0-9]*$ && "$expected_hash" =~ ^[0-9a-f]{64}$ ]] ||
-    die 'publication failed'
-  ln -T -- "$temporary" "$destination" 2>/dev/null || die 'publication failed'
-  if ! python3 - "$temporary" "$destination" "$expected_size" "$expected_hash" 2>/dev/null <<'PY'
-import hashlib
-import os
-import stat
-import sys
-
-temporary, destination, expected_size, expected_hash = sys.argv[1:]
-expected_size = int(expected_size)
-temporary_stat = os.lstat(temporary)
-destination_stat = os.lstat(destination)
-if (
-    stat.S_ISLNK(destination_stat.st_mode)
-    or not stat.S_ISREG(destination_stat.st_mode)
-    or stat.S_IMODE(destination_stat.st_mode) != 0o600
-    or destination_stat.st_size != expected_size
-    or (temporary_stat.st_dev, temporary_stat.st_ino) != (destination_stat.st_dev, destination_stat.st_ino)
-):
-    raise SystemExit(1)
-with open(destination, "rb") as handle:
-    content = handle.read()
-if len(content) != expected_size or hashlib.sha256(content).hexdigest() != expected_hash:
-    raise SystemExit(1)
-PY
-  then
-    die 'publication failed'
-  fi
-  rm -- "$temporary" 2>/dev/null || die 'publication temporary cleanup failed'
-  forget_temp_file "$temporary"
-  if ! python3 - "$destination" "$expected_size" "$expected_hash" 2>/dev/null <<'PY'
-import hashlib
-import os
-import stat
-import sys
-
-destination, expected_size, expected_hash = sys.argv[1:]
-metadata = os.lstat(destination)
-if (
-    stat.S_ISLNK(metadata.st_mode)
-    or not stat.S_ISREG(metadata.st_mode)
-    or stat.S_IMODE(metadata.st_mode) != 0o600
-    or metadata.st_nlink != 1
-    or metadata.st_size != int(expected_size)
-):
-    raise SystemExit(1)
-with open(destination, "rb") as handle:
-    content = handle.read()
-if len(content) != metadata.st_size or hashlib.sha256(content).hexdigest() != expected_hash:
-    raise SystemExit(1)
-PY
-  then
-    die 'publication failed'
-  fi
-}
-
 run_capture() {
   local automation_output="$1"
   local private_output="$2"
@@ -1065,6 +418,48 @@ try_read_end_status() {
   [[ "$STATUS_RUN_STATE" == finalized && "$STATUS_RUN_HASH" == "$RUN_HASH" &&
      "$STATUS_COMPARISON_HASH" == "$COMPARISON_HASH" &&
      "$STATUS_TRANSPORT" == "$TRANSPORT_EXPECTED" ]] || return 20
+}
+
+probe_device_reachability() {
+  local result
+  if ! result="$(adb_read shell echo voice-step-reachable </dev/null)"; then
+    return 10
+  fi
+  [[ "$result" == voice-step-reachable ]] || return 20
+}
+
+complete_reachable_product_failure() {
+  local destination="$1"
+  local call_stopped="$2"
+  local fixtures_removed="$3"
+  local status_readback
+  if try_read_end_status; then
+    status_readback=0
+  else
+    status_readback=$?
+  fi
+  case "$status_readback" in
+    0) complete_end_outcome "$destination" product_failure "$call_stopped" "$fixtures_removed" true ;;
+    10) complete_end_outcome "$destination" product_failure "$call_stopped" "$fixtures_removed" false ;;
+    *) die 'ambiguous cleanup readback' ;;
+  esac
+}
+
+complete_failed_end_step() {
+  local destination="$1"
+  local call_stopped="$2"
+  local fixtures_removed="$3"
+  local reachability
+  if probe_device_reachability; then
+    reachability=0
+  else
+    reachability=$?
+  fi
+  case "$reachability" in
+    0) complete_reachable_product_failure "$destination" "$call_stopped" "$fixtures_removed" ;;
+    10) complete_end_outcome "$destination" infrastructure_interruption "$call_stopped" "$fixtures_removed" false ;;
+    *) die 'ambiguous cleanup readback' ;;
+  esac
 }
 
 probe_end_service() {
@@ -1148,12 +543,19 @@ run_end() {
   local cleanup_output="$1"
   local wait_status
   local status_readback
-  local run_fixture_dir="files/voice-real-room/${RUN_HASH#sha256:}"
+  local removal_status
   validate_runtime
+  REMOTE_FIXTURE_DIR="files/voice-real-room/${RUN_HASH#sha256:}"
+  compute_remote_owner_hash
   if ! adb_read shell am start-foreground-service \
     -n "$PACKAGE/$SERVICE_CLASS" \
-    -a "$CALL_END_ACTION" </dev/null >/dev/null 2>&1; then
-    complete_end_outcome "$cleanup_output" infrastructure_interruption false false false
+    -a "$CALL_END_BOUND_ACTION" \
+    --es conversationId "$CONVERSATION_ID" \
+    --es transport "$TRANSPORT_EXPECTED" \
+    --es run_hash "$RUN_HASH" \
+    --es comparison_hash "$COMPARISON_HASH" \
+    </dev/null >/dev/null 2>&1; then
+    complete_failed_end_step "$cleanup_output" false false
     return
   fi
   if wait_end_service; then
@@ -1163,7 +565,7 @@ run_end() {
   fi
   case "$wait_status" in
     10)
-      complete_end_outcome "$cleanup_output" infrastructure_interruption false false false
+      complete_failed_end_step "$cleanup_output" false false
       return
       ;;
     20)
@@ -1177,7 +579,7 @@ run_end() {
       fi
       case "$status_readback" in
         0) complete_end_outcome "$cleanup_output" product_failure false false true ;;
-        10) complete_end_outcome "$cleanup_output" infrastructure_interruption false false false ;;
+        10) complete_failed_end_step "$cleanup_output" false false ;;
         *) die 'ambiguous cleanup readback' ;;
       esac
       return
@@ -1185,11 +587,17 @@ run_end() {
     0) ;;
     *) die 'ambiguous cleanup readback' ;;
   esac
-  if ! adb_read shell run-as "$PACKAGE" rm -rf -- "$run_fixture_dir" \
-    </dev/null >/dev/null 2>&1; then
-    complete_end_outcome "$cleanup_output" infrastructure_interruption true false false
-    return
+  if remove_owned_remote_directory; then
+    removal_status=0
+  else
+    removal_status=$?
   fi
+  case "$removal_status" in
+    0) ;;
+    1) complete_failed_end_step "$cleanup_output" true false; return ;;
+    2) complete_reachable_product_failure "$cleanup_output" true false; return ;;
+    *) die 'ambiguous cleanup readback' ;;
+  esac
   if try_read_end_status; then
     status_readback=0
   else
@@ -1197,7 +605,7 @@ run_end() {
   fi
   case "$status_readback" in
     0) complete_end_outcome "$cleanup_output" complete true true true ;;
-    10) complete_end_outcome "$cleanup_output" infrastructure_interruption true true false ;;
+    10) complete_failed_end_step "$cleanup_output" true true ;;
     *) die 'ambiguous cleanup readback' ;;
   esac
 }
@@ -1281,91 +689,6 @@ wait_for_new_trace() {
   die 'trace activation timed out'
 }
 
-publish_state() {
-  local destination="$1"
-  local parent
-  local expected_hash
-  parent="$(dirname -- "$destination")" || die 'state publication failed'
-  STATE_PUBLICATION_TEMP="$(mktemp "$parent/.voice-step-state.XXXXXX" 2>/dev/null)" ||
-    die 'state publication failed'
-  register_temp_file "$STATE_PUBLICATION_TEMP"
-  chmod 600 -- "$STATE_PUBLICATION_TEMP" 2>/dev/null || die 'state publication failed'
-  if ! python3 - "$STATE_PUBLICATION_TEMP" "$SERIAL" "$PACKAGE" "$CONVERSATION_ID" \
-    "$RUN_HASH" "$COMPARISON_HASH" "$FIXTURE_TOKEN" "$TRACE_ID" 2>/dev/null <<'PY'
-import json
-import os
-import sys
-
-path, serial, package, conversation, run_hash, comparison_hash, token, trace = sys.argv[1:]
-payload = {
-    "schemaVersion": 1,
-    "serial": serial,
-    "package": package,
-    "conversationId": conversation,
-    "runHash": run_hash,
-    "comparisonHash": comparison_hash,
-    "fixtureToken": token,
-    "traceId": trace,
-    "transport": "livekit_experimental",
-}
-flags = os.O_WRONLY | os.O_TRUNC | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-descriptor = os.open(path, flags)
-with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-    json.dump(payload, handle, separators=(",", ":"))
-    handle.write("\n")
-    handle.flush()
-    os.fsync(handle.fileno())
-PY
-  then
-    die 'state publication failed'
-  fi
-  [[ -s "$STATE_PUBLICATION_TEMP" ]] || die 'state publication failed'
-  expected_hash="$(sha256sum "$STATE_PUBLICATION_TEMP" 2>/dev/null | awk '{print $1}')" ||
-    die 'state publication failed'
-  ln -T -- "$STATE_PUBLICATION_TEMP" "$destination" 2>/dev/null || die 'state publication failed'
-  if ! python3 - "$STATE_PUBLICATION_TEMP" "$destination" "$expected_hash" 2>/dev/null <<'PY'
-import hashlib
-import os
-import stat
-import sys
-
-temporary, destination, expected_hash = sys.argv[1:]
-temp_stat = os.lstat(temporary)
-dest_stat = os.lstat(destination)
-if (
-    stat.S_ISLNK(dest_stat.st_mode)
-    or not stat.S_ISREG(dest_stat.st_mode)
-    or stat.S_IMODE(dest_stat.st_mode) != 0o600
-    or (temp_stat.st_dev, temp_stat.st_ino) != (dest_stat.st_dev, dest_stat.st_ino)
-):
-    raise SystemExit(1)
-with open(destination, "rb") as handle:
-    content = handle.read()
-if hashlib.sha256(content).hexdigest() != expected_hash or len(content) != dest_stat.st_size:
-    raise SystemExit(1)
-PY
-  then
-    die 'state publication failed'
-  fi
-  rm -- "$STATE_PUBLICATION_TEMP" 2>/dev/null || die 'state publication failed'
-  forget_temp_file "$STATE_PUBLICATION_TEMP"
-  STATE_PUBLICATION_TEMP=''
-  if ! python3 - "$destination" 2>/dev/null <<'PY'
-import os
-import stat
-import sys
-
-metadata = os.lstat(sys.argv[1])
-if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
-    raise SystemExit(1)
-if stat.S_IMODE(metadata.st_mode) != 0o600 or metadata.st_nlink != 1:
-    raise SystemExit(1)
-PY
-  then
-    die 'state publication failed'
-  fi
-}
-
 run_preflight() {
   validate_runtime
   ensure_device_and_package
@@ -1428,6 +751,8 @@ run_start() {
     --es conversationId "$CONVERSATION_ID" \
     --es transport "$TRANSPORT_EXPECTED" \
     --es captureFixtureToken "$FIXTURE_TOKEN" \
+    --es run_hash "$RUN_HASH" \
+    --es comparison_hash "$COMPARISON_HASH" \
     </dev/null >/dev/null 2>&1 || die 'call start failed'
   wait_for_call_active
   wait_for_new_trace "$old_trace_present" "$old_trace_value"

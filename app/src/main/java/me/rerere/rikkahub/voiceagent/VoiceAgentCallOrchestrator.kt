@@ -19,6 +19,7 @@ internal interface VoiceAgentCallServiceController {
 
     suspend fun start(request: VoiceAgentCallRequest): VoiceAgentCallStartResult
     suspend fun end(): VoiceAgentCallEndResult
+    fun endIfMatches(expected: VoiceAgentBoundCallIdentity): VoiceAgentCallEndAdmission?
     fun closeNow()
     fun updateCallStatus(status: VoiceCallStatus)
 }
@@ -77,6 +78,23 @@ internal class VoiceAgentCallOrchestrator(
         return reply.await()
     }
 
+    override fun endIfMatches(expected: VoiceAgentBoundCallIdentity): VoiceAgentCallEndAdmission? {
+        val reply = CompletableDeferred<VoiceAgentCallEndResult>()
+        val execution = synchronized(lock) {
+            val request = (callState as? VoiceAgentCallState.Active)?.call?.request ?: return null
+            if (
+                request.conversationId != expected.conversationId ||
+                request.transport != expected.transport ||
+                request.automationBinding != expected.automationBinding
+            ) {
+                return null
+            }
+            reduceAndDrainAdmissionsLocked(VoiceAgentCallEvent.EndRequested(reply))
+        }
+        runExecution(execution)
+        return VoiceAgentCallEndAdmission(reply)
+    }
+
     override fun closeNow() {
         dispatch(VoiceAgentCallEvent.CloseNowRequested)
     }
@@ -106,6 +124,10 @@ internal class VoiceAgentCallOrchestrator(
         val execution = synchronized(lock) {
             reduceAndDrainAdmissionsLocked(event)
         }
+        runExecution(execution)
+    }
+
+    private fun runExecution(execution: EventExecution) {
         try {
             execution.effects.forEach(::runEffect)
         } finally {

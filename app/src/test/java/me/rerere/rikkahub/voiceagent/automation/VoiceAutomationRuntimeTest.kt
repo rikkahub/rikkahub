@@ -4,6 +4,8 @@ import java.nio.file.Files
 import me.rerere.rikkahub.voiceagent.VoiceAgentTransport
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -120,6 +122,27 @@ class VoiceAutomationRuntimeTest {
         assertEquals(VoiceAutomationRunState.Finalized, runtime.status().state)
         assertEquals(RUN_HASH, runtime.status().runHash)
         assertEquals(3, runtime.status().eventCount)
+    }
+
+    @Test
+    fun `bound finalize rejects stale binding and finalizes the exact active binding`() {
+        val root = Files.createTempDirectory("voice-automation-runtime-bound-finalize").toFile()
+        val runtime = DefaultVoiceAutomationRuntime(root, FakeClock())
+        val activeBinding = VoiceAutomationRunBinding(
+            RUN_HASH,
+            COMPARISON_HASH,
+            VoiceAgentTransport.LiveKitExperimental,
+        )
+        runtime.prepare(activeBinding)
+        val staleBinding = activeBinding.copy(runHash = NEXT_RUN_HASH)
+
+        assertNull(runtime.finalizeRunIfMatches(staleBinding))
+        assertEquals(VoiceAutomationRunState.Active, runtime.status().state)
+        assertEquals(1, runtime.status().eventCount)
+
+        assertNotNull(runtime.finalizeRunIfMatches(activeBinding))
+        assertEquals(VoiceAutomationRunState.Finalized, runtime.status().state)
+        assertEquals(2, runtime.status().eventCount)
     }
 
     @Test

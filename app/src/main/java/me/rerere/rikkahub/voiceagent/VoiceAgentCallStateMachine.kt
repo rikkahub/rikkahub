@@ -12,6 +12,22 @@ internal data class VoiceAgentCallRequest(
     val config: VoiceAgentLaunchConfig,
     val transport: VoiceAgentTransport,
     val captureFixtureToken: String? = null,
+    val automationBinding: VoiceAgentAutomationBinding? = null,
+)
+
+internal data class VoiceAgentAutomationBinding(
+    val runHash: String,
+    val comparisonHash: String,
+)
+
+internal data class VoiceAgentBoundCallIdentity(
+    val conversationId: Uuid,
+    val transport: VoiceAgentTransport,
+    val automationBinding: VoiceAgentAutomationBinding,
+)
+
+internal class VoiceAgentCallEndAdmission(
+    internal val result: CompletableDeferred<VoiceAgentCallEndResult>,
 )
 
 internal data class ActiveVoiceAgentIdentity(

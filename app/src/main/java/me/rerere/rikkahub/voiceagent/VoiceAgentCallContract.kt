@@ -7,9 +7,12 @@ import kotlin.uuid.Uuid
 object VoiceAgentCallContract {
     const val ACTION_START = "me.rerere.rikkahub.voiceagent.action.START"
     const val ACTION_END = "me.rerere.rikkahub.voiceagent.action.END"
+    const val ACTION_END_BOUND = "me.rerere.rikkahub.voiceagent.action.END_BOUND"
     const val EXTRA_CONVERSATION_ID = "conversationId"
     const val EXTRA_TRANSPORT = "transport"
     const val EXTRA_CAPTURE_FIXTURE_TOKEN = "captureFixtureToken"
+    const val EXTRA_RUN_HASH = "run_hash"
+    const val EXTRA_COMPARISON_HASH = "comparison_hash"
     const val EXTRA_ROUTE_VOICE_AGENT_CONVERSATION_ID = "voiceAgentConversationId"
     const val EXTRA_ROUTE_VOICE_AGENT_TRANSPORT = "voiceAgentTransport"
     const val NOTIFICATION_ID = 2401
@@ -35,6 +38,7 @@ internal data class VoiceAgentCallStartFields(
     val conversationId: Uuid,
     val transport: VoiceAgentTransport,
     val captureFixtureToken: String?,
+    val automationBinding: VoiceAgentAutomationBinding?,
 )
 
 internal data class EncodedVoiceAgentCallStartFields(
@@ -64,13 +68,66 @@ internal fun decodeVoiceAgentCallStartFields(
     conversationId: String?,
     transportWireName: String?,
     captureFixtureToken: String?,
+    runHash: String? = null,
+    comparisonHash: String? = null,
 ): VoiceAgentCallStartFields? {
     val parsedConversationId = conversationId?.let { runCatching { Uuid.parse(it) }.getOrNull() }
         ?: return null
     val transport = VoiceAgentTransport.fromWireName(transportWireName) ?: return null
     val normalizedFixtureToken = captureFixtureToken?.trim()?.takeIf(String::isNotEmpty)
     if (captureFixtureToken != null && normalizedFixtureToken == null) return null
-    return VoiceAgentCallStartFields(parsedConversationId, transport, normalizedFixtureToken)
+    val automationBinding = decodeVoiceAgentAutomationBinding(runHash, comparisonHash) ?: when {
+        runHash == null && comparisonHash == null -> null
+        else -> return null
+    }
+    return VoiceAgentCallStartFields(
+        parsedConversationId,
+        transport,
+        normalizedFixtureToken,
+        automationBinding,
+    )
+}
+
+internal fun decodeVoiceAgentBoundCallIdentity(
+    conversationId: String?,
+    transportWireName: String?,
+    runHash: String?,
+    comparisonHash: String?,
+): VoiceAgentBoundCallIdentity? {
+    val parsedConversationId = conversationId?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+        ?: return null
+    val transport = VoiceAgentTransport.fromWireName(transportWireName) ?: return null
+    val automationBinding = decodeVoiceAgentAutomationBinding(runHash, comparisonHash) ?: return null
+    return VoiceAgentBoundCallIdentity(parsedConversationId, transport, automationBinding)
+}
+
+internal fun decodeVoiceAgentBoundCallIdentity(
+    extras: Map<String, String?>,
+): VoiceAgentBoundCallIdentity? {
+    val expectedKeys = setOf(
+        VoiceAgentCallContract.EXTRA_CONVERSATION_ID,
+        VoiceAgentCallContract.EXTRA_TRANSPORT,
+        VoiceAgentCallContract.EXTRA_RUN_HASH,
+        VoiceAgentCallContract.EXTRA_COMPARISON_HASH,
+    )
+    if (extras.keys != expectedKeys) return null
+    return decodeVoiceAgentBoundCallIdentity(
+        conversationId = extras[VoiceAgentCallContract.EXTRA_CONVERSATION_ID],
+        transportWireName = extras[VoiceAgentCallContract.EXTRA_TRANSPORT],
+        runHash = extras[VoiceAgentCallContract.EXTRA_RUN_HASH],
+        comparisonHash = extras[VoiceAgentCallContract.EXTRA_COMPARISON_HASH],
+    )
+}
+
+private fun decodeVoiceAgentAutomationBinding(
+    runHash: String?,
+    comparisonHash: String?,
+): VoiceAgentAutomationBinding? {
+    if (runHash == null || comparisonHash == null) return null
+    if (!VOICE_AGENT_AUTOMATION_HASH.matches(runHash) || !VOICE_AGENT_AUTOMATION_HASH.matches(comparisonHash)) {
+        return null
+    }
+    return VoiceAgentAutomationBinding(runHash, comparisonHash)
 }
 
 internal fun encodeVoiceAgentNotificationRouteFields(
@@ -94,3 +151,5 @@ internal fun decodeVoiceAgentNotificationRouteFields(
     }
     return VoiceAgentNotificationRouteFields(parsedConversationId, transport)
 }
+
+private val VOICE_AGENT_AUTOMATION_HASH = Regex("^sha256:[0-9a-f]{64}$")

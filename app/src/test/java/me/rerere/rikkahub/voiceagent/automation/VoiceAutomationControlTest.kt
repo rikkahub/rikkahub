@@ -383,6 +383,48 @@ class VoiceAutomationControlTest {
     }
 
     @Test
+    fun `bound finalize rejects stale binding and accepts only exact binding extras`() {
+        val runtime = RecordingRuntime(
+            currentStatus = VoiceAutomationStatus(
+                state = VoiceAutomationRunState.Active,
+                runHash = RUN_HASH,
+                comparisonHash = COMPARISON_HASH,
+                requestedTransport = VoiceAgentTransport.LiveKitExperimental,
+            ),
+        )
+        val control = control(runtime)
+        val exact = mapOf(
+            VoiceAutomationControl.EXTRA_RUN_HASH to RUN_HASH,
+            VoiceAutomationControl.EXTRA_COMPARISON_HASH to COMPARISON_HASH,
+            VoiceAutomationControl.EXTRA_TRANSPORT to VoiceAgentTransport.LiveKitExperimental.wireName,
+        )
+
+        val stale = control.handle(
+            VoiceAutomationControl.ACTION_FINALIZE_BOUND,
+            exact + (VoiceAutomationControl.EXTRA_RUN_HASH to NEXT_RUN_HASH),
+        )
+        assertEquals(VoiceAutomationControl.RESULT_ERROR, stale.resultCode)
+        assertEquals("status=error\nerror=invalid_state", stale.resultData)
+        assertEquals(VoiceAutomationRunState.Active, runtime.status().state)
+
+        listOf(
+            exact - VoiceAutomationControl.EXTRA_RUN_HASH,
+            exact - VoiceAutomationControl.EXTRA_COMPARISON_HASH,
+            exact - VoiceAutomationControl.EXTRA_TRANSPORT,
+            exact + ("unexpected" to "value"),
+            exact + (VoiceAutomationControl.EXTRA_TRANSPORT to "livekit"),
+        ).forEach { extras ->
+            assertInvalid(control.handle(VoiceAutomationControl.ACTION_FINALIZE_BOUND, extras))
+        }
+        assertEquals(VoiceAutomationRunState.Active, runtime.status().state)
+
+        val finalized = control.handle(VoiceAutomationControl.ACTION_FINALIZE_BOUND, exact)
+        assertSuccess(finalized)
+        assertEquals("status=ok\naction=finalize_bound", finalized.resultData)
+        assertEquals(VoiceAutomationRunState.Finalized, runtime.status().state)
+    }
+
+    @Test
     fun `actions without extras reject unexpected fields and unknown actions`() {
         listOf(
             VoiceAutomationControl.ACTION_STATUS,
@@ -463,6 +505,18 @@ class VoiceAutomationControlTest {
         override fun finalizeRun(): File {
             currentStatus = currentStatus.copy(state = VoiceAutomationRunState.Finalized)
             return finalizedFile
+        }
+
+        override fun finalizeRunIfMatches(binding: VoiceAutomationRunBinding): File? {
+            if (
+                currentStatus.state != VoiceAutomationRunState.Active ||
+                currentStatus.runHash != binding.runHash ||
+                currentStatus.comparisonHash != binding.comparisonHash ||
+                currentStatus.requestedTransport != binding.requestedTransport
+            ) {
+                return null
+            }
+            return finalizeRun()
         }
 
         override fun reset() {

@@ -27,6 +27,7 @@ internal interface VoiceAutomationRuntime {
         }
     fun status(): VoiceAutomationStatus
     fun finalizeRun(): File
+    fun finalizeRunIfMatches(binding: VoiceAutomationRunBinding): File? = null
     fun reset()
 }
 
@@ -151,6 +152,16 @@ internal class DefaultVoiceAutomationRuntime(
 
     @Synchronized
     override fun finalizeRun(): File {
+        return finalizeActiveRun()
+    }
+
+    @Synchronized
+    override fun finalizeRunIfMatches(binding: VoiceAutomationRunBinding): File? {
+        if (currentStatus.state != VoiceAutomationRunState.Active || this.binding != binding) return null
+        return finalizeActiveRun()
+    }
+
+    private fun finalizeActiveRun(): File {
         check(currentStatus.state == VoiceAutomationRunState.Active) { "No active automation run to finalize" }
         recordActive(VoiceAutomationEventInput(VoiceAutomationEventName.RUN_FINALIZED))
         currentStatus = activeStatus(checkNotNull(binding), currentStatus.eventCount).copy(

@@ -144,13 +144,31 @@ internal class VoiceAgentCallServiceLifecycle(
     fun endCall(): Boolean {
         if (endJobTracker.job?.isActive == true) return false
 
+        return launchEnd(
+            endingIdentity = controller.activeIdentity.value,
+            admittedResult = null,
+        )
+    }
+
+    fun endCallIfMatches(expected: VoiceAgentBoundCallIdentity): Boolean {
+        if (endJobTracker.job?.isActive == true) return false
+        val admission = controller.endIfMatches(expected) ?: return false
+        return launchEnd(
+            endingIdentity = ActiveVoiceAgentIdentity(expected.conversationId, expected.transport),
+            admittedResult = admission.result,
+        )
+    }
+
+    private fun launchEnd(
+        endingIdentity: ActiveVoiceAgentIdentity?,
+        admittedResult: kotlinx.coroutines.Deferred<VoiceAgentCallEndResult>?,
+    ): Boolean {
         configurationJob?.cancel()
         configurationJob = null
         configurationToken = null
         notificationJob?.cancel()
         notificationJob = null
         host.cancelNotification()
-        val endingIdentity = controller.activeIdentity.value
         host.startForeground(
             endingIdentity?.conversationId?.toString() ?: FALLBACK_END_NOTIFICATION_CONVERSATION_ID,
             endingIdentity?.transport ?: notificationTransport,
@@ -159,7 +177,7 @@ internal class VoiceAgentCallServiceLifecycle(
         currentGeneration += 1
         val endGeneration = currentGeneration
         endJobTracker.launch(serviceScope) {
-            val result = controller.end()
+            val result = admittedResult?.await() ?: controller.end()
             if (!isCurrent(endGeneration)) return@launch
             if (result is VoiceAgentCallEndResult.Failed) {
                 reportFailureSafely(result.error)

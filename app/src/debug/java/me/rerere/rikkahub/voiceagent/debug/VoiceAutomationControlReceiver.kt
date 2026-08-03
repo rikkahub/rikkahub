@@ -99,6 +99,7 @@ internal class VoiceAutomationControl(
                 ACTION_MARK -> mark(extras)
                 ACTION_ROUTE -> route(extras)
                 ACTION_FINALIZE -> finalize(extras)
+                ACTION_FINALIZE_BOUND -> finalizeBound(extras)
                 ACTION_DUMP -> dump(extras)
                 else -> invalidRequest()
             }
@@ -221,6 +222,22 @@ internal class VoiceAutomationControl(
         return success("finalize")
     }
 
+    private fun finalizeBound(extras: Map<String, String>): VoiceAutomationControlResult {
+        requireExactKeys(extras, setOf(EXTRA_RUN_HASH, EXTRA_COMPARISON_HASH, EXTRA_TRANSPORT))
+        val runHash = extras.getValue(EXTRA_RUN_HASH)
+        val comparisonHash = extras.getValue(EXTRA_COMPARISON_HASH)
+        VoiceAutomationEventValidation.validateHash("runHash", runHash)
+        VoiceAutomationEventValidation.validateHash("comparisonHash", comparisonHash)
+        val transport = VoiceAgentTransport.fromWireName(extras.getValue(EXTRA_TRANSPORT))
+            ?: throw IllegalArgumentException("Invalid transport")
+        checkNotNull(
+            runtime.finalizeRunIfMatches(
+                VoiceAutomationRunBinding(runHash, comparisonHash, transport),
+            ),
+        ) { "Automation run binding changed" }
+        return success("finalize_bound")
+    }
+
     private fun dump(extras: Map<String, String>): VoiceAutomationControlResult {
         requireExactKeys(extras, emptySet())
         val file = artifactFile(runtime.status()) ?: throw IllegalStateException("Artifact unavailable")
@@ -265,6 +282,7 @@ internal class VoiceAutomationControl(
         const val ACTION_MARK = "me.rerere.rikkahub.voiceagent.automation.MARK"
         const val ACTION_ROUTE = "me.rerere.rikkahub.voiceagent.automation.ROUTE"
         const val ACTION_FINALIZE = "me.rerere.rikkahub.voiceagent.automation.FINALIZE"
+        const val ACTION_FINALIZE_BOUND = "me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND"
         const val ACTION_DUMP = "me.rerere.rikkahub.voiceagent.automation.DUMP"
 
         const val EXTRA_RUN_HASH = "run_hash"

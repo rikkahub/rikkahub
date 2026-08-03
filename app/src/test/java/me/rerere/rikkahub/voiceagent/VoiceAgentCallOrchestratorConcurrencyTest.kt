@@ -491,6 +491,75 @@ class VoiceAgentCallOrchestratorConcurrencyTest {
     }
 
     @Test
+    fun `bound end rejects stale binding and admits the exact active call once before replacement`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val appJob = SupervisorJob()
+        val cleanupEntered = CompletableDeferred<Unit>()
+        val releaseCleanup = CompletableDeferred<Unit>()
+        val cleanup = OrchestratorFakeCleanupOperation {
+            cleanupEntered.complete(Unit)
+            releaseCleanup.await()
+            VoiceAgentCleanupResult.Completed
+        }
+        val routes = listOf(OrchestratorFakeRoute(), OrchestratorFakeRoute())
+        val sessions = listOf(
+            OrchestratorFakeSession(routeMetadata = routes[0].lease.metadata, cleanupOperation = cleanup),
+            OrchestratorFakeSession(routeMetadata = routes[1].lease.metadata),
+        )
+        var routeIndex = 0
+        var sessionIndex = 0
+        val orchestrator = VoiceAgentCallOrchestrator(
+            factory = OrchestratorFakeFactory { _, _, _ ->
+                VoiceAgentSessionCreationResult.Created(sessions[sessionIndex++])
+            },
+            resolveRoute = { routes[routeIndex++].lease },
+            appScope = CoroutineScope(appJob + dispatcher),
+        )
+        val activeBinding = VoiceAgentAutomationBinding(RUN_HASH_A, COMPARISON_HASH_A)
+        val activeRequest = orchestratorRequest("bound-active").copy(
+            transport = VoiceAgentTransport.LiveKitExperimental,
+            automationBinding = activeBinding,
+        )
+        val activeIdentity = VoiceAgentBoundCallIdentity(
+            activeRequest.conversationId,
+            activeRequest.transport,
+            activeBinding,
+        )
+        val staleIdentity = activeIdentity.copy(
+            automationBinding = VoiceAgentAutomationBinding(RUN_HASH_B, COMPARISON_HASH_A),
+        )
+        assertTrue(
+            async { orchestrator.start(activeRequest) }.also { runCurrent() }.await() is
+                VoiceAgentCallStartResult.Active,
+        )
+
+        assertNull(orchestrator.endIfMatches(staleIdentity))
+        assertEquals(
+            ActiveVoiceAgentIdentity(activeRequest.conversationId, activeRequest.transport),
+            orchestrator.activeIdentity.value,
+        )
+        assertTrue(cleanup.modes.isEmpty())
+
+        val admission = checkNotNull(orchestrator.endIfMatches(activeIdentity))
+        val replacement = async { orchestrator.start(orchestratorRequest("after-bound-end")) }
+        runCurrent()
+        cleanupEntered.await()
+
+        assertNull(orchestrator.endIfMatches(activeIdentity))
+        assertFalse(admission.result.isCompleted)
+        assertFalse(replacement.isCompleted)
+        assertEquals(listOf(VoiceAgentCleanupMode.GracefulEnd), cleanup.modes)
+
+        releaseCleanup.complete(Unit)
+        runCurrent()
+
+        assertEquals(VoiceAgentCallEndResult.Completed, admission.result.await())
+        assertTrue(replacement.await() is VoiceAgentCallStartResult.Active)
+        assertEquals(listOf(VoiceAgentCleanupMode.GracefulEnd), cleanup.modes)
+        appJob.cancel()
+    }
+
+    @Test
     fun `end during replacement cleanup retires pending start and joins exact cleanup`() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val appJob = SupervisorJob()
@@ -704,5 +773,12 @@ class VoiceAgentCallOrchestratorConcurrencyTest {
             orchestrator.lifecycle.first { it == VoiceAgentCallLifecycle.Idle },
         )
         appJob.cancel()
+    }
+
+    private companion object {
+        const val RUN_HASH_A = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        const val RUN_HASH_B = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        const val COMPARISON_HASH_A =
+            "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     }
 }

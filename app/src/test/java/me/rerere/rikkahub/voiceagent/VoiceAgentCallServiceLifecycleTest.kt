@@ -619,6 +619,55 @@ class VoiceAgentCallServiceLifecycleTest {
     }
 
     @Test
+    fun `rejected bound end preserves configuration generation notification and host state`() = runTest {
+        val request = serviceRequest().copy(
+            transport = VoiceAgentTransport.LiveKitExperimental,
+            automationBinding = VoiceAgentAutomationBinding(RUN_HASH_A, COMPARISON_HASH_A),
+        )
+        val activeBoundIdentity = VoiceAgentBoundCallIdentity(
+            request.conversationId,
+            request.transport,
+            checkNotNull(request.automationBinding),
+        )
+        val controller = RecordingServiceController(
+            activeIdentity = ActiveVoiceAgentIdentity(request.conversationId, request.transport),
+            boundIdentity = activeBoundIdentity,
+        )
+        val host = RecordingLifecycleHost()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val lifecycle = VoiceAgentCallServiceLifecycle(controller, scope, host)
+        val releaseConfiguration = CompletableDeferred<Unit>()
+        try {
+            val generation = lifecycle.beginStart(request.conversationId, request.transport)
+            lifecycle.launchStartConfiguration(generation, request.conversationId) {
+                releaseConfiguration.await()
+                request
+            }
+            runCurrent()
+            val eventsBefore = host.events.toList()
+            val foregroundBefore = host.foregroundStates.toList()
+            val staleIdentity = activeBoundIdentity.copy(
+                automationBinding = VoiceAgentAutomationBinding(RUN_HASH_B, COMPARISON_HASH_A),
+            )
+
+            assertFalse(lifecycle.endCallIfMatches(staleIdentity))
+
+            assertEquals(generation, lifecycle.currentGeneration)
+            assertEquals(eventsBefore, host.events)
+            assertEquals(foregroundBefore, host.foregroundStates)
+            assertEquals(listOf(staleIdentity), controller.boundEndIdentities)
+            assertEquals(0, controller.endCalls)
+
+            releaseConfiguration.complete(Unit)
+            runCurrent()
+            assertEquals(listOf(request), controller.requests)
+        } finally {
+            releaseConfiguration.complete(Unit)
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun `end failure reports exact error then stops matching generation`() = runTest {
         val failure = IllegalStateException("cleanup token=secret")
         val controller = RecordingServiceController(
@@ -694,6 +743,8 @@ internal class RecordingServiceController(
     activeIdentity: ActiveVoiceAgentIdentity? = null,
     val startResults: ArrayDeque<CompletableDeferred<VoiceAgentCallStartResult>> = ArrayDeque(),
     val endResults: ArrayDeque<CompletableDeferred<VoiceAgentCallEndResult>> = ArrayDeque(),
+    private val boundIdentity: VoiceAgentBoundCallIdentity? = null,
+    val boundEndResults: ArrayDeque<CompletableDeferred<VoiceAgentCallEndResult>> = ArrayDeque(),
     private val events: MutableList<String>? = null,
 ) : VoiceAgentCallServiceController {
     override val activeIdentity = MutableStateFlow(activeIdentity)
@@ -705,6 +756,7 @@ internal class RecordingServiceController(
     var endCalls = 0
     var endCancellations = 0
     var closeNowCalls = 0
+    val boundEndIdentities = mutableListOf<VoiceAgentBoundCallIdentity>()
 
     override suspend fun start(request: VoiceAgentCallRequest): VoiceAgentCallStartResult {
         requests += request
@@ -725,6 +777,15 @@ internal class RecordingServiceController(
             events?.add("endCancelled")
             throw cancellation
         }
+    }
+
+    override fun endIfMatches(expected: VoiceAgentBoundCallIdentity): VoiceAgentCallEndAdmission? {
+        boundEndIdentities += expected
+        if (expected != boundIdentity) return null
+        return VoiceAgentCallEndAdmission(
+            boundEndResults.removeFirstOrNull()
+                ?: CompletableDeferred(VoiceAgentCallEndResult.Completed),
+        )
     }
 
     override fun closeNow() {
@@ -797,6 +858,11 @@ internal class RecordingLifecycleHost(
 private fun activeServiceStartResult() = VoiceAgentCallStartResult.Active(
     VoiceAgentRouteMetadata(VoiceAudioRouteOwner.DirectFallback),
 )
+
+private const val RUN_HASH_A = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+private const val RUN_HASH_B = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+private const val COMPARISON_HASH_A =
+    "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 
 internal fun serviceRequest(
     conversationId: Uuid = Uuid.random(),
