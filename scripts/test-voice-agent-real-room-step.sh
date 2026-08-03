@@ -372,6 +372,28 @@ if command[:3] == ["shell", "run-as", EXPECTED_PACKAGE]:
                 raise SystemExit(1)
             state["remote_directory"] = remote_dir
             state["owner_hash"] = ownership
+            if os.environ.get("FAKE_ADB_SUBSTITUTE_RUN_DIRECTORY_BEFORE_CREATE_ROLLBACK") == "1":
+                state["moved_remote_directory"] = remote_dir + ".moved"
+                cleanup_markers = (
+                    "exec 5< .",
+                    "exec 4< .",
+                    'stat -Lc %d:%i /proc/self/fd/4',
+                    'stat -c %d:%i "$name"',
+                    'rmdir -- "$name"',
+                    'stat -Lc %h /proc/self/fd/4',
+                )
+                state["missing_cleanup_markers"] = [
+                    marker for marker in cleanup_markers if marker not in script
+                ]
+                state["substitute_sentinel"] = (
+                    "untouched"
+                    if not state["missing_cleanup_markers"] and
+                    'rm -rf -- "$directory"' not in script
+                    else "deleted"
+                )
+                state["remote_directory"] = remote_dir + ".moved"
+                save_state(state)
+                raise SystemExit(1)
             save_state(state)
             print("created")
             raise SystemExit(0)
@@ -659,6 +681,7 @@ JSON
   unset FAKE_ADB_STATUS_EVENT_COUNT_DRIFT FAKE_ADB_STATUS_NETWORK_DRIFT
   unset FAKE_ADB_SUBSTITUTE_STAGE_BEFORE_STREAM
   unset FAKE_ADB_STATUS_INVALID_RUN_HASH
+  unset FAKE_ADB_SUBSTITUTE_RUN_DIRECTORY_BEFORE_CREATE_ROLLBACK
 }
 
 make_fixture() {
@@ -1363,6 +1386,29 @@ PY
   [[ "$(command_count PREPARE)" == "0" && "$(command_count ARM_CAPTURE_FIXTURE)" == "0" &&
      "$(command_count start-foreground-service)" == "0" && "$(command_count voice-step-remove-owned-directory)" == "0" ]] ||
     fail "start-ownership test: refusal mutated the run or removed an unowned directory"
+  assert_private_output_absent
+  pass
+
+  reset_fake
+  rm -f -- "$state"
+  export FAKE_ADB_SUBSTITUTE_RUN_DIRECTORY_BEFORE_CREATE_ROLLBACK=1
+  run_helper start --state "$state" --serial DEVICE_SECRET_123 \
+    --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
+    --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
+    --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$state" ]] ||
+    fail "start-create-rollback-race test: substituted directory reached a successful start"
+  python3 - "$FAKE_STATE" <<'PY' || fail "start-create-rollback-race test: substitute was recursively deleted"
+import json
+import sys
+
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["substitute_sentinel"] == "untouched", state["missing_cleanup_markers"]
+assert state["moved_remote_directory"] == "files/voice-real-room/" + "a" * 64 + ".moved"
+PY
+  [[ "$(command_count PREPARE)" == "0" && "$(command_count ARM_CAPTURE_FIXTURE)" == "0" &&
+     "$(command_count start-foreground-service)" == "0" ]] ||
+    fail "start-create-rollback-race test: failed creation continued into run mutations"
   assert_private_output_absent
   pass
 

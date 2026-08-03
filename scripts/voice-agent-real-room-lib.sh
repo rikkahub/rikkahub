@@ -539,6 +539,7 @@ set -eu
 directory=$1
 owner=$2
 parent=${directory%/*}
+name=${directory##*/}
 [ "$parent" = files/voice-real-room ] || exit 1
 [ ! -e "$directory" ] && [ ! -L "$directory" ] || exit 1
 [ ! -L "$parent" ] || exit 1
@@ -549,19 +550,60 @@ fi
 files_root=$(readlink -f files) || exit 1
 parent_root=$(readlink -f "$parent") || exit 1
 [ "$parent_root" = "$files_root/voice-real-room" ] || exit 1
-created=0
-cleanup() { [ "$created" = 0 ] || rm -rf -- "$directory"; }
-trap cleanup EXIT HUP INT TERM
-mkdir -m 700 -- "$directory" || exit 1
-created=1
-marker=$directory/.voice-step-owner
-[ -d "$directory" ] && [ ! -L "$directory" ] && \
-  [ "$(stat -c %a "$directory")" = 700 ] || exit 1
-(umask 077; printf "%s\n" "$owner" > "$marker") || exit 1
-[ -f "$marker" ] && [ ! -L "$marker" ] && \
-  [ "$(stat -c %a "$marker")" = 600 ] && [ "$(stat -c %h "$marker")" = 1 ] && \
-  [ "$(cat "$marker")" = "$owner" ] || exit 1
+cd -- "$parent" || exit 1
+parent_inode=$(stat -c %d:%i .) || exit 1
+exec 5< . || exit 1
+[ "$(stat -Lc %d:%i /proc/self/fd/5)" = "$parent_inode" ] || exit 1
+created_bound=0
+directory_inode=
+cleanup() {
+  [ "$created_bound" = 1 ] || return 0
+  exec 3>&-
+  [ "$(stat -c %d:%i . 2>/dev/null || :)" = "$directory_inode" ] || return 1
+  [ "$(stat -Lc %d:%i /proc/self/fd/4 2>/dev/null || :)" = "$directory_inode" ] || return 1
+  for entry in .[!.]* ..?* *; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    rm -rf -- "$entry" || return 1
+  done
+  cd /proc/self/fd/5 || return 1
+  [ "$(stat -c %d:%i . 2>/dev/null || :)" = "$parent_inode" ] || return 1
+  [ "$(stat -Lc %d:%i /proc/self/fd/5 2>/dev/null || :)" = "$parent_inode" ] || return 1
+  [ "$(stat -c %d:%i "$name" 2>/dev/null || :)" = "$directory_inode" ] || return 1
+  rmdir -- "$name" || return 1
+  [ ! -e "$name" ] && [ ! -L "$name" ] || return 1
+  [ "$(stat -Lc %d:%i /proc/self/fd/4 2>/dev/null || :)" = "$directory_inode" ] && \
+    [ "$(stat -Lc %h /proc/self/fd/4 2>/dev/null || :)" = 0 ] || return 1
+  exec 4<&-
+  exec 5<&-
+}
+trap cleanup EXIT
+trap "exit 1" HUP INT TERM
+mkdir -m 700 -- "$name" || exit 1
+directory_inode=$(stat -c %d:%i "$name") || exit 1
+cd -- "$name" || exit 1
+exec 4< . || exit 1
+[ "$(stat -c %d:%i .)" = "$directory_inode" ] && \
+  [ "$(stat -Lc %d:%i /proc/self/fd/4)" = "$directory_inode" ] && \
+  [ "$(stat -c %a .)" = 700 ] || exit 1
+for entry in .[!.]* ..?* *; do
+  [ -e "$entry" ] || [ -L "$entry" ] || continue
+  exit 1
+done
+created_bound=1
+set -C
+umask 077
+exec 3> .voice-step-owner || exit 1
+set +C
+marker_inode=$(stat -Lc %d:%i /proc/self/fd/3) || exit 1
+printf "%s\n" "$owner" >&3 || exit 1
+[ "$(stat -Lc %a /proc/self/fd/3)" = 600 ] && \
+  [ "$(stat -Lc %h /proc/self/fd/3)" = 1 ] && \
+  [ "$(cat /proc/self/fd/3)" = "$owner" ] && \
+  [ "$(stat -c %d:%i .voice-step-owner)" = "$marker_inode" ] || exit 1
+exec 3>&-
 trap - EXIT HUP INT TERM
+exec 4<&-
+exec 5<&-
 printf created
 ' sh "$remote_directory" "$owner_hash" </dev/null)" ||
     die 'fixture staging failed'

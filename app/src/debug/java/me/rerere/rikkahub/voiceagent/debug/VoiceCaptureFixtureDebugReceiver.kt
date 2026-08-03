@@ -3,17 +3,62 @@ package me.rerere.rikkahub.voiceagent.debug
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.system.Os
+import android.system.OsConstants
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.file.Files
-import java.nio.file.LinkOption
-import java.nio.file.StandardOpenOption
-import java.nio.file.attribute.BasicFileAttributes
+import java.io.FileDescriptor
 import java.security.MessageDigest
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureFixture
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureFixtureArming
 
-class VoiceCaptureFixtureDebugReceiver : BroadcastReceiver() {
+private val VERIFIED_PCM_OPEN_FLAGS: Int =
+    OsConstants.O_RDONLY or OsConstants.O_CLOEXEC or OsConstants.O_NOFOLLOW or OsConstants.O_NONBLOCK
+
+internal data class PcmDescriptorStat(
+    val mode: Int,
+    val linkCount: Long,
+    val size: Long,
+)
+
+internal interface OpenPcmDescriptor : AutoCloseable {
+    fun stat(): PcmDescriptorStat
+
+    fun read(buffer: ByteArray, offset: Int, byteCount: Int): Int
+}
+
+internal fun interface PcmDescriptorOpener {
+    fun open(path: String, flags: Int): OpenPcmDescriptor
+}
+
+private object AndroidPcmDescriptorOpener : PcmDescriptorOpener {
+    override fun open(path: String, flags: Int): OpenPcmDescriptor =
+        AndroidOpenPcmDescriptor(Os.open(path, flags, 0))
+}
+
+private class AndroidOpenPcmDescriptor(
+    private val descriptor: FileDescriptor,
+) : OpenPcmDescriptor {
+    override fun stat(): PcmDescriptorStat = Os.fstat(descriptor).let { stat ->
+        PcmDescriptorStat(
+            mode = stat.st_mode,
+            linkCount = stat.st_nlink,
+            size = stat.st_size,
+        )
+    }
+
+    override fun read(buffer: ByteArray, offset: Int, byteCount: Int): Int =
+        Os.read(descriptor, buffer, offset, byteCount)
+
+    override fun close() {
+        Os.close(descriptor)
+    }
+}
+
+class VoiceCaptureFixtureDebugReceiver internal constructor(
+    private val pcmDescriptorOpener: PcmDescriptorOpener,
+) : BroadcastReceiver() {
+    constructor() : this(AndroidPcmDescriptorOpener)
+
     override fun onReceive(context: Context, intent: Intent) {
         val result = runCatching {
             when (intent.action) {
@@ -129,22 +174,21 @@ class VoiceCaptureFixtureDebugReceiver : BroadcastReceiver() {
         val parent = requireNotNull(requested.parentFile).canonicalFile
         require(parent.path == filesRoot.path || parent.path.startsWith(filesRoot.path + File.separator))
         require(requested.name !in setOf("", ".", ".."))
-        val candidate = File(parent, requested.name).toPath()
-        val attributes = Files.readAttributes(
-            candidate,
-            BasicFileAttributes::class.java,
-            LinkOption.NOFOLLOW_LINKS,
-        )
-        require(attributes.isRegularFile && !attributes.isSymbolicLink)
-        require(attributes.size() == expectedSize)
-        val bytes = ByteArray(expectedSize.toInt())
-        Files.newByteChannel(candidate, StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS).use { channel ->
-            require(channel.size() == expectedSize)
-            val buffer = ByteBuffer.wrap(bytes)
-            while (buffer.hasRemaining()) {
-                require(channel.read(buffer) >= 0)
+        val candidate = File(parent, requested.name)
+        val bytes = pcmDescriptorOpener.open(candidate.path, VERIFIED_PCM_OPEN_FLAGS).use { descriptor ->
+            val stat = descriptor.stat()
+            require((stat.mode and OsConstants.S_IFMT) == OsConstants.S_IFREG)
+            require(stat.linkCount == 1L)
+            require(stat.size == expectedSize)
+            ByteArray(expectedSize.toInt()).also { snapshot ->
+                var offset = 0
+                while (offset < snapshot.size) {
+                    val read = descriptor.read(snapshot, offset, snapshot.size - offset)
+                    require(read > 0)
+                    offset += read
+                }
+                require(descriptor.read(ByteArray(1), 0, 1) == 0)
             }
-            require(channel.read(ByteBuffer.allocate(1)) == -1)
         }
         val actualSha256 = MessageDigest.getInstance("SHA-256")
             .digest(bytes)

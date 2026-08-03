@@ -2,10 +2,15 @@ package me.rerere.rikkahub.voiceagent
 
 import android.content.Context
 import android.content.Intent
+import android.system.OsConstants
 import io.mockk.every
 import io.mockk.mockk
 import java.io.File
+import java.nio.ByteBuffer
 import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import java.security.MessageDigest
 import kotlin.io.path.createTempDirectory
 import kotlinx.coroutines.async
@@ -13,6 +18,9 @@ import kotlinx.coroutines.test.runTest
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureFixture
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureFixtureArming
 import me.rerere.rikkahub.voiceagent.debug.HermesTextDebugReceiver
+import me.rerere.rikkahub.voiceagent.debug.OpenPcmDescriptor
+import me.rerere.rikkahub.voiceagent.debug.PcmDescriptorOpener
+import me.rerere.rikkahub.voiceagent.debug.PcmDescriptorStat
 import me.rerere.rikkahub.voiceagent.debug.VoiceAgentDebugSeedReceiver
 import me.rerere.rikkahub.voiceagent.debug.VoiceCaptureFixtureDebugReceiver
 import org.junit.After
@@ -122,7 +130,8 @@ class VoiceAgentDebugManifestTest {
             )
         }
 
-        val result = VoiceCaptureFixtureDebugReceiver().stage(
+        val descriptorOpener = JvmPcmDescriptorOpener()
+        val result = VoiceCaptureFixtureDebugReceiver(descriptorOpener).stage(
             context = context(filesDir),
             intent = stageIntent(
                 token = token,
@@ -133,6 +142,8 @@ class VoiceAgentDebugManifestTest {
         )
         fixtureFile.writeBytes(byteArrayOf(99, 99, 99, 99, 99))
         assertEquals("status=ok\naction=stage\naccepted=true", result)
+        assertEquals(listOf(EXPECTED_PCM_OPEN_FLAGS), descriptorOpener.openedFlags)
+        assertEquals(1, descriptorOpener.statCalls)
 
         assertTrue(
             VoiceCaptureFixtureArming.trigger(token, "voice-fixtures/request-2.pcm").accepted,
@@ -160,7 +171,7 @@ class VoiceAgentDebugManifestTest {
         val source = VoiceCaptureFixtureArming.claim(token, delays = {}).getOrThrow()
 
         assertThrows(IllegalArgumentException::class.java) {
-            VoiceCaptureFixtureDebugReceiver().stage(
+            receiver().stage(
                 context = context(filesDir),
                 intent = stageIntent(
                     token = token,
@@ -188,7 +199,7 @@ class VoiceAgentDebugManifestTest {
         val source = VoiceCaptureFixtureArming.claim(token, delays = {}).getOrThrow()
 
         assertThrows(IllegalArgumentException::class.java) {
-            VoiceCaptureFixtureDebugReceiver().stage(
+            receiver().stage(
                 context = context(filesDir),
                 intent = stageIntent(
                     token = token,
@@ -217,7 +228,7 @@ class VoiceAgentDebugManifestTest {
         val source = VoiceCaptureFixtureArming.claim(token, delays = {}).getOrThrow()
 
         assertThrows(Exception::class.java) {
-            VoiceCaptureFixtureDebugReceiver().stage(
+            receiver().stage(
                 context = context(filesDir),
                 intent = stageIntent(
                     token = token,
@@ -228,6 +239,83 @@ class VoiceAgentDebugManifestTest {
                 ),
             )
         }
+
+        source.close()
+    }
+
+    @Test(timeout = 2_000)
+    fun `stage request rejects FIFO substituted at descriptor open boundary without reading`() {
+        val filesDir = createTempDirectory("voice-fixture-fifo-race").toFile()
+        val fixtureFile = File(filesDir, "voice-fixtures/request-2.pcm").apply {
+            parentFile?.mkdirs()
+            writeBytes(byteArrayOf(1, 2, 3, 4, 5))
+        }
+        val token = VoiceCaptureFixtureArming.arm(
+            initial = fixture("initial.pcm", byteArrayOf(9, 10)),
+            staged = emptyList(),
+        )
+        val source = VoiceCaptureFixtureArming.claim(token, delays = {}).getOrThrow()
+        val relativePath = fixtureFile.relativeTo(filesDir).path
+        val descriptorOpener = JvmPcmDescriptorOpener { candidate ->
+            Files.move(candidate, candidate.resolveSibling("request-2.original"))
+            val mkfifo = ProcessBuilder("mkfifo", candidate.toString())
+                .redirectErrorStream(true)
+                .start()
+            val exitCode = mkfifo.waitFor()
+            assertEquals(mkfifo.inputStream.bufferedReader().readText(), 0, exitCode)
+        }
+
+        assertThrows(IllegalArgumentException::class.java) {
+            VoiceCaptureFixtureDebugReceiver(descriptorOpener).stage(
+                context = context(filesDir),
+                intent = stageIntent(
+                    token = token,
+                    path = relativePath,
+                    chunkBytes = 2,
+                    chunkDelayMs = 0,
+                ),
+            )
+        }
+
+        assertEquals(listOf(EXPECTED_PCM_OPEN_FLAGS), descriptorOpener.openedFlags)
+        assertEquals(1, descriptorOpener.statCalls)
+        assertEquals(0, descriptorOpener.readCalls)
+        assertFalse(VoiceCaptureFixtureArming.trigger(token, relativePath).accepted)
+
+        source.close()
+    }
+
+    @Test
+    fun `stage request rejects multiply linked fixture before reading`() {
+        val filesDir = createTempDirectory("voice-fixture-hardlink").toFile()
+        val fixtureFile = File(filesDir, "voice-fixtures/request-2.pcm").apply {
+            parentFile?.mkdirs()
+            writeBytes(byteArrayOf(1, 2, 3, 4, 5))
+        }
+        Files.createLink(fixtureFile.toPath().resolveSibling("request-2.alias"), fixtureFile.toPath())
+        val token = VoiceCaptureFixtureArming.arm(
+            initial = fixture("initial.pcm", byteArrayOf(9, 10)),
+            staged = emptyList(),
+        )
+        val source = VoiceCaptureFixtureArming.claim(token, delays = {}).getOrThrow()
+        val relativePath = fixtureFile.relativeTo(filesDir).path
+        val descriptorOpener = JvmPcmDescriptorOpener()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            VoiceCaptureFixtureDebugReceiver(descriptorOpener).stage(
+                context = context(filesDir),
+                intent = stageIntent(
+                    token = token,
+                    path = relativePath,
+                    chunkBytes = 2,
+                    chunkDelayMs = 0,
+                ),
+            )
+        }
+
+        assertEquals(1, descriptorOpener.statCalls)
+        assertEquals(0, descriptorOpener.readCalls)
+        assertFalse(VoiceCaptureFixtureArming.trigger(token, relativePath).accepted)
 
         source.close()
     }
@@ -263,6 +351,9 @@ class VoiceAgentDebugManifestTest {
         every { this@mockk.filesDir } returns filesDir
     }
 
+    private fun receiver(): VoiceCaptureFixtureDebugReceiver =
+        VoiceCaptureFixtureDebugReceiver(JvmPcmDescriptorOpener())
+
     private fun stageIntent(
         token: String,
         path: String,
@@ -296,5 +387,72 @@ class VoiceAgentDebugManifestTest {
     private companion object {
         const val STAGE_ACTION =
             "me.rerere.rikkahub.debug.voiceagent.STAGE_CAPTURE_FIXTURE"
+        val EXPECTED_PCM_OPEN_FLAGS: Int =
+            OsConstants.O_RDONLY or OsConstants.O_CLOEXEC or
+                OsConstants.O_NOFOLLOW or OsConstants.O_NONBLOCK
+    }
+
+    private class JvmPcmDescriptorOpener(
+        private var beforeOpen: ((Path) -> Unit)? = null,
+    ) : PcmDescriptorOpener {
+        val openedFlags = mutableListOf<Int>()
+        var statCalls = 0
+            private set
+        var readCalls = 0
+            private set
+
+        override fun open(path: String, flags: Int): OpenPcmDescriptor {
+            openedFlags += flags
+            val candidate = Path.of(path)
+            beforeOpen?.also {
+                beforeOpen = null
+                it(candidate)
+            }
+            val mode = Files.getAttribute(
+                candidate,
+                "unix:mode",
+                LinkOption.NOFOLLOW_LINKS,
+            ) as Int
+            val linkCount = (Files.getAttribute(
+                candidate,
+                "unix:nlink",
+                LinkOption.NOFOLLOW_LINKS,
+            ) as Number).toLong()
+            val size = (Files.getAttribute(
+                candidate,
+                "unix:size",
+                LinkOption.NOFOLLOW_LINKS,
+            ) as Number).toLong()
+            val channel = if ((mode and UNIX_FILE_TYPE_MASK) == UNIX_REGULAR_FILE) {
+                Files.newByteChannel(
+                    candidate,
+                    StandardOpenOption.READ,
+                    LinkOption.NOFOLLOW_LINKS,
+                )
+            } else {
+                null
+            }
+            return object : OpenPcmDescriptor {
+                override fun stat(): PcmDescriptorStat {
+                    statCalls += 1
+                    return PcmDescriptorStat(mode = mode, linkCount = linkCount, size = size)
+                }
+
+                override fun read(buffer: ByteArray, offset: Int, byteCount: Int): Int {
+                    readCalls += 1
+                    val read = requireNotNull(channel).read(ByteBuffer.wrap(buffer, offset, byteCount))
+                    return if (read < 0) 0 else read
+                }
+
+                override fun close() {
+                    channel?.close()
+                }
+            }
+        }
+
+        private companion object {
+            const val UNIX_FILE_TYPE_MASK = 0xf000
+            const val UNIX_REGULAR_FILE = 0x8000
+        }
     }
 }
