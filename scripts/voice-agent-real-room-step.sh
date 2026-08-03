@@ -53,14 +53,20 @@ START_COMMITTED=0
 STATE_PUBLICATION_CRITICAL=0
 PUBLICATION_SIGNAL=0
 HOST_LOCK_FD=''
+HOST_LOCK_ROOT_FD=''
 PACKAGE_FORCE_STOP_OWNED=0
+EXIT_CLEANUP_SIGNAL=0
 declare -a OWNED_TEMP_FILES=()
 declare -A PARSED=()
 
 raw_start_cleanup() {
   local cleanup_status=0
+  local stopped_status
+  local quiescence_status
+  local broker_status
   if (( START_CALL_ATTEMPTED == 1 )); then
     adb_read shell am start-foreground-service \
+      --user "$ANDROID_USER_ID" \
       -n "$PACKAGE/$SERVICE_CLASS" \
       -a "$CALL_END_BOUND_ACTION" \
       --es conversationId "$CONVERSATION_ID" \
@@ -71,7 +77,7 @@ raw_start_cleanup() {
     START_CALL_ATTEMPTED=0
   fi
   if (( START_PREPARE_ATTEMPTED == 1 )); then
-    adb_read shell am broadcast --user 0 \
+    adb_read shell am broadcast --user "$ANDROID_USER_ID" \
       -n "$PACKAGE/$CONTROL_RECEIVER" \
       -a "$CONTROL_ACTION_PREFIX.FINALIZE_BOUND" \
       --es run_hash "$RUN_HASH" \
@@ -81,8 +87,38 @@ raw_start_cleanup() {
     START_PREPARE_ATTEMPTED=0
   fi
   if (( START_FIXTURE_DIR_CREATED == 1 )); then
-    remove_owned_remote_directory "$REMOTE_FIXTURE_DIR" "$REMOTE_OWNER_HASH" >/dev/null 2>&1 || cleanup_status=1
-    START_FIXTURE_DIR_CREATED=0
+    PACKAGE_FORCE_STOP_OWNED=1
+    adb_read shell cmd activity force-stop --user "$ANDROID_USER_ID" "$PACKAGE" \
+      </dev/null >/dev/null 2>&1 || cleanup_status=1
+    if read_package_stopped_state true; then
+      stopped_status=0
+    else
+      stopped_status=$?
+    fi
+    if (( stopped_status == 0 )); then
+      if prove_package_quiescence; then
+        quiescence_status=0
+      else
+        quiescence_status=$?
+      fi
+      if (( quiescence_status == 0 )); then
+        if remove_owned_remote_directory_quiescent "$REMOTE_FIXTURE_DIR"; then
+          broker_status=0
+        else
+          broker_status=$?
+        fi
+        if (( broker_status == 0 )); then
+          START_FIXTURE_DIR_CREATED=0
+        else
+          cleanup_status=1
+        fi
+      else
+        cleanup_status=1
+      fi
+    else
+      cleanup_status=1
+    fi
+    restore_force_stopped_package || cleanup_status=1
   fi
   return "$cleanup_status"
 }
@@ -90,7 +126,8 @@ raw_start_cleanup() {
 on_exit() {
   local status=$?
   local cleanup_status=0
-  trap - EXIT HUP INT TERM
+  trap - EXIT
+  trap defer_exit_cleanup_signal HUP INT TERM
   set +e
   if (( status != 0 && START_CLEANUP_NEEDED == 1 )); then
     raw_start_cleanup || cleanup_status=1
@@ -99,6 +136,9 @@ on_exit() {
     restore_force_stopped_package || cleanup_status=1
   fi
   cleanup_local_temps || cleanup_status=1
+  if (( EXIT_CLEANUP_SIGNAL == 1 && status == 0 )); then
+    status=1
+  fi
   if (( status == 0 && cleanup_status != 0 )); then
     status=1
     if (( ERROR_REPORTED == 0 )); then
@@ -108,6 +148,10 @@ on_exit() {
     printf 'voice-step.error=operation failed\n' >&2
   fi
   exit "$status"
+}
+
+defer_exit_cleanup_signal() {
+  EXIT_CLEANUP_SIGNAL=1
 }
 
 on_signal() {
@@ -360,6 +404,7 @@ run_finalize() {
   local -a status=()
   validate_runtime
   adb_read shell am start-foreground-service \
+    --user "$ANDROID_USER_ID" \
     -n "$PACKAGE/$SERVICE_CLASS" \
     -a "$CALL_END_BOUND_ACTION" \
     --es conversationId "$CONVERSATION_ID" \
@@ -426,12 +471,48 @@ run_capture() {
     'voice-step.artifacts=published'
 }
 
-probe_device_reachability() {
-  local result
-  if ! result="$(adb_read shell echo voice-step-reachable </dev/null)"; then
-    return 10
+classify_device_access() {
+  local enumeration
+  local classification
+  if ! enumeration="$(adb_global_read devices -l 2>/dev/null)"; then
+    return 2
   fi
-  [[ "$result" == voice-step-reachable ]] || return 20
+  python3 -c '
+import re
+import sys
+
+serial = sys.argv[1]
+lines = sys.stdin.read().replace("\r", "").splitlines()
+if not lines or lines[0] != "List of devices attached":
+    raise SystemExit(2)
+rows = []
+for line in lines[1:]:
+    if not line:
+        continue
+    fields = line.split()
+    if (
+        len(fields) < 2
+        or re.fullmatch(r"\S+", fields[0]) is None
+        or re.fullmatch(r"[a-z_]+", fields[1]) is None
+        or any(":" not in field for field in fields[2:])
+    ):
+        raise SystemExit(2)
+    rows.append((fields[0], fields[1]))
+selected = [state for candidate, state in rows if candidate == serial]
+if len(selected) > 1:
+    raise SystemExit(2)
+if not selected:
+    raise SystemExit(1)
+if selected[0] == "device":
+    raise SystemExit(0)
+if selected[0] in {"offline", "unauthorized"}:
+    raise SystemExit(1)
+raise SystemExit(2)
+' "$SERIAL" <<<"$enumeration" 2>/dev/null || {
+    classification=$?
+    return "$classification"
+  }
+  return 0
 }
 
 complete_failed_end_step() {
@@ -439,13 +520,13 @@ complete_failed_end_step() {
   local call_stopped="$2"
   local fixtures_removed="$3"
   local automation_finalized="$4"
-  local reachability
-  if probe_device_reachability; then
-    reachability=0
+  local device_access
+  if classify_device_access; then
+    device_access=0
   else
-    reachability=$?
+    device_access=$?
   fi
-  case "$reachability" in
+  case "$device_access" in
     0)
       if (( PACKAGE_FORCE_STOP_OWNED == 1 )); then
         restore_force_stopped_package || die 'package restoration failed'
@@ -453,7 +534,7 @@ complete_failed_end_step() {
       complete_end_outcome "$destination" product_failure "$call_stopped" \
         "$fixtures_removed" "$automation_finalized"
       ;;
-    10)
+    1)
       complete_end_outcome "$destination" infrastructure_interruption \
         "$call_stopped" "$fixtures_removed" "$automation_finalized"
       ;;
@@ -504,6 +585,7 @@ run_end() {
   local metadata_after_baseline
   local metadata_after_cleanup
   local metadata_after_post_read
+  local stopped_status
   local quiescence_status
   local cleanup_status
   validate_runtime
@@ -516,13 +598,25 @@ run_end() {
   metadata_after_baseline="$(read_source_metadata "$automation_source")"
   [[ "$metadata_before" == "$metadata_after_baseline" ]] || die 'artifact source changed'
 
+  PACKAGE_FORCE_STOP_OWNED=1
   if ! adb_read shell cmd activity force-stop --user "$ANDROID_USER_ID" "$PACKAGE" \
       </dev/null >/dev/null 2>&1; then
     complete_failed_end_step "$cleanup_output" true false true
     return
   fi
-  PACKAGE_FORCE_STOP_OWNED=1
-  read_package_stopped_state true || die 'ambiguous package stopped-state readback'
+  if read_package_stopped_state true; then
+    stopped_status=0
+  else
+    stopped_status=$?
+  fi
+  case "$stopped_status" in
+    0) ;;
+    1)
+      complete_failed_end_step "$cleanup_output" true false true
+      return
+      ;;
+    *) die 'ambiguous package stopped-state readback' ;;
+  esac
   if prove_package_quiescence; then
     quiescence_status=0
   else
@@ -720,6 +814,7 @@ run_start() {
 
   START_CALL_ATTEMPTED=1
   adb_read shell am start-foreground-service \
+    --user "$ANDROID_USER_ID" \
     -n "$PACKAGE/$SERVICE_CLASS" \
     -a "$CALL_START_ACTION" \
     --es conversationId "$CONVERSATION_ID" \

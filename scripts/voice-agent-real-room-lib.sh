@@ -121,14 +121,27 @@ validate_fixture_nonce() {
 }
 
 acquire_host_operation_lock() {
-  local lock_root
+  local lock_root="/tmp/rikkahub-voice-real-room-locks-${EUID}"
   local lock_key
+  local lock_name
   local lock_path
-  lock_root="${VOICE_STEP_LOCK_ROOT:-${TMPDIR:-/tmp}/voice-real-room-locks}"
-  if ! mkdir -m 700 -- "$lock_root" 2>/dev/null; then
-    [[ -d "$lock_root" && ! -L "$lock_root" ]] || die 'host operation lock unavailable'
+  python3 - /tmp 2>/dev/null <<'PY' || die 'host operation lock unavailable'
+import os
+import stat
+import sys
+
+metadata = os.lstat(sys.argv[1])
+if (
+    stat.S_ISLNK(metadata.st_mode)
+    or not stat.S_ISDIR(metadata.st_mode)
+    or metadata.st_uid != 0
+    or not metadata.st_mode & stat.S_ISVTX
+):
+    raise SystemExit(1)
+PY
+  if [[ ! -e "$lock_root" && ! -L "$lock_root" ]]; then
+    mkdir -m 700 -- "$lock_root" 2>/dev/null || true
   fi
-  chmod 700 -- "$lock_root" 2>/dev/null || die 'host operation lock unavailable'
   python3 - "$lock_root" 2>/dev/null <<'PY' || die 'host operation lock unavailable'
 import os
 import stat
@@ -143,6 +156,23 @@ if (
 ):
     raise SystemExit(1)
 PY
+  exec {HOST_LOCK_ROOT_FD}<"$lock_root" || die 'host operation lock unavailable'
+  python3 - "$lock_root" "$HOST_LOCK_ROOT_FD" 2>/dev/null <<'PY' ||
+    die 'host operation lock unavailable'
+import os
+import stat
+import sys
+
+path_metadata = os.lstat(sys.argv[1])
+descriptor_metadata = os.fstat(int(sys.argv[2]))
+if (
+    stat.S_ISLNK(path_metadata.st_mode)
+    or not stat.S_ISDIR(descriptor_metadata.st_mode)
+    or (path_metadata.st_dev, path_metadata.st_ino) !=
+       (descriptor_metadata.st_dev, descriptor_metadata.st_ino)
+):
+    raise SystemExit(1)
+PY
   lock_key="$(python3 - "$SERIAL" "$PACKAGE" 2>/dev/null <<'PY'
 import hashlib
 import sys
@@ -151,23 +181,40 @@ print(hashlib.sha256("\0".join(sys.argv[1:]).encode()).hexdigest())
 PY
 )" || die 'host operation lock unavailable'
   [[ "$lock_key" =~ ^[0-9a-f]{64}$ ]] || die 'host operation lock unavailable'
-  lock_path="$lock_root/$lock_key.lock"
-  exec {HOST_LOCK_FD}<>"$lock_path" || die 'host operation lock unavailable'
-  chmod 600 -- "$lock_path" 2>/dev/null || die 'host operation lock unavailable'
-  python3 - "$lock_path" "$HOST_LOCK_FD" 2>/dev/null <<'PY' || die 'host operation lock unavailable'
+  lock_name="$lock_key.lock"
+  lock_path="/proc/self/fd/$HOST_LOCK_ROOT_FD/$lock_name"
+  if [[ ! -e "$lock_path" && ! -L "$lock_path" ]]; then
+    mkdir -m 700 -- "$lock_path" 2>/dev/null || true
+  fi
+  python3 - "$HOST_LOCK_ROOT_FD" "$lock_name" 2>/dev/null <<'PY' ||
+    die 'host operation lock unavailable'
 import os
 import stat
 import sys
 
-path, descriptor = sys.argv[1], int(sys.argv[2])
-path_metadata = os.lstat(path)
+root_descriptor, name = int(sys.argv[1]), sys.argv[2]
+metadata = os.stat(name, dir_fd=root_descriptor, follow_symlinks=False)
+if (
+    not stat.S_ISDIR(metadata.st_mode)
+    or stat.S_IMODE(metadata.st_mode) != 0o700
+    or metadata.st_uid != os.geteuid()
+):
+    raise SystemExit(1)
+PY
+  exec {HOST_LOCK_FD}<"$lock_path" || die 'host operation lock unavailable'
+  python3 - "$HOST_LOCK_ROOT_FD" "$lock_name" "$HOST_LOCK_FD" 2>/dev/null <<'PY' ||
+    die 'host operation lock unavailable'
+import os
+import stat
+import sys
+
+root_descriptor, name, descriptor = int(sys.argv[1]), sys.argv[2], int(sys.argv[3])
+path_metadata = os.stat(name, dir_fd=root_descriptor, follow_symlinks=False)
 descriptor_metadata = os.fstat(descriptor)
 if (
-    stat.S_ISLNK(path_metadata.st_mode)
-    or not stat.S_ISREG(path_metadata.st_mode)
-    or stat.S_IMODE(path_metadata.st_mode) != 0o600
+    not stat.S_ISDIR(path_metadata.st_mode)
+    or stat.S_IMODE(path_metadata.st_mode) != 0o700
     or path_metadata.st_uid != os.geteuid()
-    or path_metadata.st_nlink != 1
     or (path_metadata.st_dev, path_metadata.st_ino) !=
        (descriptor_metadata.st_dev, descriptor_metadata.st_ino)
 ):
@@ -863,52 +910,6 @@ printf "%s\n" "$metadata"
     die 'fixture staging verification failed'
 }
 
-remove_owned_remote_directory() {
-  local remote_directory="$1"
-  local owner_hash="$2"
-  local result
-  result="$(adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
-set -eu
-: voice-step-remove-owned-directory
-directory=$1
-owner=$2
-parent=${directory%/*}
-name=${directory##*/}
-[ "$parent" = files/voice-real-room ] || exit 1
-[ -d "$parent" ] && [ ! -L "$parent" ] || exit 1
-[ "$(readlink -f "$parent")" = "$(readlink -f files)/voice-real-room" ] || exit 1
-cd -- "$parent" || exit 1
-[ -d "$name" ] && [ ! -L "$name" ] && [ "$(stat -c %a "$name")" = 700 ] || exit 1
-directory_inode=$(stat -c %d:%i "$name") || exit 1
-cd -- "$name" || exit 1
-[ "$(stat -c %d:%i .)" = "$directory_inode" ] || exit 1
-exec 4< . || exit 1
-[ "$(stat -Lc %d:%i /proc/self/fd/4)" = "$directory_inode" ] || exit 1
-[ -f .voice-step-owner ] && [ ! -L .voice-step-owner ] || exit 1
-exec 3< .voice-step-owner || exit 1
-marker_inode=$(stat -Lc %d:%i /proc/self/fd/3) || exit 1
-[ "$(stat -Lc %a /proc/self/fd/3)" = 600 ] && \
-  [ "$(stat -Lc %h /proc/self/fd/3)" = 1 ] && \
-  [ "$(stat -c %d:%i .voice-step-owner)" = "$marker_inode" ] || exit 1
-[ "$(awk "END { print NR }" /proc/self/fd/3)" = 2 ] || exit 1
-[ "$(sed -n "1p" /proc/self/fd/3)" = "$owner" ] || exit 1
-exec 3<&-
-for entry in .[!.]* ..?* *; do
-  [ -e "$entry" ] || [ -L "$entry" ] || continue
-  rm -rf -- "$entry" || exit 1
-done
-cd .. || exit 1
-[ "$(stat -c %d:%i "$name" 2>/dev/null || :)" = "$directory_inode" ] || exit 1
-rmdir -- "$name" || exit 1
-[ ! -e "$name" ] && [ ! -L "$name" ] || exit 1
-[ "$(stat -Lc %d:%i /proc/self/fd/4)" = "$directory_inode" ] && \
-  [ "$(stat -Lc %h /proc/self/fd/4)" = 0 ] || exit 1
-exec 4<&-
-printf removed
-' sh "$remote_directory" "$owner_hash" </dev/null)" || return 1
-  [[ "$result" == removed ]] || return 2
-}
-
 stage_snapshot() {
   local remote_directory="$1"
   local remote_path="$2"
@@ -1075,9 +1076,20 @@ wait_for_durable_call_stopped() {
 read_package_stopped_state() {
   local expected="$1"
   local row
+  local opposite
+  [[ "$expected" == true || "$expected" == false ]] || return 2
+  if [[ "$expected" == true ]]; then
+    opposite=false
+  else
+    opposite=true
+  fi
   row="$(adb_read shell cmd package list packages --user "$ANDROID_USER_ID" \
-    -U --show-stopped "$PACKAGE" 2>/dev/null)" || return 1
-  [[ "$row" == "package:$PACKAGE stopped=$expected uid:$PACKAGE_UID" ]]
+    -U --show-stopped "$PACKAGE" 2>/dev/null)" || return 2
+  if [[ "$row" == "package:$PACKAGE stopped=$expected uid:$PACKAGE_UID" ]]; then
+    return 0
+  fi
+  [[ "$row" == "package:$PACKAGE stopped=$opposite uid:$PACKAGE_UID" ]] && return 1
+  return 2
 }
 
 prove_package_quiescence() {
@@ -1087,7 +1099,10 @@ prove_package_quiescence() {
   for iteration in 1 2; do
     processes="$(adb_read exec-out ps -A -n -o UID,PID,PPID,STAT,NAME 2>/dev/null)" || return 1
     isolated="$(adb_read shell cmd activity get-isolated-pids "$PACKAGE_UID" 2>/dev/null)" || return 1
-    validate_process_capability_readbacks "$processes" "$isolated"
+    if ! (validate_process_capability_readbacks "$processes" "$isolated") \
+        >/dev/null 2>&1; then
+      return 3
+    fi
     printf '%s\n' "$processes" | python3 -c '
 import sys
 
