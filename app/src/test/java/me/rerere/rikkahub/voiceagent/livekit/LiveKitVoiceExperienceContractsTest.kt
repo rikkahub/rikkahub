@@ -8,13 +8,45 @@ import org.junit.Test
 class LiveKitVoiceExperienceContractsTest {
     @Test
     fun `accepted event requires exact session job call and request hash`() {
-        val event = parseLiveKitVoiceExperienceEvent(
-            """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_1","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1","prompt":"private question"}"""
-        )
+        val event = parseLiveKitVoiceExperienceEvent(acceptedEventJson())
 
         assertEquals("hj_1", (event as LiveKitVoiceExperienceEvent.JobAccepted).jobId)
         assertEquals(acceptedEventJson(), event.canonicalJson())
         assertNull(parseLiveKitVoiceExperienceEvent("""{"version":1,"kind":"job_accepted"}"""))
+    }
+
+    @Test
+    fun `every job event rejects each missing correlation field and an unknown field`() {
+        val exactEvents = listOf(
+            acceptedEventJson(),
+            jobStateJson(kind = "job_running"),
+            jobStateJson(kind = "still_working"),
+            succeededEventJson(answer = "answer", resultHash = voiceSha256("answer")),
+            jobStateJson(kind = "job_failed", suffix = ""","failureReason":"safe failure""""),
+            jobStateJson(kind = "job_expired", suffix = ""","failureReason":"safe expiration""""),
+            jobStateJson(kind = "job_canceled", suffix = ""","failureReason":"safe cancellation""""),
+        )
+
+        exactEvents.forEach { payload ->
+            val event = requireNotNull(parseLiveKitVoiceExperienceEvent(payload)) { payload }
+            val parsedCorrelation = when (event) {
+                is LiveKitVoiceExperienceEvent.JobAccepted -> event.correlation()
+                is LiveKitVoiceExperienceEvent.JobState -> event.correlation()
+                else -> error("Expected a job event")
+            }
+            assertEquals(event.kind, correlation, parsedCorrelation)
+
+            correlationFields.forEach { field ->
+                assertNull(
+                    "${event.kind} accepted a payload missing ${field.substringBefore(':')}",
+                    parseLiveKitVoiceExperienceEvent(payload.replace(",${field}", "")),
+                )
+            }
+            assertNull(
+                "${event.kind} accepted an unknown field",
+                parseLiveKitVoiceExperienceEvent(payload.dropLast(1) + ""","unknown":true}"""),
+            )
+        }
     }
 
     @Test
@@ -176,7 +208,7 @@ class LiveKitVoiceExperienceContractsTest {
 }
 
 private fun acceptedEventJson(): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_1","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1","prompt":"private question"}"""
+    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_1","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()},"prompt":"private question"}"""
 
 private fun succeededEventJson(answer: String, resultHash: String): String =
     jobStateJson(
@@ -185,7 +217,7 @@ private fun succeededEventJson(answer: String, resultHash: String): String =
     )
 
 private fun jobStateJson(kind: String, suffix: String = ""): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_state","kind":"$kind","observedAt":"2026-07-30T12:00:02Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"$suffix}"""
+    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_state","kind":"$kind","observedAt":"2026-07-30T12:00:02Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()}$suffix}"""
 
 private fun transcriptJson(
     role: String,
@@ -199,3 +231,23 @@ private fun deliveryJson(kind: String, assistantTurn: String = ""): String =
 
 private fun followUpCorrelationJson(): String =
     """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_follow_up","kind":"follow_up_correlation","observedAt":"2026-07-30T12:00:05Z","followUpTurnId":"turn_2","assistantTurnId":"assistant_2","resultHash":"sha256:${"3".repeat(64)}"}"""
+
+private val correlation = LiveKitJobCorrelation(
+    ownerHash = hash('1'),
+    conversationHash = hash('2'),
+    voiceSessionHash = voiceSha256("lvs_1"),
+    roomHash = hash('3'),
+    traceHash = hash('4'),
+)
+
+private val correlationFields = listOf(
+    "\"ownerHash\":\"${correlation.ownerHash}\"",
+    "\"conversationHash\":\"${correlation.conversationHash}\"",
+    "\"voiceSessionHash\":\"${correlation.voiceSessionHash}\"",
+    "\"roomHash\":\"${correlation.roomHash}\"",
+    "\"traceHash\":\"${correlation.traceHash}\"",
+)
+
+private fun correlationJson(): String = correlationFields.joinToString(separator = ",", prefix = ",")
+
+private fun hash(character: Char): String = "sha256:" + character.toString().repeat(64)

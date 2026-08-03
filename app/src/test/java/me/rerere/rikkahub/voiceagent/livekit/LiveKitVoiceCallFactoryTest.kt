@@ -395,7 +395,7 @@ private fun factoryDetails() = LiveKitSessionDetails(
 )
 
 private fun acceptedEventJson(): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_accepted","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1","prompt":"private question"}"""
+    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_accepted","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1","ownerHash":"sha256:${"1".repeat(64)}","conversationHash":"sha256:${"2".repeat(64)}","voiceSessionHash":"${voiceSha256("lvs_1")}","roomHash":"sha256:${"3".repeat(64)}","traceHash":"sha256:${"4".repeat(64)}","prompt":"private question"}"""
 
 private fun assertCausalChainContains(error: Throwable, expected: Throwable) {
     assertTrue(generateSequence(error as Throwable?) { it.cause }.any { it === expected })

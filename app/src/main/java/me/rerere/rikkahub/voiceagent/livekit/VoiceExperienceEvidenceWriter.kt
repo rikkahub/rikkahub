@@ -21,7 +21,7 @@ internal class VoiceExperienceEvidenceWriter(
 private fun LiveKitVoiceExperienceEvent.sanitizedJson(rawEvent: String): String =
     buildJsonObject {
         put("version", version)
-        put("voiceSessionId", voiceSessionId)
+        put("voiceSessionHash", voiceSha256(voiceSessionId))
         put("eventId", eventId)
         put("kind", kind)
         put("observedAt", observedAt)
@@ -33,6 +33,10 @@ private fun LiveKitVoiceExperienceEvent.sanitizedJson(rawEvent: String): String 
                 put("toolCallId", toolCallId)
                 put("argumentHash", argumentHash)
                 put("jobId", jobId)
+                put("ownerHash", ownerHash)
+                put("conversationHash", conversationHash)
+                put("roomHash", roomHash)
+                put("traceHash", traceHash)
                 put("promptCharacterCount", prompt.length)
             }
 
@@ -42,6 +46,10 @@ private fun LiveKitVoiceExperienceEvent.sanitizedJson(rawEvent: String): String 
                 put("toolCallId", toolCallId)
                 put("argumentHash", argumentHash)
                 put("jobId", jobId)
+                put("ownerHash", ownerHash)
+                put("conversationHash", conversationHash)
+                put("roomHash", roomHash)
+                put("traceHash", traceHash)
                 resultHash?.let { put("resultHash", it) }
                 answer?.let { put("answerCharacterCount", it.length) }
                 failureReason?.let { put("failureReasonCharacterCount", it.length) }

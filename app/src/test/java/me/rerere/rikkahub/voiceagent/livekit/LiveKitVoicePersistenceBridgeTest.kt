@@ -203,6 +203,31 @@ class LiveKitVoicePersistenceBridgeTest {
     }
 
     @Test
+    fun `running state cannot change accepted room hash or mutate queued record`() = runTest {
+        val store = RecordingVoiceConversationStore()
+        val evidence = RecordingEvidenceSink()
+        val bridge = bridge(store, evidence)
+        bridge.handle(AGENT_IDENTITY, acceptedEventJson())
+
+        val failure = runCatching {
+            bridge.handle(
+                AGENT_IDENTITY,
+                jobStateJson(
+                    kind = "job_running",
+                    eventId = "evt_changed_room",
+                    roomHash = hash('5'),
+                ),
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+        val record = store.conversation.value.hermesQueueRecords().single()
+        assertEquals("queued", record.status.wireName)
+        assertEquals("private question", record.prompt)
+        assertEquals(listOf("evt_accepted"), evidence.events.map { it.eventId })
+    }
+
+    @Test
     fun `grounded assistant transcript requires the matching completed Hermes result`() = runTest {
         val missingStore = RecordingVoiceConversationStore()
         val missingBridge = bridge(missingStore)
@@ -527,8 +552,13 @@ private fun acceptedEventJson(
     requestHash: String = REQUEST_HASH,
     argumentHash: String = ARGUMENT_HASH,
     prompt: String = "private question",
+    ownerHash: String = OWNER_HASH,
+    conversationHash: String = CONVERSATION_HASH,
+    voiceSessionHash: String = VOICE_SESSION_HASH,
+    roomHash: String = ROOM_HASH,
+    traceHash: String = TRACE_HASH,
 ): String =
-    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"$userTurnId","requestHash":"$requestHash","toolCallId":"call_1","argumentHash":"$argumentHash","jobId":"hj_1","prompt":"$prompt"}"""
+    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"$userTurnId","requestHash":"$requestHash","toolCallId":"call_1","argumentHash":"$argumentHash","jobId":"hj_1","ownerHash":"$ownerHash","conversationHash":"$conversationHash","voiceSessionHash":"$voiceSessionHash","roomHash":"$roomHash","traceHash":"$traceHash","prompt":"$prompt"}"""
 
 private fun succeededEventJson(
     answer: String,
@@ -551,8 +581,13 @@ private fun jobStateJson(
     kind: String,
     eventId: String,
     suffix: String = "",
+    ownerHash: String = OWNER_HASH,
+    conversationHash: String = CONVERSATION_HASH,
+    voiceSessionHash: String = VOICE_SESSION_HASH,
+    roomHash: String = ROOM_HASH,
+    traceHash: String = TRACE_HASH,
 ): String =
-    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"$kind","observedAt":"2026-07-30T12:00:01Z","userTurnId":"turn_1","requestHash":"$REQUEST_HASH","toolCallId":"call_1","argumentHash":"$ARGUMENT_HASH","jobId":"hj_1"$suffix}"""
+    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"$kind","observedAt":"2026-07-30T12:00:01Z","userTurnId":"turn_1","requestHash":"$REQUEST_HASH","toolCallId":"call_1","argumentHash":"$ARGUMENT_HASH","jobId":"hj_1","ownerHash":"$ownerHash","conversationHash":"$conversationHash","voiceSessionHash":"$voiceSessionHash","roomHash":"$roomHash","traceHash":"$traceHash"$suffix}"""
 
 private fun assistantTranscriptJson(
     text: String,
@@ -587,7 +622,18 @@ private const val REQUEST_HASH =
     "sha256:1111111111111111111111111111111111111111111111111111111111111111"
 private const val ARGUMENT_HASH =
     "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+private const val OWNER_HASH =
+    "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+private const val CONVERSATION_HASH =
+    "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+private val VOICE_SESSION_HASH = voiceSha256(VOICE_SESSION_ID)
+private const val ROOM_HASH =
+    "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+private const val TRACE_HASH =
+    "sha256:4444444444444444444444444444444444444444444444444444444444444444"
 private const val RESULT_HASH =
     "sha256:5ba14662f757c0819a81f38b78c10d7b8cf7dda9ef6014b3ca7c25b5b7711d77"
 private const val ANSWER_ONE_HASH =
     "sha256:83331a5e274ed68d54e09fd859e39f92c0e833301485dbef3cfc216f778db5bd"
+
+private fun hash(character: Char): String = "sha256:" + character.toString().repeat(64)

@@ -36,6 +36,8 @@ internal class LiveKitVoicePersistenceBridge(
 ) : LiveKitPersistenceOwner {
     private val mutex = Mutex()
     private val persistedEventPayloadHashes = mutableMapOf<String, String>()
+    private val persistedJobCorrelations =
+        mutableMapOf<Pair<String, String>, LiveKitJobCorrelation>()
     private val closed = AtomicBoolean(false)
 
     suspend fun handle(callerIdentity: String, payload: String): String = mutex.withLock {
@@ -47,6 +49,22 @@ internal class LiveKitVoicePersistenceBridge(
         require(event.voiceSessionId == voiceSessionId) {
             "Unexpected LiveKit voice session"
         }
+        val jobIdentityAndCorrelation = when (event) {
+            is LiveKitVoiceExperienceEvent.JobAccepted ->
+                (event.toolCallId to event.jobId) to event.correlation()
+
+            is LiveKitVoiceExperienceEvent.JobState ->
+                (event.toolCallId to event.jobId) to event.correlation()
+
+            else -> null
+        }
+        jobIdentityAndCorrelation?.let { (jobIdentity, correlation) ->
+            persistedJobCorrelations[jobIdentity]?.let { persistedCorrelation ->
+                require(persistedCorrelation == correlation) {
+                    "LiveKit job correlation changed"
+                }
+            }
+        }
         val payloadHash = voiceSha256(payload)
         val persistedPayloadHash = persistedEventPayloadHashes[event.eventId]
         if (persistedPayloadHash != null) {
@@ -57,6 +75,9 @@ internal class LiveKitVoicePersistenceBridge(
             persist(event)
             evidence.append(event)
             persistedEventPayloadHashes[event.eventId] = payloadHash
+            if (event is LiveKitVoiceExperienceEvent.JobAccepted) {
+                persistedJobCorrelations[event.toolCallId to event.jobId] = event.correlation()
+            }
         }
         LiveKitPersistenceAck(
             version = 1,

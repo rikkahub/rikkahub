@@ -20,6 +20,20 @@ private val LIVEKIT_EXPERIENCE_JSON = Json {
 }
 
 @Serializable
+internal data class LiveKitJobCorrelation(
+    val ownerHash: String,
+    val conversationHash: String,
+    val voiceSessionHash: String,
+    val roomHash: String,
+    val traceHash: String,
+) {
+    fun isValid(voiceSessionId: String): Boolean =
+        listOf(ownerHash, conversationHash, voiceSessionHash, roomHash, traceHash)
+            .all(String::isLiveKitExperienceHash) &&
+            voiceSessionHash == voiceSha256(voiceSessionId)
+}
+
+@Serializable
 internal sealed interface LiveKitVoiceExperienceEvent {
     val version: Int
     val voiceSessionId: String
@@ -39,8 +53,21 @@ internal sealed interface LiveKitVoiceExperienceEvent {
         val toolCallId: String,
         val argumentHash: String,
         val jobId: String,
+        val ownerHash: String,
+        val conversationHash: String,
+        val voiceSessionHash: String,
+        val roomHash: String,
+        val traceHash: String,
         val prompt: String,
-    ) : LiveKitVoiceExperienceEvent
+    ) : LiveKitVoiceExperienceEvent {
+        fun correlation(): LiveKitJobCorrelation = LiveKitJobCorrelation(
+            ownerHash = ownerHash,
+            conversationHash = conversationHash,
+            voiceSessionHash = voiceSessionHash,
+            roomHash = roomHash,
+            traceHash = traceHash,
+        )
+    }
 
     @Serializable
     data class JobState(
@@ -54,10 +81,23 @@ internal sealed interface LiveKitVoiceExperienceEvent {
         val toolCallId: String,
         val argumentHash: String,
         val jobId: String,
+        val ownerHash: String,
+        val conversationHash: String,
+        val voiceSessionHash: String,
+        val roomHash: String,
+        val traceHash: String,
         val resultHash: String? = null,
         val answer: String? = null,
         val failureReason: String? = null,
-    ) : LiveKitVoiceExperienceEvent
+    ) : LiveKitVoiceExperienceEvent {
+        fun correlation(): LiveKitJobCorrelation = LiveKitJobCorrelation(
+            ownerHash = ownerHash,
+            conversationHash = conversationHash,
+            voiceSessionHash = voiceSessionHash,
+            roomHash = roomHash,
+            traceHash = traceHash,
+        )
+    }
 
     @Serializable
     data class Transcript(
@@ -314,14 +354,16 @@ private fun LiveKitVoiceExperienceEvent.JobAccepted.hasValidJobCorrelation(): Bo
         requestHash.isLiveKitExperienceHash() &&
         toolCallId.isLiveKitExperienceIdentifier() &&
         argumentHash.isLiveKitExperienceHash() &&
-        jobId.isLiveKitExperienceIdentifier()
+        jobId.isLiveKitExperienceIdentifier() &&
+        correlation().isValid(voiceSessionId)
 
 private fun LiveKitVoiceExperienceEvent.JobState.hasValidJobCorrelation(): Boolean =
     userTurnId.isLiveKitExperienceIdentifier() &&
         requestHash.isLiveKitExperienceHash() &&
         toolCallId.isLiveKitExperienceIdentifier() &&
         argumentHash.isLiveKitExperienceHash() &&
-        jobId.isLiveKitExperienceIdentifier()
+        jobId.isLiveKitExperienceIdentifier() &&
+        correlation().isValid(voiceSessionId)
 
 private fun LiveKitVoiceExperienceEvent.Transcript.hasValidGrounding(): Boolean {
     val bothGrounded = groundedJobId != null && groundedResultHash != null
@@ -362,7 +404,18 @@ private val TRANSCRIPT_ROLES = setOf("user", "assistant")
 private val BASE_EVENT_KEYS =
     setOf("version", "voiceSessionId", "eventId", "kind", "observedAt")
 private val JOB_CORRELATION_KEYS =
-    setOf("userTurnId", "requestHash", "toolCallId", "argumentHash", "jobId")
+    setOf(
+        "userTurnId",
+        "requestHash",
+        "toolCallId",
+        "argumentHash",
+        "jobId",
+        "ownerHash",
+        "conversationHash",
+        "voiceSessionHash",
+        "roomHash",
+        "traceHash",
+    )
 private val DELIVERY_KEYS = setOf("toolCallId", "jobId")
 private val FOLLOW_UP_CORRELATION_KEYS =
     setOf("followUpTurnId", "assistantTurnId", "resultHash")
