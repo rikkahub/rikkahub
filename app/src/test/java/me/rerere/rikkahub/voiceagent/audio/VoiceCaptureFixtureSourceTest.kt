@@ -71,6 +71,77 @@ class VoiceCaptureFixtureSourceTest {
     }
 
     @Test
+    fun `active owner stages and consumes several distinct fixtures`() = runTest {
+        val token = VoiceCaptureFixtureArming.arm(
+            initial = fixture("initial.pcm", byteArrayOf(1, 2), chunkBytes = 2),
+            staged = emptyList(),
+        )
+        val source = VoiceCaptureFixtureArming.claim(token, delays = {}).getOrThrow()
+        val firstBytes = byteArrayOf(3, 4)
+        val first = fixture("request-2.pcm", firstBytes, chunkBytes = 2)
+        val second = fixture("follow-up.pcm", byteArrayOf(5, 6), chunkBytes = 2)
+        val chunks = mutableListOf<List<Byte>>()
+        val pump = async {
+            source.pump(
+                onPcm16 = { chunks += it.toList() },
+                onFixtureComplete = {},
+            )
+        }
+
+        assertTrue(VoiceCaptureFixtureArming.stage(token, first).accepted)
+        assertTrue(VoiceCaptureFixtureArming.stage(token, second).accepted)
+        assertFalse(VoiceCaptureFixtureArming.stage("fixture-stale", first).accepted)
+        firstBytes.fill(99)
+
+        assertTrue(VoiceCaptureFixtureArming.trigger(token, first.path).accepted)
+        source.awaitIdle()
+        assertTrue(VoiceCaptureFixtureArming.trigger(token, second.path).accepted)
+        source.awaitIdle()
+        assertEquals(listOf(listOf<Byte>(3, 4), listOf<Byte>(5, 6)), chunks)
+
+        source.close()
+        pump.await()
+    }
+
+    @Test
+    fun `staging rejects duplicate and queued fixture paths`() = runTest {
+        val token = VoiceCaptureFixtureArming.arm(
+            initial = fixture("initial.pcm", byteArrayOf(1, 2), chunkBytes = 2),
+            staged = emptyList(),
+        )
+        val source = VoiceCaptureFixtureArming.claim(token, delays = {}).getOrThrow()
+        val fixture = fixture("request-2.pcm", byteArrayOf(3, 4), chunkBytes = 2)
+
+        assertTrue(VoiceCaptureFixtureArming.stage(token, fixture).accepted)
+        assertFalse(VoiceCaptureFixtureArming.stage(token, fixture).accepted)
+        assertTrue(VoiceCaptureFixtureArming.trigger(token, fixture.path).accepted)
+        assertFalse(
+            VoiceCaptureFixtureArming.stage(
+                token,
+                fixture("request-2.pcm", byteArrayOf(9, 10), chunkBytes = 2),
+            ).accepted,
+        )
+
+        source.close()
+    }
+
+    @Test
+    fun `closed source rejects fixture staging`() = runTest {
+        val token = VoiceCaptureFixtureArming.arm(
+            initial = fixture("initial.pcm", byteArrayOf(1, 2), chunkBytes = 2),
+            staged = emptyList(),
+        )
+        val source = VoiceCaptureFixtureArming.claim(token, delays = {}).getOrThrow()
+        source.close()
+
+        assertFalse(
+            source.stage(
+                fixture("request-2.pcm", byteArrayOf(3, 4), chunkBytes = 2),
+            ).accepted,
+        )
+    }
+
+    @Test
     fun `cancelled stale pump cannot complete or clear a newer consumer`() = runTest {
         val firstChunkDelivered = CompletableDeferred<Unit>()
         val allowDelay = CompletableDeferred<Unit>()

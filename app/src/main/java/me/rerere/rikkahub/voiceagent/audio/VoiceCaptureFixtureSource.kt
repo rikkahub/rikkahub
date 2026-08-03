@@ -49,6 +49,7 @@ internal data class VoiceCaptureFixtureTriggerResult(
 
 internal object VoiceCaptureFixtureArming {
     const val ACTION_ARM_FIXTURE = "me.rerere.rikkahub.debug.voiceagent.ARM_CAPTURE_FIXTURE"
+    const val ACTION_STAGE_FIXTURE = "me.rerere.rikkahub.debug.voiceagent.STAGE_CAPTURE_FIXTURE"
     const val ACTION_TRIGGER_FIXTURE = "me.rerere.rikkahub.debug.voiceagent.TRIGGER_CAPTURE_FIXTURE"
     const val EXTRA_INITIAL_PATH = "initial_path"
     const val EXTRA_STAGED_PATH = "staged_path"
@@ -111,6 +112,16 @@ internal object VoiceCaptureFixtureArming {
             message = "Fixture capture owner is not active",
         )
         return source.trigger(path)
+    }
+
+    fun stage(token: String, fixture: VoiceCaptureFixture): VoiceCaptureFixtureTriggerResult {
+        val source = synchronized(lock) {
+            active?.takeIf { it.token == token }?.source
+        } ?: return VoiceCaptureFixtureTriggerResult(
+            accepted = false,
+            message = "Fixture capture owner is not active",
+        )
+        return source.stage(fixture)
     }
 
     fun claimSource(token: String?): Result<VoiceCaptureSource> =
@@ -197,6 +208,15 @@ internal class VoiceCaptureFixtureSource(
             accepted = fixture.pcm16.isNotEmpty(),
             message = "Fixture accepted",
         )
+    }
+
+    fun stage(fixture: VoiceCaptureFixture): VoiceCaptureFixtureTriggerResult = synchronized(lock) {
+        if (closed) return VoiceCaptureFixtureTriggerResult(false, "Fixture capture source is closed")
+        if (fixture.path in staged || queued.any { it.path == fixture.path }) {
+            return VoiceCaptureFixtureTriggerResult(false, "Fixture path is already owned")
+        }
+        staged[fixture.path] = fixture.snapshot()
+        VoiceCaptureFixtureTriggerResult(true, "Fixture staged")
     }
 
     suspend fun pump(

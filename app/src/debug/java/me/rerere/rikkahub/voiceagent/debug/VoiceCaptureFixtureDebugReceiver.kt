@@ -12,6 +12,7 @@ class VoiceCaptureFixtureDebugReceiver : BroadcastReceiver() {
         val result = runCatching {
             when (intent.action) {
                 VoiceCaptureFixtureArming.ACTION_ARM_FIXTURE -> arm(context, intent)
+                VoiceCaptureFixtureArming.ACTION_STAGE_FIXTURE -> stage(context, intent)
                 VoiceCaptureFixtureArming.ACTION_TRIGGER_FIXTURE -> trigger(intent)
                 else -> return
             }
@@ -43,6 +44,27 @@ class VoiceCaptureFixtureDebugReceiver : BroadcastReceiver() {
             .orEmpty()
         val token = VoiceCaptureFixtureArming.arm(initial, staged)
         return "status=ok\naction=arm\ntoken=$token"
+    }
+
+    internal fun stage(context: Context, intent: Intent): String {
+        val token = intent.getStringExtra(VoiceCaptureFixtureArming.EXTRA_TOKEN)?.trim().orEmpty()
+        val path = intent.getStringExtra(VoiceCaptureFixtureArming.EXTRA_PATH)?.trim().orEmpty()
+        require(token.isNotEmpty() && path.isNotEmpty())
+        val fixture = fixture(
+            context = context,
+            path = path,
+            chunkBytes = intent.getIntExtra(
+                VoiceCaptureFixtureArming.EXTRA_CHUNK_BYTES,
+                VoiceCaptureFixtureArming.DEFAULT_CHUNK_BYTES,
+            ),
+            chunkDelayMs = intent.getLongExtra(
+                VoiceCaptureFixtureArming.EXTRA_CHUNK_DELAY_MS,
+                VoiceCaptureFixtureArming.DEFAULT_CHUNK_DELAY_MS,
+            ),
+        )
+        val result = VoiceCaptureFixtureArming.stage(token, fixture)
+        require(result.accepted)
+        return "status=ok\naction=stage\naccepted=true"
     }
 
     private fun trigger(intent: Intent): String {

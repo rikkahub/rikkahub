@@ -17,6 +17,7 @@
       android:permission="android.permission.DUMP">
       <intent-filter>
         <action android:name="me.rerere.rikkahub.debug.voiceagent.ARM_CAPTURE_FIXTURE" />
+        <action android:name="me.rerere.rikkahub.debug.voiceagent.STAGE_CAPTURE_FIXTURE" />
         <action android:name="me.rerere.rikkahub.debug.voiceagent.TRIGGER_CAPTURE_FIXTURE" />
       </intent-filter>
     </receiver>
