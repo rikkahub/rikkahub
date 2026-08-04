@@ -55,7 +55,24 @@ data class LiveKitSessionRequest(
 }
 
 @Serializable
-data class LiveKitSessionDetails(
+internal data class LiveKitSessionCorrelationBinding(
+    val ownerHash: String,
+    val conversationHash: String,
+    val voiceSessionHash: String,
+    val roomHash: String,
+    val traceHash: String,
+) {
+    init {
+        require(
+            listOf(ownerHash, conversationHash, voiceSessionHash, roomHash, traceHash)
+                .all(LIVEKIT_HASH::matches)
+        ) { "LiveKit session correlation binding is invalid" }
+    }
+}
+
+@Serializable
+@ConsistentCopyVisibility
+data class LiveKitSessionDetails internal constructor(
     val livekitUrl: String,
     val participantToken: String,
     val roomName: String,
@@ -64,6 +81,7 @@ data class LiveKitSessionDetails(
     val agentParticipantIdentity: String,
     val dispatchId: String,
     val expiresAt: String,
+    internal val correlationBinding: LiveKitSessionCorrelationBinding,
 ) {
     init {
         require(livekitUrl.isSecureLiveKitUrl()) { "LiveKit URL is invalid" }
@@ -91,6 +109,24 @@ data class LiveKitSessionDetails(
             "dispatchId=$dispatchId, " +
             "expiresAt=$expiresAt" +
             ")"
+}
+
+internal fun LiveKitSessionDetails.requireTrustedCorrelationBinding(
+    conversationId: String,
+    traceId: String,
+): LiveKitSessionCorrelationBinding = correlationBinding.also { binding ->
+    require(binding.conversationHash == voiceSha256(conversationId)) {
+        "LiveKit conversation correlation binding is invalid"
+    }
+    require(binding.voiceSessionHash == voiceSha256(voiceSessionId)) {
+        "LiveKit voice session correlation binding is invalid"
+    }
+    require(binding.roomHash == voiceSha256(roomName)) {
+        "LiveKit room correlation binding is invalid"
+    }
+    require(binding.traceHash == voiceSha256(traceId)) {
+        "LiveKit trace correlation binding is invalid"
+    }
 }
 
 internal data class LiveKitAutomationCorrelation(

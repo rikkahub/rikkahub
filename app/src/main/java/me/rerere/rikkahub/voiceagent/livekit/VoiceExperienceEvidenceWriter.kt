@@ -27,6 +27,13 @@ private fun LiveKitVoiceExperienceEvent.sanitizedJson(rawEvent: String): String 
         put("observedAt", observedAt)
         put("eventHash", voiceSha256(rawEvent))
         when (this@sanitizedJson) {
+            is LiveKitVoiceExperienceEvent.SessionBinding -> {
+                put("ownerHash", ownerHash)
+                put("conversationHash", conversationHash)
+                put("roomHash", roomHash)
+                put("traceHash", traceHash)
+            }
+
             is LiveKitVoiceExperienceEvent.JobAccepted -> {
                 put("userTurnId", userTurnId)
                 put("requestHash", requestHash)

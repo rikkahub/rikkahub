@@ -15,6 +15,8 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceE2EArtifact
@@ -38,6 +40,36 @@ import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
 
 class LiveKitVoiceCallFactoryTest {
+    @Test
+    fun `each locally recomputable binding mismatch fails before room construction`() = runTest {
+        val mismatches = listOf(
+            SESSION_BINDING.copy(conversationHash = hash('9')),
+            SESSION_BINDING.copy(voiceSessionHash = hash('9')),
+            SESSION_BINDING.copy(roomHash = hash('9')),
+            SESSION_BINDING.copy(traceHash = hash('9')),
+        )
+
+        mismatches.forEachIndexed { index, binding ->
+            var roomFactoryCalls = 0
+            val factory = factory(
+                sessionDetailsFactory = { _, _ -> factoryDetails(binding) },
+                roomFactory = {
+                    roomFactoryCalls += 1
+                    InertLiveKitRoomFacade()
+                },
+            )
+
+            val result = factory.createOwned(
+                request(),
+                OrchestratorFakeRoute().lease,
+                backgroundScope,
+            )
+
+            assertTrue("binding mismatch $index", result is VoiceAgentSessionCreationResult.FailedClean)
+            assertEquals("binding mismatch $index", 0, roomFactoryCalls)
+        }
+    }
+
     @Test
     fun `session request timeout retires the exact route and returns clean failure`() = runTest {
         val route = OrchestratorFakeRoute()
@@ -228,13 +260,12 @@ class LiveKitVoiceCallFactoryTest {
             val result = factory.createOwned(request(), OrchestratorFakeRoute().lease, writerScope)
 
             assertTrue(result is VoiceAgentSessionCreationResult.FailedClean)
-            assertEquals(
-                listOf("""{"kind":"construction_failed"}"""),
-                File(
-                    root,
-                    "voice-e2e/VA123456-0000000000000001/voice-experience-events.ndjson",
-                ).readLines(),
-            )
+            val lines = File(
+                root,
+                "voice-e2e/VA123456-0000000000000001/voice-experience-events.ndjson",
+            ).readLines()
+            assertEquals("""{"kind":"construction_failed"}""", lines.first())
+            assertEquals("session_binding", Json.parseToJsonElement(lines.last()).jsonObject["kind"]?.toString()?.trim('"'))
             assertTrue(writerJob.children.none { it.isActive })
         } finally {
             writerScope.cancel()
@@ -303,8 +334,18 @@ class LiveKitVoiceCallFactoryTest {
             runCurrent()
 
             val traceDirectory = File(root, "voice-e2e/VA123456-0000000000000001")
-            assertEquals(listOf(acceptedEventJson()), File(traceDirectory, "voice-experience-private.ndjson").readLines())
-            assertEquals(1, File(traceDirectory, "voice-experience-events.ndjson").readLines().size)
+            val privateLines = File(traceDirectory, "voice-experience-private.ndjson").readLines()
+            assertEquals(2, privateLines.size)
+            assertEquals("session_binding", Json.parseToJsonElement(privateLines.first()).jsonObject["kind"]?.toString()?.trim('"'))
+            assertEquals(acceptedEventJson(), privateLines.last())
+            val sanitizedLines = File(traceDirectory, "voice-experience-events.ndjson").readLines()
+            assertEquals(2, sanitizedLines.size)
+            assertEquals(
+                listOf("session_binding", "job_accepted"),
+                sanitizedLines.map { line ->
+                    Json.parseToJsonElement(line).jsonObject["kind"]?.toString()?.trim('"')
+                },
+            )
         } finally {
             releaseTerminalWrite.countDown()
             callScope.cancel()
@@ -343,6 +384,7 @@ class LiveKitVoiceCallFactoryTest {
     )
 
     private fun request() = orchestratorRequest("livekit-factory").copy(
+        conversationId = Uuid.parse(CONVERSATION_ID),
         transport = VoiceAgentTransport.LiveKitExperimental,
     )
 }
@@ -383,7 +425,9 @@ private class RecordingFactoryConversationStore(
     }
 }
 
-private fun factoryDetails() = LiveKitSessionDetails(
+private fun factoryDetails(
+    correlationBinding: LiveKitSessionCorrelationBinding = SESSION_BINDING,
+) = LiveKitSessionDetails(
     livekitUrl = "wss://project.livekit.cloud",
     participantToken = "participant-token",
     roomName = "rikka_1",
@@ -392,10 +436,26 @@ private fun factoryDetails() = LiveKitSessionDetails(
     agentParticipantIdentity = "agent_lvs_1",
     dispatchId = "AD_1",
     expiresAt = "2026-07-20T02:00:00Z",
+    correlationBinding = correlationBinding,
 )
 
+private const val CONVERSATION_ID = "018f0000-0000-7000-8000-000000000001"
+private val SESSION_BINDING = LiveKitSessionCorrelationBinding(
+    ownerHash = hash('1'),
+    conversationHash = "sha256:d604c61b95ebfb79347557e2b9bad92e0226bc9ef75850258cb18edb91885c4b",
+    voiceSessionHash = "sha256:6dde1c43f223440f4bfba0ed05aa33cb837253ac01e0cadc1d223eff98914e06",
+    roomHash = "sha256:3991f60c5217aa9e5a07f65f0fcbdd77e67e3ad561e3b36a0bab7afcea93aeee",
+    traceHash = "sha256:e360c878ca1a503b8b97b628774ffb56350c57838c3053321436e09733acd3a0",
+)
+
+private fun hash(character: Char): String = "sha256:" + character.toString().repeat(64)
+
 private fun acceptedEventJson(): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_accepted","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1","ownerHash":"sha256:${"1".repeat(64)}","conversationHash":"sha256:${"2".repeat(64)}","voiceSessionHash":"${voiceSha256("lvs_1")}","roomHash":"sha256:${"3".repeat(64)}","traceHash":"sha256:${"4".repeat(64)}","prompt":"private question"}"""
+    CanonicalVoiceExperienceJson.encodeObject(
+        Json.parseToJsonElement(
+            """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_accepted","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1","ownerHash":"${SESSION_BINDING.ownerHash}","conversationHash":"${SESSION_BINDING.conversationHash}","voiceSessionHash":"${SESSION_BINDING.voiceSessionHash}","roomHash":"${SESSION_BINDING.roomHash}","traceHash":"${SESSION_BINDING.traceHash}","prompt":"private question"}"""
+        ).jsonObject,
+    )
 
 private fun assertCausalChainContains(error: Throwable, expected: Throwable) {
     assertTrue(generateSequence(error as Throwable?) { it.cause }.any { it === expected })

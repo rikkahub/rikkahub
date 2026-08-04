@@ -28,6 +28,7 @@ internal interface LiveKitPersistenceOwner {
 internal class LiveKitVoicePersistenceBridge(
     private val voiceSessionId: String,
     private val agentIdentity: String,
+    private val expectedCorrelation: LiveKitJobCorrelation,
     private val queueStore: HermesQueueStore,
     private val transcriptPersister: VoiceTranscriptPersister,
     private val conversationStore: VoiceConversationStore,
@@ -38,7 +39,19 @@ internal class LiveKitVoicePersistenceBridge(
     private val persistedEventPayloadHashes = mutableMapOf<String, String>()
     private val persistedJobCorrelations =
         mutableMapOf<Pair<String, String>, LiveKitJobCorrelation>()
+    private var sessionBindingWritten = false
     private val closed = AtomicBoolean(false)
+
+    init {
+        require(expectedCorrelation.isValid(voiceSessionId)) {
+            "Expected LiveKit session correlation is invalid"
+        }
+    }
+
+    suspend fun initialize() = mutex.withLock {
+        require(!closed.get()) { "LiveKit persistence bridge is closed" }
+        ensureSessionBinding()
+    }
 
     suspend fun handle(callerIdentity: String, payload: String): String = mutex.withLock {
         require(!closed.get()) { "LiveKit persistence bridge is closed" }
@@ -59,11 +72,15 @@ internal class LiveKitVoicePersistenceBridge(
             else -> null
         }
         jobIdentityAndCorrelation?.let { (jobIdentity, correlation) ->
+            require(correlation == expectedCorrelation) {
+                "Unexpected LiveKit job correlation"
+            }
             persistedJobCorrelations[jobIdentity]?.let { persistedCorrelation ->
                 require(persistedCorrelation == correlation) {
                     "LiveKit job correlation changed"
                 }
             }
+            ensureSessionBinding()
         }
         val payloadHash = voiceSha256(payload)
         val persistedPayloadHash = persistedEventPayloadHashes[event.eventId]
@@ -104,6 +121,7 @@ internal class LiveKitVoicePersistenceBridge(
 
     private suspend fun persist(event: LiveKitVoiceExperienceEvent) {
         when (event) {
+            is LiveKitVoiceExperienceEvent.SessionBinding -> Unit
             is LiveKitVoiceExperienceEvent.JobAccepted ->
                 queueStore.persistLiveKitAcceptance(
                     callId = event.toolCallId,
@@ -132,6 +150,30 @@ internal class LiveKitVoicePersistenceBridge(
                 else -> Unit
             }
         }
+    }
+
+    private suspend fun ensureSessionBinding() {
+        if (sessionBindingWritten) return
+        val observedAt = now().toString()
+        require(CanonicalVoiceExperienceJson.isCanonicalInstant(observedAt)) {
+            "LiveKit session binding timestamp is not canonical"
+        }
+        evidence.append(
+            LiveKitVoiceExperienceEvent.SessionBinding(
+                version = 1,
+                voiceSessionId = voiceSessionId,
+                eventId = "binding_" +
+                    expectedCorrelation.voiceSessionHash.removePrefix("sha256:").take(24),
+                kind = "session_binding",
+                observedAt = observedAt,
+                ownerHash = expectedCorrelation.ownerHash,
+                conversationHash = expectedCorrelation.conversationHash,
+                voiceSessionHash = expectedCorrelation.voiceSessionHash,
+                roomHash = expectedCorrelation.roomHash,
+                traceHash = expectedCorrelation.traceHash,
+            )
+        )
+        sessionBindingWritten = true
     }
 
     private suspend fun persistJobState(event: LiveKitVoiceExperienceEvent.JobState) {

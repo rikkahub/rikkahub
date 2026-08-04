@@ -18,6 +18,64 @@ import org.junit.Test
 
 class VoiceExperienceEvidenceWriterTest {
     @Test
+    fun `session binding writes one private and sanitized hash-only row`() = runBlocking {
+        val root = Files.createTempDirectory("voice-experience-binding").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        try {
+            val artifactWriter = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                scope = scope,
+            )
+            val event = LiveKitVoiceExperienceEvent.SessionBinding(
+                version = 1,
+                voiceSessionId = "lvs_1",
+                eventId = "binding_6dde1c43f223440f4bfba0ed",
+                kind = "session_binding",
+                observedAt = "2026-07-30T12:00:00Z",
+                ownerHash = hash('1'),
+                conversationHash = hash('2'),
+                voiceSessionHash = "sha256:6dde1c43f223440f4bfba0ed05aa33cb837253ac01e0cadc1d223eff98914e06",
+                roomHash = hash('3'),
+                traceHash = hash('4'),
+            )
+
+            VoiceExperienceEvidenceWriter(artifactWriter).append(event)
+            artifactWriter.drain()
+
+            val privateLines = File(root, "voice-e2e/voice-experience-private.ndjson").readLines()
+            val sanitizedLines = File(root, "voice-e2e/voice-experience-events.ndjson").readLines()
+            assertEquals(1, privateLines.size)
+            assertEquals(1, sanitizedLines.size)
+            val sanitized = Json.parseToJsonElement(sanitizedLines.single()).jsonObject
+            assertEquals(
+                setOf(
+                    "version",
+                    "voiceSessionHash",
+                    "eventId",
+                    "kind",
+                    "observedAt",
+                    "eventHash",
+                    "ownerHash",
+                    "conversationHash",
+                    "roomHash",
+                    "traceHash",
+                ),
+                sanitized.keys,
+            )
+            assertEquals("session_binding", sanitized.getValue("kind").jsonPrimitive.content)
+            assertEquals(hash('1'), sanitized.getValue("ownerHash").jsonPrimitive.content)
+            assertEquals(hash('2'), sanitized.getValue("conversationHash").jsonPrimitive.content)
+            assertEquals(hash('3'), sanitized.getValue("roomHash").jsonPrimitive.content)
+            assertEquals(hash('4'), sanitized.getValue("traceHash").jsonPrimitive.content)
+            assertFalse(sanitizedLines.single().contains("lvs_1"))
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `raw session and prompt appear only in private while sanitized keeps hashes and counts`() = runBlocking {
         val root = Files.createTempDirectory("voice-experience-evidence").toFile()
         val scope = CoroutineScope(coroutineContext + SupervisorJob())

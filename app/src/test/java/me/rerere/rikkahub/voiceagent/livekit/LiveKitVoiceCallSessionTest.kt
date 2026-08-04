@@ -183,13 +183,21 @@ class LiveKitVoiceCallSessionTest {
     @Test
     fun `factory trace ID is published in the LiveKit session UI state`() = runTest {
         val trace = VoiceTraceContext(traceId = "VA123456-0000000000000001", voiceSessionId = "voice-session")
+        val returnedDetails = details()
         val root = Files.createTempDirectory("livekit-trace-factory").toFile()
         val factory = LiveKitVoiceCallFactory(
             context = object : ContextWrapper(null) {
                 override fun getNoBackupFilesDir(): File = root
             },
             traceContextFactory = { trace },
-            sessionDetailsFactory = { _, _ -> details() },
+            sessionDetailsFactory = { request, requestedTrace ->
+                returnedDetails.copy(
+                    correlationBinding = returnedDetails.correlationBinding.copy(
+                        conversationHash = voiceSha256(request.conversationId.toString()),
+                        traceHash = voiceSha256(requestedTrace.traceId),
+                    ),
+                )
+            },
             roomFactory = { FakeLiveKitRoomFacade() },
             conversationStoreFactory = { InMemoryVoiceConversationStore() },
             artifactWriterFactory = { _, _, _ -> VoiceE2EArtifactWriter.disabled() },
@@ -1292,6 +1300,13 @@ private fun details() = LiveKitSessionDetails(
     agentParticipantIdentity = AGENT_IDENTITY,
     dispatchId = "AD_1",
     expiresAt = "2026-07-20T02:00:00Z",
+    correlationBinding = LiveKitSessionCorrelationBinding(
+        ownerHash = "sha256:${"1".repeat(64)}",
+        conversationHash = "sha256:${"2".repeat(64)}",
+        voiceSessionHash = "sha256:6dde1c43f223440f4bfba0ed05aa33cb837253ac01e0cadc1d223eff98914e06",
+        roomHash = "sha256:3991f60c5217aa9e5a07f65f0fcbdd77e67e3ad561e3b36a0bab7afcea93aeee",
+        traceHash = "sha256:${"4".repeat(64)}",
+    ),
 )
 
 private fun readyJson(

@@ -103,7 +103,14 @@ class LiveKitVoiceContractsTest {
                       "mobileParticipantIdentity":"mobile-lvs_0123456789abcdef0123456789abcdef",
                       "agentParticipantIdentity":"agent-lvs_0123456789abcdef0123456789abcdef",
                       "dispatchId":"AD_123",
-                      "expiresAt":"2026-07-20T02:00:00Z"
+                      "expiresAt":"2026-07-20T02:00:00Z",
+                      "correlationBinding":{
+                        "ownerHash":"${hash('1')}",
+                        "conversationHash":"${hash('2')}",
+                        "voiceSessionHash":"${hash('3')}",
+                        "roomHash":"${hash('4')}",
+                        "traceHash":"${hash('5')}"
+                      }
                     }
                     """.trimIndent(),
                 )
@@ -133,6 +140,16 @@ class LiveKitVoiceContractsTest {
         assertEquals("agent-lvs_0123456789abcdef0123456789abcdef", result.agentParticipantIdentity)
         assertEquals("AD_123", result.dispatchId)
         assertEquals("2026-07-20T02:00:00Z", result.expiresAt)
+        assertEquals(
+            LiveKitSessionCorrelationBinding(
+                ownerHash = hash('1'),
+                conversationHash = hash('2'),
+                voiceSessionHash = hash('3'),
+                roomHash = hash('4'),
+                traceHash = hash('5'),
+            ),
+            result.correlationBinding,
+        )
     }
 
     @Test
@@ -155,6 +172,22 @@ class LiveKitVoiceContractsTest {
         }
         assertThrows(IllegalArgumentException::class.java) {
             validDetails().copy(dispatchId = "dispatch id")
+        }
+    }
+
+    @Test
+    fun `LiveKit session binding requires five lowercase SHA-256 hashes`() {
+        val valid = validDetails()
+        listOf<(LiveKitSessionCorrelationBinding) -> LiveKitSessionCorrelationBinding>(
+            { it.copy(ownerHash = "sha256:${"a".repeat(63)}") },
+            { it.copy(conversationHash = "sha256:${"A".repeat(64)}") },
+            { it.copy(voiceSessionHash = "sha256:${"g".repeat(64)}") },
+            { it.copy(roomHash = "sha256:${"0".repeat(65)}") },
+            { it.copy(traceHash = "${"0".repeat(64)}") },
+        ).forEach { mutate ->
+            assertThrows(IllegalArgumentException::class.java) {
+                valid.copy(correlationBinding = mutate(valid.correlationBinding))
+            }
         }
     }
 
@@ -192,7 +225,14 @@ class LiveKitVoiceContractsTest {
                       "mobileParticipantIdentity":"mobile-lvs_valid",
                       "agentParticipantIdentity":"agent-lvs_valid",
                       "dispatchId":"AD_123",
-                      "expiresAt":"2026-07-20T02:00:00Z"
+                      "expiresAt":"2026-07-20T02:00:00Z",
+                      "correlationBinding":{
+                        "ownerHash":"${hash('1')}",
+                        "conversationHash":"${hash('2')}",
+                        "voiceSessionHash":"${hash('3')}",
+                        "roomHash":"${hash('4')}",
+                        "traceHash":"${hash('5')}"
+                      }
                     }
                     """.trimIndent(),
                 )
@@ -217,6 +257,13 @@ class LiveKitVoiceContractsTest {
         agentParticipantIdentity = "agent-lvs_0123456789abcdef0123456789abcdef",
         dispatchId = "AD_123",
         expiresAt = "2026-07-20T02:00:00Z",
+        correlationBinding = LiveKitSessionCorrelationBinding(
+            ownerHash = hash('1'),
+            conversationHash = hash('2'),
+            voiceSessionHash = hash('3'),
+            roomHash = hash('4'),
+            traceHash = hash('5'),
+        ),
     )
 }
 
@@ -225,6 +272,8 @@ private const val WORKER_EVENT_HASH =
 private const val CANONICAL_READY_JSON =
     "{\"version\":1,\"voiceSessionId\":\"voice-session-id\",\"kind\":\"ready\"," +
         "\"observedAt\":\"2026-07-25T00:00:00Z\",\"eventIdHash\":\"$WORKER_EVENT_HASH\"}"
+
+private fun hash(character: Char): String = "sha256:" + character.toString().repeat(64)
 
 private fun readyJsonWithObservedAt(observedAt: String): String =
     CANONICAL_READY_JSON.replace("2026-07-25T00:00:00Z", observedAt)

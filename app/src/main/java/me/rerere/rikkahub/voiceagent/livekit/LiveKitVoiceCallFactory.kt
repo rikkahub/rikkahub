@@ -93,6 +93,10 @@ internal class LiveKitVoiceCallFactory internal constructor(
             val details = withTimeout(sessionCreationTimeoutMillis) {
                 sessionDetailsFactory(request, trace)
             }
+            val trustedBinding = details.requireTrustedCorrelationBinding(
+                conversationId = request.conversationId.toString(),
+                traceId = trace.traceId,
+            )
             conversationStore = SynchronizedVoiceConversationStore(
                 conversationStoreFactory(request.conversationId),
             )
@@ -101,6 +105,7 @@ internal class LiveKitVoiceCallFactory internal constructor(
             val persistenceBridge = LiveKitVoicePersistenceBridge(
                 voiceSessionId = details.voiceSessionId,
                 agentIdentity = details.agentParticipantIdentity,
+                expectedCorrelation = trustedBinding.toJobCorrelation(),
                 queueStore = HermesQueueStore(
                     conversationStore = conversationStore,
                     writer = HermesToolRecordWriter(),
@@ -111,6 +116,7 @@ internal class LiveKitVoiceCallFactory internal constructor(
                 conversationStore = conversationStore,
                 evidence = VoiceExperienceEvidenceWriter(artifactWriter),
             )
+            persistenceBridge.initialize()
             val persistenceOwner = LiveKitPersistenceResources(
                 bridge = persistenceBridge,
                 artifactWriter = artifactWriter,

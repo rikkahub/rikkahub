@@ -25,6 +25,61 @@ import kotlin.uuid.Uuid
 
 class LiveKitVoicePersistenceBridgeTest {
     @Test
+    fun `job correlation mismatch is rejected before queue evidence or acknowledgement`() = runTest {
+        val store = RecordingVoiceConversationStore()
+        val evidence = RecordingEvidenceSink()
+        val bridge = bridge(store, evidence)
+
+        val failure = runCatching {
+            bridge.handle(
+                AGENT_IDENTITY,
+                acceptedEventJson(roomHash = hash('9')),
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+        assertTrue(store.conversation.value.hermesQueueRecords().isEmpty())
+        assertTrue(evidence.events.isEmpty())
+    }
+
+    @Test
+    fun `job state correlation mismatch is rejected before any prior acceptance or side effect`() = runTest {
+        val store = RecordingVoiceConversationStore()
+        val evidence = RecordingEvidenceSink()
+        val bridge = bridge(store, evidence)
+
+        val failure = runCatching {
+            bridge.handle(
+                AGENT_IDENTITY,
+                jobStateJson(
+                    kind = "job_running",
+                    eventId = "evt_unbound_state",
+                    traceHash = hash('9'),
+                ),
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+        assertTrue(store.conversation.value.hermesQueueRecords().isEmpty())
+        assertTrue(evidence.events.isEmpty())
+    }
+
+    @Test
+    fun `valid acceptance writes exactly one session binding as first evidence`() = runTest {
+        val store = RecordingVoiceConversationStore()
+        val evidence = RecordingEvidenceSink()
+        val bridge = bridge(store, evidence)
+
+        bridge.handle(AGENT_IDENTITY, acceptedEventJson())
+        bridge.handle(AGENT_IDENTITY, acceptedEventJson())
+
+        assertEquals(listOf("session_binding", "job_accepted"), evidence.events.map { it.kind })
+        val binding = evidence.events.first() as LiveKitVoiceExperienceEvent.SessionBinding
+        assertEquals("binding_6dde1c43f223440f4bfba0ed", binding.eventId)
+        assertEquals(SESSION_BINDING.toJobCorrelation(), binding.correlation())
+    }
+
+    @Test
     fun `job acceptance ack is returned only after durable queued record exists`() = runTest {
         val store = RecordingVoiceConversationStore(blockUpdates = true)
         val bridge = bridge(store)
@@ -57,7 +112,10 @@ class LiveKitVoicePersistenceBridgeTest {
             parseLiveKitPersistenceAck(second)!!.eventId,
         )
         assertEquals(1, store.conversation.value.hermesQueueRecords().size)
-        assertEquals(listOf("evt_accepted"), evidence.events.map { it.eventId })
+        assertEquals(
+            listOf(SESSION_BINDING_EVENT_ID, "evt_accepted"),
+            evidence.events.map { it.eventId },
+        )
     }
 
     @Test
@@ -226,7 +284,10 @@ class LiveKitVoicePersistenceBridgeTest {
         val record = store.conversation.value.hermesQueueRecords().single()
         assertEquals("queued", record.status.wireName)
         assertEquals("private question", record.prompt)
-        assertEquals(listOf("evt_accepted"), evidence.events.map { it.eventId })
+        assertEquals(
+            listOf(SESSION_BINDING_EVENT_ID, "evt_accepted"),
+            evidence.events.map { it.eventId },
+        )
     }
 
     @Test
@@ -393,7 +454,7 @@ class LiveKitVoicePersistenceBridgeTest {
             assertEquals("conflict $index", conflict.expectedAnswer, record.answer)
             assertEquals("conflict $index", conflict.expectedError, record.error)
             assertEquals("conflict $index", conflict.expectedResultHash, record.resultHash)
-            assertEquals("conflict $index", 1, evidence.events.size)
+            assertEquals("conflict $index", 2, evidence.events.size)
         }
     }
 
@@ -415,7 +476,7 @@ class LiveKitVoicePersistenceBridgeTest {
         assertEquals("persisted", parseLiveKitPersistenceAck(ack)!!.status)
         assertEquals(1, store.conversation.value.hermesQueueRecords().size)
         assertEquals(
-            listOf("evt_terminal_first", "evt_terminal_equivalent"),
+            listOf(SESSION_BINDING_EVENT_ID, "evt_terminal_first", "evt_terminal_equivalent"),
             evidence.events.map { it.eventId },
         )
     }
@@ -451,7 +512,7 @@ class LiveKitVoicePersistenceBridgeTest {
             assertEquals("conflict $index", "turn_1", record.originatingUserTurnId)
             assertEquals("conflict $index", REQUEST_HASH, record.requestHash)
             assertEquals("conflict $index", ARGUMENT_HASH, record.argumentHash)
-            assertEquals("conflict $index", 1, evidence.events.size)
+            assertEquals("conflict $index", 2, evidence.events.size)
         }
     }
 
@@ -481,10 +542,16 @@ class LiveKitVoicePersistenceBridgeTest {
 
         assertTrue(contentFailure is IllegalArgumentException)
         assertEquals("private question", contentStore.conversation.value.hermesQueueRecords().single().prompt)
-        assertEquals(listOf("evt_accepted"), contentEvidence.events.map { it.eventId })
+        assertEquals(
+            listOf(SESSION_BINDING_EVENT_ID, "evt_accepted"),
+            contentEvidence.events.map { it.eventId },
+        )
         assertTrue(kindFailure is IllegalArgumentException)
         assertEquals(1, kindStore.conversation.value.hermesQueueRecords().size)
-        assertEquals(listOf("evt_accepted"), kindEvidence.events.map { it.eventId })
+        assertEquals(
+            listOf(SESSION_BINDING_EVENT_ID, "evt_accepted"),
+            kindEvidence.events.map { it.eventId },
+        )
     }
 
     private fun bridge(
@@ -496,6 +563,7 @@ class LiveKitVoicePersistenceBridgeTest {
         return LiveKitVoicePersistenceBridge(
             voiceSessionId = VOICE_SESSION_ID,
             agentIdentity = AGENT_IDENTITY,
+            expectedCorrelation = SESSION_BINDING.toJobCorrelation(),
             queueStore = HermesQueueStore(
                 conversationStore = store,
                 writer = HermesToolRecordWriter(nowIso = { PERSISTED_AT }),
@@ -623,6 +691,7 @@ private fun canonicalJson(payload: String): String =
 private const val VOICE_SESSION_ID = "lvs_1"
 private const val AGENT_IDENTITY = "agent_1"
 private const val PERSISTED_AT = "2026-07-30T12:00:05Z"
+private const val SESSION_BINDING_EVENT_ID = "binding_6dde1c43f223440f4bfba0ed"
 private const val REQUEST_HASH =
     "sha256:1111111111111111111111111111111111111111111111111111111111111111"
 private const val ARGUMENT_HASH =
@@ -636,6 +705,13 @@ private const val ROOM_HASH =
     "sha256:3333333333333333333333333333333333333333333333333333333333333333"
 private const val TRACE_HASH =
     "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+private val SESSION_BINDING = LiveKitSessionCorrelationBinding(
+    ownerHash = OWNER_HASH,
+    conversationHash = CONVERSATION_HASH,
+    voiceSessionHash = VOICE_SESSION_HASH,
+    roomHash = ROOM_HASH,
+    traceHash = TRACE_HASH,
+)
 private const val RESULT_HASH =
     "sha256:5ba14662f757c0819a81f38b78c10d7b8cf7dda9ef6014b3ca7c25b5b7711d77"
 private const val ANSWER_ONE_HASH =

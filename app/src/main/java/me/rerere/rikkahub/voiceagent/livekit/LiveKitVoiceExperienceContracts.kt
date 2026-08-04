@@ -31,6 +31,15 @@ internal data class LiveKitJobCorrelation(
             voiceSessionHash == voiceSha256(voiceSessionId)
 }
 
+internal fun LiveKitSessionCorrelationBinding.toJobCorrelation(): LiveKitJobCorrelation =
+    LiveKitJobCorrelation(
+        ownerHash = ownerHash,
+        conversationHash = conversationHash,
+        voiceSessionHash = voiceSessionHash,
+        roomHash = roomHash,
+        traceHash = traceHash,
+    )
+
 @Serializable
 internal sealed interface LiveKitVoiceExperienceEvent {
     val version: Int
@@ -38,6 +47,28 @@ internal sealed interface LiveKitVoiceExperienceEvent {
     val eventId: String
     val kind: String
     val observedAt: String
+
+    @Serializable
+    data class SessionBinding(
+        override val version: Int,
+        override val voiceSessionId: String,
+        override val eventId: String,
+        override val kind: String,
+        override val observedAt: String,
+        val ownerHash: String,
+        val conversationHash: String,
+        val voiceSessionHash: String,
+        val roomHash: String,
+        val traceHash: String,
+    ) : LiveKitVoiceExperienceEvent {
+        fun correlation(): LiveKitJobCorrelation = LiveKitJobCorrelation(
+            ownerHash = ownerHash,
+            conversationHash = conversationHash,
+            voiceSessionHash = voiceSessionHash,
+            roomHash = roomHash,
+            traceHash = traceHash,
+        )
+    }
 
     @Serializable
     data class JobAccepted(
@@ -244,6 +275,7 @@ internal fun parseLiveKitPersistenceAck(payload: String): LiveKitPersistenceAck?
 }
 
 internal fun LiveKitVoiceExperienceEvent.canonicalJson(): String = when (this) {
+    is LiveKitVoiceExperienceEvent.SessionBinding -> canonicalVoiceExperienceJson(this)
     is LiveKitVoiceExperienceEvent.JobAccepted -> canonicalVoiceExperienceJson(this)
     is LiveKitVoiceExperienceEvent.JobState -> canonicalVoiceExperienceJson(this)
     is LiveKitVoiceExperienceEvent.Transcript -> canonicalVoiceExperienceJson(this)
@@ -281,6 +313,11 @@ private fun LiveKitVoiceExperienceEvent.isValid(): Boolean {
         !observedAt.isCanonicalUtcTimestamp()
     ) return false
     return when (this) {
+        is LiveKitVoiceExperienceEvent.SessionBinding ->
+            kind == "session_binding" &&
+                correlation().isValid(voiceSessionId) &&
+                eventId == "binding_" + voiceSessionHash.removePrefix("sha256:").take(24)
+
         is LiveKitVoiceExperienceEvent.JobAccepted ->
             kind == "job_accepted" &&
                 hasValidJobCorrelation() &&
