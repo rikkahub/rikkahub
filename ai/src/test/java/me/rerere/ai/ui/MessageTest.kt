@@ -233,6 +233,143 @@ class MessageTest {
         assertTrue(message.isValidToUpload())
     }
 
+    @Test
+    fun `handleMessageChunk should merge delayed Claude signature by content block index`() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(
+                        reasoning = "thinking",
+                        metadata = ClaudeReasoningMetadata(contentBlockIndex = 0).toMetadata(),
+                    ),
+                    UIMessagePart.Text("visible text"),
+                ),
+            )
+        )
+        val chunk = MessageChunk(
+            id = "chunk-1",
+            model = "claude-test",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Reasoning(
+                                reasoning = "",
+                                finishedAt = null,
+                                metadata = ClaudeReasoningMetadata(
+                                    signature = "sig-1",
+                                    contentBlockIndex = 0,
+                                ).toMetadata(),
+                            )
+                        ),
+                    ),
+                    message = null,
+                    finishReason = null,
+                )
+            ),
+        )
+
+        val parts = messages.handleMessageChunk(chunk).single().parts
+
+        assertEquals(2, parts.size)
+        assertTrue(parts[0] is UIMessagePart.Reasoning)
+        assertTrue(parts[1] is UIMessagePart.Text)
+        val reasoning = parts[0] as UIMessagePart.Reasoning
+        assertEquals("thinking", reasoning.reasoning)
+        assertEquals("sig-1", reasoning.metadataAs<ClaudeReasoningMetadata>()?.signature)
+    }
+
+    @Test
+    fun `handleMessageChunk should attach Claude signature to matching reasoning block`() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(
+                        reasoning = "first",
+                        metadata = ClaudeReasoningMetadata(contentBlockIndex = 0).toMetadata(),
+                    ),
+                    UIMessagePart.Text("between"),
+                    UIMessagePart.Reasoning(
+                        reasoning = "second",
+                        metadata = ClaudeReasoningMetadata(contentBlockIndex = 2).toMetadata(),
+                    ),
+                ),
+            )
+        )
+        val chunk = MessageChunk(
+            id = "chunk-2",
+            model = "claude-test",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Reasoning(
+                                reasoning = "",
+                                finishedAt = null,
+                                metadata = ClaudeReasoningMetadata(
+                                    signature = "sig-first",
+                                    contentBlockIndex = 0,
+                                ).toMetadata(),
+                            )
+                        ),
+                    ),
+                    message = null,
+                    finishReason = null,
+                )
+            ),
+        )
+
+        val reasoning = messages.handleMessageChunk(chunk)
+            .single()
+            .parts
+            .filterIsInstance<UIMessagePart.Reasoning>()
+
+        assertEquals("sig-first", reasoning[0].metadataAs<ClaudeReasoningMetadata>()?.signature)
+        assertEquals(null, reasoning[1].metadataAs<ClaudeReasoningMetadata>()?.signature)
+    }
+
+    @Test
+    fun `handleMessageChunk should ignore orphan Claude signature`() {
+        val messages = listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.Text("visible text")),
+            )
+        )
+        val chunk = MessageChunk(
+            id = "chunk-3",
+            model = "claude-test",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Reasoning(
+                                reasoning = "",
+                                finishedAt = null,
+                                metadata = ClaudeReasoningMetadata(signature = "orphan").toMetadata(),
+                            )
+                        ),
+                    ),
+                    message = null,
+                    finishReason = null,
+                )
+            ),
+        )
+
+        val parts = messages.handleMessageChunk(chunk).single().parts
+
+        assertEquals(1, parts.size)
+        assertTrue(parts.single() is UIMessagePart.Text)
+    }
+
     // ==================== migrateToolMessages Tests ====================
 
     @Test
