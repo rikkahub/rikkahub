@@ -25,7 +25,7 @@ class CanonicalVoiceExperienceJsonTest {
             }
 
         assertEquals(
-            "sha256:06db9c679c58703aa65cab460c351d32d19e371dc0bda2aa5337f77be4fa5335",
+            "sha256:625ce56ddccc8e63adcfe1d9cc13a2dba6d07ea666d77a49c16c107c1d370746",
             "sha256:$hash",
         )
         assertTrue(bytes.last() == '\n'.code.toByte())
@@ -47,6 +47,31 @@ class CanonicalVoiceExperienceJsonTest {
     }
 
     @Test
+    fun `canonical encoder renders arrays without whitespace`() {
+        val fields = Json.parseToJsonElement(
+            """{"array":[{"b":2,"a":1},true,"x"]}""",
+        ).jsonObject
+
+        assertEquals(
+            """{"array":[{"a":1,"b":2},true,"x"]}""",
+            CanonicalVoiceExperienceJson.encodeObject(fields),
+        )
+    }
+
+    @Test
+    fun `canonical encoder sorts keys by Unicode code point`() {
+        val fields = mapOf(
+            "𐀀" to JsonPrimitive(1),
+            "" to JsonPrimitive(0),
+        )
+
+        assertEquals(
+            """{"":0,"𐀀":1}""",
+            CanonicalVoiceExperienceJson.encodeObject(fields),
+        )
+    }
+
+    @Test
     fun `timestamp accepts only canonical fractions`() {
         listOf(
             "2026-08-04T12:00:00Z",
@@ -58,6 +83,7 @@ class CanonicalVoiceExperienceJsonTest {
             "2026-08-04T12:00:00.1Z",
             "2026-08-04T12:00:00.123000Z",
             "2026-08-04T12:00:00+00:00",
+            "2016-12-31T23:59:60Z",
         ).forEach { assertFalse(CanonicalVoiceExperienceJson.isCanonicalInstant(it)) }
     }
 }

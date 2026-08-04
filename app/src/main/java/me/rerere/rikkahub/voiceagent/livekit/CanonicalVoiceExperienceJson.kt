@@ -26,16 +26,24 @@ internal object CanonicalVoiceExperienceJson {
         if (!canonicalInstant.matches(value) || value.substringBeforeLast('Z').endsWith("000")) {
             return false
         }
-        return runCatching { Instant.parse(value) }.isSuccess
+        val instant = runCatching { Instant.parse(value) }.getOrNull() ?: return false
+        return instant.toString() == value
     }
 
     private fun encode(value: JsonElement): String = when (value) {
-        is JsonObject -> value.entries.sortedBy { it.key }
+        is JsonObject -> value.entries.sortedWith { left, right ->
+            compareByCodePoint(left.key, right.key)
+        }
             .joinToString(separator = ",", prefix = "{", postfix = "}") { (key, child) ->
                 Json.encodeToString(key) + ":" + encode(child)
             }
 
-        is JsonArray -> value.joinToString(prefix = "[", postfix = "]", transform = ::encode)
+        is JsonArray -> value.joinToString(
+            separator = ",",
+            prefix = "[",
+            postfix = "]",
+            transform = ::encode,
+        )
         is JsonPrimitive -> when {
             value.isString -> Json.encodeToString(value.content)
             value.booleanOrNull != null -> value.boolean.toString()
@@ -46,5 +54,18 @@ internal object CanonicalVoiceExperienceJson {
         }
 
         JsonNull -> error("Canonical voice evidence forbids null")
+    }
+
+    private fun compareByCodePoint(left: String, right: String): Int {
+        var leftIndex = 0
+        var rightIndex = 0
+        while (leftIndex < left.length && rightIndex < right.length) {
+            val leftCodePoint = Character.codePointAt(left, leftIndex)
+            val rightCodePoint = Character.codePointAt(right, rightIndex)
+            if (leftCodePoint != rightCodePoint) return leftCodePoint.compareTo(rightCodePoint)
+            leftIndex += Character.charCount(leftCodePoint)
+            rightIndex += Character.charCount(rightCodePoint)
+        }
+        return left.length.compareTo(right.length)
     }
 }

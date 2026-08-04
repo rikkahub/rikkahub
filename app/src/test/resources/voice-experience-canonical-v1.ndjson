@@ -1,3 +1,4 @@
 {"a":{"a":true,"z":2},"observedAt":"2026-08-04T12:00:00Z","text":"héllo\n世界","version":1,"z":0}
 {"eventId":"evt_1","kind":"transcript","observedAt":"2026-08-04T12:00:00.123Z","version":1}
 {"eventId":"evt_2","kind":"delivery_started","observedAt":"2026-08-04T12:00:00.123456789Z","version":1}
+{"array":[{"a":1,"b":2},true,"x"],"":0,"𐀀":1}
