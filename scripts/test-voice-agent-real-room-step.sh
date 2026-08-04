@@ -342,6 +342,8 @@ def sanitized_events():
         "assistantTurnId": "assistant-1",
     })
     rows.append(announced)
+    if os.environ.get("FAKE_ADB_CHECKPOINT_FAILURE") == "single_delivery_order":
+        rows[3], rows[4] = rows[4], rows[3]
     return "".join(
         json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
         for row in rows
@@ -1097,6 +1099,7 @@ PY
   unset FAKE_ADB_CREATE_DESTINATION_ON_TRACE FAKE_ADB_STAGE_REJECT
   unset FAKE_ADB_TRIGGER_REJECT FAKE_ADB_SERVICE_STAYS_ACTIVE
   unset FAKE_ADB_ARTIFACT_CHANGES FAKE_ADB_MISSING_ARTIFACT FAKE_ADB_BAD_SANITIZED
+  unset FAKE_ADB_CHECKPOINT_FAILURE
   unset FAKE_ADB_EMPTY_ARTIFACT FAKE_ADB_INCOMPLETE_ARTIFACT
   unset FAKE_ADB_CREATE_CAPTURE_DESTINATION FAKE_ADB_CREATE_CAPTURE_ON_READ
   unset FAKE_ADB_SIGNAL_ON_ARTIFACT_READ FAKE_ADB_ARTIFACT_SIGNAL
@@ -2522,6 +2525,27 @@ run_status_tests() {
     fail "status-scope test: status retried or used an unrelated query"
   [[ "$(command_count PREPARE)" == "0" && "$(command_count start-foreground-service)" == "0" ]] ||
     fail "status-read-only test: status mutated the run"
+  pass
+
+  reset_fake
+  rm -f -- "$state"
+  activate_fake_run
+  write_valid_state "$state"
+  export FAKE_ADB_CHECKPOINT_FAILURE=single_delivery_order
+  run_helper status --state "$state" --expect single_result_announced
+  local predicate_failure_contract=0
+  local temp_cleanup_contract=0
+  if [[ "$RUN_STATUS" -ne 0 && ! -s "$STDOUT_FILE" &&
+        "$(<"$STDERR_FILE")" == 'voice-step.error=checkpoint single_delivery_order not proven' &&
+        "$(wc -l < "$STDERR_FILE")" == 1 ]]; then
+    predicate_failure_contract=1
+  fi
+  if [[ -z "$(find "$HELPER_TEMP_ROOT" -mindepth 1 -print -quit)" ]]; then
+    temp_cleanup_contract=1
+  fi
+  (( predicate_failure_contract == 1 && temp_cleanup_contract == 1 )) ||
+    fail "status predicate-routing/cleanup test: boundary=$predicate_failure_contract cleanup=$temp_cleanup_contract"
+  assert_private_output_absent
   pass
 
   reset_fake

@@ -793,10 +793,12 @@ case "$operation" in
     python3 "$REAL_ROOM_CONTRACT" --validate-expectation "${PARSED[--expect]}" \
       >/dev/null 2>&1 || die 'invalid expectation'
     CHECKPOINT_ERROR_MODE=1
-    if ! (run_with_decoded_state status "${PARSED[--state]}" "${PARSED[--expect]}") \
-      2>/dev/null; then
-      die 'checkpoint evidence not proven'
-    fi
+    # A failure inside command substitution reports from a child shell, whose
+    # ERROR_REPORTED update cannot reach the parent EXIT trap. Pre-arm the
+    # parent so that one routed diagnostic is not followed by a generic one.
+    ERROR_REPORTED=1
+    run_with_decoded_state status "${PARSED[--state]}" "${PARSED[--expect]}"
+    ERROR_REPORTED=0
     ;;
   finalize)
     parse_options '--state' "$@"
