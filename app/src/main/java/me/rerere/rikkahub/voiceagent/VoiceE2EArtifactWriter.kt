@@ -60,6 +60,7 @@ class VoiceE2EArtifactWriter private constructor(
     private val latestTraceFile = activeTraceId?.let { VoiceE2EArtifactPaths.latestTraceIdFile(rootDirectory) }
     private val pendingLock = Any()
     private val flushLock = Any()
+    private val writeFailureLock = Any()
     private val terminalWriteScope = if (enabled) {
         CoroutineScope(SupervisorJob() + Dispatchers.IO)
     } else {
@@ -71,6 +72,7 @@ class VoiceE2EArtifactWriter private constructor(
     private val pendingAppends = mutableListOf<PendingAppend>()
     private var flushQueued = false
     private var closed = false
+    private var firstWriteFailure: Throwable? = null
     private val commandWorker: Job?
     private val closeCompleted = CompletableDeferred<Unit>()
 
@@ -85,7 +87,7 @@ class VoiceE2EArtifactWriter private constructor(
                         WriteCommand.Flush -> flushPendingWrites()
                         is WriteCommand.Drain -> {
                             flushPendingWrites()
-                            command.completed.complete(Unit)
+                            completeWithWriteFailure(command.completed)
                         }
                     }
                 }
@@ -149,7 +151,7 @@ class VoiceE2EArtifactWriter private constructor(
                 }
                 writeArtifact(VoiceE2EArtifact.SessionJson, content, append = false)
             }
-            completed.complete(Unit)
+            completeWithWriteFailure(completed)
         }
         return completed
     }
@@ -183,15 +185,13 @@ class VoiceE2EArtifactWriter private constructor(
                 closeCompleted.await()
                 return@withContext
             }
-            try {
-                queue.close()
-                commandWorker?.join()
-                flushPendingWrites()
-                drainTerminalWrites()
-            } finally {
-                terminalWriteScope?.cancel()
-                closeCompleted.complete(Unit)
-            }
+            queue.close()
+            commandWorker?.join()
+            flushPendingWrites()
+            runCatching { drainTerminalWrites() }
+            terminalWriteScope?.cancel()
+            completeWithWriteFailure(closeCompleted)
+            closeCompleted.await()
         }
     }
 
@@ -241,7 +241,7 @@ class VoiceE2EArtifactWriter private constructor(
     }
 
     private fun writeArtifact(artifact: VoiceE2EArtifact, content: String, append: Boolean) {
-        runCatching {
+        try {
             prepareActiveTraceDirectory()
             val file = File(directory, artifact.fileName)
             if (append) {
@@ -258,9 +258,27 @@ class VoiceE2EArtifactWriter private constructor(
             } else {
                 file.replaceTextAtomically(content, atomicMove)
             }
-        }.onFailure { error ->
-            val message = error.message ?: error.javaClass.simpleName
+        } catch (error: Throwable) {
+            val message = (error.message ?: error.javaClass.simpleName).redactForVoiceAgentLog()
             VoiceAgentLog.w(TAG, "artifact write failed name=${artifact.fileName} message=$message")
+            retainWriteFailure(error)
+        }
+    }
+
+    private fun retainWriteFailure(error: Throwable): Throwable = synchronized(writeFailureLock) {
+        firstWriteFailure?.also { first ->
+            if (first !== error && first.suppressed.none { it === error }) {
+                first.addSuppressed(error)
+            }
+        } ?: error.also { firstWriteFailure = it }
+    }
+
+    private fun completeWithWriteFailure(completed: CompletableDeferred<Unit>) {
+        val failure = synchronized(writeFailureLock) { firstWriteFailure }
+        if (failure == null) {
+            completed.complete(Unit)
+        } else {
+            completed.completeExceptionally(failure)
         }
     }
 

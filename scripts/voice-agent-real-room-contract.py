@@ -61,6 +61,7 @@ QUIET_RESET_NAMES = {
     "playback_stopped",
     "playback_drained",
 }
+PLAYBACK_TERMINAL_NAMES = {"playback_stopped", "playback_drained"}
 MAX_ARTIFACT_BYTES = 16 * 1024 * 1024
 HASH = re.compile(r"sha256:[0-9a-f]{64}")
 IDENTIFIER = re.compile(r"[A-Za-z0-9_-]{1,128}")
@@ -533,7 +534,10 @@ def _parallel_later(voice: Sequence[dict[str, Any]]) -> tuple[tuple[Any, ...], t
 
 
 def _interruption_active(
-    automation: Sequence[dict[str, Any]], voice: Sequence[dict[str, Any]], allow_announcement: bool
+    automation: Sequence[dict[str, Any]],
+    voice: Sequence[dict[str, Any]],
+    allow_announcement: bool,
+    allow_terminal: bool,
 ) -> tuple[tuple[Any, ...], int, int]:
     accepted_rows = _accepted(voice, "interruption_one_job", 1)
     identity = _identity(accepted_rows[0][1])
@@ -546,21 +550,58 @@ def _interruption_active(
             not any(row.get("kind") == "delivery_announced" for row in voice),
             "interruption_no_announcement",
         )
+    delivery_ns = _timestamp_nanoseconds(started[0][1].get("observedAt"))
+    _require(delivery_ns is not None, "interruption_delivery_identity")
     active = [
         (index, row)
         for index, row in enumerate(automation)
         if row.get("name") == "playback_active"
         and type(row.get("playbackEpoch")) is int
         and row["playbackEpoch"] > 0
+        and type(row.get("wallClockMs")) is int
+        and row["wallClockMs"] * 1_000_000 >= delivery_ns
     ]
-    _require(bool(active), "interruption_active_epoch")
+    if allow_terminal:
+        earliest_active_index = min((index for index, _ in active), default=None)
+        interrupt_index = next(
+            (
+                index
+                for index, row in enumerate(automation)
+                if row.get("name") == "interrupt_started"
+                and earliest_active_index is not None
+                and earliest_active_index < index
+            ),
+            None,
+        )
+        terminal_cutoff = interrupt_index
+    else:
+        terminal_cutoff = len(automation)
+    if terminal_cutoff is not None:
+        latest_terminal_by_epoch = {
+            terminal["playbackEpoch"]: terminal_index
+            for terminal_index, terminal in enumerate(automation[:terminal_cutoff])
+            if terminal.get("name") in PLAYBACK_TERMINAL_NAMES
+            and type(terminal.get("playbackEpoch")) is int
+        }
+        active = [
+            (active_index, row)
+            for active_index, row in active
+            if active_index < terminal_cutoff
+            and latest_terminal_by_epoch.get(row["playbackEpoch"], -1) <= active_index
+        ]
+    _require(len(active) == 1, "interruption_active_epoch")
     return identity, active[0][1]["playbackEpoch"], active[0][0]
 
 
 def _interruption_stop(
     automation: Sequence[dict[str, Any]], voice: Sequence[dict[str, Any]], allow_announcement: bool
 ) -> tuple[tuple[Any, ...], int, int]:
-    identity, epoch, active_index = _interruption_active(automation, voice, allow_announcement)
+    identity, epoch, active_index = _interruption_active(
+        automation,
+        voice,
+        allow_announcement,
+        allow_terminal=True,
+    )
     interrupted = ordered_event(automation, "interrupt_started", after=active_index)
     _require(interrupted is not None, "interruption_boundary")
     stopped = ordered_event(
@@ -641,7 +682,7 @@ def evaluate_checkpoint(
         return
 
     if expectation is Expectation.INTERRUPTION_DELIVERY_ACTIVE:
-        _interruption_active(automation, voice, False)
+        _interruption_active(automation, voice, False, allow_terminal=False)
         return
 
     if expectation is Expectation.INTERRUPTION_OBSERVED:
@@ -822,6 +863,17 @@ def _canonical_timestamp(value: Any) -> bool:
     except ValueError:
         return False
     return True
+
+
+def _timestamp_nanoseconds(value: Any) -> int | None:
+    if not _canonical_timestamp(value):
+        return None
+    whole = datetime.fromisoformat(value[:19] + "+00:00")
+    epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+    elapsed = whole - epoch
+    fraction = value[20:-1] if value[19] == "." else ""
+    fractional_ns = int(fraction.ljust(9, "0")) if fraction else 0
+    return (elapsed.days * 86_400 + elapsed.seconds) * 1_000_000_000 + fractional_ns
 
 
 def parse_automation_bytes(

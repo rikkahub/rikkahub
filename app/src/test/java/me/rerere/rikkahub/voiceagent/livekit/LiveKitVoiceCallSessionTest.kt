@@ -29,6 +29,7 @@ import me.rerere.rikkahub.voiceagent.VoiceAgentCleanupMode
 import me.rerere.rikkahub.voiceagent.VoiceAgentCleanupResult
 import me.rerere.rikkahub.voiceagent.VoiceAudioStatus
 import me.rerere.rikkahub.voiceagent.VoiceSessionStatus
+import me.rerere.rikkahub.voiceagent.VoiceE2EArtifact
 import me.rerere.rikkahub.voiceagent.VoiceE2EArtifactWriter
 import me.rerere.rikkahub.voiceagent.orchestratorRequest
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationAudioProbe
@@ -807,6 +808,67 @@ class LiveKitVoiceCallSessionTest {
     }
 
     @Test
+    fun `artifact filesystem failure prevents call stopped and run finalization`() = runTest {
+        val root = Files.createTempDirectory("livekit-artifact-write-failure").toFile()
+        try {
+            val writer = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                scope = backgroundScope,
+            )
+            writer.drain()
+            val blocked = File(
+                root,
+                "voice-e2e/${VoiceE2EArtifact.VoiceExperiencePrivate.fileName}",
+            )
+            requireNotNull(blocked.parentFile).mkdirs()
+            assertTrue(blocked.mkdir())
+            writer(VoiceE2EArtifact.VoiceExperiencePrivate, """{"event":"private"}""")
+
+            var persistenceClosed = false
+            val persistenceOwner = object : LiveKitPersistenceOwner {
+                override suspend fun drain() {
+                    writer.close()
+                }
+
+                override fun close() {
+                    persistenceClosed = true
+                }
+            }
+            val runtime = SessionRecordingAutomationRuntime()
+            val fixture = fixture(
+                persistenceHandler = { _, _ -> """{"status":"persisted"}""" },
+                persistenceOwner = persistenceOwner,
+                automationRuntime = runtime,
+            )
+            fixture.session.start()
+            runCurrent()
+
+            val first = fixture.session.cleanupOperation.run(VoiceAgentCleanupMode.GracefulEnd)
+            val second = fixture.session.cleanupOperation.run(VoiceAgentCleanupMode.GracefulEnd)
+
+            assertTrue(first is VoiceAgentCleanupResult.Failed)
+            assertTrue(second is VoiceAgentCleanupResult.Failed)
+            assertSame(
+                (first as VoiceAgentCleanupResult.Failed).error.rootCause(),
+                (second as VoiceAgentCleanupResult.Failed).error.rootCause(),
+            )
+            assertFalse(persistenceClosed)
+            assertTrue(fixture.room.rpcHandlers.containsKey(LIVEKIT_PERSISTENCE_RPC))
+            assertEquals(0, fixture.room.disconnectCalls)
+            assertEquals(0, fixture.room.closeCalls)
+            assertTrue(runtime.events.none {
+                it.name in setOf(
+                    VoiceAutomationEventName.CALL_STOPPED,
+                    VoiceAutomationEventName.RUN_FINALIZED,
+                )
+            })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `reserved persistence RPC cannot be supplied without its owner`() = runTest {
         val error = runCatching {
             fixture(
@@ -1428,6 +1490,14 @@ private fun readyJson(
 
 private fun acceptedEventJson(): String =
     """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"evt_accepted","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1","prompt":"private question"}"""
+
+private fun Throwable.rootCause(): Throwable {
+    var current = this
+    while (current.cause != null && current.cause !== current) {
+        current = requireNotNull(current.cause)
+    }
+    return current
+}
 
 private const val LIVEKIT_URL = "wss://project.livekit.cloud"
 private const val PARTICIPANT_TOKEN = "participant-token"

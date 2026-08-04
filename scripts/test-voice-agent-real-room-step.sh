@@ -3325,8 +3325,17 @@ def delivery(kind, job, **fields):
     return voice(kind, toolCallId=job["toolCallId"], jobId=job["jobId"], **fields)
 
 
-def automation(monotonic_ms, name, epoch=None, rms=None):
-    row = {"monotonicMs": monotonic_ms, "name": name, "playbackEpoch": epoch}
+def automation(monotonic_ms, name, epoch=None, rms=None, wall_clock_ms=None):
+    row = {
+        "monotonicMs": monotonic_ms,
+        "wallClockMs": (
+            1_800_000_000_000 + monotonic_ms
+            if wall_clock_ms is None
+            else wall_clock_ms
+        ),
+        "name": name,
+        "playbackEpoch": epoch,
+    }
     if rms is not None:
         row["rmsActive"] = rms
     return row
@@ -3542,10 +3551,37 @@ expect_failure("parallel_both_announced", [], mutated, "parallel_acceptance_orde
 active_voice = [
     accepted(first),
     state("job_succeeded", first, resultHash=digest("8")),
-    delivery("delivery_started", first),
+    delivery("delivery_started", first, observedAt="2027-01-15T08:00:00.010Z"),
 ]
 active_automation = [automation(10, "playback_active", 1)]
 expect_pass("interruption_delivery_active", active_automation, active_voice)
+delivery_one_ns_after_active = [dict(row) for row in active_voice]
+delivery_one_ns_after_active[-1]["observedAt"] = "2027-01-15T08:00:00.010000001Z"
+expect_failure(
+    "interruption_delivery_active",
+    active_automation,
+    delivery_one_ns_after_active,
+    "interruption_active_epoch",
+)
+expect_failure(
+    "interruption_delivery_active",
+    [automation(9, "playback_active", 1)],
+    active_voice,
+    "interruption_active_epoch",
+)
+for terminal_name in ("playback_stopped", "playback_drained"):
+    expect_failure(
+        "interruption_delivery_active",
+        active_automation + [automation(20, terminal_name, 1)],
+        active_voice,
+        "interruption_active_epoch",
+    )
+expect_failure(
+    "interruption_delivery_active",
+    active_automation + [automation(20, "playback_active", 2)],
+    active_voice,
+    "interruption_active_epoch",
+)
 mutated = [dict(row) for row in active_voice]
 mutated[-1]["jobId"] = second["jobId"]
 expect_failure("interruption_delivery_active", active_automation, mutated, "interruption_delivery_identity")
@@ -3557,6 +3593,34 @@ observed_automation = active_automation + [
     automation(30, "playback_stopped", 1),
 ]
 expect_pass("interruption_observed", observed_automation, active_voice)
+stale_observed_automation = [
+    automation(1, "playback_active", 99),
+    *observed_automation,
+]
+expect_pass("interruption_observed", stale_observed_automation, active_voice)
+for terminal_name in ("playback_stopped", "playback_drained"):
+    prematurely_terminated = active_automation + [
+        automation(15, terminal_name, 1),
+        automation(20, "interrupt_started"),
+        automation(30, "playback_stopped", 1),
+    ]
+    expect_failure(
+        "interruption_observed",
+        prematurely_terminated,
+        active_voice,
+        "interruption_active_epoch",
+    )
+competing_observed = active_automation + [
+    automation(15, "playback_active", 2),
+    automation(20, "interrupt_started"),
+    automation(30, "playback_stopped", 1),
+]
+expect_failure(
+    "interruption_observed",
+    competing_observed,
+    active_voice,
+    "interruption_active_epoch",
+)
 mutated_automation = active_automation + [
     automation(20, "interrupt_started"),
     automation(30, "playback_stopped", 2),
@@ -3585,6 +3649,18 @@ recovered_automation = canonical_automation([
     (2300, "playback_drained", 2, None),
 ])
 expect_pass("interruption_recovered", recovered_automation, recovered_voice)
+recovered_with_stale_active = canonical_automation([
+    (1, "playback_active", 99, None),
+    (10, "playback_active", 1, None),
+    (20, "playback_written", 1, True),
+    (30, "interrupt_started", None, None),
+    (40, "playback_stopped", 1, None),
+    (100, "playback_written", 1, False),
+    (500, "playback_written", 1, False),
+    (2200, "playback_active", 2, None),
+    (2300, "playback_drained", 2, None),
+])
+expect_pass("interruption_recovered", recovered_with_stale_active, recovered_voice)
 quiet_before_interruption = canonical_automation([
     (10, "playback_active", 1, None),
     (20, "playback_written", 1, True),

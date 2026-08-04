@@ -9,9 +9,11 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.io.IOException
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -626,6 +628,97 @@ class VoiceE2EArtifactWriterTest {
         }
 
     @Test
+    fun `private and sanitized append failures fail drain and every close caller`() = runBlocking {
+        for (artifact in listOf(
+            VoiceE2EArtifact.VoiceExperiencePrivate,
+            VoiceE2EArtifact.VoiceExperienceEvents,
+        )) {
+            val root = Files.createTempDirectory("voice-experience-write-failure").toFile()
+            val scope = CoroutineScope(coroutineContext + SupervisorJob())
+            try {
+                val writer = VoiceE2EArtifactWriter.create(
+                    enabled = true,
+                    rootDirectory = root,
+                    scope = scope,
+                )
+                writer.drain()
+                val blocked = File(VoiceE2EArtifactPaths.rootDirectory(root), artifact.fileName)
+                requireNotNull(blocked.parentFile).mkdirs()
+                assertTrue(blocked.mkdir())
+
+                writer(artifact, """{"event":"durable"}""")
+
+                val drainFailure = withTimeout(1000) {
+                    runCatching { writer.drain() }.exceptionOrNull()
+                }
+                assertTrue("$artifact drain succeeded after a filesystem failure", drainFailure != null)
+                val secondDrainFailure = withTimeout(1000) {
+                    runCatching { writer.drain() }.exceptionOrNull()
+                }
+                val firstCloseFailure = withTimeout(1000) {
+                    runCatching { writer.close() }.exceptionOrNull()
+                }
+                val secondCloseFailure = withTimeout(1000) {
+                    runCatching { writer.close() }.exceptionOrNull()
+                }
+                val retainedFailure = requireNotNull(drainFailure).rootCause()
+                assertSame(retainedFailure, requireNotNull(secondDrainFailure).rootCause())
+                assertSame(retainedFailure, requireNotNull(firstCloseFailure).rootCause())
+                assertSame(retainedFailure, requireNotNull(secondCloseFailure).rootCause())
+            } finally {
+                scope.cancel()
+                root.deleteRecursively()
+            }
+        }
+    }
+
+    @Test
+    fun `terminal writes retain first failure while attempting later writes`() = runBlocking {
+        val root = Files.createTempDirectory("voice-e2e-terminal-write-failure").toFile()
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val attempted = mutableListOf<String>()
+        try {
+            val writer = VoiceE2EArtifactWriter.create(
+                enabled = true,
+                rootDirectory = root,
+                traceId = "VA000399",
+                scope = scope,
+                atomicMove = { source, _, _ ->
+                    val content = source.toFile().readText()
+                    attempted += content
+                    throw IOException("terminal write ${attempted.size} failed")
+                },
+            )
+
+            val first = writer.writeTerminalSessionJson("first-terminal")
+            val second = writer.writeTerminalSessionJson("second-terminal")
+            val firstFailure = withTimeout(1000) {
+                runCatching { first.await() }.exceptionOrNull()
+            }
+            val secondFailure = withTimeout(1000) {
+                runCatching { second.await() }.exceptionOrNull()
+            }
+            val drainFailure = withTimeout(1000) {
+                runCatching { writer.drainTerminalWrites() }.exceptionOrNull()
+            }
+            val closeFailure = withTimeout(1000) {
+                runCatching { writer.close() }.exceptionOrNull()
+            }
+
+            assertEquals(listOf("first-terminal", "second-terminal"), attempted)
+            val retainedFailure = requireNotNull(firstFailure).rootCause()
+            assertTrue(retainedFailure is IOException)
+            assertSame(retainedFailure, requireNotNull(secondFailure).rootCause())
+            assertSame(retainedFailure, requireNotNull(drainFailure).rootCause())
+            assertSame(retainedFailure, requireNotNull(closeFailure).rootCause())
+            assertEquals(1, retainedFailure.suppressed.size)
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `enabled writer clears stale append-only hermes events before writing`() = runBlocking {
         val root = Files.createTempDirectory("voice-e2e-hermes-events-stale").toFile()
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
@@ -799,6 +892,14 @@ private val OWNER_READ_WRITE = setOf(
     PosixFilePermission.OWNER_READ,
     PosixFilePermission.OWNER_WRITE,
 )
+
+private fun Throwable.rootCause(): Throwable {
+    var current = this
+    while (current.cause != null && current.cause !== current) {
+        current = requireNotNull(current.cause)
+    }
+    return current
+}
 
 private fun blockingSessionJsonMove(
     status: String,
