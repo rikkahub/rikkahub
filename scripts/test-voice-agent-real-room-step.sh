@@ -2316,6 +2316,9 @@ PY
 run_fixture_bounds_tests() {
   local state="$TMP_DIR/fixture-bounds-state.json"
   local fixture="$TMP_DIR/fixture-bounds.pcm"
+  local growth_site="$TMP_DIR/fixture-growth-site"
+  local snapshot_path
+  local snapshot_status
   local size
   for size in 0 1 16777216 16777217; do
     reset_fake
@@ -2334,6 +2337,47 @@ run_fixture_bounds_tests() {
     rm -f -- "$state" "$fixture"
     pass
   done
+
+  make_fixture "$fixture"
+  mkdir "$growth_site"
+  printf '%s\n' \
+    'import os' \
+    'fixture_path = os.environ["VOICE_STEP_GROW_FIXTURE"]' \
+    'real_read = os.read' \
+    'grew = False' \
+    'def growing_read(descriptor, size):' \
+    '    global grew' \
+    '    block = real_read(descriptor, size)' \
+    '    if block and not grew:' \
+    '        grew = True' \
+    '        with open(fixture_path, "ab") as handle:' \
+    '            handle.write(b"x")' \
+    '    return block' \
+    'os.read = growing_read' \
+    > "$growth_site/sitecustomize.py"
+  set +e
+  PYTHONPATH="$growth_site" VOICE_STEP_GROW_FIXTURE="$fixture" TMPDIR="$TMP_DIR" \
+    bash -s -- "$LIBRARY" "$fixture" <<'BASH'
+set -euo pipefail
+source "$1"
+LOCAL_TEMP_DIR=''
+declare -a OWNED_TEMP_FILES=()
+snapshot=''
+size=''
+hash=''
+snapshot_fixture "$2" snapshot size hash
+BASH
+  snapshot_status=$?
+  set -e
+  [[ "$snapshot_status" -ne 0 ]] ||
+    fail "fixture-growth test: post-stat fixture growth was accepted"
+  snapshot_path="$(find "$TMP_DIR" -path '*/voice-real-room-step.*/fixture.*.pcm' -type f -print -quit)"
+  [[ -n "$snapshot_path" && "$(stat -c %s "$snapshot_path")" == 8 ]] ||
+    fail "fixture-growth test: over-limit byte entered private snapshot"
+  [[ "$(stat -c %s "$fixture")" == 9 ]] ||
+    fail "fixture-growth test: instrumented reader did not grow fixture"
+  rm -f -- "$fixture"
+  pass
 }
 
 run_host_lock_test() {

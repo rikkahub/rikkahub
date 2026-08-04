@@ -322,12 +322,16 @@ try:
     if (snapshot_opened.st_dev, snapshot_opened.st_ino) != (snapshot_before.st_dev, snapshot_before.st_ino):
         raise SystemExit(1)
     with os.fdopen(output_descriptor, "wb") as output:
-        while True:
-            block = os.read(descriptor, 65536)
+        remaining = before.st_size
+        while remaining:
+            block = os.read(descriptor, min(65536, remaining))
             if not block:
-                break
+                raise SystemExit(1)
             output.write(block)
             digest.update(block)
+            remaining -= len(block)
+        if os.read(descriptor, 1):
+            raise SystemExit(1)
         output.flush()
         os.fsync(output.fileno())
 finally:
