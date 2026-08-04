@@ -36,14 +36,14 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.GoogleThoughtMetadata
-import me.rerere.ai.ui.MessageChunk
+import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
-import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.ui.toMetadata
@@ -158,7 +158,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         providerSetting: ProviderSetting.Google,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): MessageChunk = withContext(Dispatchers.IO) {
+    ): TextGenerationResult = withContext(Dispatchers.IO) {
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -190,31 +190,22 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         val bodyStr = response.body?.string() ?: ""
         val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
 
-        val candidates = bodyJson["candidates"]!!.jsonArray
-        val usage = bodyJson["usageMetadata"]!!.jsonObject
-
-        val messageChunk = MessageChunk(
+        val candidate = bodyJson["candidates"]?.jsonArray?.firstOrNull()?.jsonObject
+            ?: error("No candidates in response")
+        TextGenerationResult(
             id = Uuid.random().toString(),
             model = params.model.modelId,
-            choices = candidates.map { candidate ->
-                UIMessageChoice(
-                    message = parseMessage(candidate.jsonObject),
-                    index = 0,
-                    finishReason = null,
-                    delta = null
-                )
-            },
-            usage = parseUsageMeta(usage)
+            message = parseMessage(candidate),
+            finishReason = candidate["finishReason"]?.jsonPrimitive?.contentOrNull,
+            usage = parseUsageMeta(bodyJson["usageMetadata"] as? JsonObject),
         )
-
-        messageChunk
     }
 
     override suspend fun streamText(
         providerSetting: ProviderSetting.Google,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): Flow<MessageChunk> = callbackFlow {
+    ): Flow<StreamChunk> = callbackFlow {
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -240,6 +231,25 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
 
+        val normalizer = StreamChunkNormalizer()
+        val responseId = Uuid.random().toString()
+        var finishReason: String? = null
+        var finishEmitted = false
+
+        fun sendChunks(chunks: Iterable<StreamChunk>) {
+            chunks.forEach { chunk ->
+                trySend(chunk).onFailure { e ->
+                    Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                }
+            }
+        }
+
+        fun finishStream() {
+            if (finishEmitted) return
+            finishEmitted = true
+            sendChunks(normalizer.finish(finishReason, responseId, params.model.modelId))
+        }
+
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -255,46 +265,29 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         jsonData["promptFeedback"]?.jsonObject?.get("blockReason")?.jsonPrimitiveOrNull?.contentOrNull
                     if (reason != null) {
                         close(RuntimeException("Prompt feedback: $reason"))
+                        return
                     }
-                    val candidates = jsonData["candidates"]?.jsonArray ?: return
-                    if (candidates.isEmpty()) return
-                    val usage = parseUsageMeta(jsonData["usageMetadata"] as? JsonObject)
-                    val messageChunk = MessageChunk(
-                        id = Uuid.random().toString(),
-                        model = params.model.modelId,
-                        choices = candidates.mapIndexed { index, candidate ->
-                            val candidateObj = candidate.jsonObject
-                            val content = candidateObj["content"]?.jsonObject
-                            val groundingMetadata = candidateObj["groundingMetadata"]?.jsonObject
-                            val finishReason =
-                                candidateObj["finishReason"]?.jsonPrimitive?.contentOrNull
-
-                            val message = content?.let {
-                                parseMessage(buildJsonObject {
-                                    put("role", JsonPrimitive("model"))
-                                    put("content", it)
-                                    groundingMetadata?.let { groundingMetadata ->
-                                        put("groundingMetadata", groundingMetadata)
-                                    }
-                                })
-                            }
-
-                            UIMessageChoice(
-                                index = index,
-                                delta = message,
-                                message = null,
-                                finishReason = finishReason
-                            )
-                        },
-                        usage = usage
-                    )
-
-                    trySend(messageChunk).onFailure { e ->
-                        Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                    parseUsageMeta(jsonData["usageMetadata"] as? JsonObject)?.let { usage ->
+                        trySend(StreamChunk.Usage(usage)).onFailure { e ->
+                            Log.w(TAG, "onEvent: usage dropped (${e?.message})")
+                        }
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                    println("[onEvent] 解析错误: $data")
+
+                    val candidateObj = jsonData["candidates"]?.jsonArray?.firstOrNull()?.jsonObject ?: return
+                    candidateObj["finishReason"]?.jsonPrimitive?.contentOrNull?.let {
+                        finishReason = it
+                    }
+                    val content = candidateObj["content"]?.jsonObject ?: return
+                    val groundingMetadata = candidateObj["groundingMetadata"]?.jsonObject
+                    val message = parseMessage(buildJsonObject {
+                        put("role", JsonPrimitive("model"))
+                        put("content", content)
+                        groundingMetadata?.let { put("groundingMetadata", it) }
+                    })
+                    sendChunks(normalizer.append(message, responseId))
+                } catch (e: Throwable) {
+                    Log.e(TAG, "Failed to parse stream event: $data", e)
+                    close(e)
                 }
             }
 
@@ -334,6 +327,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
             override fun onClosed(eventSource: EventSource) {
                 println("[onClosed] 连接已关闭")
+                finishStream()
                 close()
             }
         }

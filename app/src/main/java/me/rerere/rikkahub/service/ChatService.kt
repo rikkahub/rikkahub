@@ -764,7 +764,7 @@ class ChatService(
             conversationRepo.getConversationById(conversation.id)?.let {
                 saveConversation(
                     conversationId,
-                    it.copy(title = result.choices[0].message?.toText()?.trim() ?: "")
+                    it.copy(title = result.message.toText().trim())
                 )
             }
         }.onFailure {
@@ -808,8 +808,8 @@ class ChatService(
                 params = backgroundTextGenerationParams(model),
             )
             val suggestions =
-                result.choices[0].message?.toText()?.split("\n")?.map { it.trim() }
-                    ?.filter { it.isNotBlank() } ?: emptyList()
+                result.message.toText().split("\n").map { it.trim() }
+                    .filter { it.isNotBlank() }
 
             val latestConversation = conversationRepo.getConversationById(conversationId)
                 ?: sessions[conversationId]?.state?.value
@@ -888,7 +888,7 @@ class ChatService(
                 params = backgroundTextGenerationParams(model),
             )
 
-            return result.choices[0].message?.toText()?.trim()
+            return result.message.toText().trim().takeIf { it.isNotBlank() }
                 ?: throw IllegalStateException("Failed to generate compressed summary")
         }
 

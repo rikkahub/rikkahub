@@ -33,14 +33,15 @@ import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
+import me.rerere.ai.provider.providers.StreamChunkNormalizer
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
-import me.rerere.ai.ui.MessageChunk
+import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
-import me.rerere.ai.ui.UIMessageChoice
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
@@ -75,7 +76,7 @@ class ChatCompletionsAPI(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): MessageChunk = withContext(Dispatchers.IO) {
+    ): TextGenerationResult = withContext(Dispatchers.IO) {
         val requestBody =
             buildChatCompletionRequest(
                 messages = messages,
@@ -113,17 +114,11 @@ class ChatCompletionsAPI(
             ?: "unknown"
         val usage = parseTokenUsage(bodyJson["usage"] as? JsonObject)
 
-        MessageChunk(
+        TextGenerationResult(
             id = id,
             model = model,
-            choices = listOf(
-                UIMessageChoice(
-                    index = 0,
-                    delta = null,
-                    message = parseMessage(message),
-                    finishReason = finishReason
-                )
-            ),
+            message = parseMessage(message),
+            finishReason = finishReason,
             usage = usage
         )
     }
@@ -132,7 +127,7 @@ class ChatCompletionsAPI(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams,
-    ): Flow<MessageChunk> = callbackFlow {
+    ): Flow<StreamChunk> = callbackFlow {
         val requestBody = buildChatCompletionRequest(
             messages = messages,
             params = params,
@@ -154,6 +149,27 @@ class ChatCompletionsAPI(
         // just for debugging response body
         // println(client.newCall(request).await().body?.string())
 
+        val normalizer = StreamChunkNormalizer()
+        var responseId: String? = null
+        var responseModel: String? = null
+        var finishReason: String? = null
+        var finishEmitted = false
+        val toolIdsByIndex = mutableMapOf<Int, String>()
+
+        fun sendChunks(chunks: Iterable<StreamChunk>) {
+            chunks.forEach { chunk ->
+                trySend(chunk).onFailure { e ->
+                    Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                }
+            }
+        }
+
+        fun finishStream() {
+            if (finishEmitted) return
+            finishEmitted = true
+            sendChunks(normalizer.finish(finishReason, responseId, responseModel))
+        }
+
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -163,55 +179,74 @@ class ChatCompletionsAPI(
             ) {
                 if (data == "[DONE]") {
                     println("[onEvent] (done) 结束流: $data")
+                    finishStream()
                     close()
                     return
                 }
                 Log.d(TAG, "onEvent: $data")
-                data
-                    .trim()
-                    .split("\n")
-                    .filter { it.isNotBlank() }
-                    .map { json.parseToJsonElement(it).jsonObject }
-                    .forEach {
+                try {
+                    data
+                        .trim()
+                        .split("\n")
+                        .filter { it.isNotBlank() }
+                        .map { json.parseToJsonElement(it).jsonObject }
+                        .forEach {
                         if (it["error"] != null) {
                             val error = it["error"]!!.parseErrorDetail()
-                            throw error
+                            close(error)
+                            return
                         }
-                        val id = it["id"]?.jsonPrimitive?.contentOrNull ?: ""
-                        val model = it["model"]?.jsonPrimitive?.contentOrNull ?: ""
+                        responseId = it["id"]?.jsonPrimitive?.contentOrNull ?: responseId
+                        responseModel = it["model"]?.jsonPrimitive?.contentOrNull ?: responseModel
 
                         val choices = it["choices"]?.jsonArray ?: JsonArray(emptyList())
-                        val choiceList = buildList {
-                            if (choices.isNotEmpty()) {
-                                val choice = choices[0].jsonObject
-                                val message =
-                                    choice["delta"]?.jsonObject ?: choice["message"]?.jsonObject
-                                    ?: throw Exception("delta/message is null")
-                                val finishReason =
-                                    choice["finish_reason"]?.jsonPrimitive?.contentOrNull
-                                        ?: "unknown"
-                                add(
-                                    UIMessageChoice(
-                                        index = 0,
-                                        delta = parseMessage(message),
-                                        message = null,
-                                        finishReason = finishReason,
+                        choices.firstOrNull()?.jsonObject?.let { choice ->
+                            (choice["delta"]?.jsonObject ?: choice["message"]?.jsonObject)?.let { message ->
+                                val messageWithoutTools = JsonObject(message.filterKeys { key -> key != "tool_calls" })
+                                sendChunks(normalizer.append(parseMessage(messageWithoutTools), responseId))
+
+                                message["tool_calls"]?.jsonArray?.forEachIndexed { fallbackIndex, element ->
+                                    val toolCall = element.jsonObject
+                                    val index = toolCall["index"]?.jsonPrimitive?.intOrNull ?: fallbackIndex
+                                    val toolId = toolCall["id"]?.jsonPrimitive?.contentOrNull
+                                        ?.also { id -> toolIdsByIndex[index] = id }
+                                        ?: toolIdsByIndex.getOrPut(index) {
+                                            "${responseId ?: "response"}:tool-$index"
+                                        }
+                                    val function = toolCall["function"]?.jsonObject
+                                    sendChunks(
+                                        normalizer.append(
+                                            UIMessage(
+                                                role = MessageRole.ASSISTANT,
+                                                parts = listOf(
+                                                    UIMessagePart.Tool(
+                                                        toolCallId = toolId,
+                                                        toolName = function?.get("name")
+                                                            ?.jsonPrimitive?.contentOrNull ?: "",
+                                                        input = function?.get("arguments")
+                                                            ?.jsonPrimitive?.contentOrNull ?: "",
+                                                        output = emptyList(),
+                                                    )
+                                                )
+                                            ),
+                                            responseId,
+                                        )
                                     )
-                                )
+                                }
+                            }
+                            choice["finish_reason"]?.jsonPrimitive?.contentOrNull?.let { reason ->
+                                finishReason = reason
                             }
                         }
-                        val usage = parseTokenUsage(it["usage"] as? JsonObject)
-
-                        val messageChunk = MessageChunk(
-                            id = id,
-                            model = model,
-                            choices = choiceList,
-                            usage = usage
-                        )
-                        trySend(messageChunk).onFailure { e ->
-                            Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
+                        parseTokenUsage(it["usage"] as? JsonObject)?.let { usage ->
+                            trySend(StreamChunk.Usage(usage)).onFailure { e ->
+                                Log.w(TAG, "onEvent: usage dropped (${e?.message})")
+                            }
                         }
                     }
+                } catch (e: Throwable) {
+                    close(e)
+                }
             }
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
@@ -238,6 +273,7 @@ class ChatCompletionsAPI(
             }
 
             override fun onClosed(eventSource: EventSource) {
+                finishStream()
                 close()
             }
         }

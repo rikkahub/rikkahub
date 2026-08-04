@@ -21,11 +21,12 @@ import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
 import me.rerere.ai.provider.providers.openai.ResponseAPI
 import me.rerere.ai.ui.ImageGenerationItem
-import me.rerere.ai.ui.MessageChunk
+import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
@@ -117,7 +118,7 @@ class OpenAIProvider(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): Flow<MessageChunk> = if (providerSetting.useResponseApi) {
+    ): Flow<StreamChunk> = if (providerSetting.useResponseApi) {
         responseAPI.streamText(
             providerSetting = providerSetting,
             messages = messages,
@@ -135,7 +136,7 @@ class OpenAIProvider(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
-    ): MessageChunk = if (providerSetting.useResponseApi) {
+    ): TextGenerationResult = if (providerSetting.useResponseApi) {
         responseAPI.generateText(
             providerSetting = providerSetting,
             messages = messages,
