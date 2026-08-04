@@ -50,10 +50,18 @@ class LiveKitVoiceExperienceContractsTest {
             )
         }
         listOf("job_cancel_requested", "job_cancelled").forEach { removed ->
-            assertNull(
-                removed,
-                parseLiveKitVoiceExperienceEvent(jobStateJson(kind = removed)),
-            )
+            listOf(
+                jobStateJson(kind = removed),
+                jobStateJson(
+                    kind = removed,
+                    suffix = ""","failureReason":"safe failure"""",
+                ),
+            ).forEach { payload ->
+                assertNull(
+                    "$removed was accepted as $payload",
+                    parseLiveKitVoiceExperienceEvent(payload),
+                )
+            }
         }
     }
 
