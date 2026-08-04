@@ -185,19 +185,22 @@ private val OWNER_READ_WRITE = setOf(
 )
 
 private fun acceptedEventJson(): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_accepted","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()},"prompt":"PRIVATE-PROMPT"}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_accepted","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()},"prompt":"PRIVATE-PROMPT"}""")
 
 private fun transcriptEventJson(text: String): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_transcript","kind":"transcript","observedAt":"2026-07-30T12:00:01Z","turnId":"turn_2","role":"assistant","text":"$text","interrupted":false}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_transcript","kind":"transcript","observedAt":"2026-07-30T12:00:01Z","turnId":"turn_2","role":"assistant","text":"$text","interrupted":false}""")
 
 private fun succeededEventJson(answer: String): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_succeeded","kind":"job_succeeded","observedAt":"2026-07-30T12:00:02Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()},"resultHash":"${voiceSha256(answer)}","answer":"$answer"}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_succeeded","kind":"job_succeeded","observedAt":"2026-07-30T12:00:02Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()},"resultHash":"${voiceSha256(answer)}","answer":"$answer"}""")
 
 private fun failedEventJson(reason: String): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_failed","kind":"job_failed","observedAt":"2026-07-30T12:00:03Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()},"failureReason":"$reason"}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_failed","kind":"job_failed","observedAt":"2026-07-30T12:00:03Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()},"failureReason":"$reason"}""")
 
 private fun followUpCorrelationEventJson(): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_follow_up","kind":"follow_up_correlation","observedAt":"2026-07-30T12:00:04Z","followUpTurnId":"turn_2","assistantTurnId":"assistant_2","resultHash":"sha256:${"3".repeat(64)}"}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_follow_up","kind":"follow_up_correlation","observedAt":"2026-07-30T12:00:04Z","followUpTurnId":"turn_2","assistantTurnId":"assistant_2","resultHash":"sha256:${"3".repeat(64)}"}""")
+
+private fun canonicalJson(payload: String): String =
+    CanonicalVoiceExperienceJson.encodeObject(Json.parseToJsonElement(payload).jsonObject)
 
 private fun correlationJson(): String =
     ""","ownerHash":"${hash('1')}","conversationHash":"${hash('2')}","voiceSessionHash":"${voiceSha256("lvs_1")}","roomHash":"${hash('3')}","traceHash":"${hash('4')}""""

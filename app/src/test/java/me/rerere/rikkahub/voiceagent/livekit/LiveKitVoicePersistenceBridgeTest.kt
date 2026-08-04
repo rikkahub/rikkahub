@@ -5,6 +5,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessagePart
@@ -558,7 +560,7 @@ private fun acceptedEventJson(
     roomHash: String = ROOM_HASH,
     traceHash: String = TRACE_HASH,
 ): String =
-    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"$userTurnId","requestHash":"$requestHash","toolCallId":"call_1","argumentHash":"$argumentHash","jobId":"hj_1","ownerHash":"$ownerHash","conversationHash":"$conversationHash","voiceSessionHash":"$voiceSessionHash","roomHash":"$roomHash","traceHash":"$traceHash","prompt":"$prompt"}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"$userTurnId","requestHash":"$requestHash","toolCallId":"call_1","argumentHash":"$argumentHash","jobId":"hj_1","ownerHash":"$ownerHash","conversationHash":"$conversationHash","voiceSessionHash":"$voiceSessionHash","roomHash":"$roomHash","traceHash":"$traceHash","prompt":"$prompt"}""")
 
 private fun succeededEventJson(
     answer: String,
@@ -587,7 +589,7 @@ private fun jobStateJson(
     roomHash: String = ROOM_HASH,
     traceHash: String = TRACE_HASH,
 ): String =
-    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"$kind","observedAt":"2026-07-30T12:00:01Z","userTurnId":"turn_1","requestHash":"$REQUEST_HASH","toolCallId":"call_1","argumentHash":"$ARGUMENT_HASH","jobId":"hj_1","ownerHash":"$ownerHash","conversationHash":"$conversationHash","voiceSessionHash":"$voiceSessionHash","roomHash":"$roomHash","traceHash":"$traceHash"$suffix}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"$kind","observedAt":"2026-07-30T12:00:01Z","userTurnId":"turn_1","requestHash":"$REQUEST_HASH","toolCallId":"call_1","argumentHash":"$ARGUMENT_HASH","jobId":"hj_1","ownerHash":"$ownerHash","conversationHash":"$conversationHash","voiceSessionHash":"$voiceSessionHash","roomHash":"$roomHash","traceHash":"$traceHash"$suffix}""")
 
 private fun assistantTranscriptJson(
     text: String,
@@ -600,20 +602,23 @@ private fun assistantTranscriptJson(
     } else {
         ""
     }
-    return """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"transcript","observedAt":"2026-07-30T12:00:02Z","turnId":"${eventId}_turn","role":"assistant","text":"$text","interrupted":false$grounding}"""
+    return canonicalJson("""{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"transcript","observedAt":"2026-07-30T12:00:02Z","turnId":"${eventId}_turn","role":"assistant","text":"$text","interrupted":false$grounding}""")
 }
 
 private fun deliveryEligibleJson(eventId: String = "evt_eligible"): String =
-    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"delivery_eligible","observedAt":"2026-07-30T12:00:03Z","toolCallId":"call_1","jobId":"hj_1"}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"delivery_eligible","observedAt":"2026-07-30T12:00:03Z","toolCallId":"call_1","jobId":"hj_1"}""")
 
 private fun deliveryAnnouncedJson(
     assistantTurnId: String,
     eventId: String = "evt_announced",
 ): String =
-    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"delivery_announced","observedAt":"2026-07-30T12:00:04Z","toolCallId":"call_1","jobId":"hj_1","assistantTurnId":"$assistantTurnId"}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"$eventId","kind":"delivery_announced","observedAt":"2026-07-30T12:00:04Z","toolCallId":"call_1","jobId":"hj_1","assistantTurnId":"$assistantTurnId"}""")
 
 private fun followUpCorrelationJson(): String =
-    """{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"evt_follow_up","kind":"follow_up_correlation","observedAt":"2026-07-30T12:00:04Z","followUpTurnId":"turn_2","assistantTurnId":"assistant_2","resultHash":"$RESULT_HASH"}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"$VOICE_SESSION_ID","eventId":"evt_follow_up","kind":"follow_up_correlation","observedAt":"2026-07-30T12:00:04Z","followUpTurnId":"turn_2","assistantTurnId":"assistant_2","resultHash":"$RESULT_HASH"}""")
+
+private fun canonicalJson(payload: String): String =
+    CanonicalVoiceExperienceJson.encodeObject(Json.parseToJsonElement(payload).jsonObject)
 
 private const val VOICE_SESSION_ID = "lvs_1"
 private const val AGENT_IDENTITY = "agent_1"

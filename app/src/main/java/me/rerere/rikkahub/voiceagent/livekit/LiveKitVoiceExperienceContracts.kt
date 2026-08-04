@@ -1,13 +1,11 @@
 package me.rerere.rikkahub.voiceagent.livekit
 
 import java.security.MessageDigest
-import java.time.Instant
-import java.time.format.DateTimeFormatter
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -149,7 +147,7 @@ internal data class LiveKitPersistenceAck(
     val status: String,
     val persistedAt: String,
 ) {
-    fun canonicalJson(): String = LIVEKIT_EXPERIENCE_JSON.encodeToString(this)
+    fun canonicalJson(): String = canonicalVoiceExperienceJson(this)
 }
 
 internal fun parseLiveKitVoiceExperienceEvent(payload: String): LiveKitVoiceExperienceEvent? {
@@ -246,11 +244,11 @@ internal fun parseLiveKitPersistenceAck(payload: String): LiveKitPersistenceAck?
 }
 
 internal fun LiveKitVoiceExperienceEvent.canonicalJson(): String = when (this) {
-    is LiveKitVoiceExperienceEvent.JobAccepted -> LIVEKIT_EXPERIENCE_JSON.encodeToString(this)
-    is LiveKitVoiceExperienceEvent.JobState -> LIVEKIT_EXPERIENCE_JSON.encodeToString(this)
-    is LiveKitVoiceExperienceEvent.Transcript -> LIVEKIT_EXPERIENCE_JSON.encodeToString(this)
-    is LiveKitVoiceExperienceEvent.Delivery -> LIVEKIT_EXPERIENCE_JSON.encodeToString(this)
-    is LiveKitVoiceExperienceEvent.FollowUpCorrelation -> LIVEKIT_EXPERIENCE_JSON.encodeToString(this)
+    is LiveKitVoiceExperienceEvent.JobAccepted -> canonicalVoiceExperienceJson(this)
+    is LiveKitVoiceExperienceEvent.JobState -> canonicalVoiceExperienceJson(this)
+    is LiveKitVoiceExperienceEvent.Transcript -> canonicalVoiceExperienceJson(this)
+    is LiveKitVoiceExperienceEvent.Delivery -> canonicalVoiceExperienceJson(this)
+    is LiveKitVoiceExperienceEvent.FollowUpCorrelation -> canonicalVoiceExperienceJson(this)
 }
 
 internal fun voiceSha256(text: String): String =
@@ -271,7 +269,7 @@ private inline fun <reified T> decodeExact(
     val decoded = runCatching {
         LIVEKIT_EXPERIENCE_JSON.decodeFromString<T>(payload)
     }.getOrNull() ?: return null
-    if (LIVEKIT_EXPERIENCE_JSON.encodeToString(decoded) != payload) return null
+    if (canonicalVoiceExperienceJson(decoded) != payload) return null
     return decoded
 }
 
@@ -388,11 +386,13 @@ private fun String.isLiveKitExperienceIdentifier(): Boolean =
 private fun String.isLiveKitExperienceHash(): Boolean =
     LIVEKIT_EXPERIENCE_HASH.matches(this)
 
-private fun String.isCanonicalUtcTimestamp(): Boolean {
-    if (startsWith("0000-")) return false
-    val instant = runCatching { Instant.parse(this) }.getOrNull() ?: return false
-    return DateTimeFormatter.ISO_INSTANT.format(instant) == this
-}
+private fun String.isCanonicalUtcTimestamp(): Boolean =
+    CanonicalVoiceExperienceJson.isCanonicalInstant(this)
+
+private inline fun <reified T> canonicalVoiceExperienceJson(value: T): String =
+    CanonicalVoiceExperienceJson.encodeObject(
+        LIVEKIT_EXPERIENCE_JSON.encodeToJsonElement(value).jsonObject,
+    )
 
 private fun JsonObject.string(key: String): String? =
     runCatching { getValue(key).jsonPrimitive.content }.getOrNull()

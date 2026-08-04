@@ -79,12 +79,16 @@ internal class LiveKitVoicePersistenceBridge(
                 persistedJobCorrelations[event.toolCallId to event.jobId] = event.correlation()
             }
         }
+        val persistedAt = now().toString()
+        require(CanonicalVoiceExperienceJson.isCanonicalInstant(persistedAt)) {
+            "LiveKit persistence acknowledgement timestamp is not canonical"
+        }
         LiveKitPersistenceAck(
             version = 1,
             voiceSessionId = voiceSessionId,
             eventId = event.eventId,
             status = "persisted",
-            persistedAt = now().toString(),
+            persistedAt = persistedAt,
         ).canonicalJson()
     }
 

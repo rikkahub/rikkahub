@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.voiceagent.livekit
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -198,17 +200,17 @@ class LiveKitVoiceExperienceContractsTest {
         val payload = ack.canonicalJson()
 
         assertEquals(
-            """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_1","status":"persisted","persistedAt":"2026-07-30T12:00:01Z"}""",
+            """{"eventId":"evt_1","persistedAt":"2026-07-30T12:00:01Z","status":"persisted","version":1,"voiceSessionId":"lvs_1"}""",
             payload,
         )
         assertEquals(ack, parseLiveKitPersistenceAck(payload))
         assertNull(parseLiveKitPersistenceAck(payload.replace("\"persisted\"", "\"queued\"")))
-        assertNull(parseLiveKitPersistenceAck(payload.replace(",\"eventId\"", ", \"eventId\"")))
+        assertNull(parseLiveKitPersistenceAck(payload.replace(",\"status\"", ", \"status\"")))
     }
 }
 
 private fun acceptedEventJson(): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_1","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()},"prompt":"private question"}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_1","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()},"prompt":"private question"}""")
 
 private fun succeededEventJson(answer: String, resultHash: String): String =
     jobStateJson(
@@ -217,20 +219,23 @@ private fun succeededEventJson(answer: String, resultHash: String): String =
     )
 
 private fun jobStateJson(kind: String, suffix: String = ""): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_state","kind":"$kind","observedAt":"2026-07-30T12:00:02Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()}$suffix}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_state","kind":"$kind","observedAt":"2026-07-30T12:00:02Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()}$suffix}""")
 
 private fun transcriptJson(
     role: String,
     interrupted: Boolean,
     grounding: String = "",
 ): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_transcript","kind":"transcript","observedAt":"2026-07-30T12:00:03Z","turnId":"turn_1","role":"$role","text":"spoken words","interrupted":$interrupted$grounding}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_transcript","kind":"transcript","observedAt":"2026-07-30T12:00:03Z","turnId":"turn_1","role":"$role","text":"spoken words","interrupted":$interrupted$grounding}""")
 
 private fun deliveryJson(kind: String, assistantTurn: String = ""): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_delivery","kind":"$kind","observedAt":"2026-07-30T12:00:04Z","toolCallId":"call_1","jobId":"hj_1"$assistantTurn}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_delivery","kind":"$kind","observedAt":"2026-07-30T12:00:04Z","toolCallId":"call_1","jobId":"hj_1"$assistantTurn}""")
 
 private fun followUpCorrelationJson(): String =
-    """{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_follow_up","kind":"follow_up_correlation","observedAt":"2026-07-30T12:00:05Z","followUpTurnId":"turn_2","assistantTurnId":"assistant_2","resultHash":"sha256:${"3".repeat(64)}"}"""
+    canonicalJson("""{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_follow_up","kind":"follow_up_correlation","observedAt":"2026-07-30T12:00:05Z","followUpTurnId":"turn_2","assistantTurnId":"assistant_2","resultHash":"sha256:${"3".repeat(64)}"}""")
+
+private fun canonicalJson(payload: String): String =
+    CanonicalVoiceExperienceJson.encodeObject(Json.parseToJsonElement(payload).jsonObject)
 
 private val correlation = LiveKitJobCorrelation(
     ownerHash = hash('1'),

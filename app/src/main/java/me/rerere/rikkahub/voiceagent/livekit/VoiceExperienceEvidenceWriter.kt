@@ -78,4 +78,4 @@ private fun LiveKitVoiceExperienceEvent.sanitizedJson(rawEvent: String): String 
                 put("resultHash", resultHash)
             }
         }
-    }.toString()
+    }.let(CanonicalVoiceExperienceJson::encodeObject)
