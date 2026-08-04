@@ -17,6 +17,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.core.Tool
 import me.rerere.ai.core.merge
 import me.rerere.ai.provider.CustomBody
@@ -415,40 +416,35 @@ class GenerationHandler(
                 addAll(model.customBodies)
             }
         )
-        if (stream) {
+        val chunks = if (stream) {
             providerImpl.streamText(
                 providerSetting = provider,
                 messages = internalMessages,
                 params = params
-            ).collect {
-                messages = messages.handleMessageChunk(chunk = it, model = model)
-                it.usage?.let { usage ->
-                    messages = messages.mapIndexed { index, message ->
-                        if (index == messages.lastIndex) {
-                            message.copy(usage = message.usage.merge(usage))
-                        } else {
-                            message
-                        }
-                    }
-                }
-                onUpdateMessages(messages)
-            }
-        } else {
-            val chunk = providerImpl.generateText(
-                providerSetting = provider,
-                messages = internalMessages,
-                params = params,
             )
+        } else {
+            flow {
+                emit(
+                    providerImpl.generateText(
+                        providerSetting = provider,
+                        messages = internalMessages,
+                        params = params,
+                    )
+                )
+            }
+        }
+
+        var requestUsage: TokenUsage? = null
+        chunks.collect { chunk ->
             messages = messages.handleMessageChunk(chunk = chunk, model = model)
-            chunk.usage?.let { usage ->
-                messages = messages.mapIndexed { index, message ->
-                    if (index == messages.lastIndex) {
-                        message.copy(
-                            usage = message.usage.merge(usage)
-                        )
-                    } else {
-                        message
-                    }
+            chunk.usage?.let {
+                requestUsage = requestUsage.merge(it)
+            }
+            messages = messages.mapIndexed { index, message ->
+                if (index == messages.lastIndex) {
+                    message.copy(usage = requestUsage)
+                } else {
+                    message
                 }
             }
             onUpdateMessages(messages)

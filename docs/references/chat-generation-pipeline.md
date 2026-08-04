@@ -77,6 +77,15 @@ onSuccess
     └── generateSuggestion()（异步，使用 suggestionModel）
 ```
 
+### Token Usage 语义
+
+- 同一次 Provider 请求的流式 usage 是快照：按字段更新，不能把每个 chunk 相加。
+- 每次工具 Step 都创建独立的请求级 usage；聊天消息只保留最后一次请求的统计。
+- 生成中或存在未执行 Tool 时不展示消息统计，工具链完成后再显示最后一轮结果。
+- `ProviderManager` 对每个正常完成且返回 usage 的文本请求记录一次全局累计；该累计独立于会话，
+  删除或压缩消息不会减少历史消耗。
+- `cachedTokens` 是 `promptTokens` 的子集，计算总 Token 时不重复相加。
+
 ---
 
 ## 阶段一：用户消息预处理
