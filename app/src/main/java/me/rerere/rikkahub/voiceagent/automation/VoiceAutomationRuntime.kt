@@ -26,6 +26,13 @@ internal interface VoiceAutomationRuntime {
             status.state == VoiceAutomationRunState.Active && status.runHash == runHash
         }
     fun status(): VoiceAutomationStatus
+    fun activeBindingMatches(binding: VoiceAutomationRunBinding): Boolean =
+        status().let { status ->
+            status.state == VoiceAutomationRunState.Active &&
+                status.runHash == binding.runHash &&
+                status.comparisonHash == binding.comparisonHash &&
+                status.requestedTransport == binding.requestedTransport
+        }
     fun finalizeRun(): File
     fun finalizeRunIfMatches(binding: VoiceAutomationRunBinding): File? = null
     fun reset()
@@ -62,6 +69,7 @@ internal class DefaultVoiceAutomationRuntime(
     private var handoverCellularObserved = false
     private var handoverWifiRestored = false
     private var handoverMediaRestored = false
+    private var successfulBoundCallStopped = false
 
     @Synchronized
     override fun prepare(binding: VoiceAutomationRunBinding) {
@@ -82,6 +90,7 @@ internal class DefaultVoiceAutomationRuntime(
         writer = candidateWriter
         lastEmittedMonotonicMs = monotonicMs
         directAppCorrelationRecorded = false
+        successfulBoundCallStopped = false
         resetRestorationState()
         currentStatus = activeStatus(binding, eventCount = 1)
     }
@@ -151,13 +160,21 @@ internal class DefaultVoiceAutomationRuntime(
     override fun status(): VoiceAutomationStatus = currentStatus
 
     @Synchronized
+    override fun activeBindingMatches(binding: VoiceAutomationRunBinding): Boolean =
+        currentStatus.state == VoiceAutomationRunState.Active && this.binding == binding
+
+    @Synchronized
     override fun finalizeRun(): File {
         return finalizeActiveRun()
     }
 
     @Synchronized
     override fun finalizeRunIfMatches(binding: VoiceAutomationRunBinding): File? {
-        if (currentStatus.state != VoiceAutomationRunState.Active || this.binding != binding) return null
+        if (
+            currentStatus.state != VoiceAutomationRunState.Active ||
+            this.binding != binding ||
+            !successfulBoundCallStopped
+        ) return null
         return finalizeActiveRun()
     }
 
@@ -175,11 +192,15 @@ internal class DefaultVoiceAutomationRuntime(
         binding = null
         writer = null
         directAppCorrelationRecorded = false
+        successfulBoundCallStopped = false
         resetRestorationState()
         currentStatus = VoiceAutomationStatus(VoiceAutomationRunState.Idle)
     }
 
     private fun recordActive(input: VoiceAutomationEventInput) {
+        check(!successfulBoundCallStopped || input.name == VoiceAutomationEventName.RUN_FINALIZED) {
+            "Successful call stop must remain the final active event"
+        }
         when (input.name) {
             VoiceAutomationEventName.RECONNECT_STARTED -> {
                 if (reconnectStarted) {
@@ -223,6 +244,12 @@ internal class DefaultVoiceAutomationRuntime(
             else -> Unit
         }
         appendActive(input)
+        if (
+            input.name == VoiceAutomationEventName.CALL_STOPPED &&
+            input.succeeded == true
+        ) {
+            successfulBoundCallStopped = true
+        }
         if (input.name == VoiceAutomationEventName.PLAYBACK_WRITTEN) {
             recordRestoredMedia(input.playbackEpoch)
         }

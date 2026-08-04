@@ -230,12 +230,17 @@ internal class VoiceAutomationControl(
         VoiceAutomationEventValidation.validateHash("comparisonHash", comparisonHash)
         val transport = VoiceAgentTransport.fromWireName(extras.getValue(EXTRA_TRANSPORT))
             ?: throw IllegalArgumentException("Invalid transport")
-        checkNotNull(
-            runtime.finalizeRunIfMatches(
-                VoiceAutomationRunBinding(runHash, comparisonHash, transport),
-            ),
-        ) { "Automation run binding changed" }
-        return success("finalize_bound")
+        val binding = VoiceAutomationRunBinding(runHash, comparisonHash, transport)
+        if (runtime.finalizeRunIfMatches(binding) != null) {
+            return success("finalize")
+        }
+        return rejected(
+            if (runtime.activeBindingMatches(binding)) {
+                "call_not_stopped"
+            } else {
+                "binding_mismatch"
+            },
+        )
     }
 
     private fun dump(extras: Map<String, String>): VoiceAutomationControlResult {
@@ -268,6 +273,11 @@ internal class VoiceAutomationControl(
     ) = VoiceAutomationControlResult(
         resultCode = RESULT_OK,
         resultData = output("status" to "ok", "action" to action, *fields),
+    )
+
+    private fun rejected(reason: String) = VoiceAutomationControlResult(
+        resultCode = RESULT_ERROR,
+        resultData = output("status" to "rejected", "reason" to reason),
     )
 
     private fun VoiceAutomationRunState.wireName(): String = when (this) {

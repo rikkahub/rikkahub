@@ -4,7 +4,6 @@ import java.nio.file.Files
 import me.rerere.rikkahub.voiceagent.VoiceAgentTransport
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -125,7 +124,7 @@ class VoiceAutomationRuntimeTest {
     }
 
     @Test
-    fun `bound finalize rejects stale binding and finalizes the exact active binding`() {
+    fun `bound finalize requires a successful call stopped event for the exact active binding`() {
         val root = Files.createTempDirectory("voice-automation-runtime-bound-finalize").toFile()
         val runtime = DefaultVoiceAutomationRuntime(root, FakeClock())
         val activeBinding = VoiceAutomationRunBinding(
@@ -140,9 +139,80 @@ class VoiceAutomationRuntimeTest {
         assertEquals(VoiceAutomationRunState.Active, runtime.status().state)
         assertEquals(1, runtime.status().eventCount)
 
-        assertNotNull(runtime.finalizeRunIfMatches(activeBinding))
+        assertNull(runtime.finalizeRunIfMatches(activeBinding))
+        assertTrue(
+            runtime.recordIfActiveRun(
+                activeBinding.runHash,
+                VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_STOPPED,
+                    succeeded = false,
+                ),
+            ),
+        )
+        assertNull(runtime.finalizeRunIfMatches(activeBinding))
+        assertTrue(
+            runtime.recordIfActiveRun(
+                activeBinding.runHash,
+                VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_STOPPED,
+                    succeeded = true,
+                ),
+            ),
+        )
+
+        val artifact = requireNotNull(runtime.finalizeRunIfMatches(activeBinding))
+
         assertEquals(VoiceAutomationRunState.Finalized, runtime.status().state)
-        assertEquals(2, runtime.status().eventCount)
+        assertEquals(4, runtime.status().eventCount)
+        assertEquals(
+            listOf("call_stopped", "run_finalized"),
+            artifact.readLines().takeLast(2).map(::eventName),
+        )
+
+        val nextBinding = VoiceAutomationRunBinding(
+            NEXT_RUN_HASH,
+            NEXT_COMPARISON_HASH,
+            VoiceAgentTransport.LiveKitExperimental,
+        )
+        runtime.prepare(nextBinding)
+        assertNull(runtime.finalizeRunIfMatches(nextBinding))
+        assertEquals(VoiceAutomationRunState.Active, runtime.status().state)
+        assertEquals(1, runtime.status().eventCount)
+    }
+
+    @Test
+    fun `successful call stopped remains the last active event until runtime finalization`() {
+        val runtime = preparedRuntime()
+
+        assertTrue(
+            runtime.recordIfActiveRun(
+                RUN_HASH,
+                VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_STOPPED,
+                    succeeded = true,
+                ),
+            ),
+        )
+
+        assertFailsWith<IllegalStateException> {
+            runtime.recordIfActiveRun(
+                RUN_HASH,
+                VoiceAutomationEventInput(VoiceAutomationEventName.NETWORK_OBSERVED),
+            )
+        }
+        val artifact = requireNotNull(
+            runtime.finalizeRunIfMatches(
+                VoiceAutomationRunBinding(
+                    RUN_HASH,
+                    COMPARISON_HASH,
+                    VoiceAgentTransport.DirectGemini,
+                ),
+            ),
+        )
+        assertEquals(
+            listOf("call_stopped", "run_finalized"),
+            artifact.readLines().takeLast(2).map(::eventName),
+        )
     }
 
     @Test
@@ -379,6 +449,9 @@ class VoiceAutomationRuntimeTest {
     ).also { runtime ->
         runtime.prepare(VoiceAutomationRunBinding(RUN_HASH, COMPARISON_HASH, VoiceAgentTransport.DirectGemini))
     }
+
+    private fun eventName(line: String): String =
+        requireNotNull(Regex("""\"name\":\"([^\"]+)\"""").find(line)).groupValues[1]
 
     private class FakeClock : VoiceAutomationClock {
         private var tick = 0L

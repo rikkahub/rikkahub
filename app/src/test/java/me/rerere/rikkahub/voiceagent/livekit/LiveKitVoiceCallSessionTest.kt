@@ -693,6 +693,92 @@ class LiveKitVoiceCallSessionTest {
     }
 
     @Test
+    fun `call stopped follows RPC quiescence persistence drain artifact close and room close`() = runTest {
+        val orderedStages = mutableListOf<String>()
+        val handlerStarted = CompletableDeferred<Unit>()
+        val handlerGate = CompletableDeferred<Unit>()
+        val drainStarted = CompletableDeferred<Unit>()
+        val drainGate = CompletableDeferred<Unit>()
+        val artifactCloseStarted = CompletableDeferred<Unit>()
+        val artifactCloseGate = CompletableDeferred<Unit>()
+        val persistence = RecordingPersistenceOwner(
+            handlerStarted = handlerStarted,
+            handlerGate = handlerGate,
+            drainStarted = drainStarted,
+            drainGate = drainGate,
+            artifactCloseStarted = artifactCloseStarted,
+            artifactCloseGate = artifactCloseGate,
+            stageObserver = orderedStages::add,
+        )
+        val runtime = SessionRecordingAutomationRuntime { event ->
+            if (event.name == VoiceAutomationEventName.CALL_STOPPED) {
+                orderedStages += "call-stopped"
+            }
+        }
+        val fixture = fixture(
+            persistenceHandler = persistence::handle,
+            persistenceOwner = persistence,
+            automationRuntime = runtime,
+            roomLifecycleObserver = { stage -> orderedStages += "room-$stage" },
+        )
+        fixture.session.start()
+        runCurrent()
+        fixture.room.emit(LiveKitRoomEvent.Data(AGENT_IDENTITY, READY_TOPIC, readyJson()))
+        runCurrent()
+
+        val invocation = async {
+            fixture.room.invoke(
+                LIVEKIT_PERSISTENCE_RPC,
+                AGENT_IDENTITY,
+                acceptedEventJson(),
+            )
+        }
+        handlerStarted.await()
+        val cleanup = async {
+            fixture.session.cleanupOperation.run(VoiceAgentCleanupMode.GracefulEnd)
+        }
+        runCurrent()
+
+        assertFalse(cleanup.isCompleted)
+        assertFalse(drainStarted.isCompleted)
+        assertTrue(runtime.events.none { it.name == VoiceAutomationEventName.CALL_STOPPED })
+
+        handlerGate.complete(Unit)
+        drainStarted.await()
+
+        assertFalse(cleanup.isCompleted)
+        assertEquals(0, fixture.room.disconnectCalls)
+        assertTrue(runtime.events.none { it.name == VoiceAutomationEventName.CALL_STOPPED })
+
+        drainGate.complete(Unit)
+        artifactCloseStarted.await()
+
+        assertFalse(cleanup.isCompleted)
+        assertEquals(0, fixture.room.disconnectCalls)
+        assertTrue(runtime.events.none { it.name == VoiceAutomationEventName.CALL_STOPPED })
+
+        artifactCloseGate.complete(Unit)
+        runCurrent()
+
+        assertEquals("""{"status":"persisted"}""", invocation.await())
+        assertEquals(VoiceAgentCleanupResult.Completed, cleanup.await())
+        assertEquals(
+            listOf(
+                "rpc-finished",
+                "persistence-drain-started",
+                "persistence-drained",
+                "artifact-writer-close-started",
+                "artifact-writer-closed",
+                "persistence-owner-closed",
+                "room-disconnect",
+                "room-close",
+                "call-stopped",
+            ),
+            orderedStages,
+        )
+    }
+
+    @Test
     fun `failed persistence drain keeps owner and RPC open until a successful retry`() = runTest {
         val persistence = RecordingPersistenceOwner()
         val drainFailure = IllegalStateException("persistence drain failed")
@@ -1048,10 +1134,12 @@ class LiveKitVoiceCallSessionTest {
         automationAudio: SessionAutomationAudioBinding = SessionAutomationAudioBinding(),
         automationAudioProbe: VoiceAutomationAudioProbe? = null,
         captureSource: VoiceCaptureSource = VoiceCaptureSource.Microphone,
+        roomLifecycleObserver: (String) -> Unit = {},
     ): SessionFixture {
         val room = FakeLiveKitRoomFacade(
             connectFailure = connectFailure,
             automationAudio = automationAudio,
+            lifecycleObserver = roomLifecycleObserver,
         )
         return SessionFixture(
             session = LiveKitVoiceCallSession(
@@ -1087,6 +1175,7 @@ class LiveKitVoiceCallSessionTest {
 private class FakeLiveKitRoomFacade(
     private val connectFailure: Throwable? = null,
     override val automationAudio: LiveKitAutomationAudioBinding = SessionAutomationAudioBinding(),
+    private val lifecycleObserver: (String) -> Unit = {},
 ) : LiveKitRoomFacade {
     val lifecycle = mutableListOf<String>()
     private val mutableEvents = MutableSharedFlow<LiveKitRoomEvent>(extraBufferCapacity = 16)
@@ -1184,6 +1273,7 @@ private class FakeLiveKitRoomFacade(
 
     override fun disconnect() {
         lifecycle += "disconnect"
+        lifecycleObserver("disconnect")
         disconnectCalls += 1
         disconnectFailure?.let { throw it }
         connected = false
@@ -1191,6 +1281,7 @@ private class FakeLiveKitRoomFacade(
 
     override fun close() {
         lifecycle += "close"
+        lifecycleObserver("close")
         closeCalls += 1
         closeFailure?.let { throw it }
     }
@@ -1199,6 +1290,11 @@ private class FakeLiveKitRoomFacade(
 private class RecordingPersistenceOwner(
     private val handlerStarted: CompletableDeferred<Unit>? = null,
     private val handlerGate: CompletableDeferred<Unit>? = null,
+    private val drainStarted: CompletableDeferred<Unit>? = null,
+    private val drainGate: CompletableDeferred<Unit>? = null,
+    private val artifactCloseStarted: CompletableDeferred<Unit>? = null,
+    private val artifactCloseGate: CompletableDeferred<Unit>? = null,
+    private val stageObserver: (String) -> Unit = {},
 ) : LiveKitPersistenceOwner {
     val events = mutableListOf<String>()
     val lifecycle = mutableListOf<String>()
@@ -1210,17 +1306,27 @@ private class RecordingPersistenceOwner(
         handlerStarted?.complete(Unit)
         handlerGate?.await()
         events += requireNotNull(Regex(""""eventId":"([^"]+)"""").find(payload)).groupValues[1]
+        stageObserver("rpc-finished")
         return """{"status":"persisted"}"""
     }
 
     override suspend fun drain() {
         onDrain()
         drainFailure?.let { throw it }
+        stageObserver("persistence-drain-started")
+        drainStarted?.complete(Unit)
+        drainGate?.await()
         lifecycle += "drain"
+        stageObserver("persistence-drained")
+        stageObserver("artifact-writer-close-started")
+        artifactCloseStarted?.complete(Unit)
+        artifactCloseGate?.await()
+        stageObserver("artifact-writer-closed")
     }
 
     override fun close() {
         lifecycle += "close"
+        stageObserver("persistence-owner-closed")
     }
 }
 
@@ -1262,7 +1368,9 @@ private class SessionRecordingAudioProbe(
     override fun onOutputSilenceConfirmed() = Unit
 }
 
-private class SessionRecordingAutomationRuntime : VoiceAutomationRuntime {
+private class SessionRecordingAutomationRuntime(
+    private val onRecord: (VoiceAutomationEventInput) -> Unit = {},
+) : VoiceAutomationRuntime {
     val events = mutableListOf<VoiceAutomationEventInput>()
     var activeRunHash = AUTOMATION_RUN_HASH
 
@@ -1270,6 +1378,7 @@ private class SessionRecordingAutomationRuntime : VoiceAutomationRuntime {
 
     override fun record(event: VoiceAutomationEventInput) {
         events += event
+        onRecord(event)
     }
 
     override fun markReconnectTransportRestored(runHash: String): Boolean {

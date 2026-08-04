@@ -383,29 +383,100 @@ class VoiceAutomationControlTest {
     }
 
     @Test
-    fun `bound finalize rejects stale binding and accepts only exact binding extras`() {
-        val runtime = RecordingRuntime(
-            currentStatus = VoiceAutomationStatus(
-                state = VoiceAutomationRunState.Active,
-                runHash = RUN_HASH,
-                comparisonHash = COMPARISON_HASH,
-                requestedTransport = VoiceAgentTransport.LiveKitExperimental,
+    fun `bound finalize rejects an exact active binding until call stopped succeeds`() {
+        val root = createTempDirectory("voice-automation-control-bound-not-stopped").toFile()
+        val runtime = DefaultVoiceAutomationRuntime(root, IncrementingClock())
+        runtime.prepare(
+            VoiceAutomationRunBinding(
+                RUN_HASH,
+                COMPARISON_HASH,
+                VoiceAgentTransport.LiveKitExperimental,
             ),
         )
-        val control = control(runtime)
-        val exact = mapOf(
-            VoiceAutomationControl.EXTRA_RUN_HASH to RUN_HASH,
-            VoiceAutomationControl.EXTRA_COMPARISON_HASH to COMPARISON_HASH,
-            VoiceAutomationControl.EXTRA_TRANSPORT to VoiceAgentTransport.LiveKitExperimental.wireName,
+        val control = realControl(runtime)
+
+        val notStopped = control.handle(
+            VoiceAutomationControl.ACTION_FINALIZE_BOUND,
+            boundFinalizeExtras(),
         )
 
-        val stale = control.handle(
-            VoiceAutomationControl.ACTION_FINALIZE_BOUND,
-            exact + (VoiceAutomationControl.EXTRA_RUN_HASH to NEXT_RUN_HASH),
-        )
-        assertEquals(VoiceAutomationControl.RESULT_ERROR, stale.resultCode)
-        assertEquals("status=error\nerror=invalid_state", stale.resultData)
+        assertEquals(VoiceAutomationControl.RESULT_ERROR, notStopped.resultCode)
+        assertEquals("status=rejected\nreason=call_not_stopped", notStopped.resultData)
         assertEquals(VoiceAutomationRunState.Active, runtime.status().state)
+
+        assertTrue(
+            runtime.recordIfActiveRun(
+                RUN_HASH,
+                VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_STOPPED,
+                    succeeded = false,
+                ),
+            ),
+        )
+        val failedStop = control.handle(
+            VoiceAutomationControl.ACTION_FINALIZE_BOUND,
+            boundFinalizeExtras(),
+        )
+
+        assertEquals(VoiceAutomationControl.RESULT_ERROR, failedStop.resultCode)
+        assertEquals("status=rejected\nreason=call_not_stopped", failedStop.resultData)
+        assertEquals(VoiceAutomationRunState.Active, runtime.status().state)
+    }
+
+    @Test
+    fun `bound finalize reports binding mismatch before and after successful call stopped`() {
+        val root = createTempDirectory("voice-automation-control-bound-stale").toFile()
+        val runtime = DefaultVoiceAutomationRuntime(root, IncrementingClock())
+        runtime.prepare(
+            VoiceAutomationRunBinding(
+                RUN_HASH,
+                COMPARISON_HASH,
+                VoiceAgentTransport.LiveKitExperimental,
+            ),
+        )
+
+        val stale = realControl(runtime).handle(
+            VoiceAutomationControl.ACTION_FINALIZE_BOUND,
+            boundFinalizeExtras() + (VoiceAutomationControl.EXTRA_RUN_HASH to NEXT_RUN_HASH),
+        )
+
+        assertEquals(VoiceAutomationControl.RESULT_ERROR, stale.resultCode)
+        assertEquals("status=rejected\nreason=binding_mismatch", stale.resultData)
+        assertEquals(VoiceAutomationRunState.Active, runtime.status().state)
+
+        assertTrue(
+            runtime.recordIfActiveRun(
+                RUN_HASH,
+                VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_STOPPED,
+                    succeeded = true,
+                ),
+            ),
+        )
+        val staleAfterStop = realControl(runtime).handle(
+            VoiceAutomationControl.ACTION_FINALIZE_BOUND,
+            boundFinalizeExtras() + (VoiceAutomationControl.EXTRA_RUN_HASH to NEXT_RUN_HASH),
+        )
+
+        assertEquals(VoiceAutomationControl.RESULT_ERROR, staleAfterStop.resultCode)
+        assertEquals("status=rejected\nreason=binding_mismatch", staleAfterStop.resultData)
+        assertEquals(VoiceAutomationRunState.Active, runtime.status().state)
+        assertEquals(2, runtime.status().eventCount)
+    }
+
+    @Test
+    fun `bound finalize accepts only exact extras and successful call stopped`() {
+        val root = createTempDirectory("voice-automation-control-bound-success").toFile()
+        val runtime = DefaultVoiceAutomationRuntime(root, IncrementingClock())
+        runtime.prepare(
+            VoiceAutomationRunBinding(
+                RUN_HASH,
+                COMPARISON_HASH,
+                VoiceAgentTransport.LiveKitExperimental,
+            ),
+        )
+        val control = realControl(runtime)
+        val exact = boundFinalizeExtras()
 
         listOf(
             exact - VoiceAutomationControl.EXTRA_RUN_HASH,
@@ -417,11 +488,44 @@ class VoiceAutomationControlTest {
             assertInvalid(control.handle(VoiceAutomationControl.ACTION_FINALIZE_BOUND, extras))
         }
         assertEquals(VoiceAutomationRunState.Active, runtime.status().state)
+        assertTrue(
+            runtime.recordIfActiveRun(
+                RUN_HASH,
+                VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.CALL_STOPPED,
+                    succeeded = true,
+                ),
+            ),
+        )
 
         val finalized = control.handle(VoiceAutomationControl.ACTION_FINALIZE_BOUND, exact)
+
         assertSuccess(finalized)
-        assertEquals("status=ok\naction=finalize_bound", finalized.resultData)
+        assertEquals("status=ok\naction=finalize", finalized.resultData)
         assertEquals(VoiceAutomationRunState.Finalized, runtime.status().state)
+    }
+
+    @Test
+    fun `legacy finalize remains available before call stopped`() {
+        val root = createTempDirectory("voice-automation-control-legacy-finalize").toFile()
+        val runtime = DefaultVoiceAutomationRuntime(root, IncrementingClock())
+        runtime.prepare(
+            VoiceAutomationRunBinding(
+                RUN_HASH,
+                COMPARISON_HASH,
+                VoiceAgentTransport.LiveKitExperimental,
+            ),
+        )
+
+        val finalized = realControl(runtime).handle(
+            VoiceAutomationControl.ACTION_FINALIZE,
+            emptyMap(),
+        )
+
+        assertSuccess(finalized)
+        assertEquals("status=ok\naction=finalize", finalized.resultData)
+        assertEquals(VoiceAutomationRunState.Finalized, runtime.status().state)
+        assertEquals(2, runtime.status().eventCount)
     }
 
     @Test
@@ -454,6 +558,21 @@ class VoiceAutomationControlTest {
         VoiceAutomationControl.EXTRA_COMPARISON_HASH to COMPARISON_HASH,
         VoiceAutomationControl.EXTRA_TRANSPORT to "direct_gemini",
         VoiceAutomationControl.EXTRA_LIFECYCLE to "foreground",
+    )
+
+    private fun boundFinalizeExtras() = mapOf(
+        VoiceAutomationControl.EXTRA_RUN_HASH to RUN_HASH,
+        VoiceAutomationControl.EXTRA_COMPARISON_HASH to COMPARISON_HASH,
+        VoiceAutomationControl.EXTRA_TRANSPORT to VoiceAgentTransport.LiveKitExperimental.wireName,
+    )
+
+    private fun realControl(runtime: VoiceAutomationRuntime) = VoiceAutomationControl(
+        runtime = runtime,
+        routeRequester = { false },
+        connectivityReader = {
+            VoiceAutomationConnectivity(VoiceAutomationNetwork.NONE, false)
+        },
+        artifactFile = { null },
     )
 
     private fun assertSuccess(result: VoiceAutomationControlResult) {
