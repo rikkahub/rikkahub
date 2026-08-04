@@ -1051,8 +1051,10 @@ if ending == "call-stopped":
     if rows[-1]["name"] != "call_stopped":
         raise SystemExit(1)
     if rows[-1]["succeeded"] is not True:
-        raise SystemExit(2)
+        raise SystemExit(4 if rows[-1]["succeeded"] is False else 2)
 elif ending == "finalized":
+    if rows[-1]["name"] == "call_stopped" and rows[-1]["succeeded"] is True:
+        raise SystemExit(1)
     if len(rows) < 2 or [row["name"] for row in rows[-2:]] != ["call_stopped", "run_finalized"]:
         raise SystemExit(2)
     if rows[-2]["succeeded"] is not True:
@@ -1078,16 +1080,15 @@ wait_for_durable_call_stopped() {
     fi
     case "$proof_status" in
       1) ;;
-      2) die 'invalid durable call-stop evidence' ;;
-      3) die 'durable call-stop read failed' ;;
-      *) die 'invalid durable call-stop evidence' ;;
+      2|3|4) return "$proof_status" ;;
+      *) return 2 ;;
     esac
     if (( SECONDS - started >= ${VOICE_STEP_WAIT_TIMEOUT_SECONDS:-120} )); then
       break
     fi
     sleep "${VOICE_STEP_POLL_SECONDS:-1}"
   done
-  die 'call stop timed out'
+  return 1
 }
 
 read_package_stopped_state() {
@@ -1214,6 +1215,251 @@ restore_force_stopped_package() {
      "${status[5]}" == none && "${status[6]}" == true ]] || return 2
   read_package_stopped_state false || return 2
   PACKAGE_FORCE_STOP_OWNED=0
+}
+
+snapshot_finalization_record() {
+  local source="$1"
+  local -n snapshot_out="$2"
+  local snapshot
+  ensure_local_temp_dir
+  snapshot="$(mktemp "$LOCAL_TEMP_DIR/finalization.XXXXXX.json" 2>/dev/null)" ||
+    die 'invalid finalization record'
+  register_temp_file "$snapshot"
+  chmod 600 -- "$snapshot" 2>/dev/null || die 'invalid finalization record'
+  python3 - "$source" "$snapshot" 2>/dev/null <<'PY' || die 'invalid finalization record'
+import os
+import stat
+import sys
+
+source, snapshot = sys.argv[1:]
+if not source or not os.path.isabs(source) or os.path.normpath(source) != source:
+    raise SystemExit(1)
+if os.path.realpath(source) != source:
+    raise SystemExit(1)
+before = os.lstat(source)
+if (
+    stat.S_ISLNK(before.st_mode)
+    or not stat.S_ISREG(before.st_mode)
+    or stat.S_IMODE(before.st_mode) != 0o600
+    or before.st_nlink != 1
+    or not 1 <= before.st_size <= 65536
+):
+    raise SystemExit(1)
+flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+descriptor = os.open(source, flags)
+try:
+    opened = os.fstat(descriptor)
+    identity = lambda value: (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_nlink,
+        value.st_uid,
+        value.st_size,
+        value.st_mtime_ns,
+        value.st_ctime_ns,
+    )
+    if identity(opened) != identity(before):
+        raise SystemExit(1)
+    content = b""
+    while len(content) < opened.st_size:
+        block = os.read(descriptor, opened.st_size - len(content))
+        if not block:
+            raise SystemExit(1)
+        content += block
+    if os.read(descriptor, 1):
+        raise SystemExit(1)
+finally:
+    os.close(descriptor)
+after = os.lstat(source)
+if identity(after) != identity(before):
+    raise SystemExit(1)
+snapshot_flags = os.O_WRONLY | os.O_TRUNC | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+snapshot_descriptor = os.open(snapshot, snapshot_flags)
+with os.fdopen(snapshot_descriptor, "wb") as handle:
+    handle.write(content)
+    handle.flush()
+    os.fsync(handle.fileno())
+PY
+  python3 "$REAL_ROOM_CONTRACT" --validate-finalization "$snapshot" \
+    >/dev/null 2>&1 || die 'invalid finalization record'
+  snapshot_out="$snapshot"
+}
+
+publish_finalization_record() {
+  local destination="$1"
+  local outcome="$2"
+  local reason="$3"
+  local call_stopped="$4"
+  local automation_finalized="$5"
+  local forced_fallback_used="$6"
+  local parent
+  local temporary
+  parent="$(dirname -- "$destination")" || die 'finalization record publication failed'
+  temporary="$(mktemp "$parent/.voice-step-finalization.XXXXXX" 2>/dev/null)" ||
+    die 'finalization record publication failed'
+  register_temp_file "$temporary"
+  chmod 600 -- "$temporary" 2>/dev/null || die 'finalization record publication failed'
+  python3 "$REAL_ROOM_CONTRACT" --encode-finalization \
+    "$outcome" "$reason" "$call_stopped" "$automation_finalized" \
+    "$forced_fallback_used" >"$temporary" 2>/dev/null ||
+    die 'finalization record publication failed'
+  publish_owned_temp "$temporary" "$destination"
+}
+
+publish_cleanup_record() {
+  local destination="$1"
+  local outcome="$2"
+  local call_stopped="$3"
+  local automation_finalized="$4"
+  local fixtures_removed="$5"
+  local finalization_hash="$6"
+  local parent
+  local temporary
+  parent="$(dirname -- "$destination")" || die 'cleanup record publication failed'
+  temporary="$(mktemp "$parent/.voice-step-cleanup.XXXXXX" 2>/dev/null)" ||
+    die 'cleanup record publication failed'
+  register_temp_file "$temporary"
+  chmod 600 -- "$temporary" 2>/dev/null || die 'cleanup record publication failed'
+  python3 "$REAL_ROOM_CONTRACT" --encode-cleanup \
+    "$outcome" "$call_stopped" "$automation_finalized" "$fixtures_removed" \
+    "$finalization_hash" >"$temporary" 2>/dev/null ||
+    die 'cleanup record publication failed'
+  publish_owned_temp "$temporary" "$destination"
+}
+
+read_finalization_values() {
+  local snapshot="$1"
+  python3 - "$snapshot" 2>/dev/null <<'PY'
+import json
+import sys
+
+value = json.load(open(sys.argv[1], encoding="utf-8"))
+for key in (
+    "outcome",
+    "reason",
+    "callStopped",
+    "automationFinalized",
+    "forcedFallbackUsed",
+):
+    member = value[key]
+    print("true" if member is True else "false" if member is False else member)
+PY
+}
+
+read_capture_bundle_snapshots() {
+  local automation_source="$1"
+  local private_source="$2"
+  local sanitized_source="$3"
+  local automation_destination="$4"
+  local private_destination="$5"
+  local sanitized_destination="$6"
+  local -n automation_temp_out="$7"
+  local -n private_temp_out="$8"
+  local -n sanitized_temp_out="$9"
+  local bundle
+  local automation_candidate
+  local private_candidate
+  local sanitized_candidate
+  ensure_local_temp_dir
+  bundle="$(mktemp "$LOCAL_TEMP_DIR/capture-bundle.XXXXXX" 2>/dev/null)" ||
+    die 'capture temporary storage failed'
+  register_temp_file "$bundle"
+  chmod 600 -- "$bundle" 2>/dev/null || die 'capture temporary storage failed'
+  automation_candidate="$(mktemp "$(dirname -- "$automation_destination")/.voice-step-capture.XXXXXX" 2>/dev/null)" ||
+    die 'capture temporary storage failed'
+  register_temp_file "$automation_candidate"
+  private_candidate="$(mktemp "$(dirname -- "$private_destination")/.voice-step-capture.XXXXXX" 2>/dev/null)" ||
+    die 'capture temporary storage failed'
+  register_temp_file "$private_candidate"
+  sanitized_candidate="$(mktemp "$(dirname -- "$sanitized_destination")/.voice-step-capture.XXXXXX" 2>/dev/null)" ||
+    die 'capture temporary storage failed'
+  register_temp_file "$sanitized_candidate"
+  chmod 600 -- "$automation_candidate" "$private_candidate" "$sanitized_candidate" 2>/dev/null ||
+    die 'capture temporary storage failed'
+  adb_read exec-out run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
+set -eu
+: voice-step-capture-bundle
+first=$1
+second=$2
+third=$3
+for path in "$first" "$second" "$third"; do
+  [ -f "$path" ] && [ ! -L "$path" ] && [ "$(stat -c %a "$path")" = 600 ] && \
+    [ "$(stat -c %h "$path")" = 1 ] || exit 1
+done
+exec 3< "$first"
+exec 4< "$second"
+exec 5< "$third"
+metadata() {
+  LC_ALL=C stat -Lc "%F|%h|%u|%a|%d|%i|%s|%y|%z" "$1"
+}
+first_before=$(metadata /proc/self/fd/3) || exit 1
+second_before=$(metadata /proc/self/fd/4) || exit 1
+third_before=$(metadata /proc/self/fd/5) || exit 1
+[ "$(metadata "$first")" = "$first_before" ] || exit 1
+[ "$(metadata "$second")" = "$second_before" ] || exit 1
+[ "$(metadata "$third")" = "$third_before" ] || exit 1
+first_size=$(stat -Lc %s /proc/self/fd/3) || exit 1
+second_size=$(stat -Lc %s /proc/self/fd/4) || exit 1
+third_size=$(stat -Lc %s /proc/self/fd/5) || exit 1
+for size in "$first_size" "$second_size" "$third_size"; do
+  [ "$size" -ge 1 ] && [ "$size" -le 16777216 ] || exit 1
+done
+printf "%s\n%s\n%s\n" "$first_size" "$second_size" "$third_size"
+cat /proc/self/fd/3 /proc/self/fd/4 /proc/self/fd/5 || exit 1
+[ "$(metadata /proc/self/fd/3)" = "$first_before" ] || exit 1
+[ "$(metadata /proc/self/fd/4)" = "$second_before" ] || exit 1
+[ "$(metadata /proc/self/fd/5)" = "$third_before" ] || exit 1
+[ "$(metadata "$first")" = "$first_before" ] || exit 1
+[ "$(metadata "$second")" = "$second_before" ] || exit 1
+[ "$(metadata "$third")" = "$third_before" ] || exit 1
+' sh "$automation_source" "$private_source" "$sanitized_source" >"$bundle" 2>/dev/null ||
+    die 'artifact source changed'
+  python3 - "$bundle" "$automation_candidate" "$private_candidate" "$sanitized_candidate" 2>/dev/null <<'PY' || die 'artifact source invalid'
+import os
+import stat
+import sys
+
+bundle, *destinations = sys.argv[1:]
+content = open(bundle, "rb").read()
+sizes = []
+offset = 0
+for _ in range(3):
+    end = content.find(b"\n", offset)
+    if end < 0:
+        raise SystemExit(1)
+    rendered = content[offset:end]
+    if not rendered.isdigit() or rendered.startswith(b"0"):
+        raise SystemExit(1)
+    size = int(rendered)
+    if not 1 <= size <= 16_777_216:
+        raise SystemExit(1)
+    sizes.append(size)
+    offset = end + 1
+if len(content) - offset != sum(sizes):
+    raise SystemExit(1)
+for destination, size in zip(destinations, sizes, strict=True):
+    before = os.lstat(destination)
+    if (
+        stat.S_ISLNK(before.st_mode)
+        or not stat.S_ISREG(before.st_mode)
+        or stat.S_IMODE(before.st_mode) != 0o600
+        or before.st_size != 0
+    ):
+        raise SystemExit(1)
+    flags = os.O_WRONLY | os.O_TRUNC | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(destination, flags)
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(content[offset:offset + size])
+        handle.flush()
+        os.fsync(handle.fileno())
+    offset += size
+PY
+  rm -f -- "$bundle" 2>/dev/null || die 'capture temporary cleanup failed'
+  forget_temp_file "$bundle"
+  automation_temp_out="$automation_candidate"
+  private_temp_out="$private_candidate"
+  sanitized_temp_out="$sanitized_candidate"
 }
 
 read_source_metadata() {

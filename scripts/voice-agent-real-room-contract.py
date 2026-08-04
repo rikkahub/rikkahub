@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 import enum
+import hashlib
 import json
 import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -143,11 +144,211 @@ VOICE_SCHEMAS = {
     "delivery_announced": VOICE_BASE | {"toolCallId", "jobId", "assistantTurnId"},
     "follow_up_correlation": VOICE_BASE | {"followUpTurnId", "assistantTurnId", "resultHash"},
 }
+FINALIZATION_KEYS = {
+    "schemaVersion",
+    "outcome",
+    "reason",
+    "callStopped",
+    "automationFinalized",
+    "forcedFallbackUsed",
+}
+CLEANUP_KEYS = {
+    "schemaVersion",
+    "outcome",
+    "callStopped",
+    "automationFinalized",
+    "fixturesRemoved",
+    "finalizationHash",
+}
+PRODUCT_REASONS = frozenset(
+    {
+        "bound_call_rejected",
+        "call_stop_failed",
+        "call_stop_timeout",
+        "persistence_drain_failed",
+        "automation_finalize_rejected",
+        "automation_finalize_failed",
+        "forced_fallback_used",
+    }
+)
+INFRASTRUCTURE_REASONS = frozenset(
+    {"device_unavailable", "adb_route_unavailable"}
+)
+PRIVATE_BASE = {"version", "voiceSessionId", "eventId", "kind", "observedAt"}
+PRIVATE_JOB = set(JOB_IDENTITY_FIELDS) - {"voiceSessionHash"}
+PRIVATE_SCHEMAS = {
+    "session_binding": PRIVATE_BASE
+    | {"ownerHash", "conversationHash", "voiceSessionHash", "roomHash", "traceHash"},
+    "job_accepted": PRIVATE_BASE
+    | PRIVATE_JOB
+    | {"voiceSessionHash", "prompt"},
+    "job_running": PRIVATE_BASE | PRIVATE_JOB | {"voiceSessionHash"},
+    "still_working": PRIVATE_BASE | PRIVATE_JOB | {"voiceSessionHash"},
+    "job_succeeded": PRIVATE_BASE
+    | PRIVATE_JOB
+    | {"voiceSessionHash", "resultHash", "answer"},
+    "job_failed": PRIVATE_BASE
+    | PRIVATE_JOB
+    | {"voiceSessionHash", "failureReason"},
+    "job_expired": PRIVATE_BASE
+    | PRIVATE_JOB
+    | {"voiceSessionHash", "failureReason"},
+    "job_canceled": PRIVATE_BASE
+    | PRIVATE_JOB
+    | {"voiceSessionHash", "failureReason"},
+    "delivery_eligible": PRIVATE_BASE | {"toolCallId", "jobId"},
+    "delivery_started": PRIVATE_BASE | {"toolCallId", "jobId"},
+    "speech_started": PRIVATE_BASE | {"toolCallId", "jobId"},
+    "delivery_blocked": PRIVATE_BASE
+    | {"toolCallId", "jobId", "userSpeaking", "agentSpeaking"},
+    "delivery_announced": PRIVATE_BASE
+    | {"toolCallId", "jobId", "assistantTurnId"},
+    "follow_up_correlation": PRIVATE_BASE
+    | {"followUpTurnId", "assistantTurnId", "resultHash"},
+}
 
 
 def _require(condition: bool, boundary: str) -> None:
     if not condition:
         raise ContractError(boundary)
+
+
+def _require_canonical_value(value: object) -> None:
+    if isinstance(value, Mapping):
+        for key, member in value.items():
+            _require(type(key) is str, "canonical_json")
+            _require_canonical_value(member)
+        return
+    if isinstance(value, list):
+        for member in value:
+            _require_canonical_value(member)
+        return
+    _require(type(value) in {str, bool, int}, "canonical_json")
+
+
+def canonical_json_bytes(value: Mapping[str, object]) -> bytes:
+    _require(isinstance(value, Mapping), "canonical_json")
+    _require_canonical_value(value)
+    try:
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ContractError("canonical_json") from error
+
+
+def sha256_bytes(value: bytes | bytearray | memoryview) -> str:
+    return "sha256:" + hashlib.sha256(bytes(value)).hexdigest()
+
+
+def parse_canonical_json_bytes(content: bytes) -> dict[str, object]:
+    _require(
+        bool(content)
+        and len(content) <= 65536
+        and not content.startswith(b"\xef\xbb\xbf")
+        and b"\r" not in content
+        and not content.endswith(b"\n"),
+        "canonical_json",
+    )
+    try:
+        text = content.decode("utf-8")
+        pairs = json.loads(text, object_pairs_hook=lambda value: value)
+    except (UnicodeDecodeError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise ContractError("canonical_json") from error
+    _require(
+        type(pairs) is list
+        and all(type(pair) is tuple and len(pair) == 2 for pair in pairs),
+        "canonical_json",
+    )
+    keys = [key for key, _ in pairs]
+    _require(
+        all(type(key) is str for key in keys)
+        and len(keys) == len(set(keys)),
+        "canonical_json",
+    )
+    value = dict(pairs)
+    _require(canonical_json_bytes(value) == content, "canonical_json")
+    return value
+
+
+def validate_finalization(value: object) -> dict[str, object]:
+    _require(type(value) is dict and set(value) == FINALIZATION_KEYS, "finalization")
+    finalization = dict(value)
+    _require(
+        type(finalization["schemaVersion"]) is int
+        and finalization["schemaVersion"] == 1
+        and type(finalization["outcome"]) is str
+        and type(finalization["reason"]) is str
+        and type(finalization["callStopped"]) is bool
+        and type(finalization["automationFinalized"]) is bool
+        and type(finalization["forcedFallbackUsed"]) is bool,
+        "finalization",
+    )
+    outcome = finalization["outcome"]
+    reason = finalization["reason"]
+    call_stopped = finalization["callStopped"]
+    automation_finalized = finalization["automationFinalized"]
+    forced_fallback = finalization["forcedFallbackUsed"]
+    _require(not automation_finalized or call_stopped, "finalization")
+    if outcome == "complete":
+        _require(
+            reason == "complete"
+            and call_stopped
+            and automation_finalized
+            and not forced_fallback,
+            "finalization",
+        )
+    elif outcome == "product_failure":
+        _require(reason in PRODUCT_REASONS, "finalization")
+        _require(
+            forced_fallback == (reason == "forced_fallback_used"),
+            "finalization",
+        )
+        if forced_fallback:
+            _require(not call_stopped and not automation_finalized, "finalization")
+    elif outcome == "infrastructure_interruption":
+        _require(reason in INFRASTRUCTURE_REASONS and not forced_fallback, "finalization")
+    else:
+        raise ContractError("finalization")
+    return finalization
+
+
+def validate_cleanup(
+    value: object,
+    finalization: object | None = None,
+) -> dict[str, object]:
+    _require(type(value) is dict and set(value) == CLEANUP_KEYS, "cleanup")
+    cleanup = dict(value)
+    _require(
+        type(cleanup["schemaVersion"]) is int
+        and cleanup["schemaVersion"] == 2
+        and type(cleanup["outcome"]) is str
+        and cleanup["outcome"]
+        in {"complete", "product_failure", "infrastructure_interruption"}
+        and type(cleanup["callStopped"]) is bool
+        and type(cleanup["automationFinalized"]) is bool
+        and type(cleanup["fixturesRemoved"]) is bool
+        and type(cleanup["finalizationHash"]) is str
+        and HASH.fullmatch(cleanup["finalizationHash"]) is not None
+        and (not cleanup["automationFinalized"] or cleanup["callStopped"]),
+        "cleanup",
+    )
+    if finalization is not None:
+        validated_finalization = validate_finalization(finalization)
+        _require(
+            cleanup["outcome"] == validated_finalization["outcome"]
+            and cleanup["callStopped"] == validated_finalization["callStopped"]
+            and cleanup["automationFinalized"]
+            == validated_finalization["automationFinalized"]
+            and cleanup["finalizationHash"]
+            == sha256_bytes(canonical_json_bytes(validated_finalization)),
+            "cleanup",
+        )
+    return cleanup
 
 
 def _identity(row: dict[str, Any]) -> tuple[Any, ...]:
@@ -797,6 +998,279 @@ def parse_voice_bytes(content: bytes) -> list[dict[str, Any]]:
     return rows
 
 
+def _parse_private_voice_bytes(
+    content: bytes,
+) -> tuple[list[dict[str, Any]], list[bytes]]:
+    rows: list[dict[str, Any]] = []
+    raw_rows: list[bytes] = []
+    event_ids: set[str] = set()
+    for line in _text_lines(content):
+        try:
+            keys, row = _parse_pairs(line)
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            raise ContractError("private_voice_evidence") from error
+        schema = PRIVATE_SCHEMAS.get(row.get("kind"))
+        if row.get("kind") == "transcript":
+            schema = PRIVATE_BASE | {"turnId", "role", "text", "interrupted"}
+            grounding = {"groundedJobId", "groundedResultHash"}
+            if set(keys) == schema | grounding:
+                schema |= grounding
+        _require(
+            schema is not None
+            and keys == sorted(schema)
+            and canonical_json_bytes(row).decode("utf-8") == line,
+            "private_voice_evidence",
+        )
+        _require(
+            type(row.get("version")) is int
+            and row["version"] == 1
+            and IDENTIFIER.fullmatch(row.get("voiceSessionId", "")) is not None
+            and IDENTIFIER.fullmatch(row.get("eventId", "")) is not None
+            and row["eventId"] not in event_ids
+            and _canonical_timestamp(row.get("observedAt")),
+            "private_voice_evidence",
+        )
+        _require(
+            all(
+                type(row[field]) is str
+                and IDENTIFIER.fullmatch(row[field]) is not None
+                for field in set(row) & VOICE_IDENTIFIERS
+            ),
+            "private_voice_evidence",
+        )
+        _require(
+            all(
+                type(row[field]) is str and HASH.fullmatch(row[field]) is not None
+                for field in set(row) & (VOICE_HASHES - {"eventHash"})
+            ),
+            "private_voice_evidence",
+        )
+        _require(
+            all(type(row[field]) is bool for field in set(row) & VOICE_BOOLEANS),
+            "private_voice_evidence",
+        )
+        kind = row["kind"]
+        if kind == "session_binding" or kind in {
+            "job_accepted",
+            "job_running",
+            "still_working",
+            *TERMINAL_KINDS,
+        }:
+            _require(
+                row["voiceSessionHash"]
+                == sha256_bytes(row["voiceSessionId"].encode("utf-8")),
+                "private_voice_evidence",
+            )
+        if kind == "job_accepted":
+            _require(
+                type(row["prompt"]) is str and bool(row["prompt"].strip()),
+                "private_voice_evidence",
+            )
+        elif kind == "job_succeeded":
+            _require(
+                type(row["answer"]) is str
+                and bool(row["answer"].strip())
+                and row["resultHash"]
+                == sha256_bytes(row["answer"].encode("utf-8")),
+                "private_voice_evidence",
+            )
+        elif kind in FAILURE_KINDS:
+            _require(
+                type(row["failureReason"]) is str
+                and bool(row["failureReason"].strip())
+                and len(row["failureReason"]) <= 512
+                and not any(ord(character) < 32 for character in row["failureReason"]),
+                "private_voice_evidence",
+            )
+        elif kind == "transcript":
+            grounded = "groundedJobId" in row and "groundedResultHash" in row
+            _require(
+                row["role"] in {"user", "assistant"}
+                and type(row["text"]) is str
+                and bool(row["text"].strip())
+                and type(row["interrupted"]) is bool
+                and not (row["role"] == "user" and (row["interrupted"] or grounded))
+                and (("groundedJobId" in row) == ("groundedResultHash" in row)),
+                "private_voice_evidence",
+            )
+        event_ids.add(row["eventId"])
+        rows.append(row)
+        raw_rows.append(line.encode("utf-8"))
+
+    bindings = [row for row in rows if row["kind"] == "session_binding"]
+    _require(len(bindings) == 1 and rows[0] is bindings[0], "voice_session_binding")
+    binding = bindings[0]
+    for row in rows:
+        _require(
+            row["voiceSessionId"] == binding["voiceSessionId"],
+            "voice_session_binding",
+        )
+        if row["kind"] in {
+            "job_accepted",
+            "job_running",
+            "still_working",
+            *TERMINAL_KINDS,
+        }:
+            _require(
+                all(
+                    row[field] == binding[field]
+                    for field in (
+                        "ownerHash",
+                        "conversationHash",
+                        "voiceSessionHash",
+                        "roomHash",
+                        "traceHash",
+                    )
+                ),
+                "voice_session_binding",
+            )
+    return rows, raw_rows
+
+
+def _utf16_length(value: str) -> int:
+    return len(value.encode("utf-16-le")) // 2
+
+
+def _sanitized_projection(private: dict[str, Any], raw: bytes) -> dict[str, Any]:
+    kind = private["kind"]
+    projected: dict[str, Any] = {
+        "version": private["version"],
+        "voiceSessionHash": sha256_bytes(private["voiceSessionId"].encode("utf-8")),
+        "eventId": private["eventId"],
+        "kind": kind,
+        "observedAt": private["observedAt"],
+        "eventHash": sha256_bytes(raw),
+    }
+    fields: tuple[str, ...]
+    if kind == "session_binding":
+        fields = ("ownerHash", "conversationHash", "roomHash", "traceHash")
+    elif kind in {"job_accepted", "job_running", "still_working", *TERMINAL_KINDS}:
+        fields = tuple(PRIVATE_JOB)
+        if kind == "job_accepted":
+            projected["promptCharacterCount"] = _utf16_length(private["prompt"])
+        elif kind == "job_succeeded":
+            fields += ("resultHash",)
+            projected["answerCharacterCount"] = _utf16_length(private["answer"])
+        elif kind in FAILURE_KINDS:
+            projected["failureReasonCharacterCount"] = _utf16_length(
+                private["failureReason"]
+            )
+    elif kind == "transcript":
+        fields = ("turnId", "role", "interrupted")
+        if "groundedJobId" in private:
+            fields += ("groundedJobId", "groundedResultHash")
+        projected["textCharacterCount"] = _utf16_length(private["text"])
+    elif kind == "delivery_blocked":
+        fields = ("toolCallId", "jobId", "userSpeaking", "agentSpeaking")
+    elif kind == "delivery_announced":
+        fields = ("toolCallId", "jobId", "assistantTurnId")
+    elif kind in {"delivery_eligible", "delivery_started", "speech_started"}:
+        fields = ("toolCallId", "jobId")
+    elif kind == "follow_up_correlation":
+        fields = ("followUpTurnId", "assistantTurnId", "resultHash")
+    else:
+        raise ContractError("voice_correspondence")
+    projected.update({field: private[field] for field in fields})
+    return projected
+
+
+def _validate_terminal_order(
+    automation: Sequence[dict[str, Any]],
+    finalization: Mapping[str, object],
+) -> None:
+    names = [row["name"] for row in automation]
+    stopped_events = [
+        index for index, row in enumerate(automation) if row["name"] == "call_stopped"
+    ]
+    stopped = [
+        index
+        for index, row in enumerate(automation)
+        if row["name"] == "call_stopped" and row.get("succeeded") is True
+    ]
+    finalized = [
+        index for index, row in enumerate(automation) if row["name"] == "run_finalized"
+    ]
+    _require(
+        len(stopped_events) <= 1 and len(finalized) <= 1,
+        "automation_terminal_order",
+    )
+    if finalization["callStopped"]:
+        _require(
+            len(stopped_events) == 1 and len(stopped) == 1,
+            "automation_terminal_order",
+        )
+    elif finalization["reason"] == "call_stop_failed":
+        _require(
+            len(stopped_events) == 1
+            and automation[stopped_events[0]].get("succeeded") is False
+            and stopped_events[0] == len(automation) - 1,
+            "automation_terminal_order",
+        )
+    else:
+        _require(not stopped_events, "automation_terminal_order")
+    if finalization["automationFinalized"]:
+        _require(
+            len(finalized) == 1
+            and bool(stopped)
+            and stopped[0] + 1 == finalized[0]
+            and finalized[0] == len(automation) - 1,
+            "automation_terminal_order",
+        )
+    else:
+        _require(not finalized, "automation_terminal_order")
+        if stopped:
+            _require(stopped[0] == len(automation) - 1, "automation_terminal_order")
+    if "run_finalized" in names:
+        _require(names[-1] == "run_finalized", "automation_terminal_order")
+
+
+def validate_capture_bundle(
+    automation_bytes: bytes,
+    private_bytes: bytes,
+    sanitized_bytes: bytes,
+    attempt: Mapping[str, object],
+    finalization: object,
+) -> None:
+    validated_finalization = validate_finalization(finalization)
+    _require(isinstance(attempt, Mapping), "attempt_binding")
+    run_hash = attempt.get("runHash")
+    comparison_hash = attempt.get("comparisonHash")
+    _require(
+        type(run_hash) is str
+        and HASH.fullmatch(run_hash) is not None
+        and type(comparison_hash) is str
+        and HASH.fullmatch(comparison_hash) is not None,
+        "attempt_binding",
+    )
+    automation = parse_automation_bytes(automation_bytes, run_hash, comparison_hash)
+    private, raw_private = _parse_private_voice_bytes(private_bytes)
+    sanitized = parse_voice_bytes(sanitized_bytes)
+    _require(len(private) == len(sanitized), "voice_correspondence")
+    for private_row, raw_row, sanitized_row in zip(
+        private, raw_private, sanitized, strict=True
+    ):
+        _require(
+            _sanitized_projection(private_row, raw_row) == sanitized_row,
+            "voice_correspondence",
+        )
+    _validate_terminal_order(automation, validated_finalization)
+
+
+def validate_automation_finalization(
+    automation_bytes: bytes,
+    run_hash: str,
+    comparison_hash: str,
+    finalization: object,
+) -> None:
+    validated_finalization = validate_finalization(finalization)
+    automation = parse_automation_bytes(
+        automation_bytes,
+        run_hash,
+        comparison_hash,
+    )
+    _validate_terminal_order(automation, validated_finalization)
+
+
 def _read(path: str) -> bytes:
     try:
         return Path(path).read_bytes()
@@ -810,6 +1284,90 @@ def _main(arguments: Sequence[str]) -> int:
             Expectation(arguments[1])
         except ValueError:
             return 2
+        return 0
+    if len(arguments) == 2 and arguments[0] == "--validate-finalization":
+        try:
+            validate_finalization(parse_canonical_json_bytes(_read(arguments[1])))
+        except ContractError:
+            return 3
+        return 0
+    if len(arguments) == 3 and arguments[0] == "--validate-cleanup":
+        try:
+            cleanup = parse_canonical_json_bytes(_read(arguments[1]))
+            finalization = parse_canonical_json_bytes(_read(arguments[2]))
+            validate_cleanup(cleanup, finalization)
+        except ContractError:
+            return 3
+        return 0
+    if len(arguments) == 7 and arguments[0] == "--validate-capture":
+        _, automation_path, private_path, sanitized_path, run_hash, comparison_hash, finalization_path = arguments
+        try:
+            finalization = parse_canonical_json_bytes(_read(finalization_path))
+            validate_capture_bundle(
+                automation_bytes=_read(automation_path),
+                private_bytes=_read(private_path),
+                sanitized_bytes=_read(sanitized_path),
+                attempt={"runHash": run_hash, "comparisonHash": comparison_hash},
+                finalization=finalization,
+            )
+        except ContractError:
+            return 3
+        return 0
+    if len(arguments) == 5 and arguments[0] == "--validate-automation-finalization":
+        _, automation_path, run_hash, comparison_hash, finalization_path = arguments
+        try:
+            validate_automation_finalization(
+                _read(automation_path),
+                run_hash,
+                comparison_hash,
+                parse_canonical_json_bytes(_read(finalization_path)),
+            )
+        except ContractError:
+            return 3
+        return 0
+    if len(arguments) == 6 and arguments[0] == "--encode-finalization":
+        _, outcome, reason, call_stopped, automation_finalized, forced_fallback = arguments
+        if any(
+            value not in {"true", "false"}
+            for value in (call_stopped, automation_finalized, forced_fallback)
+        ):
+            return 2
+        try:
+            value = validate_finalization(
+                {
+                    "schemaVersion": 1,
+                    "outcome": outcome,
+                    "reason": reason,
+                    "callStopped": call_stopped == "true",
+                    "automationFinalized": automation_finalized == "true",
+                    "forcedFallbackUsed": forced_fallback == "true",
+                }
+            )
+        except ContractError:
+            return 3
+        sys.stdout.buffer.write(canonical_json_bytes(value))
+        return 0
+    if len(arguments) == 6 and arguments[0] == "--encode-cleanup":
+        _, outcome, call_stopped, automation_finalized, fixtures_removed, finalization_hash = arguments
+        if any(
+            value not in {"true", "false"}
+            for value in (call_stopped, automation_finalized, fixtures_removed)
+        ):
+            return 2
+        try:
+            value = validate_cleanup(
+                {
+                    "schemaVersion": 2,
+                    "outcome": outcome,
+                    "callStopped": call_stopped == "true",
+                    "automationFinalized": automation_finalized == "true",
+                    "fixturesRemoved": fixtures_removed == "true",
+                    "finalizationHash": finalization_hash,
+                }
+            )
+        except ContractError:
+            return 3
+        sys.stdout.buffer.write(canonical_json_bytes(value))
         return 0
     if len(arguments) != 7 or arguments[0] != "--evaluate":
         return 2

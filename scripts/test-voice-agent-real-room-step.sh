@@ -289,17 +289,13 @@ def wait_for_process_state(pid, expected):
     return False
 
 
-def sanitized_events():
-    def base(sequence, kind):
-        return {
-            "version": 1,
-            "voiceSessionHash": hash_value("1"),
-            "eventId": f"event-{sequence}",
-            "kind": kind,
-            "observedAt": f"2026-08-03T00:00:{sequence:02d}Z",
-            "eventHash": hash_value(format(sequence, "x")),
-        }
+def canonical_row(row):
+    return json.dumps(row, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
+
+def private_event_rows():
+    voice_session_id = "PRIVATE_TRACE"
+    voice_session_hash = "sha256:" + hashlib.sha256(voice_session_id.encode()).hexdigest()
     job = {
         "userTurnId": "turn-1",
         "requestHash": hash_value("3"),
@@ -308,18 +304,33 @@ def sanitized_events():
         "jobId": "job-1",
         "ownerHash": hash_value("5"),
         "conversationHash": hash_value("6"),
+        "voiceSessionHash": voice_session_hash,
         "roomHash": hash_value("7"),
         "traceHash": hash_value("8"),
     }
+
+    def base(sequence, kind):
+        return {
+            "version": 1,
+            "voiceSessionId": voice_session_id,
+            "eventId": f"event-{sequence}",
+            "kind": kind,
+            "observedAt": f"2026-08-03T00:00:{sequence:02d}Z",
+        }
+
     binding = base(1, "session_binding")
-    binding.update({key: job[key] for key in ("ownerHash", "conversationHash", "roomHash", "traceHash")})
+    binding.update({key: job[key] for key in (
+        "ownerHash", "conversationHash", "voiceSessionHash", "roomHash", "traceHash"
+    )})
     accepted = base(2, "job_accepted")
     accepted.update(job)
-    accepted["promptCharacterCount"] = 17
+    accepted["prompt"] = "PROMPT_SECRET"
+    answer = "ANSWER_SECRET"
+    result_hash = "sha256:" + hashlib.sha256(answer.encode()).hexdigest()
     succeeded = base(3, "job_succeeded")
     succeeded.update(job)
-    succeeded["resultHash"] = hash_value("b")
-    succeeded["answerCharacterCount"] = 23
+    succeeded["resultHash"] = result_hash
+    succeeded["answer"] = answer
     rows = [binding, accepted, succeeded]
     for sequence, kind in ((4, "delivery_eligible"), (5, "speech_started"), (6, "delivery_started")):
         delivery = base(sequence, kind)
@@ -329,10 +340,10 @@ def sanitized_events():
     transcript.update({
         "turnId": "assistant-1",
         "role": "assistant",
+        "text": "TRANSCRIPT_SECRET",
         "interrupted": False,
-        "textCharacterCount": 23,
         "groundedJobId": job["jobId"],
-        "groundedResultHash": hash_value("b"),
+        "groundedResultHash": result_hash,
     })
     rows.append(transcript)
     announced = base(8, "delivery_announced")
@@ -342,12 +353,96 @@ def sanitized_events():
         "assistantTurnId": "assistant-1",
     })
     rows.append(announced)
+    return rows
+
+
+def utf16_length(value):
+    return len(value.encode("utf-16-le")) // 2
+
+
+def sanitized_event_rows():
+    rows = []
+    for private in private_event_rows():
+        kind = private["kind"]
+        raw = canonical_row(private)
+        public = {
+            "version": private["version"],
+            "voiceSessionHash": "sha256:" + hashlib.sha256(
+                private["voiceSessionId"].encode()
+            ).hexdigest(),
+            "eventId": private["eventId"],
+            "kind": kind,
+            "observedAt": private["observedAt"],
+            "eventHash": "sha256:" + hashlib.sha256(raw.encode()).hexdigest(),
+        }
+        if kind == "session_binding":
+            fields = ("ownerHash", "conversationHash", "roomHash", "traceHash")
+        elif kind == "job_accepted":
+            fields = (
+                "userTurnId", "requestHash", "toolCallId", "argumentHash", "jobId",
+                "ownerHash", "conversationHash", "roomHash", "traceHash",
+            )
+            public["promptCharacterCount"] = utf16_length(private["prompt"])
+        elif kind == "job_succeeded":
+            fields = (
+                "userTurnId", "requestHash", "toolCallId", "argumentHash", "jobId",
+                "ownerHash", "conversationHash", "roomHash", "traceHash", "resultHash",
+            )
+            public["answerCharacterCount"] = utf16_length(private["answer"])
+        elif kind == "transcript":
+            fields = (
+                "turnId", "role", "interrupted", "groundedJobId", "groundedResultHash",
+            )
+            public["textCharacterCount"] = utf16_length(private["text"])
+        elif kind == "delivery_announced":
+            fields = ("toolCallId", "jobId", "assistantTurnId")
+        else:
+            fields = ("toolCallId", "jobId")
+        public.update({field: private[field] for field in fields})
+        rows.append(public)
+
     if os.environ.get("FAKE_ADB_CHECKPOINT_FAILURE") == "single_delivery_order":
         rows[3], rows[4] = rows[4], rows[3]
-    return "".join(
-        json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
-        for row in rows
-    )
+    corruption = os.environ.get("FAKE_ADB_CAPTURE_CORRUPTION")
+    if corruption == "private-reorder":
+        pass
+    elif corruption == "sanitized-reorder":
+        rows[2], rows[3] = rows[3], rows[2]
+    elif corruption == "sanitized-duplicate":
+        rows.append(dict(rows[-1]))
+    elif corruption == "sanitized-orphan":
+        orphan = dict(rows[-1])
+        orphan["eventId"] = "event-orphan"
+        rows.append(orphan)
+    elif corruption == "event-id":
+        rows[2]["eventId"] = "event-mismatch"
+    elif corruption == "kind":
+        rows[2]["kind"] = "job_running"
+    elif corruption == "timestamp":
+        rows[2]["observedAt"] = "2026-08-03T00:01:03Z"
+    elif corruption == "private-hash":
+        rows[2]["eventHash"] = hash_value("0")
+    elif corruption == "forbidden-field":
+        rows[2]["answer"] = "ANSWER_SECRET"
+    return rows
+
+
+def private_events():
+    rows = private_event_rows()
+    corruption = os.environ.get("FAKE_ADB_CAPTURE_CORRUPTION")
+    if corruption == "private-reorder":
+        rows[2], rows[3] = rows[3], rows[2]
+    elif corruption == "private-duplicate":
+        rows.append(dict(rows[-1]))
+    elif corruption == "private-orphan":
+        orphan = dict(rows[-1])
+        orphan["eventId"] = "event-private-orphan"
+        rows.append(orphan)
+    return "".join(canonical_row(row) + "\n" for row in rows)
+
+
+def sanitized_events():
+    return "".join(canonical_row(row) + "\n" for row in sanitized_event_rows())
 
 
 def automation_event(state, sequence, name, *, observed_transport=None, succeeded=None):
@@ -396,7 +491,14 @@ def automation_events(state):
     stop_visible_after = int(os.environ.get("FAKE_ADB_DURABLE_STOP_VISIBLE_AFTER", "0"))
     stop_visible = state.get("automation_artifact_reads", 0) >= stop_visible_after
     if state.get("call_stopped_recorded") and stop_visible:
-        rows.append(automation_event(state, 3, "call_stopped", succeeded=True))
+        rows.append(
+            automation_event(
+                state,
+                3,
+                "call_stopped",
+                succeeded=os.environ.get("FAKE_ADB_CALL_STOP_FAILED") != "1",
+            )
+        )
     if state.get("run_finalized_recorded"):
         rows.append(automation_event(state, 4, "run_finalized"))
     malformed = os.environ.get("FAKE_ADB_MALFORMED_DURABLE_ENDING")
@@ -410,6 +512,8 @@ def automation_events(state):
         rows[-1]["comparisonHash"] = hash_value("c")
     elif malformed == "missing-call-stopped":
         rows = [row for row in rows if row["name"] != "call_stopped"]
+    elif malformed == "missing-run-finalized":
+        rows = [row for row in rows if row["name"] != "run_finalized"]
     elif malformed == "noncanonical-keys" and rows:
         last = rows[-1]
         rows[-1] = {"name": last["name"], **{key: value for key, value in last.items() if key != "name"}}
@@ -430,7 +534,7 @@ def artifact_content(path, state):
             return content.rstrip(b"\n")
         return content
     if path.endswith("voice-experience-private.ndjson"):
-        content = b'{"private":"fixture-secret"}\n'
+        content = private_events().encode()
         if os.environ.get("FAKE_ADB_EMPTY_ARTIFACT") == "voice-experience-private.ndjson":
             return b""
         if os.environ.get("FAKE_ADB_INCOMPLETE_ARTIFACT") == "voice-experience-private.ndjson":
@@ -439,8 +543,9 @@ def artifact_content(path, state):
     if path.endswith("voice-experience-events.ndjson"):
         content = sanitized_events()
         if os.environ.get("FAKE_ADB_BAD_SANITIZED") == "1":
+            session_hash = "sha256:" + hashlib.sha256(b"PRIVATE_TRACE").hexdigest()
             content = content.replace(
-                '"voiceSessionHash":"' + hash_value("1") + '"',
+                '"voiceSessionHash":"' + session_hash + '"',
                 '"voiceSessionId":"RAW_SESSION_SECRET"',
                 1,
             )
@@ -911,6 +1016,8 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
     elif action.endswith(".MARK"):
         data = f'status=ok\naction=mark\nboundary={values.get("boundary", "")}'
     elif action.endswith(".FINALIZE_BOUND"):
+        if os.environ.get("FAKE_ADB_FAIL_FINALIZE") == "1":
+            raise SystemExit(1)
         if (
             values.get("run_hash") != state["run_hash"]
             or values.get("comparison_hash") != state["comparison_hash"]
@@ -919,10 +1026,13 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
         ):
             complete(1, "status=error\nerror=invalid_state")
             raise SystemExit(0)
+        if os.environ.get("FAKE_ADB_REJECT_FINALIZE") == "1":
+            complete(1, "status=rejected\nreason=call_not_stopped")
+            raise SystemExit(0)
         state["automation_state"] = "finalized"
         state["run_finalized_recorded"] = True
         save_state(state)
-        data = "status=ok\naction=finalize_bound"
+        data = "status=ok\naction=finalize"
     elif action.endswith(".FINALIZE"):
         state["automation_state"] = "finalized"
         save_state(state)
@@ -988,6 +1098,29 @@ if command[:5] == ["exec-out", "run-as", EXPECTED_PACKAGE, "--user", str(state["
     exec_out_run_as_tail = command[5:]
 elif command[:3] == ["exec-out", "run-as", EXPECTED_PACKAGE]:
     exec_out_run_as_tail = command[3:]
+if (
+    exec_out_run_as_tail is not None
+    and exec_out_run_as_tail[:2] == ["sh", "-c"]
+    and "voice-step-capture-bundle" in exec_out_run_as_tail[2]
+):
+    remote_paths = exec_out_run_as_tail[-3:]
+    contents = [artifact_content(remote_path, state) for remote_path in remote_paths]
+    if any(content is None for content in contents):
+        raise SystemExit(1)
+    mutation = os.environ.get("FAKE_ADB_MUTATE_CAPTURE_SOURCE_AFTER_READ")
+    replacement = os.environ.get("FAKE_ADB_REPLACE_CAPTURE_SOURCE_AFTER_READ")
+    if mutation or replacement:
+        source_number = mutation or replacement
+        if source_number not in {"1", "2", "3"}:
+            raise SystemExit(2)
+        state[f"capture_source_{source_number}_raced"] = (
+            "mutated" if mutation else "replaced"
+        )
+        save_state(state)
+        raise SystemExit(1)
+    header = "".join(f"{len(content)}\n" for content in contents).encode()
+    sys.stdout.buffer.write(header + b"".join(contents))
+    raise SystemExit(0)
 if exec_out_run_as_tail is not None and exec_out_run_as_tail[:1] == ["cat"]:
     remote_path = exec_out_run_as_tail[1]
     if remote_path.endswith("latest-trace-id.txt"):
@@ -1126,6 +1259,9 @@ PY
   unset FAKE_ADB_FORCE_STOP_EXECUTE_THEN_TIMEOUT FAKE_ADB_FORCE_STOP_STOPPED_FALSE
   unset FAKE_ADB_FAIL_REACHABILITY_PROBE FAKE_ADB_MALFORMED_DEVICE_ENUMERATION
   unset FAKE_TIMEOUT_EXECUTE_THEN_TIMEOUT_MATCH
+  unset FAKE_ADB_CAPTURE_CORRUPTION FAKE_ADB_MUTATE_CAPTURE_SOURCE_AFTER_READ
+  unset FAKE_ADB_REPLACE_CAPTURE_SOURCE_AFTER_READ FAKE_ADB_CALL_STOP_FAILED
+  unset FAKE_ADB_REJECT_FINALIZE FAKE_ADB_FAIL_FINALIZE
 }
 
 make_fixture() {
@@ -1289,6 +1425,71 @@ with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, separators=(",", ":"))
     handle.write("\n")
 PY
+}
+
+write_finalization() {
+  local destination="$1"
+  local outcome="${2:-complete}"
+  local reason="${3:-complete}"
+  local call_stopped="${4:-true}"
+  local automation_finalized="${5:-true}"
+  local forced_fallback_used="${6:-false}"
+  python3 - "$destination" "$outcome" "$reason" "$call_stopped" \
+    "$automation_finalized" "$forced_fallback_used" <<'PY'
+import json
+import os
+import sys
+
+path, outcome, reason, call_stopped, automation_finalized, forced_fallback = sys.argv[1:]
+payload = {
+    "schemaVersion": 1,
+    "outcome": outcome,
+    "reason": reason,
+    "callStopped": call_stopped == "true",
+    "automationFinalized": automation_finalized == "true",
+    "forcedFallbackUsed": forced_fallback == "true",
+}
+descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, sort_keys=True, separators=(",", ":"))
+PY
+}
+
+assert_finalization_record() {
+  local path="$1"
+  local outcome="$2"
+  local reason="$3"
+  local call_stopped="$4"
+  local automation_finalized="$5"
+  local forced_fallback_used="$6"
+  if ! python3 - "$path" "$outcome" "$reason" "$call_stopped" \
+    "$automation_finalized" "$forced_fallback_used" <<'PY'
+import json
+import os
+import stat
+import sys
+
+path, outcome, reason, call_stopped, automation_finalized, forced_fallback = sys.argv[1:]
+expected = {
+    "schemaVersion": 1,
+    "outcome": outcome,
+    "reason": reason,
+    "callStopped": call_stopped == "true",
+    "automationFinalized": automation_finalized == "true",
+    "forcedFallbackUsed": forced_fallback == "true",
+}
+metadata = os.lstat(path)
+assert stat.S_ISREG(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode)
+assert stat.S_IMODE(metadata.st_mode) == 0o600 and metadata.st_nlink == 1
+actual = open(path, "rb").read()
+canonical = json.dumps(
+    expected, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+).encode()
+assert actual == canonical
+PY
+  then
+    fail "finalization-record test: exact canonical record mismatch"
+  fi
 }
 
 run_helper() {
@@ -3078,12 +3279,103 @@ PY
 
 run_finalize_tests() {
   local state="$TMP_DIR/finalize-state.json"
+  local finalization="$TMP_DIR/finalization.json"
+  python3 - "$ROOT_DIR" <<'PY' || fail "finalization-contract test: exact schema matrix failed"
+import importlib.util
+import sys
+from pathlib import Path
+
+module_path = Path(sys.argv[1]) / "scripts" / "voice-agent-real-room-contract.py"
+spec = importlib.util.spec_from_file_location("voice_agent_real_room_contract", module_path)
+contract = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(contract)
+
+valid = [
+    ({"schemaVersion": 1, "outcome": "complete", "reason": "complete", "callStopped": True,
+      "automationFinalized": True, "forcedFallbackUsed": False}, "complete"),
+    ({"schemaVersion": 1, "outcome": "product_failure", "reason": "bound_call_rejected",
+      "callStopped": False, "automationFinalized": False, "forcedFallbackUsed": False}, "product_failure"),
+    ({"schemaVersion": 1, "outcome": "product_failure", "reason": "call_stop_failed",
+      "callStopped": False, "automationFinalized": False, "forcedFallbackUsed": False}, "product_failure"),
+    ({"schemaVersion": 1, "outcome": "product_failure", "reason": "call_stop_timeout",
+      "callStopped": False, "automationFinalized": False, "forcedFallbackUsed": False}, "product_failure"),
+    ({"schemaVersion": 1, "outcome": "product_failure", "reason": "persistence_drain_failed",
+      "callStopped": False, "automationFinalized": False, "forcedFallbackUsed": False}, "product_failure"),
+    ({"schemaVersion": 1, "outcome": "product_failure", "reason": "automation_finalize_rejected",
+      "callStopped": True, "automationFinalized": False, "forcedFallbackUsed": False}, "product_failure"),
+    ({"schemaVersion": 1, "outcome": "product_failure", "reason": "automation_finalize_failed",
+      "callStopped": True, "automationFinalized": False, "forcedFallbackUsed": False}, "product_failure"),
+    ({"schemaVersion": 1, "outcome": "product_failure", "reason": "forced_fallback_used",
+      "callStopped": False, "automationFinalized": False, "forcedFallbackUsed": True}, "product_failure"),
+    ({"schemaVersion": 1, "outcome": "infrastructure_interruption", "reason": "device_unavailable",
+      "callStopped": False, "automationFinalized": False, "forcedFallbackUsed": False}, "infrastructure_interruption"),
+    ({"schemaVersion": 1, "outcome": "infrastructure_interruption", "reason": "adb_route_unavailable",
+      "callStopped": False, "automationFinalized": False, "forcedFallbackUsed": False}, "infrastructure_interruption"),
+]
+for value, outcome in valid:
+    assert contract.validate_finalization(value)["outcome"] == outcome
+    assert contract.canonical_json_bytes(value) == __import__("json").dumps(
+        value, sort_keys=True, separators=(",", ":")
+    ).encode()
+
+invalid = [
+    {**valid[0][0], "unknown": True},
+    {**valid[0][0], "forcedFallbackUsed": True},
+    {**valid[0][0], "callStopped": False},
+    {**valid[1][0], "automationFinalized": True},
+    {**valid[7][0], "forcedFallbackUsed": False},
+    {**valid[8][0], "reason": "bound_call_rejected"},
+]
+for value in invalid:
+    try:
+        contract.validate_finalization(value)
+    except contract.ContractError:
+        pass
+    else:
+        raise AssertionError(f"contradictory finalization accepted: {value}")
+
+complete = valid[0][0]
+cleanup = {
+    "schemaVersion": 2,
+    "outcome": "complete",
+    "callStopped": True,
+    "automationFinalized": True,
+    "fixturesRemoved": True,
+    "finalizationHash": contract.sha256_bytes(contract.canonical_json_bytes(complete)),
+}
+assert contract.validate_cleanup(cleanup, complete) == cleanup
+for mutation in (
+    {**cleanup, "outcome": "product_failure"},
+    {**cleanup, "outcome": ["complete"]},
+    {**cleanup, "callStopped": False},
+    {**cleanup, "automationFinalized": False},
+    {**cleanup, "finalizationHash": "sha256:" + "0" * 64},
+):
+    try:
+        contract.validate_cleanup(mutation, complete)
+    except contract.ContractError:
+        pass
+    else:
+        raise AssertionError(f"cleanup promoted or unlinked finalization: {mutation}")
+PY
+  pass
+
   reset_fake
   activate_fake_run
   write_valid_state "$state"
-  export FAKE_ADB_DURABLE_STOP_VISIBLE_AFTER=2
   run_helper finalize --state "$state"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=finalize\nvoice-step.automation=finalized'
+  [[ "$RUN_STATUS" -ne 0 && ! -s "$ADB_LOG" ]] ||
+    fail "finalize-parser test: missing finalization destination reached device access"
+  pass
+
+  reset_fake
+  activate_fake_run
+  rm -f -- "$state" "$finalization"
+  write_valid_state "$state"
+  export FAKE_ADB_DURABLE_STOP_VISIBLE_AFTER=2
+  run_helper finalize --state "$state" --finalization-output "$finalization"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=finalize\nvoice-step.outcome=complete'
+  assert_finalization_record "$finalization" complete complete true true false
   command_sequence_present END_BOUND automation-events.jsonl FINALIZE_BOUND STATUS automation-events.jsonl ||
     fail "finalize-order test: bound end, durable stop, finalize, status, and durable final proof changed"
   [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "1" &&
@@ -3128,105 +3420,107 @@ assert state["automation_artifact_reads"] >= 3
 PY
   pass
 
-  reset_fake
-  rm -f -- "$state"
-  python3 - "$FAKE_STATE" <<'PY'
-import json, os, sys
-path = sys.argv[1]
-state = json.load(open(path, encoding="utf-8"))
-state["android_user_id"] = 10
-temporary = path + ".user"
-json.dump(state, open(temporary, "w", encoding="utf-8"), separators=(",", ":"))
-os.replace(temporary, path)
-PY
-  activate_fake_run
-  write_valid_state "$state"
-  run_helper finalize --state "$state"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=finalize\nvoice-step.automation=finalized'
-  assert_service_action_pinned 'me.rerere.rikkahub.voiceagent.action.END_BOUND' 10
-
-  local failure_mode
-  for failure_mode in end-rejected stop-timeout malformed-stop; do
+  local case_name outcome reason call_stopped automation_finalized fallback
+  for case_name in \
+    bound-rejected stop-timeout call-stop-failed persistence-drain \
+    automation-failed missing-final-event forced-fallback device-loss route-loss; do
     reset_fake
     activate_fake_run
-    rm -f -- "$state"
+    rm -f -- "$state" "$finalization"
     write_valid_state "$state"
-    case "$failure_mode" in
-      end-rejected) export FAKE_ADB_FAIL_END=1 ;;
-      stop-timeout) export FAKE_ADB_SERVICE_STAYS_ACTIVE=1 ;;
-      malformed-stop) export FAKE_ADB_MALFORMED_DURABLE_ENDING=stopped-false ;;
+    case "$case_name" in
+      bound-rejected)
+        export FAKE_ADB_FAIL_END=1 FAKE_ADB_FAIL_FORCE_STOP=1
+        outcome=product_failure reason=bound_call_rejected
+        call_stopped=false automation_finalized=false fallback=false
+        ;;
+      stop-timeout)
+        export FAKE_ADB_SERVICE_STAYS_ACTIVE=1 FAKE_ADB_FAIL_FORCE_STOP=1
+        outcome=product_failure reason=call_stop_timeout
+        call_stopped=false automation_finalized=false fallback=false
+        ;;
+      call-stop-failed)
+        export FAKE_ADB_CALL_STOP_FAILED=1 FAKE_ADB_FAIL_FORCE_STOP=1
+        outcome=product_failure reason=call_stop_failed
+        call_stopped=false automation_finalized=false fallback=false
+        ;;
+      persistence-drain)
+        export FAKE_ADB_MISSING_ARTIFACT=automation-events.jsonl
+        export FAKE_ADB_FAIL_FORCE_STOP=1
+        outcome=product_failure reason=persistence_drain_failed
+        call_stopped=false automation_finalized=false fallback=false
+        ;;
+      automation-failed)
+        export FAKE_ADB_FAIL_FINALIZE=1
+        outcome=product_failure reason=automation_finalize_failed
+        call_stopped=true automation_finalized=false fallback=false
+        ;;
+      missing-final-event)
+        export FAKE_ADB_MALFORMED_DURABLE_ENDING=missing-run-finalized
+        outcome=product_failure reason=automation_finalize_failed
+        call_stopped=true automation_finalized=false fallback=false
+        ;;
+      forced-fallback)
+        export FAKE_ADB_SERVICE_STAYS_ACTIVE=1
+        outcome=product_failure reason=forced_fallback_used
+        call_stopped=false automation_finalized=false fallback=true
+        ;;
+      device-loss)
+        export FAKE_ADB_FAIL_END=1 FAKE_ADB_DEVICE_LOST=1
+        outcome=infrastructure_interruption reason=device_unavailable
+        call_stopped=false automation_finalized=false fallback=false
+        ;;
+      route-loss)
+        export FAKE_ADB_FAIL_END=1 FAKE_ADB_FAIL_REACHABILITY_PROBE=1
+        outcome=infrastructure_interruption reason=adb_route_unavailable
+        call_stopped=false automation_finalized=false fallback=false
+        ;;
     esac
-    run_helper finalize --state "$state"
-    [[ "$RUN_STATUS" -ne 0 ]] || fail "finalize-stop-proof test: $failure_mode succeeded"
-    [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "1" &&
-       "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "0" ]] ||
-      fail "finalize-stop-proof test: $failure_mode retried END or reached FINALIZE"
-    [[ "$(command_count STATUS)" == "0" ]] ||
-      fail "finalize-stop-proof test: active automation STATUS was sent for $failure_mode"
+    run_helper finalize --state "$state" --finalization-output "$finalization"
+    assert_exact_output $'voice-step.status=ok\nvoice-step.operation=finalize\n'"voice-step.outcome=$outcome"
+    assert_finalization_record "$finalization" "$outcome" "$reason" \
+      "$call_stopped" "$automation_finalized" "$fallback"
     assert_private_output_absent
     pass
   done
 
   reset_fake
   activate_fake_run
-  rm -f -- "$state"
+  rm -f -- "$state" "$finalization"
   write_valid_state "$state"
-  export FAKE_ADB_MALFORMED_BROADCAST='me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND'
-  run_helper finalize --state "$state"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "finalize-reply test: malformed FINALIZE succeeded"
-  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "1" &&
-     "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "1" &&
-     "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE)" == "0" ]] ||
-    fail "finalize-reply test: malformed bound FINALIZE was retried or fell back"
+  export FAKE_ADB_REJECT_FINALIZE=1
+  run_helper finalize --state "$state" --finalization-output "$finalization"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=finalize\nvoice-step.outcome=product_failure'
+  assert_finalization_record "$finalization" product_failure automation_finalize_rejected true false false
   assert_private_output_absent
   pass
 
   reset_fake
   activate_fake_run
-  rm -f -- "$state"
+  rm -f -- "$state" "$finalization"
   write_valid_state "$state"
-  python3 - "$FAKE_STATE" <<'PY'
-import json, os, sys
-path = sys.argv[1]
-state = json.load(open(path, encoding="utf-8"))
-state["run_hash"] = "sha256:" + "c" * 64
-temporary = path + ".stale"
-json.dump(state, open(temporary, "w", encoding="utf-8"), separators=(",", ":"))
-os.replace(temporary, path)
-PY
-  run_helper finalize --state "$state"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "finalize-stale test: stale state stopped or finalized a replacement run"
-  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "1" &&
-     "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "0" &&
-     "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE)" == "0" ]] ||
-    fail "finalize-stale test: bound end rejection reached a finalize mutation"
-  python3 - "$FAKE_STATE" <<'PY' || fail "finalize-stale test: replacement run was mutated"
-import json, sys
-state = json.load(open(sys.argv[1], encoding="utf-8"))
-assert state["automation_state"] == "active"
-assert state["run_hash"] == "sha256:" + "c" * 64
-assert state["call_stopped_recorded"] is False
-PY
+  export FAKE_ADB_FAIL_END=1 FAKE_ADB_MALFORMED_DEVICE_ENUMERATION=1
+  run_helper finalize --state "$state" --finalization-output "$finalization"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$finalization" ]] ||
+    fail "finalize-classification test: malformed independent evidence published a record"
   assert_private_output_absent
   pass
 
   reset_fake
   activate_fake_run
-  rm -f -- "$state"
+  rm -f -- "$state" "$finalization"
   write_valid_state "$state"
-  export FAKE_ADB_MALFORMED_DURABLE_ENDING=event-after-finalized
-  run_helper finalize --state "$state"
-  [[ "$RUN_STATUS" -ne 0 ]] ||
-    fail "finalize-durable-ending test: event after run_finalized succeeded"
-  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "1" &&
-     "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "1" ]] ||
-    fail "finalize-durable-ending test: terminal mutations were retried"
+  export FAKE_LN_RACE_DESTINATION="$finalization"
+  run_helper finalize --state "$state" --finalization-output "$finalization"
+  [[ "$RUN_STATUS" -ne 0 && "$(<"$finalization")" == raced ]] ||
+    fail "finalize-race test: absent-only publication overwrote a raced destination"
   assert_private_output_absent
   pass
 }
 
 run_capture_tests() {
   local state="$TMP_DIR/capture-state.json"
+  local finalization="$TMP_DIR/capture-finalization.json"
   local output_dir="$TMP_DIR/capture-output"
   local automation="$output_dir/automation.jsonl"
   local private="$output_dir/private.ndjson"
@@ -3236,7 +3530,8 @@ run_capture_tests() {
   reset_fake
   finalize_fake_run false
   write_valid_state "$state"
-  run_helper capture --state "$state" \
+  write_finalization "$finalization"
+  run_helper capture --state "$state" --finalization "$finalization" \
     --automation-output "$automation" \
     --private-voice-output "$private" \
     --sanitized-voice-output "$sanitized"
@@ -3251,174 +3546,169 @@ import sys
 
 data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
-names = [b"automation-events.jsonl", b"voice-experience-private.ndjson", b"voice-experience-events.ndjson"]
-for name in names:
-    reads = [command for command in commands if b"exec-out" in command and b"cat" in command and any(value.endswith(name) for value in command)]
-    assert len(reads) == 2
+bundles = [command for command in commands if any(b"voice-step-capture-bundle" in value for value in command)]
+assert len(bundles) == 1
+for name in (b"automation-events.jsonl", b"voice-experience-private.ndjson", b"voice-experience-events.ndjson"):
+    assert any(value.endswith(name) for value in bundles[0])
+script = next(value for value in bundles[0] if b"voice-step-capture-bundle" in value)
+for descriptor, source in ((b"3", b"first"), (b"4", b"second"), (b"5", b"third")):
+    assert b"exec " + descriptor + b'< "$' + source + b'"' in script
+    assert script.count(b"metadata /proc/self/fd/" + descriptor) >= 2
+    assert script.count(b'metadata "$' + source + b'"') >= 2
 automation = open(sys.argv[2], "rb").read()
 private = open(sys.argv[3], "rb").read()
 sanitized = open(sys.argv[4], "rb").read()
 assert automation.endswith(b"\n") and b'"name":"run_prepared"' in automation
-assert private == b'{"private":"fixture-secret"}\n'
-assert sanitized.endswith(b"\n") and b"voiceSessionId" not in sanitized and b"voiceSessionHash" in sanitized
+assert b'"voiceSessionId":"PRIVATE_TRACE"' in private
+assert b'"prompt":"PROMPT_SECRET"' in private
+assert sanitized.endswith(b"\n") and b"voiceSessionId" not in sanitized
+assert b"PRIVATE_TRACE" not in sanitized and b"PROMPT_SECRET" not in sanitized
 PY
   then
-    fail "capture-double-read test: sources were not read exactly twice or output content changed"
+    fail "capture-bundle test: sources were not captured by one descriptor-bound snapshot"
   fi
   assert_no_capture_temps "$output_dir"
   pass
 
-  rm -f -- "$automation" "$private" "$sanitized" "$state"
+  rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
   reset_fake
   finalize_fake_run false
   write_valid_state "$state"
-  export FAKE_ADB_STATUS_EVENT_COUNT_DRIFT=1
   run_helper capture --state "$state" \
     --automation-output "$automation" \
     --private-voice-output "$private" \
     --sanitized-voice-output "$sanitized"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "capture-status-event-drift test: changed event count succeeded"
-  [[ ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
-    fail "capture-status-event-drift test: changed status published a destination"
-  assert_no_capture_temps "$output_dir"
-  assert_private_output_absent
+  [[ "$RUN_STATUS" -ne 0 && ! -s "$ADB_LOG" ]] ||
+    fail "capture-parser test: missing finalization reached device access"
   pass
 
-  rm -f -- "$automation" "$private" "$sanitized" "$state"
+  rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
   reset_fake
   finalize_fake_run false
   write_valid_state "$state"
-  export FAKE_ADB_STATUS_NETWORK_DRIFT=1
-  run_helper capture --state "$state" \
+  write_finalization "$finalization" complete complete false true false
+  run_helper capture --state "$state" --finalization "$finalization" \
     --automation-output "$automation" \
     --private-voice-output "$private" \
     --sanitized-voice-output "$sanitized"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "capture-status-network-drift test: changed network succeeded"
-  [[ ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
-    fail "capture-status-network-drift test: changed status published a destination"
-  assert_no_capture_temps "$output_dir"
-  assert_private_output_absent
+  [[ "$RUN_STATUS" -ne 0 && ! -s "$ADB_LOG" ]] ||
+    fail "capture-finalization test: contradictory record reached device access"
   pass
 
-  rm -f -- "$automation" "$private" "$sanitized" "$state"
+  local corruption
+  for corruption in \
+    private-reorder private-duplicate private-orphan \
+    sanitized-reorder sanitized-duplicate sanitized-orphan \
+    event-id kind timestamp private-hash forbidden-field; do
+    rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
+    reset_fake
+    finalize_fake_run false
+    write_valid_state "$state"
+    write_finalization "$finalization"
+    export FAKE_ADB_CAPTURE_CORRUPTION="$corruption"
+    run_helper capture --state "$state" --finalization "$finalization" \
+      --automation-output "$automation" \
+      --private-voice-output "$private" \
+      --sanitized-voice-output "$sanitized"
+    [[ "$RUN_STATUS" -ne 0 && ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
+      fail "capture-correspondence test: $corruption published a destination"
+    assert_no_capture_temps "$output_dir"
+    assert_private_output_absent
+    pass
+  done
+
+  local race_mode source_number
+  for race_mode in mutate replace; do
+    for source_number in 1 2 3; do
+      rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
+      reset_fake
+      finalize_fake_run false
+      write_valid_state "$state"
+      write_finalization "$finalization"
+      if [[ "$race_mode" == mutate ]]; then
+        export FAKE_ADB_MUTATE_CAPTURE_SOURCE_AFTER_READ="$source_number"
+      else
+        export FAKE_ADB_REPLACE_CAPTURE_SOURCE_AFTER_READ="$source_number"
+      fi
+      run_helper capture --state "$state" --finalization "$finalization" \
+        --automation-output "$automation" \
+        --private-voice-output "$private" \
+        --sanitized-voice-output "$sanitized"
+      [[ "$RUN_STATUS" -ne 0 && ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
+        fail "capture-source-race test: $race_mode of source $source_number published a destination"
+      assert_no_capture_temps "$output_dir"
+      pass
+    done
+  done
+
+  rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
   reset_fake
   finalize_fake_run false
   write_valid_state "$state"
-  export FAKE_ADB_ARTIFACT_CHANGES=1
-  run_helper capture --state "$state" \
-    --automation-output "$automation" \
-    --private-voice-output "$private" \
+  write_finalization "$finalization"
+  export FAKE_ADB_MALFORMED_DURABLE_ENDING=event-after-finalized
+  run_helper capture --state "$state" --finalization "$finalization" \
+    --automation-output "$automation" --private-voice-output "$private" \
     --sanitized-voice-output "$sanitized"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "capture-stability test: changing source succeeded"
-  [[ ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
-    fail "capture-stability test: unstable source published a destination"
-  assert_no_capture_temps "$output_dir"
-  assert_private_output_absent
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
+    fail "capture-terminal-order test: event after finalization was published"
   pass
 
-  rm -f -- "$automation" "$private" "$sanitized" "$state"
+  rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
   reset_fake
-  finalize_fake_run false
+  activate_fake_run
   write_valid_state "$state"
-  export FAKE_ADB_SUBSECOND_METADATA_CHANGE=1
-  run_helper capture --state "$state" \
-    --automation-output "$automation" \
-    --private-voice-output "$private" \
+  write_finalization "$finalization" product_failure forced_fallback_used false false true
+  run_helper capture --state "$state" --finalization "$finalization" \
+    --automation-output "$automation" --private-voice-output "$private" \
     --sanitized-voice-output "$sanitized"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "capture-subsecond test: nanosecond source mutation succeeded"
-  [[ ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
-    fail "capture-subsecond test: changing source published a destination"
-  assert_no_capture_temps "$output_dir"
-  assert_private_output_absent
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=capture\nvoice-step.artifacts=published'
+  [[ "$(command_count force-stop)" == 1 &&
+     "$(exact_command_count -s DEVICE_SECRET_123 exec-out ps -A -n -o UID,PID,PPID,STAT,NAME)" == 2 &&
+     "$(exact_command_count -s DEVICE_SECRET_123 shell cmd activity get-isolated-pids "$CURRENT_UID")" == 2 ]] ||
+    fail "capture-dirty-quiescence test: forced product capture lacked independent quiescence"
   pass
 
-  rm -f -- "$automation" "$private" "$sanitized" "$state"
+  rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
   reset_fake
-  finalize_fake_run false
+  activate_fake_run
   write_valid_state "$state"
-  export FAKE_ADB_INCOMPLETE_ARTIFACT='voice-experience-private.ndjson'
-  run_helper capture --state "$state" \
-    --automation-output "$automation" \
-    --private-voice-output "$private" \
+  write_finalization "$finalization" product_failure forced_fallback_used false false true
+  export FAKE_ADB_PACKAGE_PROCESS=1
+  run_helper capture --state "$state" --finalization "$finalization" \
+    --automation-output "$automation" --private-voice-output "$private" \
     --sanitized-voice-output "$sanitized"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "capture-newline test: incomplete final newline succeeded"
-  [[ ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
-    fail "capture-newline test: invalid source published a destination"
-  assert_no_capture_temps "$output_dir"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
+    fail "capture-dirty-quiescence test: unproven quiescence published a bundle"
   pass
 
-  rm -f -- "$state"
-  reset_fake
-  finalize_fake_run false
-  write_valid_state "$state"
-  export FAKE_LN_RACE_DESTINATION="$automation"
-  run_helper capture --state "$state" \
-    --automation-output "$automation" \
-    --private-voice-output "$private" \
-    --sanitized-voice-output "$sanitized"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "capture-race test: late destination race succeeded"
-  [[ "$(<"$automation")" == raced && ! -e "$private" && ! -e "$sanitized" ]] ||
-    fail "capture-race test: raced destination was overwritten or publication continued"
-  assert_no_capture_temps "$output_dir"
-  assert_private_output_absent
-  pass
-
-
-  rm -f -- "$automation" "$private" "$sanitized" "$state"
-  reset_fake
-  finalize_fake_run false
-  write_valid_state "$state"
-  export FAKE_LN_RACE_DESTINATION="$private"
-  run_helper capture --state "$state" \
-    --automation-output "$automation" \
-    --private-voice-output "$private" \
-    --sanitized-voice-output "$sanitized"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "capture-second-race test: second destination race succeeded"
-  [[ -s "$automation" && "$(<"$private")" == raced && ! -e "$sanitized" ]] ||
-    fail "capture-second-race test: sequential no-replace semantics were violated"
-  assert_no_capture_temps "$output_dir"
-  assert_private_output_absent
-  pass
-
-  rm -f -- "$automation" "$private" "$sanitized" "$state"
-  reset_fake
-  finalize_fake_run false
-  write_valid_state "$state"
-  export FAKE_LN_RACE_DESTINATION="$sanitized"
-  run_helper capture --state "$state" \
-    --automation-output "$automation" \
-    --private-voice-output "$private" \
-    --sanitized-voice-output "$sanitized"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "capture-third-race test: third destination race succeeded"
-  [[ -s "$automation" && -s "$private" && "$(<"$sanitized")" == raced ]] ||
-    fail "capture-third-race test: prior publications or raced destination were corrupted"
-  assert_no_capture_temps "$output_dir"
-  assert_private_output_absent
-  pass
-
-  rm -f -- "$automation" "$private" "$sanitized" "$state"
-  reset_fake
-  finalize_fake_run false
-  write_valid_state "$state"
-  export FAKE_ADB_SIGNAL_ON_ARTIFACT_READ=3
-  run_helper capture --state "$state" \
-    --automation-output "$automation" \
-    --private-voice-output "$private" \
-    --sanitized-voice-output "$sanitized"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "capture-signal test: interrupted capture succeeded"
-  [[ ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
-    fail "capture-signal test: interrupted capture published a destination"
-  assert_no_capture_temps "$output_dir"
-  assert_private_output_absent
-  pass
+  local raced_destination
+  for raced_destination in "$automation" "$private" "$sanitized"; do
+    rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
+    reset_fake
+    finalize_fake_run false
+    write_valid_state "$state"
+    write_finalization "$finalization"
+    export FAKE_LN_RACE_DESTINATION="$raced_destination"
+    run_helper capture --state "$state" --finalization "$finalization" \
+      --automation-output "$automation" --private-voice-output "$private" \
+      --sanitized-voice-output "$sanitized"
+    [[ "$RUN_STATUS" -ne 0 && "$(<"$raced_destination")" == raced ]] ||
+      fail "capture-destination-race test: raced destination was overwritten"
+    case "$raced_destination" in
+      "$automation") [[ ! -e "$private" && ! -e "$sanitized" ]] ;;
+      "$private") [[ -s "$automation" && ! -e "$sanitized" ]] ;;
+      "$sanitized") [[ -s "$automation" && -s "$private" ]] ;;
+    esac || fail "capture-destination-race test: publication continued past a race"
+    assert_no_capture_temps "$output_dir"
+    pass
+  done
 }
 
 run_end_tests() {
   local state="$TMP_DIR/end-state.json"
+  local finalization="$TMP_DIR/end-finalization.json"
   local cleanup_output="$TMP_DIR/end-cleanup.json"
-  local expected_complete='{"schemaVersion":1,"outcome":"complete","callStopped":true,"fixturesRemoved":true,"automationFinalized":true}'
-  local expected_product_failure='{"schemaVersion":1,"outcome":"product_failure","callStopped":true,"fixturesRemoved":false,"automationFinalized":true}'
-  local expected_infrastructure='{"schemaVersion":1,"outcome":"infrastructure_interruption","callStopped":true,"fixturesRemoved":false,"automationFinalized":true}'
   python3 - "$HELPER" <<'PY' || fail "exit-signal test: cleanup deferral was installed after EXIT removal"
 import sys
 
@@ -3427,15 +3717,49 @@ body = source.split("on_exit() {", 1)[1].split("\n}", 1)[0]
 assert body.index("trap defer_exit_cleanup_signal HUP INT TERM") < body.index("trap - EXIT")
 PY
   pass
+
   reset_fake
-  finalize_fake_run true
+  finalize_fake_run false
   write_valid_state "$state"
   run_helper end --state "$state" --cleanup-output "$cleanup_output"
+  [[ "$RUN_STATUS" -ne 0 && ! -s "$ADB_LOG" ]] ||
+    fail "end-parser test: missing finalization reached device access"
+  pass
+
+  reset_fake
+  finalize_fake_run true
+  rm -f -- "$state" "$finalization" "$cleanup_output"
+  write_valid_state "$state"
+  write_finalization "$finalization"
+  run_helper end --state "$state" --finalization "$finalization" \
+    --cleanup-output "$cleanup_output"
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=complete'
-  [[ "$(<"$cleanup_output")" == "$expected_complete" ]] ||
-    fail "end-record test: complete cleanup record mismatch"
-  [[ -f "$cleanup_output" && ! -L "$cleanup_output" && "$(stat -c '%a' "$cleanup_output")" == 600 ]] ||
-    fail "end-publication test: cleanup record was not a mode-0600 regular file"
+  if ! python3 - "$cleanup_output" "$finalization" <<'PY'
+import hashlib
+import json
+import os
+import stat
+import sys
+
+cleanup_path, finalization_path = sys.argv[1:]
+finalization = open(finalization_path, "rb").read()
+expected = {
+    "schemaVersion": 2,
+    "outcome": "complete",
+    "callStopped": True,
+    "automationFinalized": True,
+    "fixturesRemoved": True,
+    "finalizationHash": "sha256:" + hashlib.sha256(finalization).hexdigest(),
+}
+actual = open(cleanup_path, "rb").read()
+assert actual == json.dumps(expected, sort_keys=True, separators=(",", ":")).encode()
+metadata = os.lstat(cleanup_path)
+assert stat.S_ISREG(metadata.st_mode) and stat.S_IMODE(metadata.st_mode) == 0o600
+assert metadata.st_nlink == 1
+PY
+  then
+    fail "end-record test: complete cleanup was not canonically linked"
+  fi
   [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == 0 &&
      "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END)" == 0 &&
      "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == 0 &&
@@ -3505,213 +3829,54 @@ PY
     fail "end-broker-execution test: exact broker shell left the real app-data directory"
   pass
 
-  local malformed_mode
-  for malformed_mode in stopped-false event-after-finalized binding-mismatch missing-call-stopped noncanonical-keys; do
-    rm -f -- "$cleanup_output" "$state"
-    reset_fake
-    finalize_fake_run false
-    write_valid_state "$state"
-    export FAKE_ADB_MALFORMED_DURABLE_ENDING="$malformed_mode"
-    run_helper end --state "$state" --cleanup-output "$cleanup_output"
-    [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
-      fail "end-durable-ending test: malformed $malformed_mode evidence published cleanup"
-    [[ "$(command_count force-stop)" == 0 && "$(command_count voice-step-cleanup-broker)" == 0 ]] ||
-      fail "end-durable-ending test: malformed $malformed_mode evidence reached mutation"
-    assert_private_output_absent
-    pass
-  done
-
-  local failure_mode
-  for failure_mode in force-stop quiescence unstable-quiescence isolated broker; do
-    rm -f -- "$cleanup_output" "$state"
-    reset_fake
-    finalize_fake_run false
-    write_valid_state "$state"
-    case "$failure_mode" in
-      force-stop) export FAKE_ADB_FAIL_FORCE_STOP=1 ;;
-      quiescence) export FAKE_ADB_PACKAGE_PROCESS=1 ;;
-      unstable-quiescence) export FAKE_ADB_UNSTABLE_QUIESCENCE=1 ;;
-      isolated) export FAKE_ADB_ISOLATED_PROCESS=1 ;;
-      broker) export FAKE_ADB_FAIL_CLEANUP_BROKER=1 ;;
-    esac
-    run_helper end --state "$state" --cleanup-output "$cleanup_output"
-    assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
-    [[ "$(<"$cleanup_output")" == "$expected_product_failure" ]] ||
-      fail "end-product-failure test: $failure_mode lost durable final proof"
-    [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == 0 &&
-       "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == 0 ]] ||
-      fail "end-product-failure test: $failure_mode issued a terminal mutation"
-    if [[ "$failure_mode" != force-stop ]]; then
-      [[ "$(exact_command_count -s DEVICE_SECRET_123 shell am broadcast --user 0 --include-stopped-packages -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver -a me.rerere.rikkahub.voiceagent.automation.STATUS)" == 1 ]] ||
-        fail "end-product-failure test: $failure_mode did not restore exactly once"
-    else
-      [[ "$(command_count --include-stopped-packages)" == 0 ]] ||
-        fail "end-product-failure test: rejected force-stop attempted false restoration"
-      python3 - "$FAKE_STATE" <<'PY' || fail "end-product-failure test: rejected force-stop changed runtime state"
-import json, sys
-state = json.load(open(sys.argv[1], encoding="utf-8"))
-assert state["package_stopped"] is False
-assert state["automation_state"] == "finalized"
-assert state.get("restoration_count", 0) == 0
-PY
-    fi
-    pass
-  done
-
-  rm -f -- "$cleanup_output" "$state"
+  rm -f -- "$cleanup_output" "$state" "$finalization"
   reset_fake
-  finalize_fake_run false
+  activate_fake_run
   write_valid_state "$state"
-  export FAKE_TIMEOUT_EXECUTE_THEN_TIMEOUT_MATCH=force-stop
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
+  write_finalization "$finalization" product_failure forced_fallback_used false false true
+  run_helper end --state "$state" --finalization "$finalization" \
+    --cleanup-output "$cleanup_output"
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
-  [[ "$(<"$cleanup_output")" == "$expected_product_failure" ]] ||
-    fail "end-execute-timeout test: partial force-stop delivery changed evidence"
-  python3 - "$FAKE_STATE" <<'PY' || fail "end-execute-timeout test: cleanup published before exact restoration"
-import json, sys
-state = json.load(open(sys.argv[1], encoding="utf-8"))
-assert state["force_stop_observed"] is True
-assert state["package_stopped"] is False
-assert state["automation_state"] == "idle"
-assert state["restoration_count"] == 1
+  if ! python3 - "$cleanup_output" "$finalization" <<'PY'
+import hashlib, json, sys
+finalization = open(sys.argv[2], "rb").read()
+expected = {
+    "automationFinalized": False,
+    "callStopped": False,
+    "finalizationHash": "sha256:" + hashlib.sha256(finalization).hexdigest(),
+    "fixturesRemoved": True,
+    "outcome": "product_failure",
+    "schemaVersion": 2,
+}
+assert open(sys.argv[1], "rb").read() == json.dumps(
+    expected, sort_keys=True, separators=(",", ":")
+).encode()
 PY
+  then
+    fail "end-dirty-linkage test: cleanup promoted forced-fallback finalization"
+  fi
   pass
 
-  rm -f -- "$cleanup_output" "$state"
+  rm -f -- "$cleanup_output" "$state" "$finalization"
   reset_fake
-  finalize_fake_run false
+  activate_fake_run
   write_valid_state "$state"
-  export FAKE_TIMEOUT_EXECUTE_THEN_TIMEOUT_MATCH=force-stop
-  export FAKE_ADB_MALFORMED_RESTORATION=wrong-state
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
-    fail "end-execute-timeout test: ambiguous restoration published cleanup"
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run false
-  write_valid_state "$state"
-  export FAKE_ADB_FAIL_FORCE_STOP=1
-  export FAKE_ADB_FAIL_REACHABILITY_PROBE=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
-  [[ "$(<"$cleanup_output")" == "$expected_product_failure" &&
-     "$(exact_command_count devices -l)" == 0 &&
-     "$(command_count --include-stopped-packages)" == 0 ]] ||
-    fail "end-classification test: canonical stopped=false was not direct product failure"
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run false
-  write_valid_state "$state"
-  export FAKE_ADB_FAIL_FORCE_STOP=1
-  export FAKE_ADB_DEVICE_LOST=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  [[ -f "$cleanup_output" && "$(<"$cleanup_output")" == "$expected_infrastructure" ]] ||
-    fail "end-classification test: exact device loss was not infrastructure interruption"
-  [[ "$(exact_command_count devices -l)" == 1 ]] ||
-    fail "end-classification test: device loss lacked one independent enumeration"
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run false
-  write_valid_state "$state"
-  export FAKE_ADB_FAIL_FORCE_STOP=1
-  export FAKE_ADB_MALFORMED_DEVICE_ENUMERATION=1
-  export FAKE_ADB_MALFORMED_STOPPED_ROW=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
-    fail "end-classification test: malformed device enumeration published cleanup"
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run false
-  write_valid_state "$state"
-  export FAKE_ADB_FAIL_FORCE_STOP=1
-  export FAKE_ADB_DEVICE_ENUMERATION_STATE=error
-  export FAKE_ADB_MALFORMED_STOPPED_ROW=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
-    fail "end-classification test: unknown device state published cleanup"
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run false
-  write_valid_state "$state"
-  export FAKE_ADB_FORCE_STOP_STOPPED_FALSE=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
-  [[ "$(<"$cleanup_output")" == "$expected_product_failure" ]] ||
-    fail "end-classification test: canonical stopped=false was not product failure"
-  [[ "$(command_count --include-stopped-packages)" == 0 ]] ||
-    fail "end-classification test: canonical stopped=false attempted false restoration"
-  python3 - "$FAKE_STATE" <<'PY' || fail "end-classification test: stopped=false changed finalized runtime"
-import json, sys
-state = json.load(open(sys.argv[1], encoding="utf-8"))
-assert state["package_stopped"] is False
-assert state["automation_state"] == "finalized"
-assert state.get("restoration_count", 0) == 0
-PY
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run false
-  write_valid_state "$state"
-  export FAKE_ADB_MALFORMED_STOPPED_ROW=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
-    fail "end-classification test: malformed stopped-state readback published cleanup"
-  pass
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run false
-  write_valid_state "$state"
-  export FAKE_ADB_POST_CLEANUP_ARTIFACT_CHANGE=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
-    fail "end-post-cleanup-artifact test: changed durable bytes published cleanup"
-  [[ "$(command_count voice-step-cleanup-broker)" == 1 &&
-     "$(command_count --include-stopped-packages)" == 1 ]] ||
-    fail "end-post-cleanup-artifact test: cleanup or EXIT restoration did not run once"
-  assert_private_output_absent
-  pass
-
-  local restoration_mode
-  for restoration_mode in failure malformed; do
-    rm -f -- "$cleanup_output" "$state"
-    reset_fake
-    finalize_fake_run false
-    write_valid_state "$state"
-    if [[ "$restoration_mode" == failure ]]; then
-      export FAKE_ADB_FAIL_RESTORATION=1
-    else
-      export FAKE_ADB_MALFORMED_RESTORATION=wrong-state
-    fi
-    run_helper end --state "$state" --cleanup-output "$cleanup_output"
-    [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
-      fail "end-restoration test: $restoration_mode reply published cleanup"
-    [[ "$(command_count --include-stopped-packages)" -ge 1 ]] ||
-      fail "end-restoration test: $restoration_mode path skipped bounded restoration"
-    assert_private_output_absent
-    pass
-  done
-
-  rm -f -- "$cleanup_output" "$state"
-  reset_fake
-  finalize_fake_run false
-  write_valid_state "$state"
+  write_finalization "$finalization" product_failure forced_fallback_used false false true
   export FAKE_ADB_RETAIN_FIXTURE_DIR=1
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
+  run_helper end --state "$state" --finalization "$finalization" \
+    --cleanup-output "$cleanup_output"
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
-  [[ "$(<"$cleanup_output")" == "$expected_product_failure" ]] ||
-    fail "end-retained-directory test: retained directory changed product evidence"
+  if ! python3 - "$cleanup_output" <<'PY'
+import json, sys
+cleanup = json.load(open(sys.argv[1], encoding="utf-8"))
+assert cleanup["outcome"] == "product_failure"
+assert cleanup["callStopped"] is False
+assert cleanup["automationFinalized"] is False
+assert cleanup["fixturesRemoved"] is False
+PY
+  then
+    fail "end-retained-directory test: dirty cleanup record changed terminal proof"
+  fi
   python3 - "$FAKE_STATE" <<'PY' || fail "end-retained-directory test: retained directory or restoration state changed"
 import json
 import sys
@@ -3725,47 +3890,26 @@ PY
     fail "end-retained-directory test: controlled final rmdir failure lost the directory"
   pass
 
-  local actor_trigger="$TMP_DIR/end-actor-trigger"
-  local actor_result="$TMP_DIR/end-actor-result"
-  local remote_directory="$REMOTE_APP_DATA_ROOT/files/voice-real-room/$(printf 'a%.0s' {1..64})"
-  rm -f -- "$cleanup_output" "$state" "$actor_trigger" "$actor_result"
+  rm -f -- "$cleanup_output" "$state" "$finalization"
   reset_fake
   finalize_fake_run false
   write_valid_state "$state"
-  (
-    while [[ ! -e "$actor_trigger" ]]; do sleep 0.01; done
-    printf 'entered\n' > "$actor_result"
-  ) &
-  ACTOR_PID=$!
-  export FAKE_ADB_ACTOR_PID="$ACTOR_PID"
-  export FAKE_ADB_ACTOR_TRIGGER="$actor_trigger"
-  export FAKE_ADB_ACTOR_RESULT="$actor_result"
-  export FAKE_RMDIR_ACTOR_ENTERED="$TMP_DIR/end-actor-entered"
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=complete'
-  wait "$ACTOR_PID"
-  ACTOR_PID=''
-  [[ -e "$actor_result" && ! -e "$remote_directory" ]] ||
-    fail "end-live-actor test: actor did not resume after owned directory deletion"
-  python3 - "$FAKE_STATE" <<'PY' || fail "end-live-actor test: actor crossed the stopped cleanup boundary"
-import json
-import sys
-
-state = json.load(open(sys.argv[1], encoding="utf-8"))
-assert state["actor_sigstop_observed"] is True
-assert state["actor_sigcont_observed"] is True
-assert not state.get("actor_entered_cleanup_boundary", False)
-assert state["cleanup_broker_exact_shell_executed"] is True
-assert state["rmdir_boundary_observed"] is True
-PY
+  write_finalization "$finalization"
+  export FAKE_ADB_FAIL_CLEANUP_BROKER=1
+  run_helper end --state "$state" --finalization "$finalization" \
+    --cleanup-output "$cleanup_output"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
+    fail "end-no-downgrade test: cleanup failure rewrote complete finalization"
   pass
 
-  rm -f -- "$cleanup_output" "$state"
+  rm -f -- "$cleanup_output" "$state" "$finalization"
   reset_fake
   finalize_fake_run false
   write_valid_state "$state"
+  write_finalization "$finalization"
   export FAKE_LN_RACE_DESTINATION="$cleanup_output"
-  run_helper end --state "$state" --cleanup-output "$cleanup_output"
+  run_helper end --state "$state" --finalization "$finalization" \
+    --cleanup-output "$cleanup_output"
   [[ "$RUN_STATUS" -ne 0 ]] || fail "end-race test: late cleanup destination race succeeded"
   [[ "$(<"$cleanup_output")" == raced ]] || fail "end-race test: existing cleanup destination was overwritten"
   python3 - "$FAKE_STATE" <<'PY' || fail "end-race test: publication happened before package restoration"
@@ -3781,13 +3925,15 @@ PY
 
   local signal_name
   for signal_name in HUP INT TERM; do
-    rm -f -- "$cleanup_output" "$state"
+    rm -f -- "$cleanup_output" "$state" "$finalization"
     reset_fake
     finalize_fake_run false
     write_valid_state "$state"
+    write_finalization "$finalization"
     export FAKE_ADB_SIGNAL_ON_ARTIFACT_READ=4
     export FAKE_ADB_ARTIFACT_SIGNAL="$signal_name"
-    run_helper end --state "$state" --cleanup-output "$cleanup_output"
+    run_helper end --state "$state" --finalization "$finalization" \
+      --cleanup-output "$cleanup_output"
     [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
       fail "end-signal test: $signal_name teardown published cleanup"
     python3 - "$FAKE_STATE" "$signal_name" <<'PY' || fail "end-signal test: package restoration failed"
@@ -3810,7 +3956,7 @@ if [[ "$#" -eq 0 ]]; then
 fi
 for requested in "${SELECTED_OPERATIONS[@]}"; do
   case "$requested" in
-    preflight|start|inject|interrupt|status|finalize|capture|end|fixture-bounds|checkpoints) ;;
+    preflight|start|inject|interrupt|status|finalize|finalization|capture|end|cleanup|fixture-bounds|checkpoints) ;;
     *) fail "test filter must name a real-room operation" ;;
   esac
 done
@@ -3830,8 +3976,12 @@ selected fixture-bounds && run_fixture_bounds_tests
 selected interrupt && run_interrupt_tests
 selected status && run_status_tests
 selected checkpoints && run_checkpoint_tests
-selected finalize && run_finalize_tests
+if selected finalize || selected finalization; then
+  run_finalize_tests
+fi
 selected capture && run_capture_tests
-selected end && run_end_tests
+if selected end || selected cleanup; then
+  run_end_tests
+fi
 
 printf 'PASS: voice-agent-real-room-step (%s assertions)\n' "$TEST_COUNT"

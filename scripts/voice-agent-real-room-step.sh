@@ -246,9 +246,82 @@ run_status_operation() {
     'voice-step.expectation_met=true'
 }
 
+complete_finalize_outcome() {
+  local destination="$1"
+  local outcome="$2"
+  local reason="$3"
+  local call_stopped="$4"
+  local automation_finalized="$5"
+  local forced_fallback_used="$6"
+  publish_finalization_record "$destination" "$outcome" "$reason" \
+    "$call_stopped" "$automation_finalized" "$forced_fallback_used"
+  cleanup_local_temps || die 'cleanup failed'
+  printf '%s\n' \
+    'voice-step.status=ok' \
+    'voice-step.operation=finalize' \
+    "voice-step.outcome=$outcome"
+}
+
+complete_finalization_failure() {
+  local destination="$1"
+  local original_reason="$2"
+  local force_status=0
+  local stopped_status
+  local quiescence_status
+  local device_access
+  PACKAGE_FORCE_STOP_OWNED=1
+  adb_read shell cmd activity force-stop --user "$ANDROID_USER_ID" "$PACKAGE" \
+    </dev/null >/dev/null 2>&1 || force_status=$?
+  if read_package_stopped_state true; then
+    stopped_status=0
+  else
+    stopped_status=$?
+  fi
+  case "$stopped_status" in
+    0)
+      if prove_package_quiescence; then
+        quiescence_status=0
+      else
+        quiescence_status=$?
+      fi
+      (( quiescence_status == 0 )) || die 'fallback quiescence not proven'
+      restore_force_stopped_package || die 'package restoration failed'
+      complete_finalize_outcome "$destination" product_failure \
+        forced_fallback_used false false true
+      ;;
+    1)
+      PACKAGE_FORCE_STOP_OWNED=0
+      (( force_status != 0 )) || die 'ambiguous fallback readback'
+      complete_finalize_outcome "$destination" product_failure \
+        "$original_reason" false false false
+      ;;
+    *)
+      if classify_device_access; then
+        device_access=0
+      else
+        device_access=$?
+      fi
+      case "$device_access" in
+        1) complete_finalize_outcome "$destination" infrastructure_interruption \
+             device_unavailable false false false ;;
+        3) complete_finalize_outcome "$destination" infrastructure_interruption \
+             adb_route_unavailable false false false ;;
+        *) die 'ambiguous finalization readback' ;;
+      esac
+      ;;
+  esac
+}
+
 run_finalize() {
+  local finalization_output="$1"
+  local end_status=0
+  local stop_status
+  local broadcast_output
   local reply
+  local reply_status
   local status_snapshot
+  local terminal_status
+  local device_access
   local -a status=()
   validate_runtime
   adb_read shell am start-foreground-service \
@@ -259,53 +332,215 @@ run_finalize() {
     --es transport "$TRANSPORT_EXPECTED" \
     --es run_hash "$RUN_HASH" \
     --es comparison_hash "$COMPARISON_HASH" \
-    </dev/null >/dev/null 2>&1 || die 'bound call end failed'
-  wait_for_durable_call_stopped
-  reply="$(broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.FINALIZE_BOUND" \
-    --es run_hash "$RUN_HASH" \
-    --es comparison_hash "$COMPARISON_HASH" \
-    --es transport "$TRANSPORT_EXPECTED")"
-  [[ "$reply" == $'status=ok\naction=finalize_bound' ]] || die 'unexpected receiver response'
+    </dev/null >/dev/null 2>&1 || end_status=$?
+  if (( end_status != 0 )); then
+    if classify_device_access; then
+      device_access=0
+    else
+      device_access=$?
+    fi
+    case "$device_access" in
+      0) complete_finalization_failure "$finalization_output" bound_call_rejected ;;
+      1) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
+           device_unavailable false false false ;;
+      3) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
+           adb_route_unavailable false false false ;;
+      *) die 'ambiguous finalization readback' ;;
+    esac
+    return
+  fi
+  if wait_for_durable_call_stopped; then
+    stop_status=0
+  else
+    stop_status=$?
+  fi
+  case "$stop_status" in
+    0) ;;
+    1) complete_finalization_failure "$finalization_output" call_stop_timeout; return ;;
+    4) complete_finalization_failure "$finalization_output" call_stop_failed; return ;;
+    3)
+      if classify_device_access; then
+        complete_finalization_failure "$finalization_output" persistence_drain_failed
+      else
+        case "$?" in
+          1) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
+               device_unavailable false false false ;;
+          3) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
+               adb_route_unavailable false false false ;;
+          *) die 'ambiguous finalization readback' ;;
+        esac
+      fi
+      return
+      ;;
+    *) die 'invalid durable call-stop evidence' ;;
+  esac
+
+  if broadcast_output="$(adb_read shell am broadcast --user "$ANDROID_USER_ID" \
+      -n "$PACKAGE/$CONTROL_RECEIVER" -a "$CONTROL_ACTION_PREFIX.FINALIZE_BOUND" \
+      --es run_hash "$RUN_HASH" \
+      --es comparison_hash "$COMPARISON_HASH" \
+      --es transport "$TRANSPORT_EXPECTED" 2>/dev/null)"; then
+    if reply="$(parse_ordered_broadcast_output "$broadcast_output")"; then
+      reply_status=0
+    else
+      reply_status=$?
+    fi
+  else
+    reply_status=4
+  fi
+  case "$reply_status" in
+    0)
+      [[ "$reply" == $'status=ok\naction=finalize' ]] ||
+        die 'unexpected receiver response'
+      ;;
+    3)
+      complete_finalize_outcome "$finalization_output" product_failure \
+        automation_finalize_rejected true false false
+      return
+      ;;
+    4)
+      if classify_device_access; then
+        complete_finalize_outcome "$finalization_output" product_failure \
+          automation_finalize_failed true false false
+      else
+        case "$?" in
+          1) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
+               device_unavailable true false false ;;
+          3) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
+               adb_route_unavailable true false false ;;
+          *) die 'ambiguous finalization readback' ;;
+        esac
+      fi
+      return
+      ;;
+    *) die 'unexpected receiver response' ;;
+  esac
   status_snapshot="$(read_status)"
   mapfile -t status <<< "$status_snapshot"
   [[ "${status[0]}" == finalized && "${status[1]}" == "$RUN_HASH" &&
      "${status[2]}" == "$COMPARISON_HASH" &&
      "${status[3]}" == "$TRANSPORT_EXPECTED" ]] || die 'finalized status mismatch'
-  read_automation_terminal_snapshot finalized || die 'invalid durable final evidence'
-  cleanup_local_temps || die 'cleanup failed'
-  printf '%s\n' \
-    'voice-step.status=ok' \
-    'voice-step.operation=finalize' \
-    'voice-step.automation=finalized'
+  if read_automation_terminal_snapshot finalized; then
+    terminal_status=0
+  else
+    terminal_status=$?
+  fi
+  case "$terminal_status" in
+    0) ;;
+    1)
+      complete_finalize_outcome "$finalization_output" product_failure \
+        automation_finalize_failed true false false
+      return
+      ;;
+    3)
+      if classify_device_access; then
+        complete_finalize_outcome "$finalization_output" product_failure \
+          automation_finalize_failed true false false
+      else
+        case "$?" in
+          1) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
+               device_unavailable true false false ;;
+          3) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
+               adb_route_unavailable true false false ;;
+          *) die 'ambiguous finalization readback' ;;
+        esac
+      fi
+      return
+      ;;
+    *) die 'invalid durable final evidence' ;;
+  esac
+  complete_finalize_outcome "$finalization_output" complete complete true true false
 }
 
 run_capture() {
-  local automation_output="$1"
-  local private_output="$2"
-  local sanitized_output="$3"
+  local finalization_path="$1"
+  local automation_output="$2"
+  local private_output="$3"
+  local sanitized_output="$4"
   local automation_source
   local private_source
   local sanitized_source
   local automation_temp
   local private_temp
   local sanitized_temp
+  local finalization_snapshot
+  local finalization_check
+  local finalization_values
+  local outcome
+  local call_stopped
+  local automation_finalized
+  local forced_fallback_used
+  local force_stop_status=0
+  local stopped_status
+  local quiescence_status
   local status_before
   local status_after
   local -a status=()
+  local -a finalization=()
+
+  snapshot_finalization_record "$finalization_path" finalization_snapshot
+  finalization_values="$(read_finalization_values "$finalization_snapshot")" ||
+    die 'invalid finalization record'
+  mapfile -t finalization <<< "$finalization_values"
+  [[ "${#finalization[@]}" == 5 ]] || die 'invalid finalization record'
+  outcome="${finalization[0]}"
+  call_stopped="${finalization[2]}"
+  automation_finalized="${finalization[3]}"
+  forced_fallback_used="${finalization[4]}"
   validate_runtime
-  status_before="$(read_status)"
-  mapfile -t status <<< "$status_before"
-  [[ "${status[0]}" == finalized && "${status[1]}" == "$RUN_HASH" &&
-     "${status[2]}" == "$COMPARISON_HASH" &&
-     "${status[3]}" == "$TRANSPORT_EXPECTED" ]] || die 'finalized status mismatch'
+
+  case "$outcome" in
+    complete)
+      [[ "$call_stopped" == true && "$automation_finalized" == true &&
+         "$forced_fallback_used" == false ]] || die 'invalid finalization record'
+      status_before="$(read_status)"
+      mapfile -t status <<< "$status_before"
+      [[ "${status[0]}" == finalized && "${status[1]}" == "$RUN_HASH" &&
+         "${status[2]}" == "$COMPARISON_HASH" &&
+         "${status[3]}" == "$TRANSPORT_EXPECTED" ]] || die 'finalized status mismatch'
+      ;;
+    product_failure)
+      PACKAGE_FORCE_STOP_OWNED=1
+      adb_read shell cmd activity force-stop --user "$ANDROID_USER_ID" "$PACKAGE" \
+        </dev/null >/dev/null 2>&1 || force_stop_status=$?
+      (( force_stop_status == 0 )) || die 'capture quiescence not proven'
+      if read_package_stopped_state true; then
+        stopped_status=0
+      else
+        stopped_status=$?
+      fi
+      (( stopped_status == 0 )) || die 'capture quiescence not proven'
+      if prove_package_quiescence; then
+        quiescence_status=0
+      else
+        quiescence_status=$?
+      fi
+      (( quiescence_status == 0 )) || die 'capture quiescence not proven'
+      ;;
+    *) die 'capture unavailable for interrupted infrastructure' ;;
+  esac
+
   automation_source="$(app_artifact_path "$APP_ARTIFACT_ROOT/${RUN_HASH#sha256:}" automation-events.jsonl)"
   private_source="$(app_artifact_path "$APP_ARTIFACT_ROOT/$TRACE_ID" voice-experience-private.ndjson)"
   sanitized_source="$(app_artifact_path "$APP_ARTIFACT_ROOT/$TRACE_ID" voice-experience-events.ndjson)"
-  read_stable_artifact "$automation_source" "$automation_output" automation_temp
-  read_stable_artifact "$private_source" "$private_output" private_temp
-  read_stable_artifact "$sanitized_source" "$sanitized_output" sanitized_temp
-  status_after="$(read_status)"
-  [[ "$status_after" == "$status_before" ]] || die 'status changed during capture'
+  read_capture_bundle_snapshots \
+    "$automation_source" "$private_source" "$sanitized_source" \
+    "$automation_output" "$private_output" "$sanitized_output" \
+    automation_temp private_temp sanitized_temp
+  python3 "$REAL_ROOM_CONTRACT" --validate-capture \
+    "$automation_temp" "$private_temp" "$sanitized_temp" \
+    "$RUN_HASH" "$COMPARISON_HASH" "$finalization_snapshot" \
+    >/dev/null 2>&1 || die 'captured evidence violates contract'
+
+  if [[ "$outcome" == complete ]]; then
+    status_after="$(read_status)"
+    [[ "$status_after" == "$status_before" ]] || die 'status changed during capture'
+  else
+    restore_force_stopped_package || die 'package restoration failed'
+  fi
+  snapshot_finalization_record "$finalization_path" finalization_check
+  cmp -s -- "$finalization_snapshot" "$finalization_check" ||
+    die 'finalization record changed'
   validate_absent_destination "$automation_output" || die 'output destination appeared'
   validate_absent_destination "$private_output" || die 'output destination appeared'
   validate_absent_destination "$sanitized_output" || die 'output destination appeared'
@@ -322,6 +557,7 @@ run_capture() {
 classify_device_access() {
   local enumeration
   local classification
+  local reachability
   if ! enumeration="$(adb_global_read devices -l 2>/dev/null)"; then
     return 2
   fi
@@ -360,62 +596,23 @@ raise SystemExit(2)
     classification=$?
     return "$classification"
   }
+  reachability="$(adb_read shell echo voice-step-reachable 2>/dev/null)" || return 3
+  [[ "$reachability" == voice-step-reachable ]] || return 2
   return 0
-}
-
-complete_failed_end_step() {
-  local destination="$1"
-  local call_stopped="$2"
-  local fixtures_removed="$3"
-  local automation_finalized="$4"
-  local device_access
-  if classify_device_access; then
-    device_access=0
-  else
-    device_access=$?
-  fi
-  case "$device_access" in
-    0)
-      if (( PACKAGE_FORCE_STOP_OWNED == 1 )); then
-        restore_force_stopped_package || die 'package restoration failed'
-      fi
-      complete_end_outcome "$destination" product_failure "$call_stopped" \
-        "$fixtures_removed" "$automation_finalized"
-      ;;
-    1)
-      complete_end_outcome "$destination" infrastructure_interruption \
-        "$call_stopped" "$fixtures_removed" "$automation_finalized"
-      ;;
-    *) die 'ambiguous cleanup readback' ;;
-  esac
-}
-
-publish_end_record() {
-  local destination="$1"
-  local outcome="$2"
-  local call_stopped="$3"
-  local fixtures_removed="$4"
-  local automation_finalized="$5"
-  local parent
-  local temporary
-  parent="$(dirname -- "$destination")" || die 'cleanup record publication failed'
-  temporary="$(mktemp "$parent/.voice-step-cleanup.XXXXXX" 2>/dev/null)" ||
-    die 'cleanup record publication failed'
-  register_temp_file "$temporary"
-  chmod 600 -- "$temporary" 2>/dev/null || die 'cleanup record publication failed'
-  printf '{"schemaVersion":1,"outcome":"%s","callStopped":%s,"fixturesRemoved":%s,"automationFinalized":%s}\n' \
-    "$outcome" "$call_stopped" "$fixtures_removed" "$automation_finalized" > "$temporary" ||
-    die 'cleanup record publication failed'
-  publish_owned_temp "$temporary" "$destination"
 }
 
 complete_end_outcome() {
   local destination="$1"
-  local outcome="$2"
-  local call_stopped="$3"
-  local fixtures_removed="$4"
+  local finalization_snapshot="$2"
+  local outcome="$3"
+  local call_stopped="$4"
   local automation_finalized="$5"
-  publish_end_record "$destination" "$outcome" "$call_stopped" "$fixtures_removed" "$automation_finalized"
+  local fixtures_removed="$6"
+  local finalization_hash
+  finalization_hash="sha256:$(sha256sum -- "$finalization_snapshot" | awk '{print $1}')" ||
+    die 'finalization hash failed'
+  publish_cleanup_record "$destination" "$outcome" "$call_stopped" \
+    "$automation_finalized" "$fixtures_removed" "$finalization_hash"
   cleanup_local_temps || die 'cleanup failed'
   printf '%s\n' \
     'voice-step.status=ok' \
@@ -424,28 +621,43 @@ complete_end_outcome() {
 }
 
 run_end() {
-  local cleanup_output="$1"
+  local finalization_path="$1"
+  local cleanup_output="$2"
   local remote_fixture_dir
   local automation_source
   local baseline_temp
   local post_cleanup_temp
-  local metadata_before
-  local metadata_after_baseline
-  local metadata_after_cleanup
-  local metadata_after_post_read
+  local finalization_snapshot
+  local finalization_check
+  local finalization_values
+  local outcome
+  local call_stopped
+  local automation_finalized
+  local forced_fallback_used
   local stopped_status
   local force_stop_status=0
   local quiescence_status
   local cleanup_status
+  local fixtures_removed=false
+  local -a finalization=()
+
+  snapshot_finalization_record "$finalization_path" finalization_snapshot
+  finalization_values="$(read_finalization_values "$finalization_snapshot")" ||
+    die 'invalid finalization record'
+  mapfile -t finalization <<< "$finalization_values"
+  [[ "${#finalization[@]}" == 5 ]] || die 'invalid finalization record'
+  outcome="${finalization[0]}"
+  call_stopped="${finalization[2]}"
+  automation_finalized="${finalization[3]}"
+  forced_fallback_used="${finalization[4]}"
   validate_runtime
   remote_fixture_dir="files/voice-real-room/${RUN_HASH#sha256:}"
   automation_source="$(app_artifact_path "$APP_ARTIFACT_ROOT/${RUN_HASH#sha256:}" automation-events.jsonl)"
 
-  read_automation_terminal_snapshot finalized || die 'invalid durable final evidence'
-  metadata_before="$(read_source_metadata "$automation_source")"
   read_stable_artifact "$automation_source" "$cleanup_output" baseline_temp
-  metadata_after_baseline="$(read_source_metadata "$automation_source")"
-  [[ "$metadata_before" == "$metadata_after_baseline" ]] || die 'artifact source changed'
+  python3 "$REAL_ROOM_CONTRACT" --validate-automation-finalization \
+    "$baseline_temp" "$RUN_HASH" "$COMPARISON_HASH" "$finalization_snapshot" \
+    >/dev/null 2>&1 || die 'invalid durable final evidence'
 
   PACKAGE_FORCE_STOP_OWNED=1
   adb_read shell cmd activity force-stop --user "$ANDROID_USER_ID" "$PACKAGE" \
@@ -456,32 +668,29 @@ run_end() {
     stopped_status=$?
   fi
   case "$stopped_status" in
-    0)
-      if (( force_stop_status != 0 )); then
-        complete_failed_end_step "$cleanup_output" true false true
-        return
-      fi
-      ;;
+    0) ;;
     1)
       PACKAGE_FORCE_STOP_OWNED=0
-      complete_end_outcome "$cleanup_output" product_failure true false true
+      [[ "$outcome" != complete ]] || die 'complete cleanup failed'
+      snapshot_finalization_record "$finalization_path" finalization_check
+      cmp -s -- "$finalization_snapshot" "$finalization_check" ||
+        die 'finalization record changed'
+      complete_end_outcome "$cleanup_output" "$finalization_snapshot" \
+        "$outcome" "$call_stopped" "$automation_finalized" false
       return
       ;;
-    *)
-      if classify_device_access; then
-        die 'ambiguous package stopped-state readback'
-      else
-        case "$?" in
-          1)
-            complete_end_outcome "$cleanup_output" infrastructure_interruption \
-              true false true
-            return
-            ;;
-          *) die 'ambiguous package stopped-state readback' ;;
-        esac
-      fi
-      ;;
+    *) die 'ambiguous package stopped-state readback' ;;
   esac
+  (( force_stop_status == 0 )) || {
+    restore_force_stopped_package || die 'package restoration failed'
+    [[ "$outcome" != complete ]] || die 'complete cleanup failed'
+    snapshot_finalization_record "$finalization_path" finalization_check
+    cmp -s -- "$finalization_snapshot" "$finalization_check" ||
+      die 'finalization record changed'
+    complete_end_outcome "$cleanup_output" "$finalization_snapshot" \
+      "$outcome" "$call_stopped" "$automation_finalized" false
+    return
+  }
   if prove_package_quiescence; then
     quiescence_status=0
   else
@@ -489,10 +698,14 @@ run_end() {
   fi
   case "$quiescence_status" in
     0) ;;
-    1) complete_failed_end_step "$cleanup_output" true false true; return ;;
-    2)
+    1|2)
       restore_force_stopped_package || die 'package restoration failed'
-      complete_end_outcome "$cleanup_output" product_failure true false true
+      [[ "$outcome" != complete ]] || die 'complete cleanup failed'
+      snapshot_finalization_record "$finalization_path" finalization_check
+      cmp -s -- "$finalization_snapshot" "$finalization_check" ||
+        die 'finalization record changed'
+      complete_end_outcome "$cleanup_output" "$finalization_snapshot" \
+        "$outcome" "$call_stopped" "$automation_finalized" false
       return
       ;;
     *) die 'ambiguous package quiescence readback' ;;
@@ -504,26 +717,27 @@ run_end() {
     cleanup_status=$?
   fi
   case "$cleanup_status" in
-    0) ;;
-    1)
-      complete_failed_end_step "$cleanup_output" true false true
-      return
-      ;;
+    0) fixtures_removed=true ;;
+    1) fixtures_removed=false ;;
     2) die 'ambiguous fixture cleanup readback' ;;
     *) die 'ambiguous fixture cleanup readback' ;;
   esac
 
-  metadata_after_cleanup="$(read_source_metadata "$automation_source")"
   read_stable_artifact "$automation_source" "$cleanup_output" post_cleanup_temp
-  metadata_after_post_read="$(read_source_metadata "$automation_source")"
-  [[ "$metadata_before" == "$metadata_after_cleanup" &&
-     "$metadata_before" == "$metadata_after_post_read" ]] || die 'artifact source changed'
   cmp -s -- "$baseline_temp" "$post_cleanup_temp" || die 'artifact source changed'
-  read_automation_terminal_snapshot finalized || die 'invalid durable final evidence'
+  python3 "$REAL_ROOM_CONTRACT" --validate-automation-finalization \
+    "$post_cleanup_temp" "$RUN_HASH" "$COMPARISON_HASH" "$finalization_snapshot" \
+    >/dev/null 2>&1 || die 'invalid durable final evidence'
   read_package_stopped_state true || die 'ambiguous package stopped-state readback'
 
   restore_force_stopped_package || die 'package restoration failed'
-  complete_end_outcome "$cleanup_output" complete true true true
+  snapshot_finalization_record "$finalization_path" finalization_check
+  cmp -s -- "$finalization_snapshot" "$finalization_check" ||
+    die 'finalization record changed'
+  [[ "$outcome" != complete || "$fixtures_removed" == true ]] ||
+    die 'complete cleanup failed'
+  complete_end_outcome "$cleanup_output" "$finalization_snapshot" \
+    "$outcome" "$call_stopped" "$automation_finalized" "$fixtures_removed"
 }
 
 wait_for_call_active() {
@@ -733,7 +947,7 @@ run_with_decoded_state() {
     inject) run_inject "$@" ;;
     interrupt) run_interrupt "$@" ;;
     status) run_status_operation "$@" ;;
-    finalize) run_finalize ;;
+    finalize) run_finalize "$@" ;;
     capture) run_capture "$@" ;;
     end) run_end "$@" ;;
     *) die 'invalid operation' ;;
@@ -801,13 +1015,16 @@ case "$operation" in
     ERROR_REPORTED=0
     ;;
   finalize)
-    parse_options '--state' "$@"
-    require_options --state
-    run_with_decoded_state finalize "${PARSED[--state]}"
+    parse_options '--state --finalization-output' "$@"
+    require_options --state --finalization-output
+    validate_absent_destination "${PARSED[--finalization-output]}" ||
+      die 'invalid finalization destination'
+    run_with_decoded_state finalize "${PARSED[--state]}" \
+      "${PARSED[--finalization-output]}"
     ;;
   capture)
-    parse_options '--state --automation-output --private-voice-output --sanitized-voice-output' "$@"
-    require_options --state --automation-output --private-voice-output --sanitized-voice-output
+    parse_options '--state --finalization --automation-output --private-voice-output --sanitized-voice-output' "$@"
+    require_options --state --finalization --automation-output --private-voice-output --sanitized-voice-output
     validate_absent_destination "${PARSED[--automation-output]}" || die 'invalid output destination'
     validate_absent_destination "${PARSED[--private-voice-output]}" || die 'invalid output destination'
     validate_absent_destination "${PARSED[--sanitized-voice-output]}" || die 'invalid output destination'
@@ -816,15 +1033,17 @@ case "$operation" in
       "${PARSED[--private-voice-output]}" \
       "${PARSED[--sanitized-voice-output]}" || die 'output destinations must be distinct'
     run_with_decoded_state capture "${PARSED[--state]}" \
+      "${PARSED[--finalization]}" \
       "${PARSED[--automation-output]}" \
       "${PARSED[--private-voice-output]}" \
       "${PARSED[--sanitized-voice-output]}"
     ;;
   end)
-    parse_options '--state --cleanup-output' "$@"
-    require_options --state --cleanup-output
+    parse_options '--state --finalization --cleanup-output' "$@"
+    require_options --state --finalization --cleanup-output
     validate_absent_destination "${PARSED[--cleanup-output]}" || die 'invalid cleanup destination'
-    run_with_decoded_state end "${PARSED[--state]}" "${PARSED[--cleanup-output]}"
+    run_with_decoded_state end "${PARSED[--state]}" \
+      "${PARSED[--finalization]}" "${PARSED[--cleanup-output]}"
     ;;
   *)
     die 'invalid operation'
