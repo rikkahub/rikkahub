@@ -526,7 +526,10 @@ sys.stdout.write(match.group(1) + "\n" + match.group(2))
   [[ "$parsed" == *$'\n'* ]] || return 2
   result_code="${parsed%%$'\n'*}"
   data="${parsed#*$'\n'}"
-  [[ "$result_code" == 0 ]] || return 3
+  if [[ "$result_code" != 0 ]]; then
+    printf '%s' "$data"
+    return 3
+  fi
   printf '%s' "$data"
 }
 
@@ -1028,14 +1031,19 @@ try:
     content = open(path, "rb").read()
 except OSError:
     raise SystemExit(2)
-if not content or len(content) > 16 * 1024 * 1024 or not content.endswith(b"\n"):
+if (
+    not content
+    or len(content) > 16 * 1024 * 1024
+    or b"\r" in content
+    or not content.endswith(b"\n")
+):
     raise SystemExit(2)
 try:
     text = content.decode("utf-8")
 except UnicodeDecodeError:
     raise SystemExit(2)
 rows = []
-for line in text.splitlines():
+for line in text[:-1].split("\n"):
     if not line:
         raise SystemExit(2)
     try:

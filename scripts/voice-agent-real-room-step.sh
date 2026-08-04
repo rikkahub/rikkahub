@@ -386,9 +386,19 @@ run_finalize() {
         die 'unexpected receiver response'
       ;;
     3)
-      complete_finalize_outcome "$finalization_output" product_failure \
-        automation_finalize_rejected true false false
-      return
+      case "$reply" in
+        $'status=rejected\nreason=call_not_stopped'|$'status=rejected\nreason=binding_mismatch')
+          complete_finalize_outcome "$finalization_output" product_failure \
+            automation_finalize_rejected true false false
+          return
+          ;;
+        $'status=error\nerror=invalid_request'|$'status=error\nerror=invalid_state'|$'status=error\nerror=runtime_failure')
+          complete_finalize_outcome "$finalization_output" product_failure \
+            automation_finalize_failed true false false
+          return
+          ;;
+        *) die 'unexpected receiver response' ;;
+      esac
       ;;
     4)
       if classify_device_access; then
@@ -429,9 +439,14 @@ run_finalize() {
     return
   fi
   mapfile -t status <<< "$status_snapshot"
-  [[ "${status[0]}" == finalized && "${status[1]}" == "$RUN_HASH" &&
-     "${status[2]}" == "$COMPARISON_HASH" &&
+  [[ "${status[1]}" == "$RUN_HASH" && "${status[2]}" == "$COMPARISON_HASH" &&
      "${status[3]}" == "$TRANSPORT_EXPECTED" ]] || die 'finalized status mismatch'
+  if [[ "${status[0]}" == active ]]; then
+    complete_finalize_outcome "$finalization_output" product_failure \
+      automation_finalize_failed true false false
+    return
+  fi
+  [[ "${status[0]}" == finalized ]] || die 'finalized status mismatch'
   if read_automation_terminal_snapshot finalized; then
     terminal_status=0
   else

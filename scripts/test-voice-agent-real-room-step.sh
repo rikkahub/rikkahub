@@ -1026,6 +1026,24 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
                 "validated=" + ("false" if os.environ.get("FAKE_ADB_VALIDATED_FALSE") == "1" else "true"),
             ]
         )
+        post_finalize_status = os.environ.get("FAKE_ADB_POST_FINALIZE_STATUS")
+        if state.get("run_finalized_recorded") and post_finalize_status:
+            if post_finalize_status == "active":
+                data = data.replace("run_state=finalized", "run_state=active", 1)
+            elif post_finalize_status == "idle":
+                data = "\n".join([
+                    "status=ok", "action=status", "run_state=idle",
+                    "run_hash=none", "comparison_hash=none",
+                    "requested_transport=none", f"event_count={status_event_count}",
+                    f"network={status_network}", "validated=true",
+                ])
+            elif post_finalize_status == "wrong-binding":
+                data = data.replace("run_state=finalized", "run_state=active", 1)
+                data = data.replace(state["run_hash"], hash_value("c"), 1)
+            elif post_finalize_status == "malformed":
+                data = data.replace("run_state=finalized", "run_state=unknown", 1)
+            else:
+                raise SystemExit(2)
         complete(0, data)
         raise SystemExit(0)
     if action.endswith(".PREPARE"):
@@ -1040,6 +1058,10 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
     elif action.endswith(".FINALIZE_BOUND"):
         if os.environ.get("FAKE_ADB_FAIL_FINALIZE") == "1":
             raise SystemExit(1)
+        finalize_nonzero_data = os.environ.get("FAKE_ADB_FINALIZE_NONZERO_DATA")
+        if finalize_nonzero_data is not None:
+            complete(1, finalize_nonzero_data)
+            raise SystemExit(0)
         if (
             values.get("run_hash") != state["run_hash"]
             or values.get("comparison_hash") != state["comparison_hash"]
@@ -1366,6 +1388,8 @@ PY
   unset FAKE_ADB_CAPTURE_CORRUPTION FAKE_ADB_MUTATE_CAPTURE_SOURCE_AFTER_READ
   unset FAKE_ADB_REPLACE_CAPTURE_SOURCE_AFTER_READ FAKE_ADB_CALL_STOP_FAILED
   unset FAKE_ADB_REJECT_FINALIZE FAKE_ADB_FAIL_FINALIZE
+  unset FAKE_ADB_FINALIZE_NONZERO_DATA
+  unset FAKE_ADB_POST_FINALIZE_STATUS
   unset FAKE_ADB_DEVICE_LOST_ON_FORCE_STOP FAKE_ADB_CAPTURE_CRLF
   unset FAKE_ADB_DEVICE_LOST_AFTER_FINALIZE FAKE_ADB_ROUTE_LOST_AFTER_FINALIZE
   unset FAKE_ADB_MALFORMED_AFTER_FINALIZE
@@ -3582,6 +3606,17 @@ assert state["automation_artifact_reads"] >= 3
 PY
   pass
 
+  reset_fake
+  activate_fake_run
+  rm -f -- "$state" "$finalization"
+  write_valid_state "$state"
+  export FAKE_ADB_CAPTURE_CRLF=automation
+  run_helper finalize --state "$state" --finalization-output "$finalization"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$finalization" ]] ||
+    fail "finalize-CRLF test: CR-bearing terminal evidence published a record"
+  assert_private_output_absent
+  pass
+
   local case_name outcome reason call_stopped automation_finalized fallback
   for case_name in \
     bound-rejected stop-timeout call-stop-failed persistence-drain \
@@ -3656,6 +3691,86 @@ PY
   assert_finalization_record "$finalization" product_failure automation_finalize_rejected true false false
   assert_private_output_absent
   pass
+
+  local finalize_reply_case expected_finalize_reason
+  for finalize_reply_case in \
+    rejected-call-not-stopped rejected-binding-mismatch \
+    error-invalid-request error-invalid-state error-runtime-failure; do
+    reset_fake
+    activate_fake_run
+    rm -f -- "$state" "$finalization"
+    write_valid_state "$state"
+    case "$finalize_reply_case" in
+      rejected-call-not-stopped)
+        export FAKE_ADB_FINALIZE_NONZERO_DATA=$'status=rejected\nreason=call_not_stopped'
+        expected_finalize_reason=automation_finalize_rejected
+        ;;
+      rejected-binding-mismatch)
+        export FAKE_ADB_FINALIZE_NONZERO_DATA=$'status=rejected\nreason=binding_mismatch'
+        expected_finalize_reason=automation_finalize_rejected
+        ;;
+      error-invalid-request)
+        export FAKE_ADB_FINALIZE_NONZERO_DATA=$'status=error\nerror=invalid_request'
+        expected_finalize_reason=automation_finalize_failed
+        ;;
+      error-invalid-state)
+        export FAKE_ADB_FINALIZE_NONZERO_DATA=$'status=error\nerror=invalid_state'
+        expected_finalize_reason=automation_finalize_failed
+        ;;
+      error-runtime-failure)
+        export FAKE_ADB_FINALIZE_NONZERO_DATA=$'status=error\nerror=runtime_failure'
+        expected_finalize_reason=automation_finalize_failed
+        ;;
+    esac
+    run_helper finalize --state "$state" --finalization-output "$finalization"
+    assert_exact_output $'voice-step.status=ok\nvoice-step.operation=finalize\nvoice-step.outcome=product_failure'
+    assert_finalization_record "$finalization" product_failure \
+      "$expected_finalize_reason" true false false
+    pass
+  done
+
+  local malformed_finalize_reply
+  for malformed_finalize_reply in \
+    $'status=rejected\nreason=unknown' \
+    $'status=error\nerror=unknown' \
+    $'status=rejected\nreason=call_not_stopped\nextra=true' \
+    $'status=ok\naction=finalize'; do
+    reset_fake
+    activate_fake_run
+    rm -f -- "$state" "$finalization"
+    write_valid_state "$state"
+    export FAKE_ADB_FINALIZE_NONZERO_DATA="$malformed_finalize_reply"
+    run_helper finalize --state "$state" --finalization-output "$finalization"
+    [[ "$RUN_STATUS" -ne 0 && ! -e "$finalization" ]] ||
+      fail "finalize-resultData test: malformed nonzero reply published a record"
+    assert_private_output_absent
+    pass
+  done
+
+  reset_fake
+  activate_fake_run
+  rm -f -- "$state" "$finalization"
+  write_valid_state "$state"
+  export FAKE_ADB_POST_FINALIZE_STATUS=active
+  run_helper finalize --state "$state" --finalization-output "$finalization"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=finalize\nvoice-step.outcome=product_failure'
+  assert_finalization_record "$finalization" product_failure \
+    automation_finalize_failed true false false
+  pass
+
+  local unclassifiable_post_finalize_status
+  for unclassifiable_post_finalize_status in idle wrong-binding malformed; do
+    reset_fake
+    activate_fake_run
+    rm -f -- "$state" "$finalization"
+    write_valid_state "$state"
+    export FAKE_ADB_POST_FINALIZE_STATUS="$unclassifiable_post_finalize_status"
+    run_helper finalize --state "$state" --finalization-output "$finalization"
+    [[ "$RUN_STATUS" -ne 0 && ! -e "$finalization" ]] ||
+      fail "finalize-post-accept status test: $unclassifiable_post_finalize_status published"
+    assert_private_output_absent
+    pass
+  done
 
   local fallback_failure expected_reason expected_fallback
   for fallback_failure in device-loss malformed-quiescence restoration-failure; do
@@ -4005,6 +4120,76 @@ PY
   [[ "$RUN_STATUS" -ne 0 && ! -s "$ADB_LOG" ]] ||
     fail "end-parser test: missing finalization reached device access"
   pass
+
+  local infrastructure_reason terminal_prefix
+  for infrastructure_reason in device_unavailable adb_route_unavailable; do
+    for terminal_prefix in none stopped finalized; do
+      rm -f -- "$cleanup_output" "$state" "$finalization"
+      reset_fake
+      case "$terminal_prefix" in
+        none)
+          activate_fake_run
+          ;;
+        stopped)
+          activate_fake_run
+          record_fake_call_stop
+          ;;
+        finalized)
+          finalize_fake_run false
+          ;;
+      esac
+      write_valid_state "$state"
+      write_finalization "$finalization" infrastructure_interruption \
+        "$infrastructure_reason" false false false
+      run_helper end --state "$state" --finalization "$finalization" \
+        --cleanup-output "$cleanup_output"
+      assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=infrastructure_interruption'
+      if ! python3 - "$cleanup_output" <<'PY'
+import json
+import sys
+
+cleanup = json.load(open(sys.argv[1], encoding="utf-8"))
+assert cleanup["outcome"] == "infrastructure_interruption"
+assert cleanup["callStopped"] is False
+assert cleanup["automationFinalized"] is False
+assert cleanup["fixturesRemoved"] is True
+PY
+      then
+        fail "end-infrastructure-prefix test: cleanup changed the false/false tuple"
+      fi
+      pass
+    done
+  done
+
+  local contradictory_infrastructure_prefix
+  for contradictory_infrastructure_prefix in failed-stop finalized-without-stop event-after-finalized; do
+    rm -f -- "$cleanup_output" "$state" "$finalization"
+    reset_fake
+    case "$contradictory_infrastructure_prefix" in
+      failed-stop)
+        activate_fake_run
+        record_fake_call_stop
+        export FAKE_ADB_CALL_STOP_FAILED=1
+        ;;
+      finalized-without-stop)
+        finalize_fake_run false
+        export FAKE_ADB_MALFORMED_DURABLE_ENDING=missing-call-stopped
+        ;;
+      event-after-finalized)
+        finalize_fake_run false
+        export FAKE_ADB_MALFORMED_DURABLE_ENDING=event-after-finalized
+        ;;
+    esac
+    write_valid_state "$state"
+    write_finalization "$finalization" infrastructure_interruption \
+      device_unavailable false false false
+    run_helper end --state "$state" --finalization "$finalization" \
+      --cleanup-output "$cleanup_output"
+    [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
+      fail "end-infrastructure-prefix test: $contradictory_infrastructure_prefix published"
+    assert_private_output_absent
+    pass
+  done
 
   reset_fake
   finalize_fake_run true

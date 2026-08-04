@@ -1196,6 +1196,25 @@ def _validate_terminal_order(
         len(stopped_events) <= 1 and len(finalized) <= 1,
         "automation_terminal_order",
     )
+    if finalization["outcome"] == "infrastructure_interruption":
+        _require(
+            (not stopped_events and not finalized)
+            or (
+                len(stopped_events) == 1
+                and len(stopped) == 1
+                and not finalized
+                and stopped[0] == len(automation) - 1
+            )
+            or (
+                len(stopped_events) == 1
+                and len(stopped) == 1
+                and len(finalized) == 1
+                and stopped[0] + 1 == finalized[0]
+                and finalized[0] == len(automation) - 1
+            ),
+            "automation_terminal_order",
+        )
+        return
     if finalization["callStopped"]:
         _require(
             len(stopped_events) == 1 and len(stopped) == 1,
