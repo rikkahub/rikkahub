@@ -596,11 +596,26 @@ parse_status_data() {
     "$event_count" "$network" "$validated"
 }
 
-read_status() {
+read_status_snapshot() {
+  local output
   local data
-  data="$(broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.STATUS")" ||
-    die 'unexpected status response'
-  parse_status_data "$data" || die 'unexpected status response'
+  local parse_status
+  output="$(adb_read shell am broadcast --user "$ANDROID_USER_ID" \
+    -n "$PACKAGE/$CONTROL_RECEIVER" -a "$CONTROL_ACTION_PREFIX.STATUS" 2>/dev/null)" ||
+    return 3
+  if data="$(parse_ordered_broadcast_output "$output")"; then
+    parse_status=0
+  else
+    parse_status=$?
+  fi
+  (( parse_status == 0 )) || return 2
+  parse_status_data "$data" || return 2
+}
+
+read_status() {
+  local snapshot
+  snapshot="$(read_status_snapshot)" || die 'unexpected status response'
+  printf '%s' "$snapshot"
 }
 
 ensure_device_and_package() {
@@ -1383,22 +1398,35 @@ set -eu
 first=$1
 second=$2
 third=$3
-for path in "$first" "$second" "$third"; do
-  [ -f "$path" ] && [ ! -L "$path" ] && [ "$(stat -c %a "$path")" = 600 ] && \
-    [ "$(stat -c %h "$path")" = 1 ] || exit 1
-done
+name_metadata() {
+  LC_ALL=C stat -c "%F|%h|%u|%a|%d|%i|%s|%y|%z" "$1"
+}
+descriptor_metadata() {
+  LC_ALL=C stat -Lc "%F|%h|%u|%a|%d|%i|%s|%y|%z" "$1"
+}
+validate_name_metadata() {
+  old_ifs=$IFS
+  IFS="|"
+  set -- $1
+  IFS=$old_ifs
+  [ "$#" = 9 ] && [ "$1" = "regular file" ] && [ "$2" = 1 ] &&
+    [ "$4" = 600 ] || return 1
+  case "$2:$3:$5:$6:$7" in
+    ""|*[!0-9:]*) return 1 ;;
+  esac
+}
+first_before=$(name_metadata "$first") || exit 1
+second_before=$(name_metadata "$second") || exit 1
+third_before=$(name_metadata "$third") || exit 1
+validate_name_metadata "$first_before" || exit 1
+validate_name_metadata "$second_before" || exit 1
+validate_name_metadata "$third_before" || exit 1
 exec 3< "$first"
 exec 4< "$second"
 exec 5< "$third"
-metadata() {
-  LC_ALL=C stat -Lc "%F|%h|%u|%a|%d|%i|%s|%y|%z" "$1"
-}
-first_before=$(metadata /proc/self/fd/3) || exit 1
-second_before=$(metadata /proc/self/fd/4) || exit 1
-third_before=$(metadata /proc/self/fd/5) || exit 1
-[ "$(metadata "$first")" = "$first_before" ] || exit 1
-[ "$(metadata "$second")" = "$second_before" ] || exit 1
-[ "$(metadata "$third")" = "$third_before" ] || exit 1
+[ "$(descriptor_metadata /proc/self/fd/3)" = "$first_before" ] || exit 1
+[ "$(descriptor_metadata /proc/self/fd/4)" = "$second_before" ] || exit 1
+[ "$(descriptor_metadata /proc/self/fd/5)" = "$third_before" ] || exit 1
 first_size=$(stat -Lc %s /proc/self/fd/3) || exit 1
 second_size=$(stat -Lc %s /proc/self/fd/4) || exit 1
 third_size=$(stat -Lc %s /proc/self/fd/5) || exit 1
@@ -1407,12 +1435,12 @@ for size in "$first_size" "$second_size" "$third_size"; do
 done
 printf "%s\n%s\n%s\n" "$first_size" "$second_size" "$third_size"
 cat /proc/self/fd/3 /proc/self/fd/4 /proc/self/fd/5 || exit 1
-[ "$(metadata /proc/self/fd/3)" = "$first_before" ] || exit 1
-[ "$(metadata /proc/self/fd/4)" = "$second_before" ] || exit 1
-[ "$(metadata /proc/self/fd/5)" = "$third_before" ] || exit 1
-[ "$(metadata "$first")" = "$first_before" ] || exit 1
-[ "$(metadata "$second")" = "$second_before" ] || exit 1
-[ "$(metadata "$third")" = "$third_before" ] || exit 1
+[ "$(descriptor_metadata /proc/self/fd/3)" = "$first_before" ] || exit 1
+[ "$(descriptor_metadata /proc/self/fd/4)" = "$second_before" ] || exit 1
+[ "$(descriptor_metadata /proc/self/fd/5)" = "$third_before" ] || exit 1
+[ "$(name_metadata "$first")" = "$first_before" ] || exit 1
+[ "$(name_metadata "$second")" = "$second_before" ] || exit 1
+[ "$(name_metadata "$third")" = "$third_before" ] || exit 1
 ' sh "$automation_source" "$private_source" "$sanitized_source" >"$bundle" 2>/dev/null ||
     die 'artifact source changed'
   python3 - "$bundle" "$automation_candidate" "$private_candidate" "$sanitized_candidate" 2>/dev/null <<'PY' || die 'artifact source invalid'

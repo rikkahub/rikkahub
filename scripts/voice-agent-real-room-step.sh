@@ -267,8 +267,8 @@ complete_finalization_failure() {
   local original_reason="$2"
   local force_status=0
   local stopped_status
-  local quiescence_status
-  local device_access
+  local reason="$original_reason"
+  local forced_fallback_used=false
   PACKAGE_FORCE_STOP_OWNED=1
   adb_read shell cmd activity force-stop --user "$ANDROID_USER_ID" "$PACKAGE" \
     </dev/null >/dev/null 2>&1 || force_status=$?
@@ -277,39 +277,30 @@ complete_finalization_failure() {
   else
     stopped_status=$?
   fi
-  case "$stopped_status" in
-    0)
-      if prove_package_quiescence; then
-        quiescence_status=0
-      else
-        quiescence_status=$?
-      fi
-      (( quiescence_status == 0 )) || die 'fallback quiescence not proven'
-      restore_force_stopped_package || die 'package restoration failed'
-      complete_finalize_outcome "$destination" product_failure \
-        forced_fallback_used false false true
-      ;;
-    1)
-      PACKAGE_FORCE_STOP_OWNED=0
-      (( force_status != 0 )) || die 'ambiguous fallback readback'
-      complete_finalize_outcome "$destination" product_failure \
-        "$original_reason" false false false
-      ;;
-    *)
-      if classify_device_access; then
-        device_access=0
-      else
-        device_access=$?
-      fi
-      case "$device_access" in
-        1) complete_finalize_outcome "$destination" infrastructure_interruption \
-             device_unavailable false false false ;;
-        3) complete_finalize_outcome "$destination" infrastructure_interruption \
-             adb_route_unavailable false false false ;;
-        *) die 'ambiguous finalization readback' ;;
-      esac
-      ;;
-  esac
+  if (( force_status == 0 || stopped_status == 0 )); then
+    reason=forced_fallback_used
+    forced_fallback_used=true
+  fi
+  if (( stopped_status == 1 )); then
+    PACKAGE_FORCE_STOP_OWNED=0
+  fi
+
+  # Product classification is monotonic. Publish it before best-effort
+  # quiescence and restoration so later access failures cannot erase or
+  # upgrade the already-classifiable outcome.
+  publish_finalization_record "$destination" product_failure "$reason" \
+    false false "$forced_fallback_used"
+  if (( stopped_status == 0 )); then
+    prove_package_quiescence >/dev/null 2>&1 || true
+  fi
+  if (( PACKAGE_FORCE_STOP_OWNED == 1 )); then
+    restore_force_stopped_package >/dev/null 2>&1 || true
+  fi
+  cleanup_local_temps || die 'cleanup failed'
+  printf '%s\n' \
+    'voice-step.status=ok' \
+    'voice-step.operation=finalize' \
+    'voice-step.outcome=product_failure'
 }
 
 run_finalize() {
@@ -320,6 +311,7 @@ run_finalize() {
   local reply
   local reply_status
   local status_snapshot
+  local status_status
   local terminal_status
   local device_access
   local -a status=()
@@ -405,9 +397,9 @@ run_finalize() {
       else
         case "$?" in
           1) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
-               device_unavailable true false false ;;
+               device_unavailable false false false ;;
           3) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
-               adb_route_unavailable true false false ;;
+               adb_route_unavailable false false false ;;
           *) die 'ambiguous finalization readback' ;;
         esac
       fi
@@ -415,7 +407,27 @@ run_finalize() {
       ;;
     *) die 'unexpected receiver response' ;;
   esac
-  status_snapshot="$(read_status)"
+  if status_snapshot="$(read_status_snapshot)"; then
+    status_status=0
+  else
+    status_status=$?
+  fi
+  if (( status_status != 0 )); then
+    (( status_status == 3 )) || die 'unexpected status response'
+    if classify_device_access; then
+      complete_finalize_outcome "$finalization_output" product_failure \
+        automation_finalize_failed true false false
+    else
+      case "$?" in
+        1) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
+             device_unavailable false false false ;;
+        3) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
+             adb_route_unavailable false false false ;;
+        *) die 'ambiguous finalization readback' ;;
+      esac
+    fi
+    return
+  fi
   mapfile -t status <<< "$status_snapshot"
   [[ "${status[0]}" == finalized && "${status[1]}" == "$RUN_HASH" &&
      "${status[2]}" == "$COMPARISON_HASH" &&
@@ -439,9 +451,9 @@ run_finalize() {
       else
         case "$?" in
           1) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
-               device_unavailable true false false ;;
+               device_unavailable false false false ;;
           3) complete_finalize_outcome "$finalization_output" infrastructure_interruption \
-               adb_route_unavailable true false false ;;
+               adb_route_unavailable false false false ;;
           *) die 'ambiguous finalization readback' ;;
         esac
       fi

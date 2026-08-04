@@ -10,6 +10,7 @@ LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
 REAL_TIMEOUT="$(command -v timeout)"
 REAL_LN="$(command -v ln)"
 REAL_RMDIR="$(command -v rmdir)"
+REAL_STAT="$(command -v stat)"
 CURRENT_UID="$(id -u)"
 TMP_DIR="$(mktemp -d)"
 chmod 700 "$TMP_DIR"
@@ -532,6 +533,8 @@ def artifact_content(path, state):
             return b""
         if os.environ.get("FAKE_ADB_INCOMPLETE_ARTIFACT") == "automation-events.jsonl":
             return content.rstrip(b"\n")
+        if os.environ.get("FAKE_ADB_CAPTURE_CRLF") == "automation":
+            return content.replace(b"\n", b"\r\n")
         return content
     if path.endswith("voice-experience-private.ndjson"):
         content = private_events().encode()
@@ -539,6 +542,8 @@ def artifact_content(path, state):
             return b""
         if os.environ.get("FAKE_ADB_INCOMPLETE_ARTIFACT") == "voice-experience-private.ndjson":
             return content.rstrip(b"\n")
+        if os.environ.get("FAKE_ADB_CAPTURE_CRLF") == "private":
+            return content.replace(b"\n", b"\r\n")
         return content
     if path.endswith("voice-experience-events.ndjson"):
         content = sanitized_events()
@@ -554,6 +559,8 @@ def artifact_content(path, state):
             return b""
         if os.environ.get("FAKE_ADB_INCOMPLETE_ARTIFACT") == "voice-experience-events.ndjson":
             return encoded.rstrip(b"\n")
+        if os.environ.get("FAKE_ADB_CAPTURE_CRLF") == "sanitized":
+            return encoded.replace(b"\n", b"\r\n")
         return encoded
     return None
 
@@ -566,11 +573,18 @@ state = load_state()
 maybe_block(argv)
 
 if argv == ["devices", "-l"]:
-    if os.environ.get("FAKE_ADB_MALFORMED_DEVICE_ENUMERATION") == "1":
+    if (
+        os.environ.get("FAKE_ADB_MALFORMED_DEVICE_ENUMERATION") == "1"
+        or state.get("malformed_after_finalize")
+    ):
         print("malformed device enumeration")
         raise SystemExit(0)
     print("List of devices attached")
-    if os.environ.get("FAKE_ADB_DEVICE_LOST") != "1" and not state.get("device_lost_after_force_stop"):
+    if (
+        os.environ.get("FAKE_ADB_DEVICE_LOST") != "1"
+        and not state.get("device_lost_after_force_stop")
+        and not state.get("device_lost_after_finalize")
+    ):
         device_state = os.environ.get("FAKE_ADB_DEVICE_ENUMERATION_STATE", "device")
         print(f'{state["serial"]} {device_state} product:phone model:Real device:real transport_id:1')
     if os.environ.get("FAKE_ADB_TWO_DEVICES") == "1":
@@ -583,7 +597,12 @@ serial = argv[1]
 command = argv[2:]
 if serial != state["serial"]:
     raise SystemExit(3)
-if state.get("device_lost_after_force_stop"):
+if (
+    state.get("device_lost_after_force_stop")
+    or state.get("device_lost_after_finalize")
+    or state.get("route_lost_after_finalize")
+    or state.get("malformed_after_finalize")
+):
     raise SystemExit(1)
 
 if len(command) > 3 and command[:3] == ["shell", "sh", "-c"] and "voice-step-service-status" in command[3]:
@@ -678,7 +697,10 @@ if command == [
     "shell", "cmd", "activity", "force-stop", "--user",
     str(state["android_user_id"]), EXPECTED_PACKAGE,
 ]:
-    if os.environ.get("FAKE_ADB_DEVICE_LOST") == "1":
+    if (
+        os.environ.get("FAKE_ADB_DEVICE_LOST") == "1"
+        or os.environ.get("FAKE_ADB_DEVICE_LOST_ON_FORCE_STOP") == "1"
+    ):
         state["device_lost_after_force_stop"] = True
         save_state(state)
         raise SystemExit(1)
@@ -1031,6 +1053,15 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
             raise SystemExit(0)
         state["automation_state"] = "finalized"
         state["run_finalized_recorded"] = True
+        state["device_lost_after_finalize"] = (
+            os.environ.get("FAKE_ADB_DEVICE_LOST_AFTER_FINALIZE") == "1"
+        )
+        state["route_lost_after_finalize"] = (
+            os.environ.get("FAKE_ADB_ROUTE_LOST_AFTER_FINALIZE") == "1"
+        )
+        state["malformed_after_finalize"] = (
+            os.environ.get("FAKE_ADB_MALFORMED_AFTER_FINALIZE") == "1"
+        )
         save_state(state)
         data = "status=ok\naction=finalize"
     elif action.endswith(".FINALIZE"):
@@ -1118,6 +1149,79 @@ if (
         )
         save_state(state)
         raise SystemExit(1)
+    preopen_replacement = os.environ.get("FAKE_ADB_PREOPEN_REPLACE_CAPTURE_SOURCE")
+    if preopen_replacement:
+        if preopen_replacement not in {"1", "2", "3"}:
+            raise SystemExit(2)
+        for remote_path, content in zip(remote_paths, contents, strict=True):
+            host_path = remote_host_path(remote_path)
+            host_path.parent.mkdir(parents=True, exist_ok=True)
+            host_path.write_bytes(content)
+            host_path.chmod(0o600)
+        target_remote = remote_paths[int(preopen_replacement) - 1]
+        target_host = remote_host_path(target_remote)
+        attacker_host = target_host.with_name(target_host.name + ".attacker")
+        attacker_host.write_bytes(contents[int(preopen_replacement) - 1])
+        attacker_host.chmod(0o600)
+        wrapper_directory = REMOTE_APP_DATA_ROOT / ".capture-race-bin"
+        wrapper_directory.mkdir(mode=0o700)
+        wrapper = wrapper_directory / "stat"
+        wrapper.write_text(
+            """#!/bin/sh
+set -eu
+output=$("$REAL_CAPTURE_STAT" "$@")
+status=$?
+printf '%s\\n' "$output"
+[ "$status" -eq 0 ] || exit "$status"
+candidate=
+for argument do candidate=$argument; done
+case "$candidate" in
+  "$CAPTURE_SOURCE_ONE"|"$CAPTURE_SOURCE_TWO"|"$CAPTURE_SOURCE_THREE") ;;
+  *) exit 0 ;;
+esac
+grep -Fqx -- "$candidate" "$CAPTURE_RACE_SEEN" 2>/dev/null ||
+  printf '%s\\n' "$candidate" >> "$CAPTURE_RACE_SEEN"
+if grep -Fqx -- "$CAPTURE_SOURCE_ONE" "$CAPTURE_RACE_SEEN" &&
+   grep -Fqx -- "$CAPTURE_SOURCE_TWO" "$CAPTURE_RACE_SEEN" &&
+   grep -Fqx -- "$CAPTURE_SOURCE_THREE" "$CAPTURE_RACE_SEEN" &&
+   [ ! -e "$CAPTURE_RACE_DONE" ]; then
+  : > "$CAPTURE_RACE_DONE"
+  mv -- "$CAPTURE_RACE_TARGET" "$CAPTURE_RACE_TARGET.original"
+  ln -s -- "$CAPTURE_RACE_ATTACKER" "$CAPTURE_RACE_TARGET"
+fi
+""",
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o700)
+        race_environment = os.environ.copy()
+        race_environment.update(
+            {
+                "PATH": str(wrapper_directory) + os.pathsep + race_environment["PATH"],
+                "REAL_CAPTURE_STAT": os.environ["REAL_STAT"],
+                "CAPTURE_SOURCE_ONE": remote_paths[0],
+                "CAPTURE_SOURCE_TWO": remote_paths[1],
+                "CAPTURE_SOURCE_THREE": remote_paths[2],
+                "CAPTURE_RACE_SEEN": str(REMOTE_APP_DATA_ROOT / ".capture-race-seen"),
+                "CAPTURE_RACE_DONE": str(REMOTE_APP_DATA_ROOT / ".capture-race-done"),
+                "CAPTURE_RACE_TARGET": target_remote,
+                "CAPTURE_RACE_ATTACKER": str(attacker_host),
+            }
+        )
+        completed = subprocess.run(
+            ["sh", "-c", exec_out_run_as_tail[2], "sh", *remote_paths],
+            cwd=REMOTE_APP_DATA_ROOT,
+            env=race_environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        state[f"capture_source_{preopen_replacement}_raced"] = "preopen-replaced"
+        save_state(state)
+        if completed.returncode != 0:
+            raise SystemExit(1)
+        sys.stdout.buffer.write(completed.stdout)
+        raise SystemExit(0)
     header = "".join(f"{len(content)}\n" for content in contents).encode()
     sys.stdout.buffer.write(header + b"".join(contents))
     raise SystemExit(0)
@@ -1172,7 +1276,7 @@ export FAKE_ADB_LOG="$ADB_LOG"
 export FAKE_TIMEOUT_LOG="$TIMEOUT_LOG"
 export FAKE_LN_LOG="$LN_LOG"
 export FAKE_ADB_STATE="$FAKE_STATE"
-export REAL_TIMEOUT REAL_LN REAL_RMDIR
+export REAL_TIMEOUT REAL_LN REAL_RMDIR REAL_STAT
 export FAKE_REMOTE_APP_DATA_ROOT="$REMOTE_APP_DATA_ROOT"
 export FAKE_RMDIR_BOUNDARY_FILE="$RMDIR_BOUNDARY_FILE"
 export VOICE_STEP_ADB_TIMEOUT_SECONDS=10
@@ -1262,6 +1366,10 @@ PY
   unset FAKE_ADB_CAPTURE_CORRUPTION FAKE_ADB_MUTATE_CAPTURE_SOURCE_AFTER_READ
   unset FAKE_ADB_REPLACE_CAPTURE_SOURCE_AFTER_READ FAKE_ADB_CALL_STOP_FAILED
   unset FAKE_ADB_REJECT_FINALIZE FAKE_ADB_FAIL_FINALIZE
+  unset FAKE_ADB_DEVICE_LOST_ON_FORCE_STOP FAKE_ADB_CAPTURE_CRLF
+  unset FAKE_ADB_DEVICE_LOST_AFTER_FINALIZE FAKE_ADB_ROUTE_LOST_AFTER_FINALIZE
+  unset FAKE_ADB_MALFORMED_AFTER_FINALIZE
+  unset FAKE_ADB_PREOPEN_REPLACE_CAPTURE_SOURCE
 }
 
 make_fixture() {
@@ -1324,6 +1432,23 @@ def identity(candidate):
 state["fixture_parent_identity"] = identity(directory.parent)
 state["fixture_directory_identity"] = identity(directory)
 temporary = path + ".active"
+with open(temporary, "w", encoding="utf-8") as handle:
+    json.dump(state, handle, separators=(",", ":"))
+os.replace(temporary, path)
+PY
+}
+
+record_fake_call_stop() {
+  python3 - "$FAKE_STATE" <<'PY'
+import json
+import os
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as handle:
+    state = json.load(handle)
+state["call_stopped_recorded"] = True
+temporary = path + ".failed-stop"
 with open(temporary, "w", encoding="utf-8") as handle:
     json.dump(state, handle, separators=(",", ":"))
 os.replace(temporary, path)
@@ -3317,6 +3442,16 @@ for value, outcome in valid:
     assert contract.canonical_json_bytes(value) == __import__("json").dumps(
         value, sort_keys=True, separators=(",", ":")
     ).encode()
+    for boolean in ("callStopped", "automationFinalized"):
+        mutation = {**value, boolean: not value[boolean]}
+        try:
+            contract.validate_finalization(mutation)
+        except contract.ContractError:
+            pass
+        else:
+            raise AssertionError(
+                f"reason/terminal tuple mutation accepted: {mutation}"
+            )
 
 invalid = [
     {**valid[0][0], "unknown": True},
@@ -3357,6 +3492,33 @@ for mutation in (
         pass
     else:
         raise AssertionError(f"cleanup promoted or unlinked finalization: {mutation}")
+
+standalone_cleanup = [
+    {**cleanup, "finalizationHash": "sha256:" + "1" * 64},
+    {**cleanup, "outcome": "product_failure", "callStopped": False,
+     "automationFinalized": False, "fixturesRemoved": False,
+     "finalizationHash": "sha256:" + "2" * 64},
+    {**cleanup, "outcome": "product_failure", "callStopped": True,
+     "automationFinalized": False, "fixturesRemoved": True,
+     "finalizationHash": "sha256:" + "3" * 64},
+    {**cleanup, "outcome": "infrastructure_interruption", "callStopped": False,
+     "automationFinalized": False, "fixturesRemoved": False,
+     "finalizationHash": "sha256:" + "4" * 64},
+]
+for value in standalone_cleanup:
+    assert contract.validate_cleanup(value) == value
+for mutation in (
+    {**standalone_cleanup[0], "fixturesRemoved": False},
+    {**standalone_cleanup[1], "automationFinalized": True, "callStopped": True},
+    {**standalone_cleanup[3], "callStopped": True},
+    {**standalone_cleanup[3], "automationFinalized": True, "callStopped": True},
+):
+    try:
+        contract.validate_cleanup(mutation)
+    except contract.ContractError:
+        pass
+    else:
+        raise AssertionError(f"standalone cleanup invariant mutation accepted: {mutation}")
 PY
   pass
 
@@ -3495,6 +3657,67 @@ PY
   assert_private_output_absent
   pass
 
+  local fallback_failure expected_reason expected_fallback
+  for fallback_failure in device-loss malformed-quiescence restoration-failure; do
+    reset_fake
+    activate_fake_run
+    rm -f -- "$state" "$finalization"
+    write_valid_state "$state"
+    export FAKE_ADB_FAIL_END=1
+    case "$fallback_failure" in
+      device-loss)
+        export FAKE_ADB_DEVICE_LOST_ON_FORCE_STOP=1
+        expected_reason=bound_call_rejected expected_fallback=false
+        ;;
+      malformed-quiescence)
+        export FAKE_ADB_MALFORMED_QUIESCENCE_AFTER_FORCE_STOP=ps-header
+        expected_reason=forced_fallback_used expected_fallback=true
+        ;;
+      restoration-failure)
+        export FAKE_ADB_FAIL_RESTORATION=1
+        expected_reason=forced_fallback_used expected_fallback=true
+        ;;
+    esac
+    run_helper finalize --state "$state" --finalization-output "$finalization"
+    [[ -f "$finalization" ]] ||
+      fail "finalize-monotonic-product test: $fallback_failure suppressed the record"
+    assert_finalization_record "$finalization" product_failure "$expected_reason" \
+      false false "$expected_fallback"
+    assert_private_output_absent
+    pass
+  done
+
+  local post_finalize_loss expected_infrastructure_reason
+  for post_finalize_loss in device route; do
+    reset_fake
+    activate_fake_run
+    rm -f -- "$state" "$finalization"
+    write_valid_state "$state"
+    if [[ "$post_finalize_loss" == device ]]; then
+      export FAKE_ADB_DEVICE_LOST_AFTER_FINALIZE=1
+      expected_infrastructure_reason=device_unavailable
+    else
+      export FAKE_ADB_ROUTE_LOST_AFTER_FINALIZE=1
+      expected_infrastructure_reason=adb_route_unavailable
+    fi
+    run_helper finalize --state "$state" --finalization-output "$finalization"
+    assert_exact_output $'voice-step.status=ok\nvoice-step.operation=finalize\nvoice-step.outcome=infrastructure_interruption'
+    assert_finalization_record "$finalization" infrastructure_interruption \
+      "$expected_infrastructure_reason" false false false
+    pass
+  done
+
+  reset_fake
+  activate_fake_run
+  rm -f -- "$state" "$finalization"
+  write_valid_state "$state"
+  export FAKE_ADB_MALFORMED_AFTER_FINALIZE=1
+  run_helper finalize --state "$state" --finalization-output "$finalization"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$finalization" ]] ||
+    fail "finalize-post-accept classification test: malformed evidence published"
+  assert_private_output_absent
+  pass
+
   reset_fake
   activate_fake_run
   rm -f -- "$state" "$finalization"
@@ -3550,11 +3773,6 @@ bundles = [command for command in commands if any(b"voice-step-capture-bundle" i
 assert len(bundles) == 1
 for name in (b"automation-events.jsonl", b"voice-experience-private.ndjson", b"voice-experience-events.ndjson"):
     assert any(value.endswith(name) for value in bundles[0])
-script = next(value for value in bundles[0] if b"voice-step-capture-bundle" in value)
-for descriptor, source in ((b"3", b"first"), (b"4", b"second"), (b"5", b"third")):
-    assert b"exec " + descriptor + b'< "$' + source + b'"' in script
-    assert script.count(b"metadata /proc/self/fd/" + descriptor) >= 2
-    assert script.count(b'metadata "$' + source + b'"') >= 2
 automation = open(sys.argv[2], "rb").read()
 private = open(sys.argv[3], "rb").read()
 sanitized = open(sys.argv[4], "rb").read()
@@ -3617,6 +3835,24 @@ PY
     pass
   done
 
+  local crlf_source
+  for crlf_source in automation private sanitized; do
+    rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
+    reset_fake
+    finalize_fake_run false
+    write_valid_state "$state"
+    write_finalization "$finalization"
+    export FAKE_ADB_CAPTURE_CRLF="$crlf_source"
+    run_helper capture --state "$state" --finalization "$finalization" \
+      --automation-output "$automation" \
+      --private-voice-output "$private" \
+      --sanitized-voice-output "$sanitized"
+    [[ "$RUN_STATUS" -ne 0 && ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
+      fail "capture-CRLF test: $crlf_source CR byte reached publication"
+    assert_no_capture_temps "$output_dir"
+    pass
+  done
+
   local race_mode source_number
   for race_mode in mutate replace; do
     for source_number in 1 2 3; do
@@ -3639,6 +3875,24 @@ PY
       assert_no_capture_temps "$output_dir"
       pass
     done
+  done
+
+
+  for source_number in 1 2 3; do
+    rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
+    reset_fake
+    finalize_fake_run false
+    write_valid_state "$state"
+    write_finalization "$finalization"
+    export FAKE_ADB_PREOPEN_REPLACE_CAPTURE_SOURCE="$source_number"
+    run_helper capture --state "$state" --finalization "$finalization" \
+      --automation-output "$automation" \
+      --private-voice-output "$private" \
+      --sanitized-voice-output "$sanitized"
+    [[ "$RUN_STATUS" -ne 0 && ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
+      fail "capture-preopen-race test: source $source_number replacement was published"
+    assert_no_capture_temps "$output_dir"
+    pass
   done
 
   rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
@@ -3667,6 +3921,32 @@ PY
      "$(exact_command_count -s DEVICE_SECRET_123 exec-out ps -A -n -o UID,PID,PPID,STAT,NAME)" == 2 &&
      "$(exact_command_count -s DEVICE_SECRET_123 shell cmd activity get-isolated-pids "$CURRENT_UID")" == 2 ]] ||
     fail "capture-dirty-quiescence test: forced product capture lacked independent quiescence"
+  pass
+
+  rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
+  reset_fake
+  activate_fake_run
+  record_fake_call_stop
+  write_valid_state "$state"
+  write_finalization "$finalization" product_failure forced_fallback_used false false true
+  export FAKE_ADB_CALL_STOP_FAILED=1
+  run_helper capture --state "$state" --finalization "$finalization" \
+    --automation-output "$automation" --private-voice-output "$private" \
+    --sanitized-voice-output "$sanitized"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=capture\nvoice-step.artifacts=published'
+  pass
+
+  rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
+  reset_fake
+  activate_fake_run
+  record_fake_call_stop
+  write_valid_state "$state"
+  write_finalization "$finalization" product_failure forced_fallback_used false false true
+  run_helper capture --state "$state" --finalization "$finalization" \
+    --automation-output "$automation" --private-voice-output "$private" \
+    --sanitized-voice-output "$sanitized"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$automation" && ! -e "$private" && ! -e "$sanitized" ]] ||
+    fail "capture-successful-stop-fallback test: contradictory evidence was published"
   pass
 
   rm -f -- "$automation" "$private" "$sanitized" "$state" "$finalization"
@@ -3854,6 +4134,43 @@ assert open(sys.argv[1], "rb").read() == json.dumps(
 PY
   then
     fail "end-dirty-linkage test: cleanup promoted forced-fallback finalization"
+  fi
+  pass
+
+  rm -f -- "$cleanup_output" "$state" "$finalization"
+  reset_fake
+  activate_fake_run
+  record_fake_call_stop
+  write_valid_state "$state"
+  write_finalization "$finalization" product_failure forced_fallback_used false false true
+  run_helper end --state "$state" --finalization "$finalization" \
+    --cleanup-output "$cleanup_output"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
+    fail "end-successful-stop-fallback test: contradictory cleanup was published"
+  pass
+
+  rm -f -- "$cleanup_output" "$state" "$finalization"
+  reset_fake
+  activate_fake_run
+  record_fake_call_stop
+  write_valid_state "$state"
+  write_finalization "$finalization" product_failure forced_fallback_used false false true
+  export FAKE_ADB_CALL_STOP_FAILED=1
+  run_helper end --state "$state" --finalization "$finalization" \
+    --cleanup-output "$cleanup_output"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=end\nvoice-step.outcome=product_failure'
+  if ! python3 - "$cleanup_output" <<'PY'
+import json
+import sys
+
+cleanup = json.load(open(sys.argv[1], encoding="utf-8"))
+assert cleanup["outcome"] == "product_failure"
+assert cleanup["callStopped"] is False
+assert cleanup["automationFinalized"] is False
+assert cleanup["fixturesRemoved"] is True
+PY
+  then
+    fail "end-failed-stop-fallback test: cleanup changed the dirty terminal tuple"
   fi
   pass
 

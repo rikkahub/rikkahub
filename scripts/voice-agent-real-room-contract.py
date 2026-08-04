@@ -160,20 +160,18 @@ CLEANUP_KEYS = {
     "fixturesRemoved",
     "finalizationHash",
 }
-PRODUCT_REASONS = frozenset(
-    {
-        "bound_call_rejected",
-        "call_stop_failed",
-        "call_stop_timeout",
-        "persistence_drain_failed",
-        "automation_finalize_rejected",
-        "automation_finalize_failed",
-        "forced_fallback_used",
-    }
-)
-INFRASTRUCTURE_REASONS = frozenset(
-    {"device_unavailable", "adb_route_unavailable"}
-)
+FINALIZATION_REASON_TERMINALS = {
+    "complete": ("complete", True, True, False),
+    "bound_call_rejected": ("product_failure", False, False, False),
+    "call_stop_failed": ("product_failure", False, False, False),
+    "call_stop_timeout": ("product_failure", False, False, False),
+    "persistence_drain_failed": ("product_failure", False, False, False),
+    "automation_finalize_rejected": ("product_failure", True, False, False),
+    "automation_finalize_failed": ("product_failure", True, False, False),
+    "forced_fallback_used": ("product_failure", False, False, True),
+    "device_unavailable": ("infrastructure_interruption", False, False, False),
+    "adb_route_unavailable": ("infrastructure_interruption", False, False, False),
+}
 PRIVATE_BASE = {"version", "voiceSessionId", "eventId", "kind", "observedAt"}
 PRIVATE_JOB = set(JOB_IDENTITY_FIELDS) - {"voiceSessionHash"}
 PRIVATE_SCHEMAS = {
@@ -293,27 +291,11 @@ def validate_finalization(value: object) -> dict[str, object]:
     call_stopped = finalization["callStopped"]
     automation_finalized = finalization["automationFinalized"]
     forced_fallback = finalization["forcedFallbackUsed"]
-    _require(not automation_finalized or call_stopped, "finalization")
-    if outcome == "complete":
-        _require(
-            reason == "complete"
-            and call_stopped
-            and automation_finalized
-            and not forced_fallback,
-            "finalization",
-        )
-    elif outcome == "product_failure":
-        _require(reason in PRODUCT_REASONS, "finalization")
-        _require(
-            forced_fallback == (reason == "forced_fallback_used"),
-            "finalization",
-        )
-        if forced_fallback:
-            _require(not call_stopped and not automation_finalized, "finalization")
-    elif outcome == "infrastructure_interruption":
-        _require(reason in INFRASTRUCTURE_REASONS and not forced_fallback, "finalization")
-    else:
-        raise ContractError("finalization")
+    _require(
+        FINALIZATION_REASON_TERMINALS.get(reason)
+        == (outcome, call_stopped, automation_finalized, forced_fallback),
+        "finalization",
+    )
     return finalization
 
 
@@ -337,6 +319,21 @@ def validate_cleanup(
         and (not cleanup["automationFinalized"] or cleanup["callStopped"]),
         "cleanup",
     )
+    outcome = cleanup["outcome"]
+    if outcome == "complete":
+        _require(
+            cleanup["callStopped"]
+            and cleanup["automationFinalized"]
+            and cleanup["fixturesRemoved"],
+            "cleanup",
+        )
+    elif outcome == "product_failure":
+        _require(not cleanup["automationFinalized"], "cleanup")
+    else:
+        _require(
+            not cleanup["callStopped"] and not cleanup["automationFinalized"],
+            "cleanup",
+        )
     if finalization is not None:
         validated_finalization = validate_finalization(finalization)
         _require(
@@ -797,13 +794,18 @@ def _parse_pairs(line: str) -> tuple[list[str], dict[str, Any]]:
 
 
 def _text_lines(content: bytes) -> list[str]:
-    if not content or len(content) > MAX_ARTIFACT_BYTES or not content.endswith(b"\n"):
+    if (
+        not content
+        or len(content) > MAX_ARTIFACT_BYTES
+        or b"\r" in content
+        or not content.endswith(b"\n")
+    ):
         raise ContractError("evidence_envelope")
     try:
         text = content.decode("utf-8")
     except UnicodeDecodeError as error:
         raise ContractError("evidence_envelope") from error
-    lines = text.splitlines()
+    lines = text[:-1].split("\n")
     if not lines or any(not line for line in lines):
         raise ContractError("evidence_envelope")
     return lines
@@ -1204,6 +1206,18 @@ def _validate_terminal_order(
             len(stopped_events) == 1
             and automation[stopped_events[0]].get("succeeded") is False
             and stopped_events[0] == len(automation) - 1,
+            "automation_terminal_order",
+        )
+    elif finalization["reason"] == "forced_fallback_used":
+        _require(
+            not stopped
+            and (
+                not stopped_events
+                or (
+                    automation[stopped_events[0]].get("succeeded") is False
+                    and stopped_events[0] == len(automation) - 1
+                )
+            ),
             "automation_terminal_order",
         )
     else:
