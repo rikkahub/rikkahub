@@ -2313,6 +2313,29 @@ PY
   pass
 }
 
+run_fixture_bounds_tests() {
+  local state="$TMP_DIR/fixture-bounds-state.json"
+  local fixture="$TMP_DIR/fixture-bounds.pcm"
+  local size
+  for size in 0 1 16777216 16777217; do
+    reset_fake
+    activate_fake_run
+    write_valid_state "$state"
+    : > "$fixture"
+    chmod 600 "$fixture"
+    truncate -s "$size" "$fixture"
+    run_helper inject --state "$state" --fixture "$fixture" --role request
+    if [[ "$size" == 1 || "$size" == 16777216 ]]; then
+      [[ "$RUN_STATUS" -eq 0 ]] || fail "fixture-bounds test: accepted size $size was rejected"
+    else
+      [[ "$RUN_STATUS" -ne 0 ]] || fail "fixture-bounds test: invalid size $size was accepted"
+      [[ ! -s "$ADB_LOG" ]] || fail "fixture-bounds test: invalid size $size reached fake device"
+    fi
+    rm -f -- "$state" "$fixture"
+    pass
+  done
+}
+
 run_host_lock_test() {
   local state="$TMP_DIR/host-lock-state.json"
   local first_fixture="$TMP_DIR/host-lock-first.pcm"
@@ -3221,7 +3244,7 @@ if [[ "$#" -eq 0 ]]; then
 fi
 for requested in "${SELECTED_OPERATIONS[@]}"; do
   case "$requested" in
-    preflight|start|inject|interrupt|status|finalize|capture|end) ;;
+    preflight|start|inject|interrupt|status|finalize|capture|end|fixture-bounds) ;;
     *) fail "test filter must name a real-room operation" ;;
   esac
 done
@@ -3237,6 +3260,7 @@ if selected inject; then
   run_inject_tests
   run_host_lock_test
 fi
+selected fixture-bounds && run_fixture_bounds_tests
 selected interrupt && run_interrupt_tests
 selected status && run_status_tests
 selected finalize && run_finalize_tests

@@ -10,6 +10,7 @@ import java.io.FileDescriptor
 import java.security.MessageDigest
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureFixture
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureFixtureArming
+import me.rerere.rikkahub.voiceagent.audio.requireVoiceCaptureFixtureSize
 
 private val VERIFIED_PCM_OPEN_FLAGS: Int =
     OsConstants.O_RDONLY or OsConstants.O_CLOEXEC or OsConstants.O_NOFOLLOW or OsConstants.O_NONBLOCK
@@ -145,7 +146,13 @@ class VoiceCaptureFixtureDebugReceiver internal constructor(
     ): VoiceCaptureFixture {
         require((expectedSize == -1L) == (expectedSha256 == null))
         val pcm16 = if (expectedSize == -1L) {
-            resolvePcmFile(context, path).readBytes()
+            resolvePcmFile(context, path).let { file ->
+                VoiceCaptureFixture.readBounded(
+                    file.inputStream(),
+                    requireVoiceCaptureFixtureSize(file.length()),
+                    null,
+                )
+            }
         } else {
             readVerifiedPcm(context, path, expectedSize, expectedSha256)
         }
@@ -163,7 +170,7 @@ class VoiceCaptureFixtureDebugReceiver internal constructor(
         expectedSize: Long,
         expectedSha256: String?,
     ): ByteArray {
-        require(expectedSize in 1..Int.MAX_VALUE.toLong())
+        requireVoiceCaptureFixtureSize(expectedSize)
         require(expectedSha256?.matches(SHA256_PATTERN) == true)
         val path = rawPath.trim()
         require(path.isNotEmpty())
@@ -179,6 +186,7 @@ class VoiceCaptureFixtureDebugReceiver internal constructor(
             val stat = descriptor.stat()
             require((stat.mode and OsConstants.S_IFMT) == OsConstants.S_IFREG)
             require(stat.linkCount == 1L)
+            requireVoiceCaptureFixtureSize(stat.size)
             require(stat.size == expectedSize)
             ByteArray(expectedSize.toInt()).also { snapshot ->
                 var offset = 0

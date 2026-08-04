@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.voiceagent.audio
 
+import java.io.InputStream
+import java.security.MessageDigest
 import java.util.ArrayDeque
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -16,6 +18,13 @@ internal sealed interface VoiceCaptureSource : AutoCloseable {
         override fun close() = Unit
     }
 }
+
+internal const val VOICE_CAPTURE_FIXTURE_MAX_BYTES = 16_777_216L
+
+internal fun requireVoiceCaptureFixtureSize(value: Long): Long =
+    value.also { require(it in 1..VOICE_CAPTURE_FIXTURE_MAX_BYTES) {
+        "Voice capture fixture size is out of bounds"
+    } }
 
 internal suspend fun <Setup> setupVoiceCaptureSource(
     source: VoiceCaptureSource,
@@ -34,12 +43,36 @@ internal data class VoiceCaptureFixture(
 ) {
     init {
         require(path.isNotBlank()) { "Fixture path is blank" }
+        requireVoiceCaptureFixtureSize(pcm16.size.toLong())
         require(pcm16.isNotEmpty()) { "Fixture PCM is empty" }
         require(chunkBytes > 0) { "Fixture chunk size must be positive" }
         require(chunkDelayMs >= 0) { "Fixture chunk delay must not be negative" }
     }
 
-    fun snapshot(): VoiceCaptureFixture = copy(pcm16 = pcm16.copyOf())
+    fun snapshot(): VoiceCaptureFixture =
+        copy(pcm16 = pcm16.copyOf(requireVoiceCaptureFixtureSize(pcm16.size.toLong()).toInt()))
+
+    companion object {
+        fun readBounded(source: InputStream, size: Long, expectedSha256: String?): ByteArray {
+            val bytes = ByteArray(requireVoiceCaptureFixtureSize(size).toInt())
+            var offset = 0
+            while (offset < bytes.size) {
+                val read = source.read(bytes, offset, bytes.size - offset)
+                require(read > 0) { "Fixture PCM ended before its declared size" }
+                offset += read
+            }
+            require(source.read() == -1) { "Fixture PCM exceeds its declared size" }
+            val actualSha256 = MessageDigest.getInstance("SHA-256")
+                .digest(bytes)
+                .joinToString(prefix = "sha256:", separator = "") {
+                    "%02x".format(it.toInt() and 0xff)
+                }
+            require(expectedSha256 == null || actualSha256 == expectedSha256) {
+                "Fixture PCM hash does not match"
+            }
+            return bytes
+        }
+    }
 }
 
 internal data class VoiceCaptureFixtureTriggerResult(

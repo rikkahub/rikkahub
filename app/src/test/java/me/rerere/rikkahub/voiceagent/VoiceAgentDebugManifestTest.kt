@@ -320,6 +320,34 @@ class VoiceAgentDebugManifestTest {
         source.close()
     }
 
+    @Test
+    fun `stage request rejects an oversized declaration before opening the fixture`() {
+        val filesDir = createTempDirectory("voice-fixture-size-bound").toFile()
+        val token = VoiceCaptureFixtureArming.arm(
+            initial = fixture("initial.pcm", byteArrayOf(9, 10)),
+            staged = emptyList(),
+        )
+        val source = VoiceCaptureFixtureArming.claim(token, delays = {}).getOrThrow()
+        val descriptorOpener = JvmPcmDescriptorOpener()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            VoiceCaptureFixtureDebugReceiver(descriptorOpener).stage(
+                context = context(filesDir),
+                intent = stageIntent(
+                    token = token,
+                    path = "voice-fixtures/request-2.pcm",
+                    chunkBytes = 2,
+                    chunkDelayMs = 0,
+                    expectedSize = 16_777_217L,
+                ),
+            )
+        }
+
+        assertTrue(descriptorOpener.openedFlags.isEmpty())
+        assertEquals(0, descriptorOpener.readCalls)
+        source.close()
+    }
+
     private fun findReceiver(name: String): Element {
         return findManifestElement(tagName = "receiver", name = name)
     }
@@ -360,6 +388,7 @@ class VoiceAgentDebugManifestTest {
         chunkBytes: Int,
         chunkDelayMs: Long,
         expectedBytes: ByteArray = byteArrayOf(1, 2, 3, 4, 5),
+        expectedSize: Long = expectedBytes.size.toLong(),
     ): Intent = mockk {
         every { getStringExtra("token") } returns token
         every { getStringExtra("path") } returns path
@@ -369,7 +398,7 @@ class VoiceAgentDebugManifestTest {
         every {
             getLongExtra("chunk_delay_ms", any())
         } returns chunkDelayMs
-        every { getLongExtra("expected_size", any()) } returns expectedBytes.size.toLong()
+        every { getLongExtra("expected_size", any()) } returns expectedSize
         every { getStringExtra("expected_sha256") } returns expectedBytes.sha256()
     }
 

@@ -12,6 +12,8 @@ die() {
   exit 1
 }
 
+FIXTURE_MAX_BYTES=16777216
+
 adb_read() {
   timeout --signal=TERM --kill-after=2s "${VOICE_STEP_ADB_TIMEOUT_SECONDS:-10}s" adb -s "$SERIAL" "$@" 2>/dev/null
 }
@@ -64,6 +66,11 @@ require_command() {
 
 validate_positive_integer() {
   [[ "$1" =~ ^[1-9][0-9]*$ ]] || die 'invalid timeout configuration'
+}
+
+validate_fixture_size() {
+  [[ "$1" =~ ^[1-9][0-9]*$ ]] && (( $1 <= FIXTURE_MAX_BYTES )) ||
+    die 'invalid fixture'
 }
 
 validate_runtime() {
@@ -286,7 +293,7 @@ if os.path.realpath(source_path) != source_path:
 before = os.lstat(source_path)
 if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
     raise SystemExit(1)
-if stat.S_IMODE(before.st_mode) != 0o600 or before.st_size <= 0:
+if stat.S_IMODE(before.st_mode) != 0o600 or not 1 <= before.st_size <= 16_777_216:
     raise SystemExit(1)
 flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
 descriptor = os.open(source_path, flags)
@@ -346,7 +353,7 @@ PY
   fi
   mapfile -t fixture_metadata <<< "$metadata"
   [[ "${#fixture_metadata[@]}" == 2 ]] || die 'invalid fixture'
-  [[ "${fixture_metadata[0]}" =~ ^[1-9][0-9]*$ ]] || die 'invalid fixture'
+  validate_fixture_size "${fixture_metadata[0]}"
   validate_hash "${fixture_metadata[1]}" 'fixture hash'
   snapshot_out="$snapshot_path"
   size_out="${fixture_metadata[0]}"
@@ -857,6 +864,7 @@ stage_owned_snapshot() {
   local fixture_size="$5"
   local fixture_hash="$6"
   local metadata
+  validate_fixture_size "$fixture_size"
   metadata="$(adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
 set -eu
 : voice-step-stage-owned-fixture

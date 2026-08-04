@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.voiceagent.audio
 
+import java.io.InputStream
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
@@ -7,6 +8,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -14,6 +16,36 @@ class VoiceCaptureFixtureSourceTest {
     @After
     fun tearDown() {
         VoiceCaptureFixtureArming.clearForTest()
+    }
+
+    @Test
+    fun `fixture byte bound accepts inclusive endpoints and rejects values outside them`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            requireVoiceCaptureFixtureSize(0)
+        }
+        assertEquals(1L, requireVoiceCaptureFixtureSize(1))
+        assertEquals(
+            VOICE_CAPTURE_FIXTURE_MAX_BYTES,
+            requireVoiceCaptureFixtureSize(VOICE_CAPTURE_FIXTURE_MAX_BYTES),
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            requireVoiceCaptureFixtureSize(VOICE_CAPTURE_FIXTURE_MAX_BYTES + 1)
+        }
+    }
+
+    @Test
+    fun `over-limit declared fixture is rejected before its stream is read`() {
+        val source = CountingInputStream()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            VoiceCaptureFixture.readBounded(
+                source,
+                VOICE_CAPTURE_FIXTURE_MAX_BYTES + 1,
+                "sha256:" + "a".repeat(64),
+            )
+        }
+
+        assertEquals(0, source.readCalls)
     }
 
     @Test
@@ -285,4 +317,13 @@ class VoiceCaptureFixtureSourceTest {
         chunkBytes = chunkBytes,
         chunkDelayMs = 1,
     )
+
+    private class CountingInputStream : InputStream() {
+        var readCalls = 0
+
+        override fun read(): Int {
+            readCalls += 1
+            return -1
+        }
+    }
 }
