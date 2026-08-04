@@ -1,0 +1,788 @@
+#!/usr/bin/env python3
+"""Pure, fixed checkpoint predicates for real-room voice evidence."""
+
+from __future__ import annotations
+
+import enum
+import json
+import re
+import sys
+from collections.abc import Sequence
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+
+class Expectation(enum.StrEnum):
+    SINGLE_RESULT_ANNOUNCED = "single_result_announced"
+    SINGLE_FOLLOW_UP_GROUNDED = "single_follow_up_grounded"
+    PARALLEL_FIRST_PENDING = "parallel_first_pending"
+    PARALLEL_LATER_COMPLETED_FIRST = "parallel_later_completed_first"
+    PARALLEL_BOTH_ANNOUNCED = "parallel_both_announced"
+    INTERRUPTION_DELIVERY_ACTIVE = "interruption_delivery_active"
+    INTERRUPTION_OBSERVED = "interruption_observed"
+    INTERRUPTION_RECOVERED = "interruption_recovered"
+    ISOLATION_FIRST_ACTIVE = "isolation_first_active"
+    ISOLATION_TWO_DISTINCT = "isolation_two_distinct"
+    ISOLATION_TERMINAL_HEALTHY = "isolation_terminal_healthy"
+
+
+class ContractError(Exception):
+    def __init__(self, boundary: str):
+        super().__init__(boundary)
+        self.boundary = boundary
+
+
+JOB_IDENTITY_FIELDS = (
+    "userTurnId",
+    "requestHash",
+    "toolCallId",
+    "argumentHash",
+    "jobId",
+    "ownerHash",
+    "conversationHash",
+    "voiceSessionHash",
+    "roomHash",
+    "traceHash",
+)
+TERMINAL_KINDS = {"job_succeeded", "job_failed", "job_expired", "job_canceled"}
+FAILURE_KINDS = {"job_failed", "job_expired", "job_canceled"}
+DELIVERY_KINDS = {
+    "delivery_eligible",
+    "delivery_started",
+    "speech_started",
+    "delivery_blocked",
+    "delivery_announced",
+}
+MAX_ARTIFACT_BYTES = 16 * 1024 * 1024
+HASH = re.compile(r"sha256:[0-9a-f]{64}")
+IDENTIFIER = re.compile(r"[A-Za-z0-9_-]{1,128}")
+VOICE_IDENTIFIERS = {
+    "eventId",
+    "userTurnId",
+    "toolCallId",
+    "jobId",
+    "turnId",
+    "groundedJobId",
+    "assistantTurnId",
+    "followUpTurnId",
+}
+VOICE_HASHES = {
+    "voiceSessionHash",
+    "eventHash",
+    "requestHash",
+    "argumentHash",
+    "ownerHash",
+    "conversationHash",
+    "roomHash",
+    "traceHash",
+    "resultHash",
+    "groundedResultHash",
+}
+VOICE_COUNTS = {
+    "promptCharacterCount",
+    "answerCharacterCount",
+    "failureReasonCharacterCount",
+    "textCharacterCount",
+}
+VOICE_BOOLEANS = {"interrupted", "userSpeaking", "agentSpeaking"}
+CANONICAL_INSTANT = re.compile(
+    r"[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.(?:[0-9]{3}|[0-9]{6}|[0-9]{9}))?Z"
+)
+AUTOMATION_KEYS = (
+    "schemaVersion",
+    "monotonicMs",
+    "wallClockMs",
+    "runHash",
+    "comparisonHash",
+    "requestedTransport",
+    "observedTransport",
+    "name",
+    "route",
+    "network",
+    "lifecycle",
+    "playbackEpoch",
+    "byteCount",
+    "rmsActive",
+    "audioWindowMicros",
+    "succeeded",
+    "correlationKind",
+    "correlationHash",
+    "requestedModelHash",
+    "observedModelHash",
+    "voiceHash",
+    "instructionHash",
+    "directAccountConfigurationHash",
+    "conversationHash",
+    "captureSource",
+    "micBytes",
+    "fixtureBytes",
+)
+VOICE_BASE = {"version", "voiceSessionHash", "eventId", "kind", "observedAt", "eventHash"}
+VOICE_JOB = set(JOB_IDENTITY_FIELDS) - {"voiceSessionHash"}
+VOICE_SCHEMAS = {
+    "session_binding": VOICE_BASE | {"ownerHash", "conversationHash", "roomHash", "traceHash"},
+    "job_accepted": VOICE_BASE | VOICE_JOB | {"promptCharacterCount"},
+    "job_running": VOICE_BASE | VOICE_JOB,
+    "still_working": VOICE_BASE | VOICE_JOB,
+    "job_succeeded": VOICE_BASE | VOICE_JOB | {"resultHash", "answerCharacterCount"},
+    "job_failed": VOICE_BASE | VOICE_JOB | {"failureReasonCharacterCount"},
+    "job_expired": VOICE_BASE | VOICE_JOB | {"failureReasonCharacterCount"},
+    "job_canceled": VOICE_BASE | VOICE_JOB | {"failureReasonCharacterCount"},
+    "delivery_eligible": VOICE_BASE | {"toolCallId", "jobId"},
+    "delivery_started": VOICE_BASE | {"toolCallId", "jobId"},
+    "speech_started": VOICE_BASE | {"toolCallId", "jobId"},
+    "delivery_blocked": VOICE_BASE | {"toolCallId", "jobId", "userSpeaking", "agentSpeaking"},
+    "delivery_announced": VOICE_BASE | {"toolCallId", "jobId", "assistantTurnId"},
+    "follow_up_correlation": VOICE_BASE | {"followUpTurnId", "assistantTurnId", "resultHash"},
+}
+
+
+def _require(condition: bool, boundary: str) -> None:
+    if not condition:
+        raise ContractError(boundary)
+
+
+def _identity(row: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(row.get(field) for field in JOB_IDENTITY_FIELDS)
+
+
+def _delivery_identity(row: dict[str, Any]) -> tuple[Any, Any]:
+    return row.get("toolCallId"), row.get("jobId")
+
+
+def jobs_by_identity(voice: Sequence[dict[str, Any]]) -> dict[tuple[Any, ...], list[dict[str, Any]]]:
+    jobs: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for row in voice:
+        if row.get("kind") in {"job_accepted", "job_running", "still_working", *TERMINAL_KINDS}:
+            jobs.setdefault(_identity(row), []).append(row)
+    return jobs
+
+
+def ordered_event(
+    rows: Sequence[dict[str, Any]],
+    kind: str,
+    predicate=lambda row: True,
+    after: int = -1,
+) -> int | None:
+    for index in range(after + 1, len(rows)):
+        row = rows[index]
+        if row.get("kind", row.get("name")) == kind and predicate(row):
+            return index
+    return None
+
+
+def playback_epochs(automation: Sequence[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
+    epochs: dict[int, list[dict[str, Any]]] = {}
+    for row in automation:
+        epoch = row.get("playbackEpoch")
+        if type(epoch) is int and epoch > 0:
+            epochs.setdefault(epoch, []).append(row)
+    return epochs
+
+
+def first_quiet_after_last_reset(
+    automation: Sequence[dict[str, Any]],
+    before_ms: int | None = None,
+) -> int | None:
+    observations = [
+        row
+        for row in automation
+        if row.get("name") == "playback_written"
+        and type(row.get("monotonicMs")) is int
+        and type(row.get("rmsActive")) is bool
+        and (before_ms is None or row["monotonicMs"] < before_ms)
+    ]
+    reset_index = max(
+        (index for index, row in enumerate(observations) if row["rmsActive"]),
+        default=-1,
+    )
+    return next(
+        (
+            row["monotonicMs"]
+            for index, row in enumerate(observations)
+            if index > reset_index and not row["rmsActive"]
+        ),
+        None,
+    )
+
+
+def _accepted(voice: Sequence[dict[str, Any]], boundary: str, count: int) -> list[tuple[int, dict[str, Any]]]:
+    rows = [(index, row) for index, row in enumerate(voice) if row.get("kind") == "job_accepted"]
+    _require(len(rows) == count, boundary)
+    identities = [_identity(row) for _, row in rows]
+    _require(len(set(identities)) == len(identities), boundary)
+    return rows
+
+
+def _events_for_identity(
+    voice: Sequence[dict[str, Any]], kind: str, identity: tuple[Any, ...]
+) -> list[tuple[int, dict[str, Any]]]:
+    return [
+        (index, row)
+        for index, row in enumerate(voice)
+        if row.get("kind") == kind and _identity(row) == identity
+    ]
+
+
+def _delivery_events(
+    voice: Sequence[dict[str, Any]], kind: str, identity: tuple[Any, ...]
+) -> list[tuple[int, dict[str, Any]]]:
+    pair = identity[2], identity[4]
+    return [
+        (index, row)
+        for index, row in enumerate(voice)
+        if row.get("kind") == kind and _delivery_identity(row) == pair
+    ]
+
+
+def _single_result(voice: Sequence[dict[str, Any]]) -> tuple[tuple[Any, ...], str, str, int]:
+    accepted_rows = _accepted(voice, "single_accepted_job", 1)
+    accepted_index, accepted_row = accepted_rows[0]
+    identity = _identity(accepted_row)
+    succeeded = _events_for_identity(voice, "job_succeeded", identity)
+    _require(len(succeeded) == 1 and succeeded[0][0] > accepted_index, "single_succeeded_identity")
+    success_index, success = succeeded[0]
+    result_hash = success.get("resultHash")
+    _require(type(result_hash) is str, "single_succeeded_identity")
+    eligible = _delivery_events(voice, "delivery_eligible", identity)
+    speech = _delivery_events(voice, "speech_started", identity)
+    started = _delivery_events(voice, "delivery_started", identity)
+    _require(len(eligible) == len(speech) == len(started) == 1, "single_delivery_order")
+    grounded = [
+        (index, row)
+        for index, row in enumerate(voice)
+        if row.get("kind") == "transcript"
+        and row.get("role") == "assistant"
+        and row.get("groundedJobId") == identity[4]
+        and row.get("groundedResultHash") == result_hash
+    ]
+    _require(len(grounded) == 1, "single_grounded_assistant")
+    grounded_index, grounded_row = grounded[0]
+    assistant_turn = grounded_row.get("turnId")
+    announced = [
+        (index, row)
+        for index, row in _delivery_events(voice, "delivery_announced", identity)
+        if row.get("assistantTurnId") == assistant_turn
+    ]
+    _require(
+        len(announced) == 1
+        and sum(row.get("kind") == "delivery_announced" for row in voice) == 1,
+        "single_announcement",
+    )
+    announcement_index = announced[0][0]
+    _require(
+        success_index < eligible[0][0] < speech[0][0] < started[0][0]
+        < grounded_index < announcement_index,
+        "single_delivery_order",
+    )
+    return identity, result_hash, assistant_turn, announcement_index
+
+
+def _parallel_identities(voice: Sequence[dict[str, Any]]) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+    accepted_rows = _accepted(voice, "parallel_two_accepted", 2)
+    first = _identity(accepted_rows[0][1])
+    second = _identity(accepted_rows[1][1])
+    _require(first != second, "parallel_distinct_identity")
+    accepted_pairs = {(first[2], first[4]), (second[2], second[4])}
+    _require(
+        all(
+            _delivery_identity(row) in accepted_pairs
+            for row in voice
+            if row.get("kind") in DELIVERY_KINDS
+        ),
+        "parallel_delivery_identity",
+    )
+    return first, second
+
+
+def _parallel_later(voice: Sequence[dict[str, Any]]) -> tuple[tuple[Any, ...], tuple[Any, ...], int]:
+    first, second = _parallel_identities(voice)
+    _require(
+        not any(_identity(row) == first and row.get("kind") in TERMINAL_KINDS for row in voice),
+        "parallel_first_nonterminal",
+    )
+    succeeded = _events_for_identity(voice, "job_succeeded", second)
+    announced = _delivery_events(voice, "delivery_announced", second)
+    _require(len(succeeded) == 1, "parallel_second_succeeded")
+    _require(len(announced) == 1, "parallel_second_announcement")
+    _require(succeeded[0][0] < announced[0][0], "parallel_second_announcement")
+    return first, second, announced[0][0]
+
+
+def _interruption_active(
+    automation: Sequence[dict[str, Any]], voice: Sequence[dict[str, Any]], allow_announcement: bool
+) -> tuple[tuple[Any, ...], int, int]:
+    accepted_rows = _accepted(voice, "interruption_one_job", 1)
+    identity = _identity(accepted_rows[0][1])
+    succeeded = _events_for_identity(voice, "job_succeeded", identity)
+    started = _delivery_events(voice, "delivery_started", identity)
+    _require(len(succeeded) == 1, "interruption_succeeded_identity")
+    _require(len(started) == 1 and succeeded[0][0] < started[0][0], "interruption_delivery_identity")
+    if not allow_announcement:
+        _require(
+            not any(row.get("kind") == "delivery_announced" for row in voice),
+            "interruption_no_announcement",
+        )
+    active = [
+        (index, row)
+        for index, row in enumerate(automation)
+        if row.get("name") == "playback_active"
+        and type(row.get("playbackEpoch")) is int
+        and row["playbackEpoch"] > 0
+    ]
+    _require(bool(active), "interruption_active_epoch")
+    return identity, active[0][1]["playbackEpoch"], active[0][0]
+
+
+def _interruption_stop(
+    automation: Sequence[dict[str, Any]], voice: Sequence[dict[str, Any]], allow_announcement: bool
+) -> tuple[tuple[Any, ...], int, int]:
+    identity, epoch, active_index = _interruption_active(automation, voice, allow_announcement)
+    interrupted = ordered_event(automation, "interrupt_started", after=active_index)
+    _require(interrupted is not None, "interruption_boundary")
+    stopped = ordered_event(
+        automation,
+        "playback_stopped",
+        lambda row: row.get("playbackEpoch") == epoch,
+        interrupted,
+    )
+    _require(stopped is not None, "interruption_stopped_epoch")
+    return identity, epoch, stopped
+
+
+def evaluate_checkpoint(
+    expectation: Expectation,
+    automation: Sequence[dict[str, Any]],
+    voice: Sequence[dict[str, Any]],
+    quiet_ns: int,
+) -> None:
+    _require(type(quiet_ns) is int and quiet_ns >= 0, "quiet_threshold")
+    expectation = Expectation(expectation)
+
+    if expectation is Expectation.SINGLE_RESULT_ANNOUNCED:
+        _single_result(voice)
+        return
+
+    if expectation is Expectation.SINGLE_FOLLOW_UP_GROUNDED:
+        _, result_hash, assistant_turn, announcement_index = _single_result(voice)
+        users = [
+            (index, row)
+            for index, row in enumerate(voice)
+            if index > announcement_index and row.get("kind") == "transcript" and row.get("role") == "user"
+        ]
+        _require(len(users) == 1, "follow_up_user_turn")
+        user_index, user = users[0]
+        correlations = [
+            row
+            for index, row in enumerate(voice)
+            if index > user_index
+            and row.get("kind") == "follow_up_correlation"
+            and row.get("followUpTurnId") == user.get("turnId")
+            and row.get("assistantTurnId") == assistant_turn
+            and row.get("resultHash") == result_hash
+        ]
+        _require(len(correlations) == 1, "follow_up_correlation")
+        return
+
+    if expectation is Expectation.PARALLEL_FIRST_PENDING:
+        accepted_rows = _accepted(voice, "parallel_first_accepted", 1)
+        identity = _identity(accepted_rows[0][1])
+        _require(
+            not any(_identity(row) == identity and row.get("kind") in TERMINAL_KINDS for row in voice),
+            "parallel_first_nonterminal",
+        )
+        _require(not _delivery_events(voice, "delivery_announced", identity), "parallel_first_no_announcement")
+        return
+
+    if expectation is Expectation.PARALLEL_LATER_COMPLETED_FIRST:
+        _parallel_later(voice)
+        return
+
+    if expectation is Expectation.PARALLEL_BOTH_ANNOUNCED:
+        first, second = _parallel_identities(voice)
+        second_success = _events_for_identity(voice, "job_succeeded", second)
+        second_announced = _delivery_events(voice, "delivery_announced", second)
+        first_success = _events_for_identity(voice, "job_succeeded", first)
+        first_announced = _delivery_events(voice, "delivery_announced", first)
+        _require(len(second_success) == len(second_announced) == 1, "parallel_second_announcement")
+        _require(len(first_success) == len(first_announced) == 1, "parallel_first_announcement")
+        _require(
+            second_success[0][0] < second_announced[0][0] < first_success[0][0] < first_announced[0][0],
+            "parallel_completion_order",
+        )
+        return
+
+    if expectation is Expectation.INTERRUPTION_DELIVERY_ACTIVE:
+        _interruption_active(automation, voice, False)
+        return
+
+    if expectation is Expectation.INTERRUPTION_OBSERVED:
+        _interruption_stop(automation, voice, False)
+        return
+
+    if expectation is Expectation.INTERRUPTION_RECOVERED:
+        identity, old_epoch, stopped_index = _interruption_stop(automation, voice, True)
+        new_active = next(
+            (
+                (index, row)
+                for index, row in enumerate(automation)
+                if index > stopped_index
+                and row.get("name") == "playback_active"
+                and type(row.get("playbackEpoch")) is int
+                and row["playbackEpoch"] != old_epoch
+            ),
+            None,
+        )
+        _require(new_active is not None, "recovery_new_epoch")
+        active_index, active_row = new_active
+        active_ms = active_row.get("monotonicMs")
+        quiet_start = first_quiet_after_last_reset(automation, active_ms)
+        threshold_ms = (quiet_ns + 999_999) // 1_000_000
+        _require(
+            type(active_ms) is int
+            and quiet_start is not None
+            and active_ms - quiet_start >= threshold_ms,
+            "recovery_continuous_quiet",
+        )
+        drained = ordered_event(
+            automation,
+            "playback_drained",
+            lambda row: row.get("playbackEpoch") == active_row["playbackEpoch"],
+            active_index,
+        )
+        _require(drained is not None, "recovery_drained_epoch")
+        succeeded = _events_for_identity(voice, "job_succeeded", identity)
+        _require(len(succeeded) == 1, "recovery_succeeded_identity")
+        result_hash = succeeded[0][1].get("resultHash")
+        grounded = [
+            (index, row)
+            for index, row in enumerate(voice)
+            if row.get("kind") == "transcript"
+            and row.get("role") == "assistant"
+            and row.get("groundedJobId") == identity[4]
+            and row.get("groundedResultHash") == result_hash
+        ]
+        _require(len(grounded) == 1, "recovery_grounded_assistant")
+        announced = [
+            (index, row)
+            for index, row in _delivery_events(voice, "delivery_announced", identity)
+            if row.get("assistantTurnId") == grounded[0][1].get("turnId")
+        ]
+        _require(len(announced) == 1 and grounded[0][0] < announced[0][0], "recovery_announcement")
+        return
+
+    if expectation is Expectation.ISOLATION_FIRST_ACTIVE:
+        accepted_rows = _accepted(voice, "isolation_target_accepted", 1)
+        identity = _identity(accepted_rows[0][1])
+        _require(
+            not any(_identity(row) == identity and row.get("kind") in TERMINAL_KINDS for row in voice),
+            "isolation_target_nonterminal",
+        )
+        return
+
+    if expectation is Expectation.ISOLATION_TWO_DISTINCT:
+        accepted_rows = _accepted(voice, "isolation_two_accepted", 2)
+        first = accepted_rows[0][1]
+        second = accepted_rows[1][1]
+        _require(
+            all(first[field] != second[field] for field in ("requestHash", "toolCallId", "jobId")),
+            "isolation_disjoint_identity",
+        )
+        return
+
+    if expectation is Expectation.ISOLATION_TERMINAL_HEALTHY:
+        accepted_rows = _accepted(voice, "isolation_two_accepted", 2)
+        target = _identity(accepted_rows[0][1])
+        healthy = _identity(accepted_rows[1][1])
+        _require(
+            all(target[index] != healthy[index] for index in (1, 2, 4)),
+            "isolation_disjoint_identity",
+        )
+        target_failures = [
+            (index, row)
+            for index, row in enumerate(voice)
+            if row.get("kind") in FAILURE_KINDS and _identity(row) == target
+        ]
+        _require(len(target_failures) == 1, "isolation_target_terminal")
+        _require(not _events_for_identity(voice, "job_succeeded", target), "isolation_target_terminal")
+        healthy_success = _events_for_identity(voice, "job_succeeded", healthy)
+        _require(len(healthy_success) == 1, "isolation_healthy_succeeded")
+        _require(
+            not any(row.get("kind") in FAILURE_KINDS and _identity(row) == healthy for row in voice),
+            "isolation_healthy_succeeded",
+        )
+        _require(
+            not any(
+                row.get("kind") in DELIVERY_KINDS
+                and _delivery_identity(row) == (target[2], target[4])
+                for row in voice
+            ),
+            "isolation_target_no_delivery",
+        )
+        result_hash = healthy_success[0][1].get("resultHash")
+        grounded = [
+            (index, row)
+            for index, row in enumerate(voice)
+            if row.get("kind") == "transcript"
+            and row.get("role") == "assistant"
+            and row.get("groundedJobId") == healthy[4]
+            and row.get("groundedResultHash") == result_hash
+        ]
+        _require(len(grounded) == 1, "isolation_healthy_grounded")
+        announced = [
+            (index, row)
+            for index, row in _delivery_events(voice, "delivery_announced", healthy)
+            if row.get("assistantTurnId") == grounded[0][1].get("turnId")
+        ]
+        _require(len(announced) == 1 and grounded[0][0] < announced[0][0], "isolation_healthy_announced")
+        return
+
+    raise ContractError("expectation")
+
+
+def _parse_pairs(line: str) -> tuple[list[str], dict[str, Any]]:
+    pairs = json.loads(line, object_pairs_hook=lambda value: value)
+    if type(pairs) is not list or any(type(pair) is not tuple for pair in pairs):
+        raise ValueError
+    keys = [key for key, _ in pairs]
+    if any(type(key) is not str for key in keys) or len(keys) != len(set(keys)):
+        raise ValueError
+    return keys, dict(pairs)
+
+
+def _text_lines(content: bytes) -> list[str]:
+    if not content or len(content) > MAX_ARTIFACT_BYTES or not content.endswith(b"\n"):
+        raise ContractError("evidence_envelope")
+    try:
+        text = content.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ContractError("evidence_envelope") from error
+    lines = text.splitlines()
+    if not lines or any(not line for line in lines):
+        raise ContractError("evidence_envelope")
+    return lines
+
+
+def _canonical_timestamp(value: Any) -> bool:
+    if type(value) is not str or CANONICAL_INSTANT.fullmatch(value) is None:
+        return False
+    if "." in value and value[:-1].endswith("000"):
+        return False
+    parse_value = re.sub(r"(\.[0-9]{6})[0-9]{3}Z$", r"\1Z", value)
+    try:
+        datetime.fromisoformat(parse_value[:-1] + "+00:00").astimezone(timezone.utc)
+    except ValueError:
+        return False
+    return True
+
+
+def parse_automation_bytes(
+    content: bytes,
+    run_hash: str | None = None,
+    comparison_hash: str | None = None,
+    transport: str = "livekit_experimental",
+) -> list[dict[str, Any]]:
+    rows = []
+    previous_ms = None
+    for line in _text_lines(content):
+        try:
+            keys, row = _parse_pairs(line)
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            raise ContractError("automation_evidence") from error
+        _require(keys == list(AUTOMATION_KEYS), "automation_evidence")
+        _require(json.dumps(row, separators=(",", ":"), ensure_ascii=False) == line, "automation_evidence")
+        monotonic_ms = row.get("monotonicMs")
+        _require(
+            type(row.get("schemaVersion")) is int
+            and row["schemaVersion"] == 1
+            and type(monotonic_ms) is int
+            and monotonic_ms > 0
+            and (previous_ms is None or monotonic_ms > previous_ms)
+            and type(row.get("wallClockMs")) is int
+            and row["wallClockMs"] > 0
+            and HASH.fullmatch(row.get("runHash", "")) is not None
+            and HASH.fullmatch(row.get("comparisonHash", "")) is not None
+            and row.get("requestedTransport") == transport
+            and type(row.get("name")) is str,
+            "automation_evidence",
+        )
+        epoch = row.get("playbackEpoch")
+        byte_count = row.get("byteCount")
+        audio_window = row.get("audioWindowMicros")
+        _require(epoch is None or (type(epoch) is int and epoch > 0), "automation_evidence")
+        _require(byte_count is None or (type(byte_count) is int and byte_count >= 0), "automation_evidence")
+        _require(
+            row.get("rmsActive") is None or type(row.get("rmsActive")) is bool,
+            "automation_evidence",
+        )
+        _require(
+            audio_window is None or (type(audio_window) is int and audio_window > 0),
+            "automation_evidence",
+        )
+        if row["name"] == "playback_written":
+            _require(
+                type(byte_count) is int
+                and byte_count > 0
+                and type(row.get("rmsActive")) is bool
+                and type(audio_window) is int
+                and audio_window > 0,
+                "automation_evidence",
+            )
+        else:
+            _require(row.get("rmsActive") is None and audio_window is None, "automation_evidence")
+        _require(
+            row.get("succeeded") is None or type(row.get("succeeded")) is bool,
+            "automation_evidence",
+        )
+        correlation_kind = row.get("correlationKind")
+        correlation_hash = row.get("correlationHash")
+        _require((correlation_kind is None) == (correlation_hash is None), "automation_evidence")
+        if correlation_hash is not None:
+            _require(
+                type(correlation_kind) is str
+                and type(correlation_hash) is str
+                and HASH.fullmatch(correlation_hash) is not None,
+                "automation_evidence",
+            )
+        configuration_fields = (
+            "requestedModelHash",
+            "observedModelHash",
+            "voiceHash",
+            "instructionHash",
+            "directAccountConfigurationHash",
+            "conversationHash",
+        )
+        if row["name"] == "direct_config_attested":
+            _require(
+                all(
+                    type(row[field]) is str and HASH.fullmatch(row[field]) is not None
+                    for field in configuration_fields
+                ),
+                "automation_evidence",
+            )
+        else:
+            _require(all(row[field] is None for field in configuration_fields), "automation_evidence")
+        capture_fields = ("captureSource", "micBytes", "fixtureBytes")
+        if row["name"] == "capture_attested":
+            _require(
+                row["captureSource"] in {"microphone", "fixture"}
+                and all(type(row[field]) is int and row[field] >= 0 for field in capture_fields[1:]),
+                "automation_evidence",
+            )
+        else:
+            _require(all(row[field] is None for field in capture_fields), "automation_evidence")
+        if run_hash is not None:
+            _require(row["runHash"] == run_hash, "automation_binding")
+        if comparison_hash is not None:
+            _require(row["comparisonHash"] == comparison_hash, "automation_binding")
+        previous_ms = monotonic_ms
+        rows.append(row)
+    return rows
+
+
+def parse_voice_bytes(content: bytes) -> list[dict[str, Any]]:
+    rows = []
+    event_ids = set()
+    for line in _text_lines(content):
+        try:
+            keys, row = _parse_pairs(line)
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            raise ContractError("voice_evidence") from error
+        schema = VOICE_SCHEMAS.get(row.get("kind"))
+        if row.get("kind") == "transcript":
+            schema = VOICE_BASE | {"turnId", "role", "interrupted", "textCharacterCount"}
+            grounding = {"groundedJobId", "groundedResultHash"}
+            if set(keys) == schema | grounding:
+                schema |= grounding
+        _require(schema is not None and keys == sorted(schema), "voice_evidence")
+        _require(json.dumps(row, sort_keys=True, separators=(",", ":"), ensure_ascii=False) == line, "voice_evidence")
+        _require(
+            type(row.get("version")) is int
+            and row["version"] == 1
+            and HASH.fullmatch(row.get("voiceSessionHash", "")) is not None
+            and IDENTIFIER.fullmatch(row.get("eventId", "")) is not None
+            and row["eventId"] not in event_ids
+            and _canonical_timestamp(row.get("observedAt"))
+            and HASH.fullmatch(row.get("eventHash", "")) is not None
+            and "voiceSessionId" not in row,
+            "voice_evidence",
+        )
+        _require(
+            all(
+                type(row[field]) is str and IDENTIFIER.fullmatch(row[field]) is not None
+                for field in set(row) & VOICE_IDENTIFIERS
+            ),
+            "voice_evidence",
+        )
+        _require(
+            all(
+                type(row[field]) is str and HASH.fullmatch(row[field]) is not None
+                for field in set(row) & VOICE_HASHES
+            ),
+            "voice_evidence",
+        )
+        _require(
+            all(type(row[field]) is int and row[field] >= 0 for field in set(row) & VOICE_COUNTS),
+            "voice_evidence",
+        )
+        _require(
+            all(type(row[field]) is bool for field in set(row) & VOICE_BOOLEANS),
+            "voice_evidence",
+        )
+        if row["kind"] == "transcript":
+            grounded = "groundedJobId" in row and "groundedResultHash" in row
+            _require(
+                row.get("role") in {"user", "assistant"}
+                and not (row.get("role") == "user" and (row.get("interrupted") or grounded))
+                and (("groundedJobId" in row) == ("groundedResultHash" in row)),
+                "voice_evidence",
+            )
+        event_ids.add(row["eventId"])
+        rows.append(row)
+    binding_rows = [row for row in rows if row.get("kind") == "session_binding"]
+    _require(len(binding_rows) == 1 and rows[0] is binding_rows[0], "voice_session_binding")
+    binding = binding_rows[0]
+    for row in rows:
+        _require(row["voiceSessionHash"] == binding["voiceSessionHash"], "voice_session_binding")
+        if row.get("kind") in {"job_accepted", "job_running", "still_working", *TERMINAL_KINDS}:
+            _require(
+                all(row[field] == binding[field] for field in ("ownerHash", "conversationHash", "roomHash", "traceHash")),
+                "voice_session_binding",
+            )
+    return rows
+
+
+def _read(path: str) -> bytes:
+    try:
+        return Path(path).read_bytes()
+    except OSError as error:
+        raise ContractError("evidence_envelope") from error
+
+
+def _main(arguments: Sequence[str]) -> int:
+    if len(arguments) == 2 and arguments[0] == "--validate-expectation":
+        try:
+            Expectation(arguments[1])
+        except ValueError:
+            return 2
+        return 0
+    if len(arguments) != 7 or arguments[0] != "--evaluate":
+        return 2
+    _, expectation_value, automation_path, voice_path, run_hash, comparison_hash, quiet_ns = arguments
+    try:
+        expectation = Expectation(expectation_value)
+        threshold = int(quiet_ns)
+        automation = parse_automation_bytes(_read(automation_path), run_hash, comparison_hash)
+        voice = parse_voice_bytes(_read(voice_path))
+        evaluate_checkpoint(expectation, automation, voice, threshold)
+    except (ValueError, ContractError) as error:
+        boundary = error.boundary if isinstance(error, ContractError) else "expectation"
+        print(boundary)
+        return 3
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main(sys.argv[1:]))

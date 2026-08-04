@@ -8,7 +8,12 @@
 
 die() {
   ERROR_REPORTED=1
-  printf 'voice-step.error=%s\n' "$1" >&2
+  local message="$1"
+  if [[ "${CHECKPOINT_ERROR_MODE:-0}" == 1 &&
+        ! "$message" =~ ^checkpoint\ [a-z][a-z0-9_]{0,63}\ not\ proven$ ]]; then
+    message='checkpoint evidence not proven'
+  fi
+  printf 'voice-step.error=%s\n' "$message" >&2
   exit 1
 }
 
@@ -1278,6 +1283,32 @@ PY
   rm -- "$second" 2>/dev/null || die 'capture temporary cleanup failed'
   forget_temp_file "$second"
   stable_temp_out="$first"
+}
+
+read_checkpoint_artifact_snapshots() {
+  local -n automation_snapshot_out="$1"
+  local -n voice_snapshot_out="$2"
+  local automation_path
+  local private_path
+  local sanitized_path
+  local presence
+  automation_path="$(app_artifact_path "$APP_ARTIFACT_ROOT/${RUN_HASH#sha256:}" automation-events.jsonl)"
+  private_path="$(app_artifact_path "$APP_ARTIFACT_ROOT/$TRACE_ID" voice-experience-private.ndjson)"
+  sanitized_path="$(app_artifact_path "$APP_ARTIFACT_ROOT/$TRACE_ID" voice-experience-events.ndjson)"
+  presence="$(adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
+: voice-step-artifact-presence
+for path do
+  [ -f "$path" ] && [ ! -L "$path" ] && [ -s "$path" ] || exit 1
+  printf "present\n"
+done
+' sh "$automation_path" "$private_path" "$sanitized_path" 2>/dev/null)" ||
+    die 'required artifact unavailable'
+  [[ "$presence" == $'present\npresent\npresent' ]] || die 'required artifact unavailable'
+  ensure_local_temp_dir
+  read_stable_artifact \
+    "$automation_path" "$LOCAL_TEMP_DIR/checkpoint-automation.jsonl" automation_snapshot_out
+  read_stable_artifact \
+    "$sanitized_path" "$LOCAL_TEMP_DIR/checkpoint-voice.ndjson" voice_snapshot_out
 }
 
 publish_owned_temp() {

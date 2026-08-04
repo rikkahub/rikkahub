@@ -290,14 +290,16 @@ def wait_for_process_state(pid, expected):
 
 
 def sanitized_events():
-    base = {
-        "version": 1,
-        "voiceSessionHash": hash_value("1"),
-        "eventId": "event-1",
-        "kind": "job_accepted",
-        "observedAt": "2026-08-03T00:00:00Z",
-        "eventHash": hash_value("2"),
-    }
+    def base(sequence, kind):
+        return {
+            "version": 1,
+            "voiceSessionHash": hash_value("1"),
+            "eventId": f"event-{sequence}",
+            "kind": kind,
+            "observedAt": f"2026-08-03T00:00:{sequence:02d}Z",
+            "eventHash": hash_value(format(sequence, "x")),
+        }
+
     job = {
         "userTurnId": "turn-1",
         "requestHash": hash_value("3"),
@@ -309,35 +311,41 @@ def sanitized_events():
         "roomHash": hash_value("7"),
         "traceHash": hash_value("8"),
     }
-    rows = []
-    first = dict(base)
-    first.update(job)
-    first["promptCharacterCount"] = 17
-    rows.append(first)
-    second = dict(first)
-    second["eventId"] = "event-2"
-    second["eventHash"] = hash_value("9")
-    second["userTurnId"] = "turn-2"
-    second["toolCallId"] = "tool-2"
-    second["jobId"] = "job-2"
-    rows.append(second)
-    terminal = dict(base)
-    terminal.update(job)
-    terminal["eventId"] = "event-3"
-    terminal["eventHash"] = hash_value("a")
-    terminal["kind"] = "job_succeeded"
-    terminal["resultHash"] = hash_value("b")
-    terminal["answerCharacterCount"] = 23
-    rows.append(terminal)
-    delivery = dict(base)
-    delivery["eventId"] = "event-4"
-    delivery["eventHash"] = hash_value("c")
-    delivery["kind"] = "delivery_announced"
-    delivery["toolCallId"] = "tool-1"
-    delivery["jobId"] = "job-1"
-    delivery["assistantTurnId"] = "assistant-1"
-    rows.append(delivery)
-    return "".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows)
+    binding = base(1, "session_binding")
+    binding.update({key: job[key] for key in ("ownerHash", "conversationHash", "roomHash", "traceHash")})
+    accepted = base(2, "job_accepted")
+    accepted.update(job)
+    accepted["promptCharacterCount"] = 17
+    succeeded = base(3, "job_succeeded")
+    succeeded.update(job)
+    succeeded["resultHash"] = hash_value("b")
+    succeeded["answerCharacterCount"] = 23
+    rows = [binding, accepted, succeeded]
+    for sequence, kind in ((4, "delivery_eligible"), (5, "speech_started"), (6, "delivery_started")):
+        delivery = base(sequence, kind)
+        delivery.update({"toolCallId": job["toolCallId"], "jobId": job["jobId"]})
+        rows.append(delivery)
+    transcript = base(7, "transcript")
+    transcript.update({
+        "turnId": "assistant-1",
+        "role": "assistant",
+        "interrupted": False,
+        "textCharacterCount": 23,
+        "groundedJobId": job["jobId"],
+        "groundedResultHash": hash_value("b"),
+    })
+    rows.append(transcript)
+    announced = base(8, "delivery_announced")
+    announced.update({
+        "toolCallId": job["toolCallId"],
+        "jobId": job["jobId"],
+        "assistantTurnId": "assistant-1",
+    })
+    rows.append(announced)
+    return "".join(
+        json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n"
+        for row in rows
+    )
 
 
 def automation_event(state, sequence, name, *, observed_transport=None, succeeded=None):
@@ -430,8 +438,8 @@ def artifact_content(path, state):
         content = sanitized_events()
         if os.environ.get("FAKE_ADB_BAD_SANITIZED") == "1":
             content = content.replace(
-                '"voiceSessionHash":"' + hash_value("1") + '",',
-                '"voiceSessionId":"RAW_SESSION_SECRET",',
+                '"voiceSessionHash":"' + hash_value("1") + '"',
+                '"voiceSessionId":"RAW_SESSION_SECRET"',
                 1,
             )
         encoded = content.encode()
@@ -1719,21 +1727,21 @@ BASH
   local malformed="$TMP_DIR/malformed-state.json"
   printf '{not-json}\n' > "$malformed"
   chmod 600 "$malformed"
-  run_helper status --state "$malformed"
+  run_helper status --state "$malformed" --expect single_result_announced
   [[ "$RUN_STATUS" -ne 0 ]] || fail "state-schema test: malformed state succeeded"
   assert_no_adb_mutations
   pass
 
   local wrong_package="$TMP_DIR/wrong-package-state.json"
   write_valid_state "$wrong_package" me.rerere.rikkahub.release
-  run_helper status --state "$wrong_package"
+  run_helper status --state "$wrong_package" --expect single_result_announced
   [[ "$RUN_STATUS" -ne 0 ]] || fail "state-package test: wrong package succeeded"
   assert_no_adb_mutations
   pass
 
   local state_link="$TMP_DIR/state-link.json"
   ln -s "$state" "$state_link"
-  run_helper status --state "$state_link"
+  run_helper status --state "$state_link" --expect single_result_announced
   [[ "$RUN_STATUS" -ne 0 ]] || fail "state-type test: symlink state succeeded"
   assert_no_adb_mutations
   pass
@@ -1741,7 +1749,7 @@ BASH
 
   local state_directory="$TMP_DIR/state-directory"
   mkdir "$state_directory"
-  run_helper status --state "$state_directory"
+  run_helper status --state "$state_directory" --expect single_result_announced
   [[ "$RUN_STATUS" -ne 0 ]] || fail "state-type test: directory state succeeded"
   assert_no_adb_mutations
   pass
@@ -1749,14 +1757,14 @@ BASH
 
   local state_fifo="$TMP_DIR/state-fifo"
   mkfifo "$state_fifo"
-  run_helper status --state "$state_fifo"
+  run_helper status --state "$state_fifo" --expect single_result_announced
   [[ "$RUN_STATUS" -ne 0 ]] || fail "state-type test: FIFO state succeeded"
   assert_no_adb_mutations
   pass
   rm "$state_fifo"
 
   chmod 644 "$state"
-  run_helper status --state "$state"
+  run_helper status --state "$state" --expect single_result_announced
   [[ "$RUN_STATUS" -ne 0 ]] || fail "state-mode test: permissive state succeeded"
   assert_no_adb_mutations
   pass
@@ -2497,8 +2505,8 @@ run_status_tests() {
   reset_fake
   activate_fake_run
   write_valid_state "$state"
-  run_helper status --state "$state"
-  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=status\nvoice-step.run_state=active\nvoice-step.call_state=active\nvoice-step.event_count=17\nvoice-step.network=wifi\nvoice-step.validated=true\nvoice-step.voice_events=present\nvoice-step.job_accepted_count=2\nvoice-step.job_terminal_count=1\nvoice-step.delivery_blocked_count=0\nvoice-step.delivery_announced_count=1'
+  run_helper status --state "$state" --expect single_result_announced
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=status\nvoice-step.expectation=single_result_announced\nvoice-step.expectation_met=true'
   [[ "$(command_count .STATUS)" == "1" && "$(command_count 'dumpsys')" == "1" &&
      "$(command_count voice-step-artifact-presence)" == "1" ]] ||
     fail "status-scope test: status retried or used an unrelated query"
@@ -2511,7 +2519,7 @@ run_status_tests() {
   rm -f -- "$state"
   write_valid_state "$state"
   export FAKE_ADB_BAD_SANITIZED=1
-  run_helper status --state "$state"
+  run_helper status --state "$state" --expect single_result_announced
   [[ "$RUN_STATUS" -ne 0 ]] || fail "status-canonical test: raw session identifier succeeded"
   assert_private_output_absent
   pass
@@ -2521,8 +2529,10 @@ run_status_tests() {
   rm -f -- "$state"
   write_valid_state "$state"
   export FAKE_ADB_MISSING_ARTIFACT='voice-experience-private.ndjson'
-  run_helper status --state "$state"
+  run_helper status --state "$state" --expect single_result_announced
   [[ "$RUN_STATUS" -ne 0 ]] || fail "status-presence test: missing private artifact succeeded"
+  [[ "$(<"$STDERR_FILE")" == 'voice-step.error=checkpoint evidence not proven' ]] ||
+    fail "status-failure-output test: infrastructure detail escaped the fixed checkpoint boundary"
   assert_private_output_absent
   pass
 
@@ -2537,7 +2547,7 @@ state = json.load(open(path, encoding="utf-8"))
 state["run_hash"] = "sha256:" + "c" * 64
 json.dump(state, open(path, "w", encoding="utf-8"), separators=(",", ":"))
 PY
-  run_helper status --state "$state"
+  run_helper status --state "$state" --expect single_result_announced
   [[ "$RUN_STATUS" -ne 0 ]] || fail "status-binding test: mismatched run hash succeeded"
   assert_private_output_absent
   pass
@@ -2547,10 +2557,358 @@ PY
   rm -f -- "$state"
   write_valid_state "$state"
   export FAKE_ADB_VALIDATED_FALSE=1
-  run_helper status --state "$state"
+  run_helper status --state "$state" --expect single_result_announced
   [[ "$RUN_STATUS" -ne 0 ]] || fail "status-validation test: validated=false succeeded"
   [[ ! -s "$STDOUT_FILE" ]] || fail "status-validation test: failed validation wrote stdout"
   assert_private_output_absent
+  pass
+}
+
+run_checkpoint_tests() {
+  python3 - "$ROOT_DIR" <<'PY' || fail "checkpoint predicate test: named checkpoint contract failed"
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+module_path = root / "scripts" / "voice-agent-real-room-contract.py"
+spec = importlib.util.spec_from_file_location("voice_agent_real_room_contract", module_path)
+contract = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(contract)
+
+
+def digest(character):
+    return "sha256:" + character * 64
+
+
+def identity(number):
+    return {
+        "userTurnId": f"user-{number}",
+        "requestHash": digest(str(number)),
+        "toolCallId": f"tool-{number}",
+        "argumentHash": digest(chr(96 + number)),
+        "jobId": f"job-{number}",
+        "ownerHash": digest("d"),
+        "conversationHash": digest("e"),
+        "voiceSessionHash": digest("f"),
+        "roomHash": digest("0"),
+        "traceHash": digest("9"),
+    }
+
+
+event_number = 0
+
+
+def voice(kind, **fields):
+    global event_number
+    event_number += 1
+    return {"kind": kind, "eventId": f"event-{event_number}", **fields}
+
+
+def accepted(job):
+    return voice("job_accepted", **job)
+
+
+def state(kind, job, **fields):
+    return voice(kind, **job, **fields)
+
+
+def delivery(kind, job, **fields):
+    return voice(kind, toolCallId=job["toolCallId"], jobId=job["jobId"], **fields)
+
+
+def automation(monotonic_ms, name, epoch=None, rms=None):
+    row = {"monotonicMs": monotonic_ms, "name": name, "playbackEpoch": epoch}
+    if rms is not None:
+        row["rmsActive"] = rms
+    return row
+
+
+def announced_sequence(job, assistant="assistant-1", result=digest("8")):
+    return [
+        accepted(job),
+        state("job_succeeded", job, resultHash=result),
+        delivery("delivery_eligible", job),
+        delivery("speech_started", job),
+        delivery("delivery_started", job),
+        voice(
+            "transcript",
+            turnId=assistant,
+            role="assistant",
+            interrupted=False,
+            groundedJobId=job["jobId"],
+            groundedResultHash=result,
+        ),
+        delivery("delivery_announced", job, assistantTurnId=assistant),
+    ]
+
+
+def expect_pass(name, automation_rows, voice_rows, quiet_ns=2_000_000_000):
+    contract.evaluate_checkpoint(contract.Expectation(name), automation_rows, voice_rows, quiet_ns)
+
+
+def expect_failure(name, automation_rows, voice_rows, boundary, quiet_ns=2_000_000_000):
+    try:
+        expect_pass(name, automation_rows, voice_rows, quiet_ns)
+    except contract.ContractError as error:
+        assert error.boundary == boundary, (name, error.boundary, boundary)
+    else:
+        raise AssertionError(f"{name} accepted its decisive mutation")
+
+
+expected_values = [
+    "single_result_announced",
+    "single_follow_up_grounded",
+    "parallel_first_pending",
+    "parallel_later_completed_first",
+    "parallel_both_announced",
+    "interruption_delivery_active",
+    "interruption_observed",
+    "interruption_recovered",
+    "isolation_first_active",
+    "isolation_two_distinct",
+    "isolation_terminal_healthy",
+]
+assert [value.value for value in contract.Expectation] == expected_values
+try:
+    contract.Expectation("accepted_count>=1")
+except ValueError:
+    pass
+else:
+    raise AssertionError("arbitrary expectation expression was accepted")
+
+valid_job = {
+    "version": 1,
+    "voiceSessionHash": digest("f"),
+    "eventId": "event-parser",
+    "kind": "job_accepted",
+    "observedAt": "2026-08-04T12:00:00Z",
+    "eventHash": digest("1"),
+    **identity(1),
+    "promptCharacterCount": 1,
+}
+try:
+    contract.parse_voice_bytes(
+        (json.dumps(valid_job, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    )
+except contract.ContractError:
+    pass
+else:
+    raise AssertionError("voice evidence without its trusted session binding was accepted")
+
+binding = {
+    "version": 1,
+    "voiceSessionHash": digest("f"),
+    "eventId": "event-binding",
+    "kind": "session_binding",
+    "observedAt": "2026-08-04T11:59:59Z",
+    "eventHash": digest("2"),
+    "ownerHash": digest("d"),
+    "conversationHash": digest("e"),
+    "roomHash": digest("0"),
+    "traceHash": digest("9"),
+}
+malformed_job = dict(valid_job)
+malformed_job["toolCallId"] = "invalid tool identity"
+try:
+    contract.parse_voice_bytes(
+        (
+            json.dumps(binding, sort_keys=True, separators=(",", ":"))
+            + "\n"
+            + json.dumps(malformed_job, sort_keys=True, separators=(",", ":"))
+            + "\n"
+        ).encode()
+    )
+except contract.ContractError:
+    pass
+else:
+    raise AssertionError("malformed nested job identity was accepted")
+
+malformed_automation = dict.fromkeys(contract.AUTOMATION_KEYS)
+malformed_automation.update({
+    "schemaVersion": 1,
+    "monotonicMs": 1,
+    "wallClockMs": 1_800_000_000_001,
+    "runHash": digest("a"),
+    "comparisonHash": digest("b"),
+    "requestedTransport": "livekit_experimental",
+    "name": "playback_active",
+    "playbackEpoch": 0,
+})
+try:
+    contract.parse_automation_bytes(
+        (json.dumps(malformed_automation, separators=(",", ":")) + "\n").encode()
+    )
+except contract.ContractError:
+    pass
+else:
+    raise AssertionError("non-positive playback epoch was accepted")
+
+first = identity(1)
+second = identity(2)
+single = announced_sequence(first)
+expect_pass("single_result_announced", [], single)
+mutated = [dict(row) for row in single]
+mutated[1]["jobId"] = "job-crossed"
+expect_failure("single_result_announced", [], mutated, "single_succeeded_identity")
+mutated = single + [delivery("delivery_announced", second, assistantTurnId="assistant-crossed")]
+expect_failure("single_result_announced", [], mutated, "single_announcement")
+
+follow_up = announced_sequence(first)
+follow_up.extend([
+    voice("transcript", turnId="follow-up-1", role="user", interrupted=False),
+    voice(
+        "follow_up_correlation",
+        followUpTurnId="follow-up-1",
+        assistantTurnId="assistant-1",
+        resultHash=digest("8"),
+    ),
+])
+expect_pass("single_follow_up_grounded", [], follow_up)
+mutated = [dict(row) for row in follow_up]
+mutated[-1]["resultHash"] = digest("7")
+expect_failure("single_follow_up_grounded", [], mutated, "follow_up_correlation")
+
+pending = [accepted(first), state("job_running", first)]
+expect_pass("parallel_first_pending", [], pending)
+mutated = pending + [state("job_failed", first)]
+expect_failure("parallel_first_pending", [], mutated, "parallel_first_nonterminal")
+
+later_first = [
+    accepted(first),
+    accepted(second),
+    state("job_running", first),
+    state("job_succeeded", second, resultHash=digest("7")),
+    delivery("delivery_announced", second, assistantTurnId="assistant-2"),
+]
+expect_pass("parallel_later_completed_first", [], later_first)
+mutated = [dict(row) for row in later_first]
+mutated[-1]["toolCallId"] = first["toolCallId"]
+expect_failure("parallel_later_completed_first", [], mutated, "parallel_delivery_identity")
+
+both = later_first + [
+    state("job_succeeded", first, resultHash=digest("8")),
+    delivery("delivery_announced", first, assistantTurnId="assistant-1"),
+]
+expect_pass("parallel_both_announced", [], both)
+mutated = [both[0], both[1], both[2], both[5], both[6], both[3], both[4]]
+expect_failure("parallel_both_announced", [], mutated, "parallel_completion_order")
+
+active_voice = [
+    accepted(first),
+    state("job_succeeded", first, resultHash=digest("8")),
+    delivery("delivery_started", first),
+]
+active_automation = [automation(10, "playback_active", 1)]
+expect_pass("interruption_delivery_active", active_automation, active_voice)
+mutated = [dict(row) for row in active_voice]
+mutated[-1]["jobId"] = second["jobId"]
+expect_failure("interruption_delivery_active", active_automation, mutated, "interruption_delivery_identity")
+mutated = active_voice + [delivery("delivery_announced", second, assistantTurnId="assistant-crossed")]
+expect_failure("interruption_delivery_active", active_automation, mutated, "interruption_no_announcement")
+
+observed_automation = active_automation + [
+    automation(20, "interrupt_started"),
+    automation(30, "playback_stopped", 1),
+]
+expect_pass("interruption_observed", observed_automation, active_voice)
+mutated_automation = active_automation + [
+    automation(20, "interrupt_started"),
+    automation(30, "playback_stopped", 2),
+]
+expect_failure("interruption_observed", mutated_automation, active_voice, "interruption_stopped_epoch")
+
+recovered_voice = active_voice + [
+    voice(
+        "transcript",
+        turnId="assistant-recovered",
+        role="assistant",
+        interrupted=False,
+        groundedJobId=first["jobId"],
+        groundedResultHash=digest("8"),
+    ),
+    delivery("delivery_announced", first, assistantTurnId="assistant-recovered"),
+]
+recovered_automation = observed_automation + [
+    automation(100, "playback_written", 1, False),
+    automation(500, "playback_written", 1, False),
+    automation(2200, "playback_active", 2),
+    automation(2300, "playback_drained", 2),
+]
+expect_pass("interruption_recovered", recovered_automation, recovered_voice)
+reset_automation = observed_automation + [
+    automation(100, "playback_written", 1, False),
+    automation(500, "playback_written", 1, False),
+    automation(700, "playback_written", 1, True),
+    automation(700, "playback_written", 1, False),
+    automation(2200, "playback_active", 2),
+    automation(2300, "playback_drained", 2),
+]
+assert contract.first_quiet_after_last_reset(reset_automation[:-2]) == 700
+assert contract.first_quiet_after_last_reset(reset_automation[:-3]) is None
+expect_failure("interruption_recovered", reset_automation, recovered_voice, "recovery_continuous_quiet")
+reset_automation[-2] = automation(2700, "playback_active", 2)
+reset_automation[-1] = automation(2800, "playback_drained", 2)
+expect_pass("interruption_recovered", reset_automation, recovered_voice)
+
+isolation_active = [accepted(first), state("still_working", first)]
+expect_pass("isolation_first_active", [], isolation_active)
+expect_failure(
+    "isolation_first_active",
+    [],
+    isolation_active + [state("job_canceled", first)],
+    "isolation_target_nonterminal",
+)
+
+isolated = [accepted(first), accepted(second)]
+expect_pass("isolation_two_distinct", [], isolated)
+same_request = dict(second)
+same_request["requestHash"] = first["requestHash"]
+expect_failure(
+    "isolation_two_distinct",
+    [],
+    [accepted(first), accepted(same_request)],
+    "isolation_disjoint_identity",
+)
+
+terminal_healthy = [
+    accepted(first),
+    accepted(second),
+    state("job_failed", first),
+    state("job_succeeded", second, resultHash=digest("7")),
+    voice(
+        "transcript",
+        turnId="assistant-healthy",
+        role="assistant",
+        interrupted=False,
+        groundedJobId=second["jobId"],
+        groundedResultHash=digest("7"),
+    ),
+    delivery("delivery_announced", second, assistantTurnId="assistant-healthy"),
+]
+expect_pass("isolation_terminal_healthy", [], terminal_healthy)
+mutated = terminal_healthy + [delivery("delivery_started", first)]
+expect_failure("isolation_terminal_healthy", [], mutated, "isolation_target_no_delivery")
+PY
+  pass
+
+  local state="$TMP_DIR/checkpoint-state.json"
+  reset_fake
+  activate_fake_run
+  write_valid_state "$state"
+  run_helper status --state "$state"
+  [[ "$RUN_STATUS" -ne 0 && ! -s "$ADB_LOG" ]] ||
+    fail "checkpoint parser test: missing --expect reached device access"
+  pass
+
+  reset_fake
+  activate_fake_run
+  rm -f -- "$state"
+  write_valid_state "$state"
+  run_helper status --state "$state" --expect 'accepted_count>=1'
+  [[ "$RUN_STATUS" -ne 0 && ! -s "$ADB_LOG" ]] ||
+    fail "checkpoint parser test: unknown --expect reached device access"
   pass
 }
 
@@ -3288,7 +3646,7 @@ if [[ "$#" -eq 0 ]]; then
 fi
 for requested in "${SELECTED_OPERATIONS[@]}"; do
   case "$requested" in
-    preflight|start|inject|interrupt|status|finalize|capture|end|fixture-bounds) ;;
+    preflight|start|inject|interrupt|status|finalize|capture|end|fixture-bounds|checkpoints) ;;
     *) fail "test filter must name a real-room operation" ;;
   esac
 done
@@ -3307,6 +3665,7 @@ fi
 selected fixture-bounds && run_fixture_bounds_tests
 selected interrupt && run_interrupt_tests
 selected status && run_status_tests
+selected checkpoints && run_checkpoint_tests
 selected finalize && run_finalize_tests
 selected capture && run_capture_tests
 selected end && run_end_tests

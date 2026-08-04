@@ -7,6 +7,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 READY="$ROOT_DIR/scripts/adb-device-ready.sh"
 ARTIFACT_HELPERS="$ROOT_DIR/scripts/voice-agent-e2e-artifacts.sh"
 REAL_ROOM_LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
+REAL_ROOM_CONTRACT="$ROOT_DIR/scripts/voice-agent-real-room-contract.py"
 PACKAGE_EXPECTED='me.rerere.rikkahub.debug'
 CONTROL_RECEIVER='me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver'
 FIXTURE_RECEIVER='me.rerere.rikkahub.voiceagent.debug.VoiceCaptureFixtureDebugReceiver'
@@ -173,172 +174,6 @@ on_signal() {
 trap on_exit EXIT
 trap on_signal HUP INT TERM
 
-read_status_artifacts() {
-  local automation_path
-  local private_path
-  local sanitized_path
-  local presence
-  local sanitized_temp
-  local counts_temp
-  local -a counts=()
-  automation_path="$(app_artifact_path "$APP_ARTIFACT_ROOT/${RUN_HASH#sha256:}" automation-events.jsonl)"
-  private_path="$(app_artifact_path "$APP_ARTIFACT_ROOT/$TRACE_ID" voice-experience-private.ndjson)"
-  sanitized_path="$(app_artifact_path "$APP_ARTIFACT_ROOT/$TRACE_ID" voice-experience-events.ndjson)"
-  presence="$(adb_read shell run-as "$PACKAGE" --user "$ANDROID_USER_ID" sh -c '
-: voice-step-artifact-presence
-for path do
-  [ -f "$path" ] && [ ! -L "$path" ] && [ -s "$path" ] || exit 1
-  printf "present\n"
-done
-' sh "$automation_path" "$private_path" "$sanitized_path" 2>/dev/null)" ||
-    die 'required artifact unavailable'
-  [[ "$presence" == $'present\npresent\npresent' ]] || die 'required artifact unavailable'
-  ensure_local_temp_dir
-  sanitized_temp="$LOCAL_TEMP_DIR/status-sanitized.ndjson"
-  counts_temp="$LOCAL_TEMP_DIR/status-counts"
-  : > "$sanitized_temp"
-  chmod 600 "$sanitized_temp"
-  register_temp_file "$sanitized_temp"
-  register_temp_file "$counts_temp"
-  adb_read exec-out run-as "$PACKAGE" --user "$ANDROID_USER_ID" cat "$sanitized_path" \
-    >"$sanitized_temp" 2>/dev/null || die 'sanitized artifact read failed'
-  if ! python3 - "$sanitized_temp" >"$counts_temp" 2>/dev/null <<'PY'
-import json
-import re
-import sys
-from datetime import datetime, timezone
-
-IDENTIFIER = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
-HASH = re.compile(r"^sha256:[0-9a-f]{64}$")
-BASE = ["version", "voiceSessionHash", "eventId", "kind", "observedAt", "eventHash"]
-JOB = [
-    "userTurnId", "requestHash", "toolCallId", "argumentHash", "jobId",
-    "ownerHash", "conversationHash", "roomHash", "traceHash",
-]
-IDENTIFIERS = {
-    "eventId", "userTurnId", "toolCallId", "jobId", "turnId",
-    "groundedJobId", "assistantTurnId", "followUpTurnId",
-}
-HASHES = {
-    "voiceSessionHash", "eventHash", "requestHash", "argumentHash", "ownerHash",
-    "conversationHash", "roomHash", "traceHash", "resultHash", "groundedResultHash",
-}
-COUNTS = {
-    "promptCharacterCount", "answerCharacterCount", "failureReasonCharacterCount",
-    "textCharacterCount",
-}
-BOOLEANS = {"interrupted", "userSpeaking", "agentSpeaking"}
-SCHEMAS = {
-    "job_accepted": BASE + JOB + ["promptCharacterCount"],
-    "job_running": BASE + JOB,
-    "still_working": BASE + JOB,
-    "job_succeeded": BASE + JOB + ["resultHash", "answerCharacterCount"],
-    "job_failed": BASE + JOB + ["failureReasonCharacterCount"],
-    "job_expired": BASE + JOB + ["failureReasonCharacterCount"],
-    "job_canceled": BASE + JOB + ["failureReasonCharacterCount"],
-    "delivery_eligible": BASE + ["toolCallId", "jobId"],
-    "delivery_started": BASE + ["toolCallId", "jobId"],
-    "speech_started": BASE + ["toolCallId", "jobId"],
-    "delivery_blocked": BASE + ["toolCallId", "jobId", "userSpeaking", "agentSpeaking"],
-    "delivery_announced": BASE + ["toolCallId", "jobId", "assistantTurnId"],
-    "follow_up_correlation": BASE + ["followUpTurnId", "assistantTurnId", "resultHash"],
-}
-
-
-def timestamp(value):
-    if type(value) is not str or value.startswith("0000-") or not value.endswith("Z"):
-        return False
-    try:
-        parsed = datetime.fromisoformat(value[:-1] + "+00:00")
-    except ValueError:
-        return False
-    if parsed.tzinfo is None:
-        return False
-    rendered = parsed.astimezone(timezone.utc).isoformat(timespec=("microseconds" if parsed.microsecond else "seconds"))
-    return rendered.replace("+00:00", "Z") == value
-
-
-def parse_pairs(line):
-    pairs = json.loads(line, object_pairs_hook=lambda value: value)
-    if type(pairs) is not list or any(type(pair) is not tuple for pair in pairs):
-        raise ValueError()
-    keys = [key for key, _ in pairs]
-    if len(keys) != len(set(keys)):
-        raise ValueError()
-    return keys, dict(pairs)
-
-
-with open(sys.argv[1], "rb") as handle:
-    content = handle.read()
-if not content or len(content) > 16 * 1024 * 1024 or not content.endswith(b"\n"):
-    raise SystemExit(1)
-try:
-    text = content.decode("utf-8")
-except UnicodeDecodeError:
-    raise SystemExit(1)
-rows = []
-for line in text.splitlines():
-    if not line:
-        raise SystemExit(1)
-    try:
-        keys, row = parse_pairs(line)
-    except (TypeError, ValueError, json.JSONDecodeError):
-        raise SystemExit(1)
-    kind = row.get("kind")
-    expected = SCHEMAS.get(kind)
-    if kind == "transcript":
-        expected = BASE + ["turnId", "role", "interrupted", "textCharacterCount"]
-        grounding = ["groundedJobId", "groundedResultHash"]
-        if keys == expected + grounding:
-            expected += grounding
-    if expected is None or keys != expected or "voiceSessionId" in row:
-        raise SystemExit(1)
-    if json.dumps(row, separators=(",", ":"), ensure_ascii=False) != line:
-        raise SystemExit(1)
-    if type(row["version"]) is not int or row["version"] != 1 or not timestamp(row["observedAt"]):
-        raise SystemExit(1)
-    for field in set(row) & IDENTIFIERS:
-        if type(row[field]) is not str or IDENTIFIER.fullmatch(row[field]) is None:
-            raise SystemExit(1)
-    for field in set(row) & HASHES:
-        if type(row[field]) is not str or HASH.fullmatch(row[field]) is None:
-            raise SystemExit(1)
-    for field in set(row) & COUNTS:
-        if type(row[field]) is not int or row[field] < 0:
-            raise SystemExit(1)
-    for field in set(row) & BOOLEANS:
-        if type(row[field]) is not bool:
-            raise SystemExit(1)
-    if kind == "transcript":
-        if row["role"] not in {"user", "assistant"}:
-            raise SystemExit(1)
-        grounded = "groundedJobId" in row and "groundedResultHash" in row
-        if (row["role"] == "user" and grounded) or (("groundedJobId" in row) != ("groundedResultHash" in row)):
-            raise SystemExit(1)
-    rows.append(row)
-if not rows:
-    raise SystemExit(1)
-terminal = {"job_succeeded", "job_failed", "job_expired", "job_canceled"}
-print(sum(row["kind"] == "job_accepted" for row in rows))
-print(sum(row["kind"] in terminal for row in rows))
-print(sum(row["kind"] == "delivery_blocked" for row in rows))
-print(sum(row["kind"] == "delivery_announced" for row in rows))
-PY
-  then
-    die 'invalid sanitized artifact'
-  fi
-  mapfile -t counts < "$counts_temp"
-  [[ "${#counts[@]}" == 4 ]] || die 'invalid sanitized artifact'
-  local count
-  for count in "${counts[@]}"; do
-    [[ "$count" =~ ^[0-9]+$ ]] || die 'invalid sanitized artifact'
-  done
-  STATUS_JOB_ACCEPTED_COUNT="${counts[0]}"
-  STATUS_JOB_TERMINAL_COUNT="${counts[1]}"
-  STATUS_DELIVERY_BLOCKED_COUNT="${counts[2]}"
-  STATUS_DELIVERY_ANNOUNCED_COUNT="${counts[3]}"
-}
-
 run_inject() {
   local fixture_path="$1"
   local role="$2"
@@ -377,8 +212,14 @@ run_interrupt() {
 }
 
 run_status_operation() {
+  local expectation="$1"
   local status_snapshot
+  local automation_snapshot
+  local voice_snapshot
+  local boundary
+  local evaluation_status
   local -a status=()
+  CHECKPOINT_ERROR_MODE=1
   validate_runtime
   status_snapshot="$(read_status)"
   mapfile -t status <<< "$status_snapshot"
@@ -386,21 +227,24 @@ run_status_operation() {
      "${status[2]}" == "$COMPARISON_HASH" &&
      "${status[3]}" == "$TRANSPORT_EXPECTED" ]] || die 'status binding mismatch'
   read_call_service_active
-  read_status_artifacts
+  read_checkpoint_artifact_snapshots automation_snapshot voice_snapshot
+  set +e
+  boundary="$(python3 "$REAL_ROOM_CONTRACT" --evaluate "$expectation" \
+    "$automation_snapshot" "$voice_snapshot" "$RUN_HASH" "$COMPARISON_HASH" \
+    2000000000 2>/dev/null)"
+  evaluation_status=$?
+  set -e
+  if (( evaluation_status != 0 )); then
+    [[ "$boundary" =~ ^[a-z][a-z0-9_]{0,63}$ ]] || boundary=evidence
+    die "checkpoint $boundary not proven"
+  fi
+  [[ -z "$boundary" ]] || die 'checkpoint evidence not proven'
   cleanup_local_temps || die 'cleanup failed'
   printf '%s\n' \
     'voice-step.status=ok' \
     'voice-step.operation=status' \
-    "voice-step.run_state=${status[0]}" \
-    'voice-step.call_state=active' \
-    "voice-step.event_count=${status[4]}" \
-    "voice-step.network=${status[5]}" \
-    "voice-step.validated=${status[6]}" \
-    'voice-step.voice_events=present' \
-    "voice-step.job_accepted_count=$STATUS_JOB_ACCEPTED_COUNT" \
-    "voice-step.job_terminal_count=$STATUS_JOB_TERMINAL_COUNT" \
-    "voice-step.delivery_blocked_count=$STATUS_DELIVERY_BLOCKED_COUNT" \
-    "voice-step.delivery_announced_count=$STATUS_DELIVERY_ANNOUNCED_COUNT"
+    "voice-step.expectation=$expectation" \
+    'voice-step.expectation_met=true'
 }
 
 run_finalize() {
@@ -889,7 +733,7 @@ run_with_decoded_state() {
   case "$requested_operation" in
     inject) run_inject "$@" ;;
     interrupt) run_interrupt "$@" ;;
-    status) run_status_operation ;;
+    status) run_status_operation "$@" ;;
     finalize) run_finalize ;;
     capture) run_capture "$@" ;;
     end) run_end "$@" ;;
@@ -945,9 +789,11 @@ case "$operation" in
     run_with_decoded_state interrupt "${PARSED[--state]}" "${PARSED[--fixture]}"
     ;;
   status)
-    parse_options '--state' "$@"
-    require_options --state
-    run_with_decoded_state status "${PARSED[--state]}"
+    parse_options '--state --expect' "$@"
+    require_options --state --expect
+    python3 "$REAL_ROOM_CONTRACT" --validate-expectation "${PARSED[--expect]}" \
+      >/dev/null 2>&1 || die 'invalid expectation'
+    run_with_decoded_state status "${PARSED[--state]}" "${PARSED[--expect]}"
     ;;
   finalize)
     parse_options '--state' "$@"
