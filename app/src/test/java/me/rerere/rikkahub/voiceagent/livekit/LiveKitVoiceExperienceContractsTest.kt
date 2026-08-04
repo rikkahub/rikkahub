@@ -1,13 +1,62 @@
 package me.rerere.rikkahub.voiceagent.livekit
 
+import java.security.MessageDigest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LiveKitVoiceExperienceContractsTest {
+    @Test
+    fun `pinned persistence vocabulary is exact`() {
+        val bytes = javaClass.classLoader
+            ?.getResourceAsStream("voice-experience-ack-kinds-v1.json")
+            ?.use { it.readBytes() }
+            ?: error("ACK kind contract is missing")
+        val hash = MessageDigest.getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString(separator = "") { byte ->
+                byte.toInt().and(0xff).toString(radix = 16).padStart(length = 2, padChar = '0')
+            }
+        val contract = Json
+            .parseToJsonElement(bytes.toString(Charsets.UTF_8))
+            .jsonObject
+        val kinds = requireNotNull(contract["kinds"]).jsonArray.map { element ->
+            element.jsonPrimitive.content
+        }
+
+        assertEquals(
+            "dbac96c9160b855c2f37d5b618e9b513" +
+                "4ef70a3717c55ee593e5965440bedba0",
+            hash,
+        )
+        assertEquals(setOf("kinds", "schemaVersion"), contract.keys)
+        assertEquals(
+            1,
+            requireNotNull(contract["schemaVersion"]).jsonPrimitive.int,
+        )
+        assertEquals(kinds.size, kinds.toSet().size)
+        kinds.forEach { kind ->
+            assertEquals(
+                kind,
+                requireNotNull(
+                    parseLiveKitVoiceExperienceEvent(ackEventJson(kind)),
+                ) { kind }.kind,
+            )
+        }
+        listOf("job_cancel_requested", "job_cancelled").forEach { removed ->
+            assertNull(
+                removed,
+                parseLiveKitVoiceExperienceEvent(jobStateJson(kind = removed)),
+            )
+        }
+    }
+
     @Test
     fun `accepted event requires exact session job call and request hash`() {
         val event = parseLiveKitVoiceExperienceEvent(acceptedEventJson())
@@ -211,6 +260,30 @@ class LiveKitVoiceExperienceContractsTest {
 
 private fun acceptedEventJson(): String =
     canonicalJson("""{"version":1,"voiceSessionId":"lvs_1","eventId":"evt_1","kind":"job_accepted","observedAt":"2026-07-30T12:00:00Z","userTurnId":"turn_1","requestHash":"sha256:${"2".repeat(64)}","toolCallId":"call_1","argumentHash":"sha256:${"1".repeat(64)}","jobId":"hj_1"${correlationJson()},"prompt":"private question"}""")
+
+private fun ackEventJson(kind: String): String = when (kind) {
+    "job_accepted" -> acceptedEventJson()
+    "job_running", "still_working" -> jobStateJson(kind = kind)
+    "job_succeeded" ->
+        succeededEventJson(
+            answer = "answer",
+            resultHash = voiceSha256("answer"),
+        )
+    "job_failed", "job_expired", "job_canceled" ->
+        jobStateJson(kind = kind, suffix = ""","failureReason":"safe failure"""")
+    "transcript" -> transcriptJson(role = "assistant", interrupted = false)
+    "follow_up_correlation" -> followUpCorrelationJson()
+    "delivery_eligible", "delivery_started", "speech_started" ->
+        deliveryJson(kind = kind)
+    "delivery_blocked" ->
+        deliveryJson(
+            kind = kind,
+            assistantTurn = ""","userSpeaking":true,"agentSpeaking":false""",
+        )
+    "delivery_announced" ->
+        deliveryJson(kind = kind, assistantTurn = ""","assistantTurnId":"assistant_1"""")
+    else -> error("Unknown pinned ACK kind: $kind")
+}
 
 private fun succeededEventJson(answer: String, resultHash: String): String =
     jobStateJson(

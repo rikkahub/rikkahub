@@ -1,0 +1,1 @@
+{"kinds":["job_accepted","job_running","still_working","job_succeeded","job_failed","job_expired","job_canceled","transcript","follow_up_correlation","delivery_eligible","delivery_started","delivery_blocked","speech_started","delivery_announced"],"schemaVersion":1}
