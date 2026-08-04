@@ -487,6 +487,18 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val XIAOMI_MIMO_V3 = defineModel {
+        tokens("mimo", "v", "3")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    private val XIAOMI_MIMO_V3_PRO = defineModel {
+        tokens("mimo", "v", "3", "pro")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val HY3 = defineModel {
         tokens("hy", "3")
         toolReasoningAbility()
@@ -580,6 +592,8 @@ object ModelRegistry {
         XIAOMI_MIMO_V2_PRO,
         XIAOMI_MIMO_V2_5,
         XIAOMI_MIMO_V2_5_PRO,
+        XIAOMI_MIMO_V3,
+        XIAOMI_MIMO_V3_PRO,
         HY3,
         LONGCAT_2,
         QWEN_MT
