@@ -25,7 +25,7 @@ class CanonicalVoiceExperienceJsonTest {
             }
 
         assertEquals(
-            "sha256:625ce56ddccc8e63adcfe1d9cc13a2dba6d07ea666d77a49c16c107c1d370746",
+            "sha256:06db9c679c58703aa65cab460c351d32d19e371dc0bda2aa5337f77be4fa5335",
             "sha256:$hash",
         )
         assertTrue(bytes.last() == '\n'.code.toByte())
