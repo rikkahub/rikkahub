@@ -219,7 +219,6 @@ run_status_operation() {
   local boundary
   local evaluation_status
   local -a status=()
-  CHECKPOINT_ERROR_MODE=1
   validate_runtime
   status_snapshot="$(read_status)"
   mapfile -t status <<< "$status_snapshot"
@@ -793,7 +792,11 @@ case "$operation" in
     require_options --state --expect
     python3 "$REAL_ROOM_CONTRACT" --validate-expectation "${PARSED[--expect]}" \
       >/dev/null 2>&1 || die 'invalid expectation'
-    run_with_decoded_state status "${PARSED[--state]}" "${PARSED[--expect]}"
+    CHECKPOINT_ERROR_MODE=1
+    if ! (run_with_decoded_state status "${PARSED[--state]}" "${PARSED[--expect]}") \
+      2>/dev/null; then
+      die 'checkpoint evidence not proven'
+    fi
     ;;
   finalize)
     parse_options '--state' "$@"

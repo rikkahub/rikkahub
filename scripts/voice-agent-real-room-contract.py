@@ -54,6 +54,12 @@ DELIVERY_KINDS = {
     "delivery_blocked",
     "delivery_announced",
 }
+QUIET_RESET_NAMES = {
+    "interrupt_started",
+    "playback_active",
+    "playback_stopped",
+    "playback_drained",
+}
 MAX_ARTIFACT_BYTES = 16 * 1024 * 1024
 HASH = re.compile(r"sha256:[0-9a-f]{64}")
 IDENTIFIER = re.compile(r"[A-Za-z0-9_-]{1,128}")
@@ -186,26 +192,29 @@ def first_quiet_after_last_reset(
     automation: Sequence[dict[str, Any]],
     before_ms: int | None = None,
 ) -> int | None:
-    observations = [
+    observations = sorted(
+        (
         row
         for row in automation
-        if row.get("name") == "playback_written"
-        and type(row.get("monotonicMs")) is int
-        and type(row.get("rmsActive")) is bool
+        if type(row.get("monotonicMs")) is int
         and (before_ms is None or row["monotonicMs"] < before_ms)
-    ]
-    reset_index = max(
-        (index for index, row in enumerate(observations) if row["rmsActive"]),
-        default=-1,
-    )
-    return next(
-        (
-            row["monotonicMs"]
-            for index, row in enumerate(observations)
-            if index > reset_index and not row["rmsActive"]
         ),
-        None,
+        key=lambda row: row["monotonicMs"],
     )
+    quiet_start = None
+    for row in observations:
+        name = row.get("name")
+        if name in QUIET_RESET_NAMES or (
+            name == "playback_written" and row.get("rmsActive") is True
+        ):
+            quiet_start = None
+        elif (
+            name == "playback_written"
+            and row.get("rmsActive") is False
+            and quiet_start is None
+        ):
+            quiet_start = row["monotonicMs"]
+    return quiet_start
 
 
 def _accepted(voice: Sequence[dict[str, Any]], boundary: str, count: int) -> list[tuple[int, dict[str, Any]]]:
@@ -280,10 +289,14 @@ def _single_result(voice: Sequence[dict[str, Any]]) -> tuple[tuple[Any, ...], st
     return identity, result_hash, assistant_turn, announcement_index
 
 
-def _parallel_identities(voice: Sequence[dict[str, Any]]) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+def _parallel_identities(
+    voice: Sequence[dict[str, Any]],
+) -> tuple[tuple[int, tuple[Any, ...]], tuple[int, tuple[Any, ...]]]:
     accepted_rows = _accepted(voice, "parallel_two_accepted", 2)
-    first = _identity(accepted_rows[0][1])
-    second = _identity(accepted_rows[1][1])
+    first_index, first_row = accepted_rows[0]
+    second_index, second_row = accepted_rows[1]
+    first = _identity(first_row)
+    second = _identity(second_row)
     _require(first != second, "parallel_distinct_identity")
     accepted_pairs = {(first[2], first[4]), (second[2], second[4])}
     _require(
@@ -294,20 +307,30 @@ def _parallel_identities(voice: Sequence[dict[str, Any]]) -> tuple[tuple[Any, ..
         ),
         "parallel_delivery_identity",
     )
-    return first, second
+    return (first_index, first), (second_index, second)
 
 
 def _parallel_later(voice: Sequence[dict[str, Any]]) -> tuple[tuple[Any, ...], tuple[Any, ...], int]:
-    first, second = _parallel_identities(voice)
+    (_first_acceptance, first), (second_acceptance, second) = _parallel_identities(voice)
     _require(
-        not any(_identity(row) == first and row.get("kind") in TERMINAL_KINDS for row in voice),
-        "parallel_first_nonterminal",
+        not any(
+            (_identity(row) == first and row.get("kind") in TERMINAL_KINDS)
+            or (
+                _delivery_identity(row) == (first[2], first[4])
+                and row.get("kind") == "delivery_announced"
+            )
+            for row in voice
+        ),
+        "parallel_first_pending",
     )
     succeeded = _events_for_identity(voice, "job_succeeded", second)
     announced = _delivery_events(voice, "delivery_announced", second)
     _require(len(succeeded) == 1, "parallel_second_succeeded")
     _require(len(announced) == 1, "parallel_second_announcement")
-    _require(succeeded[0][0] < announced[0][0], "parallel_second_announcement")
+    _require(
+        second_acceptance < succeeded[0][0] < announced[0][0],
+        "parallel_second_order",
+    )
     return first, second, announced[0][0]
 
 
@@ -401,13 +424,18 @@ def evaluate_checkpoint(
         return
 
     if expectation is Expectation.PARALLEL_BOTH_ANNOUNCED:
-        first, second = _parallel_identities(voice)
+        (first_acceptance, first), (second_acceptance, second) = _parallel_identities(voice)
         second_success = _events_for_identity(voice, "job_succeeded", second)
         second_announced = _delivery_events(voice, "delivery_announced", second)
         first_success = _events_for_identity(voice, "job_succeeded", first)
         first_announced = _delivery_events(voice, "delivery_announced", first)
         _require(len(second_success) == len(second_announced) == 1, "parallel_second_announcement")
         _require(len(first_success) == len(first_announced) == 1, "parallel_first_announcement")
+        _require(
+            first_acceptance < first_success[0][0]
+            and second_acceptance < second_success[0][0],
+            "parallel_acceptance_order",
+        )
         _require(
             second_success[0][0] < second_announced[0][0] < first_success[0][0] < first_announced[0][0],
             "parallel_completion_order",
@@ -470,7 +498,14 @@ def evaluate_checkpoint(
             for index, row in _delivery_events(voice, "delivery_announced", identity)
             if row.get("assistantTurnId") == grounded[0][1].get("turnId")
         ]
-        _require(len(announced) == 1 and grounded[0][0] < announced[0][0], "recovery_announcement")
+        all_announced = [row for row in voice if row.get("kind") == "delivery_announced"]
+        _require(
+            len(all_announced) == 1
+            and len(announced) == 1
+            and all_announced[0] is announced[0][1]
+            and grounded[0][0] < announced[0][0],
+            "recovery_announcement",
+        )
         return
 
     if expectation is Expectation.ISOLATION_FIRST_ACTIVE:
@@ -494,8 +529,10 @@ def evaluate_checkpoint(
 
     if expectation is Expectation.ISOLATION_TERMINAL_HEALTHY:
         accepted_rows = _accepted(voice, "isolation_two_accepted", 2)
-        target = _identity(accepted_rows[0][1])
-        healthy = _identity(accepted_rows[1][1])
+        target_acceptance, target_row = accepted_rows[0]
+        healthy_acceptance, healthy_row = accepted_rows[1]
+        target = _identity(target_row)
+        healthy = _identity(healthy_row)
         _require(
             all(target[index] != healthy[index] for index in (1, 2, 4)),
             "isolation_disjoint_identity",
@@ -506,6 +543,7 @@ def evaluate_checkpoint(
             if row.get("kind") in FAILURE_KINDS and _identity(row) == target
         ]
         _require(len(target_failures) == 1, "isolation_target_terminal")
+        _require(target_acceptance < target_failures[0][0], "isolation_target_order")
         _require(not _events_for_identity(voice, "job_succeeded", target), "isolation_target_terminal")
         healthy_success = _events_for_identity(voice, "job_succeeded", healthy)
         _require(len(healthy_success) == 1, "isolation_healthy_succeeded")
@@ -536,7 +574,12 @@ def evaluate_checkpoint(
             for index, row in _delivery_events(voice, "delivery_announced", healthy)
             if row.get("assistantTurnId") == grounded[0][1].get("turnId")
         ]
-        _require(len(announced) == 1 and grounded[0][0] < announced[0][0], "isolation_healthy_announced")
+        _require(len(announced) == 1, "isolation_healthy_announced")
+        _require(
+            healthy_acceptance < healthy_success[0][0]
+            < grounded[0][0] < announced[0][0],
+            "isolation_healthy_order",
+        )
         return
 
     raise ContractError("expectation")

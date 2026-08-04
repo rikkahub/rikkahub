@@ -1339,6 +1339,16 @@ assert_exact_output() {
   pass
 }
 
+assert_exact_checkpoint_failure() {
+  [[ "$RUN_STATUS" -ne 0 ]] || fail "checkpoint failure test: command succeeded"
+  [[ ! -s "$STDOUT_FILE" ]] || fail "checkpoint failure test: command wrote stdout"
+  [[ "$(<"$STDERR_FILE")" == 'voice-step.error=checkpoint evidence not proven' ]] ||
+    fail "checkpoint failure test: diagnostic was not exactly one sanitized line"
+  [[ "$(wc -l < "$STDERR_FILE")" == 1 ]] ||
+    fail "checkpoint failure test: diagnostic was emitted more than once"
+  assert_private_output_absent
+}
+
 assert_rejected() {
   local command_text="$1"
   local expected="$2"
@@ -2515,6 +2525,49 @@ run_status_tests() {
   pass
 
   reset_fake
+  local malformed_state="$TMP_DIR/status-malformed-state.json"
+  printf '{not-json}\n' > "$malformed_state"
+  chmod 600 "$malformed_state"
+  run_helper status --state "$malformed_state" --expect single_result_announced
+  assert_exact_checkpoint_failure
+  [[ ! -s "$ADB_LOG" ]] || fail "status malformed-state test: device access occurred"
+  pass
+
+  reset_fake
+  rm -f -- "$state"
+  activate_fake_run
+  write_valid_state "$state"
+  export VOICE_STEP_ADB_TIMEOUT_SECONDS=invalid
+  run_helper status --state "$state" --expect single_result_announced
+  export VOICE_STEP_ADB_TIMEOUT_SECONDS=10
+  assert_exact_checkpoint_failure
+  [[ ! -s "$ADB_LOG" ]] || fail "status runtime test: device access occurred"
+  pass
+
+  reset_fake
+  rm -f -- "$state"
+  activate_fake_run
+  write_valid_state "$state"
+  local lock_key
+  local lock_directory
+  local status_lock_fd
+  lock_key="$(python3 - <<'PY'
+import hashlib
+print(hashlib.sha256(b"DEVICE_SECRET_123\0me.rerere.rikkahub.debug").hexdigest())
+PY
+)"
+  lock_directory="/tmp/rikkahub-voice-real-room-locks-${EUID}/$lock_key.lock"
+  mkdir -p -m 700 -- "$lock_directory"
+  exec {status_lock_fd}<"$lock_directory"
+  flock -n "$status_lock_fd"
+  run_helper status --state "$state" --expect single_result_announced
+  flock -u "$status_lock_fd"
+  exec {status_lock_fd}<&-
+  assert_exact_checkpoint_failure
+  [[ ! -s "$ADB_LOG" ]] || fail "status lock test: device access occurred"
+  pass
+
+  reset_fake
   activate_fake_run
   rm -f -- "$state"
   write_valid_state "$state"
@@ -2530,10 +2583,7 @@ run_status_tests() {
   write_valid_state "$state"
   export FAKE_ADB_MISSING_ARTIFACT='voice-experience-private.ndjson'
   run_helper status --state "$state" --expect single_result_announced
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "status-presence test: missing private artifact succeeded"
-  [[ "$(<"$STDERR_FILE")" == 'voice-step.error=checkpoint evidence not proven' ]] ||
-    fail "status-failure-output test: infrastructure detail escaped the fixed checkpoint boundary"
-  assert_private_output_absent
+  assert_exact_checkpoint_failure
   pass
 
   reset_fake
@@ -2623,6 +2673,37 @@ def automation(monotonic_ms, name, epoch=None, rms=None):
     if rms is not None:
         row["rmsActive"] = rms
     return row
+
+
+def canonical_automation(specifications):
+    rows = []
+    for monotonic_ms, name, epoch, rms in specifications:
+        row = dict.fromkeys(contract.AUTOMATION_KEYS)
+        row.update({
+            "schemaVersion": 1,
+            "monotonicMs": monotonic_ms,
+            "wallClockMs": 1_800_000_000_000 + monotonic_ms,
+            "runHash": digest("a"),
+            "comparisonHash": digest("b"),
+            "requestedTransport": "livekit_experimental",
+            "name": name,
+            "playbackEpoch": epoch,
+        })
+        if name == "playback_written":
+            row["byteCount"] = 3200
+            row["rmsActive"] = rms
+            row["audioWindowMicros"] = 10_000
+        rows.append(row)
+    content = "".join(
+        json.dumps(row, separators=(",", ":")) + "\n"
+        for row in rows
+    ).encode()
+    return contract.parse_automation_bytes(
+        content,
+        digest("a"),
+        digest("b"),
+        "livekit_experimental",
+    )
 
 
 def announced_sequence(job, assistant="assistant-1", result=digest("8")):
@@ -2786,6 +2867,10 @@ expect_pass("parallel_later_completed_first", [], later_first)
 mutated = [dict(row) for row in later_first]
 mutated[-1]["toolCallId"] = first["toolCallId"]
 expect_failure("parallel_later_completed_first", [], mutated, "parallel_delivery_identity")
+mutated = [later_first[0], later_first[3], later_first[1], later_first[2], later_first[4]]
+expect_failure("parallel_later_completed_first", [], mutated, "parallel_second_order")
+mutated = later_first + [delivery("delivery_announced", first, assistantTurnId="assistant-first")]
+expect_failure("parallel_later_completed_first", [], mutated, "parallel_first_pending")
 
 both = later_first + [
     state("job_succeeded", first, resultHash=digest("8")),
@@ -2794,6 +2879,8 @@ both = later_first + [
 expect_pass("parallel_both_announced", [], both)
 mutated = [both[0], both[1], both[2], both[5], both[6], both[3], both[4]]
 expect_failure("parallel_both_announced", [], mutated, "parallel_completion_order")
+mutated = [both[0], both[3], both[1], both[2], both[4], both[5], both[6]]
+expect_failure("parallel_both_announced", [], mutated, "parallel_acceptance_order")
 
 active_voice = [
     accepted(first),
@@ -2830,27 +2917,69 @@ recovered_voice = active_voice + [
     ),
     delivery("delivery_announced", first, assistantTurnId="assistant-recovered"),
 ]
-recovered_automation = observed_automation + [
-    automation(100, "playback_written", 1, False),
-    automation(500, "playback_written", 1, False),
-    automation(2200, "playback_active", 2),
-    automation(2300, "playback_drained", 2),
-]
+recovered_automation = canonical_automation([
+    (10, "playback_active", 1, None),
+    (20, "playback_written", 1, True),
+    (30, "interrupt_started", None, None),
+    (40, "playback_stopped", 1, None),
+    (100, "playback_written", 1, False),
+    (500, "playback_written", 1, False),
+    (2200, "playback_active", 2, None),
+    (2300, "playback_drained", 2, None),
+])
 expect_pass("interruption_recovered", recovered_automation, recovered_voice)
-reset_automation = observed_automation + [
-    automation(100, "playback_written", 1, False),
-    automation(500, "playback_written", 1, False),
-    automation(700, "playback_written", 1, True),
-    automation(700, "playback_written", 1, False),
-    automation(2200, "playback_active", 2),
-    automation(2300, "playback_drained", 2),
-]
-assert contract.first_quiet_after_last_reset(reset_automation[:-2]) == 700
+quiet_before_interruption = canonical_automation([
+    (10, "playback_active", 1, None),
+    (20, "playback_written", 1, True),
+    (100, "playback_written", 1, False),
+    (500, "playback_written", 1, False),
+    (700, "interrupt_started", None, None),
+    (800, "playback_stopped", 1, None),
+    (2700, "playback_active", 2, None),
+    (2800, "playback_drained", 2, None),
+])
+expect_failure(
+    "interruption_recovered",
+    quiet_before_interruption,
+    recovered_voice,
+    "recovery_continuous_quiet",
+)
+reset_automation = canonical_automation([
+    (10, "playback_active", 1, None),
+    (20, "playback_written", 1, True),
+    (30, "interrupt_started", None, None),
+    (40, "playback_stopped", 1, None),
+    (100, "playback_written", 1, False),
+    (500, "playback_written", 1, False),
+    (700, "playback_written", 1, True),
+    (701, "playback_written", 1, False),
+    (2200, "playback_active", 2, None),
+    (2300, "playback_drained", 2, None),
+])
+assert contract.first_quiet_after_last_reset(reset_automation[:-2]) == 701
 assert contract.first_quiet_after_last_reset(reset_automation[:-3]) is None
 expect_failure("interruption_recovered", reset_automation, recovered_voice, "recovery_continuous_quiet")
-reset_automation[-2] = automation(2700, "playback_active", 2)
-reset_automation[-1] = automation(2800, "playback_drained", 2)
-expect_pass("interruption_recovered", reset_automation, recovered_voice)
+recovered_after_reset = canonical_automation([
+    (10, "playback_active", 1, None),
+    (20, "playback_written", 1, True),
+    (30, "interrupt_started", None, None),
+    (40, "playback_stopped", 1, None),
+    (100, "playback_written", 1, False),
+    (500, "playback_written", 1, False),
+    (700, "playback_written", 1, True),
+    (701, "playback_written", 1, False),
+    (2701, "playback_active", 2, None),
+    (2800, "playback_drained", 2, None),
+])
+expect_pass("interruption_recovered", recovered_after_reset, recovered_voice)
+mutated_voice = recovered_voice + [
+    delivery("delivery_announced", first, assistantTurnId="assistant-other")
+]
+expect_failure("interruption_recovered", recovered_automation, mutated_voice, "recovery_announcement")
+mutated_voice = recovered_voice + [
+    delivery("delivery_announced", second, assistantTurnId="assistant-crossed")
+]
+expect_failure("interruption_recovered", recovered_automation, mutated_voice, "recovery_announcement")
 
 isolation_active = [accepted(first), state("still_working", first)]
 expect_pass("isolation_first_active", [], isolation_active)
@@ -2890,6 +3019,17 @@ terminal_healthy = [
 expect_pass("isolation_terminal_healthy", [], terminal_healthy)
 mutated = terminal_healthy + [delivery("delivery_started", first)]
 expect_failure("isolation_terminal_healthy", [], mutated, "isolation_target_no_delivery")
+mutated = [terminal_healthy[2], *terminal_healthy[:2], *terminal_healthy[3:]]
+expect_failure("isolation_terminal_healthy", [], mutated, "isolation_target_order")
+mutated = [
+    terminal_healthy[0],
+    terminal_healthy[1],
+    terminal_healthy[2],
+    terminal_healthy[4],
+    terminal_healthy[5],
+    terminal_healthy[3],
+]
+expect_failure("isolation_terminal_healthy", [], mutated, "isolation_healthy_order")
 PY
   pass
 
