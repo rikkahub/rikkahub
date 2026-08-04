@@ -956,6 +956,11 @@ if run_as_tail is not None:
 if command[:4] == ["shell", "am", "broadcast", "--user"]:
     action = command[command.index("-a") + 1]
     values = extras(command)
+    raw_broadcast_path = os.environ.get("FAKE_ADB_RAW_BROADCAST_FILE")
+    raw_broadcast_action = os.environ.get("FAKE_ADB_RAW_BROADCAST_ACTION")
+    if raw_broadcast_path and raw_broadcast_action and action.endswith(raw_broadcast_action):
+        sys.stdout.buffer.write(Path(raw_broadcast_path).read_bytes())
+        raise SystemExit(0)
     if os.environ.get("FAKE_ADB_MALFORMED_BROADCAST") == action:
         print("uncontrolled malformed receiver output")
         raise SystemExit(0)
@@ -1393,6 +1398,7 @@ PY
   unset FAKE_ADB_REPLACE_CAPTURE_SOURCE_AFTER_READ FAKE_ADB_CALL_STOP_FAILED
   unset FAKE_ADB_REJECT_FINALIZE FAKE_ADB_FAIL_FINALIZE
   unset FAKE_ADB_FINALIZE_NONZERO_DATA FAKE_ADB_FINALIZE_SUCCESS_DATA
+  unset FAKE_ADB_RAW_BROADCAST_FILE FAKE_ADB_RAW_BROADCAST_ACTION
   unset FAKE_ADB_POST_FINALIZE_STATUS
   unset FAKE_ADB_DEVICE_LOST_ON_FORCE_STOP FAKE_ADB_CAPTURE_CRLF
   unset FAKE_ADB_DEVICE_LOST_AFTER_FINALIZE FAKE_ADB_ROUTE_LOST_AFTER_FINALIZE
@@ -1410,6 +1416,44 @@ make_second_fixture() {
   local destination="$1"
   printf '\011\012\013\014\015\016\017\020' > "$destination"
   chmod 600 "$destination"
+}
+
+write_raw_broadcast_fixture() {
+  local destination="$1"
+  local fixture_kind="$2"
+  python3 - "$destination" "$fixture_kind" <<'PY'
+import sys
+from pathlib import Path
+
+destination = Path(sys.argv[1])
+fixture_kind = sys.argv[2]
+run_hash = b"sha256:" + b"a" * 64
+comparison_hash = b"sha256:" + b"b" * 64
+status_data = b"\n".join([
+    b"status=ok",
+    b"action=status",
+    b"run_state=finalized",
+    b"run_hash=" + run_hash,
+    b"comparison_hash=" + comparison_hash,
+    b"requested_transport=livekit_experimental",
+    b"event_count=17",
+    b"network=wifi",
+    b"validated=true",
+])
+records = {
+    "canonical-status": b'Broadcast completed: result=0, data="' + status_data + b'"\n',
+    "nul-success": b'Broadcast completed: result=0, data="status=ok\naction=final\0ize"\n',
+    "nul-rejection": b'Broadcast completed: result=1, data="status=rejected\nreason=call_not_\0stopped"\n',
+    "nul-error": b'Broadcast completed: result=1, data="status=error\nerror=runtime_\0failure"\n',
+    "nul-status": b'Broadcast completed: result=0, data="' + status_data.replace(
+        b"run_state=finalized", b"run_state=final\0ized", 1
+    ) + b'"\n',
+    "trailing-lf-success": b'Broadcast completed: result=0, data="status=ok\naction=finalize\n"\n',
+    "cr-success": b'Broadcast completed: result=0, data="status=ok\naction=finalize\r"\n',
+}
+destination.write_bytes(records[fixture_kind])
+PY
+  chmod 600 -- "$destination"
 }
 
 activate_fake_run() {
@@ -3764,6 +3808,34 @@ PY
     fail "finalize-resultData test: trailing-LF success reply published a record"
   assert_private_output_absent
   pass
+
+  local raw_broadcast_fixture="$TMP_DIR/raw-broadcast-output"
+  local raw_broadcast_case raw_broadcast_action
+  for raw_broadcast_case in \
+    canonical-status nul-success nul-rejection nul-error nul-status \
+    trailing-lf-success cr-success; do
+    reset_fake
+    activate_fake_run
+    rm -f -- "$state" "$finalization" "$raw_broadcast_fixture"
+    write_valid_state "$state"
+    write_raw_broadcast_fixture "$raw_broadcast_fixture" "$raw_broadcast_case"
+    raw_broadcast_action=FINALIZE_BOUND
+    case "$raw_broadcast_case" in
+      canonical-status|nul-status) raw_broadcast_action=STATUS ;;
+    esac
+    export FAKE_ADB_RAW_BROADCAST_FILE="$raw_broadcast_fixture"
+    export FAKE_ADB_RAW_BROADCAST_ACTION="$raw_broadcast_action"
+    run_helper finalize --state "$state" --finalization-output "$finalization"
+    if [[ "$raw_broadcast_case" == canonical-status ]]; then
+      assert_exact_output $'voice-step.status=ok\nvoice-step.operation=finalize\nvoice-step.outcome=complete'
+      assert_finalization_record "$finalization" complete complete true true false
+    else
+      [[ "$RUN_STATUS" -ne 0 && ! -e "$finalization" ]] ||
+        fail "finalize-raw-broadcast test: $raw_broadcast_case published a record"
+    fi
+    assert_private_output_absent "$raw_broadcast_fixture"
+    pass
+  done
 
   reset_fake
   activate_fake_run

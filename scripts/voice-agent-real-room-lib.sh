@@ -62,6 +62,7 @@ cleanup_local_temps() {
     rmdir -- "$LOCAL_TEMP_DIR" 2>/dev/null || cleanup_status=1
   fi
   LOCAL_TEMP_DIR=''
+  ORDERED_BROADCAST_OUTPUT=''
   return "$cleanup_status"
 }
 
@@ -101,6 +102,7 @@ validate_runtime() {
   require_command flock
   require_command mkdir
   [[ -x "$READY" ]] || die 'device-ready helper unavailable'
+  ensure_ordered_broadcast_output
 }
 
 validate_identifier() {
@@ -500,16 +502,73 @@ require_options() {
   done
 }
 
+ensure_ordered_broadcast_output() {
+  if [[ -z "${ORDERED_BROADCAST_OUTPUT:-}" ]]; then
+    ensure_local_temp_dir
+    ORDERED_BROADCAST_OUTPUT="$(mktemp "$LOCAL_TEMP_DIR/broadcast.XXXXXX" 2>/dev/null)" ||
+      die 'local temporary storage failed'
+    chmod 600 -- "$ORDERED_BROADCAST_OUTPUT" 2>/dev/null ||
+      die 'local temporary storage failed'
+    register_temp_file "$ORDERED_BROADCAST_OUTPUT"
+  fi
+}
+
 parse_ordered_broadcast_output() {
-  local output="$1"
+  local output_path="$1"
   local parsed
   local result_code
   local data
-  if ! parsed="$(printf '%s' "$output" | python3 -c '
+  if ! parsed="$(python3 - "$output_path" 2>/dev/null <<'PY'
+import os
 import re
+import stat
 import sys
 
-text = sys.stdin.read()
+path = sys.argv[1]
+before = os.lstat(path)
+if (
+    stat.S_ISLNK(before.st_mode)
+    or not stat.S_ISREG(before.st_mode)
+    or stat.S_IMODE(before.st_mode) != 0o600
+    or before.st_nlink != 1
+    or before.st_uid != os.geteuid()
+    or not 0 < before.st_size <= 1_048_576
+):
+    raise SystemExit(1)
+flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+descriptor = os.open(path, flags)
+try:
+    opened = os.fstat(descriptor)
+    if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+        raise SystemExit(1)
+    with os.fdopen(descriptor, "rb") as handle:
+        descriptor = -1
+        raw = handle.read(1_048_577)
+        after_open = os.fstat(handle.fileno())
+finally:
+    if descriptor >= 0:
+        os.close(descriptor)
+after = os.lstat(path)
+identity = lambda metadata: (
+    metadata.st_dev,
+    metadata.st_ino,
+    metadata.st_mode,
+    metadata.st_nlink,
+    metadata.st_uid,
+    metadata.st_size,
+    metadata.st_mtime_ns,
+    metadata.st_ctime_ns,
+)
+if identity(opened) != identity(after_open) or identity(before) != identity(after):
+    raise SystemExit(1)
+if len(raw) != before.st_size or b"\0" in raw or b"\r" in raw:
+    raise SystemExit(1)
+if raw.endswith(b"\n"):
+    raw = raw[:-1]
+try:
+    text = raw.decode("utf-8")
+except UnicodeDecodeError:
+    raise SystemExit(1)
 marker = "Broadcast completed: result="
 if text.count(marker) != 1:
     raise SystemExit(1)
@@ -520,7 +579,8 @@ match = re.fullmatch(r"(-?[0-9]+), data=\"([^\x00\r]*)\"", record, re.DOTALL)
 if match is None or match.group(2).endswith("\n"):
     raise SystemExit(1)
 sys.stdout.write(match.group(1) + "\n" + match.group(2))
-' 2>/dev/null)"; then
+PY
+)"; then
     return 2
   fi
   [[ "$parsed" == *$'\n'* ]] || return 2
@@ -533,18 +593,24 @@ sys.stdout.write(match.group(1) + "\n" + match.group(2))
   printf '%s' "$data"
 }
 
+ordered_broadcast_read() {
+  local output_path="${ORDERED_BROADCAST_OUTPUT:-}"
+  [[ -n "$output_path" ]] || return 4
+  : > "$output_path" 2>/dev/null || return 4
+  if ! adb_read shell am broadcast "$@" >"$output_path" 2>/dev/null; then
+    return 4
+  fi
+  parse_ordered_broadcast_output "$output_path"
+}
+
 broadcast_read() {
   local receiver="$1"
   local action="$2"
   shift 2
-  local output
   local data
   local parse_status
-  if ! output="$(adb_read shell am broadcast --user "$ANDROID_USER_ID" \
-      -n "$PACKAGE/$receiver" -a "$action" "$@" 2>/dev/null)"; then
-    die 'ADB command failed'
-  fi
-  if data="$(parse_ordered_broadcast_output "$output")"; then
+  if data="$(ordered_broadcast_read --user "$ANDROID_USER_ID" \
+      -n "$PACKAGE/$receiver" -a "$action" "$@")"; then
     parse_status=0
   else
     parse_status=$?
@@ -552,6 +618,7 @@ broadcast_read() {
   case "$parse_status" in
     0) printf '%s' "$data" ;;
     3) die 'receiver rejected request' ;;
+    4) die 'ADB command failed' ;;
     *) die 'unexpected receiver response' ;;
   esac
 }
@@ -600,17 +667,15 @@ parse_status_data() {
 }
 
 read_status_snapshot() {
-  local output
   local data
   local parse_status
-  output="$(adb_read shell am broadcast --user "$ANDROID_USER_ID" \
-    -n "$PACKAGE/$CONTROL_RECEIVER" -a "$CONTROL_ACTION_PREFIX.STATUS" 2>/dev/null)" ||
-    return 3
-  if data="$(parse_ordered_broadcast_output "$output")"; then
+  if data="$(ordered_broadcast_read --user "$ANDROID_USER_ID" \
+      -n "$PACKAGE/$CONTROL_RECEIVER" -a "$CONTROL_ACTION_PREFIX.STATUS")"; then
     parse_status=0
   else
     parse_status=$?
   fi
+  (( parse_status != 4 )) || return 3
   (( parse_status == 0 )) || return 2
   parse_status_data "$data" || return 2
 }
@@ -1223,14 +1288,19 @@ printf removed
 }
 
 restore_force_stopped_package() {
-  local output
   local data
+  local broadcast_status
   local status_snapshot
   local -a status=()
-  output="$(adb_read shell am broadcast --user "$ANDROID_USER_ID" \
-    --include-stopped-packages -n "$PACKAGE/$CONTROL_RECEIVER" \
-    -a "$CONTROL_ACTION_PREFIX.STATUS" 2>/dev/null)" || return 1
-  data="$(parse_ordered_broadcast_output "$output")" || return 2
+  if data="$(ordered_broadcast_read --user "$ANDROID_USER_ID" \
+      --include-stopped-packages -n "$PACKAGE/$CONTROL_RECEIVER" \
+      -a "$CONTROL_ACTION_PREFIX.STATUS")"; then
+    broadcast_status=0
+  else
+    broadcast_status=$?
+  fi
+  (( broadcast_status != 4 )) || return 1
+  (( broadcast_status == 0 )) || return 2
   status_snapshot="$(parse_status_data "$data")" || return 2
   mapfile -t status <<< "$status_snapshot"
   [[ "${#status[@]}" == 7 && "${status[0]}" == idle && "${status[1]}" == none &&

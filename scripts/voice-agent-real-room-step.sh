@@ -44,6 +44,7 @@ FIXTURE_OWNERSHIP_NONCE=''
 REMOTE_FIXTURE_DIR=''
 REMOTE_OWNER_HASH=''
 LOCAL_TEMP_DIR=''
+ORDERED_BROADCAST_OUTPUT=''
 STATE_PUBLICATION_TEMP=''
 ERROR_REPORTED=0
 START_CLEANUP_NEEDED=0
@@ -307,7 +308,6 @@ run_finalize() {
   local finalization_output="$1"
   local end_status=0
   local stop_status
-  local broadcast_output
   local reply
   local reply_status
   local status_snapshot
@@ -367,18 +367,14 @@ run_finalize() {
     *) die 'invalid durable call-stop evidence' ;;
   esac
 
-  if broadcast_output="$(adb_read shell am broadcast --user "$ANDROID_USER_ID" \
+  if reply="$(ordered_broadcast_read --user "$ANDROID_USER_ID" \
       -n "$PACKAGE/$CONTROL_RECEIVER" -a "$CONTROL_ACTION_PREFIX.FINALIZE_BOUND" \
       --es run_hash "$RUN_HASH" \
       --es comparison_hash "$COMPARISON_HASH" \
-      --es transport "$TRANSPORT_EXPECTED" 2>/dev/null)"; then
-    if reply="$(parse_ordered_broadcast_output "$broadcast_output")"; then
-      reply_status=0
-    else
-      reply_status=$?
-    fi
+      --es transport "$TRANSPORT_EXPECTED")"; then
+    reply_status=0
   else
-    reply_status=4
+    reply_status=$?
   fi
   case "$reply_status" in
     0)
