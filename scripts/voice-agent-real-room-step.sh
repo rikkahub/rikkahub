@@ -4,7 +4,6 @@ umask 077
 set +x
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-READY="$ROOT_DIR/scripts/adb-device-ready.sh"
 ARTIFACT_HELPERS="$ROOT_DIR/scripts/voice-agent-e2e-artifacts.sh"
 REAL_ROOM_LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
 REAL_ROOM_CONTRACT="$ROOT_DIR/scripts/voice-agent-real-room-contract.py"
@@ -29,7 +28,9 @@ FIXTURE_CHUNK_DELAY_MS='100'
 source "$ARTIFACT_HELPERS"
 source "$REAL_ROOM_LIBRARY"
 
-SERIAL=''
+MDEV="${MDEV:-mdev}"
+MDEV_OWNER=''
+MDEV_OWNER_HASH=''
 PACKAGE=''
 ANDROID_USER_ID=''
 PACKAGE_UID=''
@@ -578,47 +579,12 @@ run_capture() {
 }
 
 classify_device_access() {
-  local enumeration
-  local classification
+  local device_state
   local reachability
-  if ! enumeration="$(adb_global_read devices -l 2>/dev/null)"; then
-    return 2
-  fi
-  python3 -c '
-import re
-import sys
-
-serial = sys.argv[1]
-lines = sys.stdin.read().replace("\r", "").splitlines()
-if not lines or lines[0] != "List of devices attached":
-    raise SystemExit(2)
-rows = []
-for line in lines[1:]:
-    if not line:
-        continue
-    fields = line.split()
-    if (
-        len(fields) < 2
-        or re.fullmatch(r"\S+", fields[0]) is None
-        or re.fullmatch(r"[a-z_]+", fields[1]) is None
-        or any(":" not in field for field in fields[2:])
-    ):
-        raise SystemExit(2)
-    rows.append((fields[0], fields[1]))
-selected = [state for candidate, state in rows if candidate == serial]
-if len(selected) > 1:
-    raise SystemExit(2)
-if not selected:
-    raise SystemExit(1)
-if selected[0] == "device":
-    raise SystemExit(0)
-if selected[0] in {"offline", "unauthorized"}:
-    raise SystemExit(1)
-raise SystemExit(2)
-' "$SERIAL" <<<"$enumeration" 2>/dev/null || {
-    classification=$?
-    return "$classification"
-  }
+  device_state="$(adb_read get-state 2>/dev/null)" || return 1
+  device_state="${device_state//$'\r'/}"
+  device_state="${device_state//$'\n'/}"
+  [[ "$device_state" == device ]] || return 2
   reachability="$(adb_read shell echo voice-step-reachable 2>/dev/null)" || return 3
   [[ "$reachability" == voice-step-reachable ]] || return 2
   return 0
@@ -948,7 +914,7 @@ run_with_decoded_state() {
   state_snapshot="$(decode_state "$state_path")"
   mapfile -t state <<< "$state_snapshot"
   [[ "${#state[@]}" == 12 ]] || die 'invalid state'
-  local SERIAL="${state[0]}"
+  local stored_mdev_owner_hash="${state[0]}"
   local PACKAGE="${state[1]}"
   local ANDROID_USER_ID="${state[2]}"
   local PACKAGE_UID="${state[3]}"
@@ -960,6 +926,7 @@ run_with_decoded_state() {
   local FIXTURE_DIRECTORY_IDENTITY="${state[9]}"
   local FIXTURE_OWNERSHIP_NONCE="${state[10]}"
   local TRACE_ID="${state[11]}"
+  [[ "$stored_mdev_owner_hash" == "$MDEV_OWNER_HASH" ]] || die 'managed owner mismatch'
   case "$requested_operation" in
     inject|interrupt|status|finalize|capture|end)
       validate_runtime
@@ -983,23 +950,23 @@ shift
 
 case "$operation" in
   preflight)
-    parse_options '--serial --package' "$@"
-    require_options --serial --package
-    SERIAL="${PARSED[--serial]}"
+    parse_options '--mdev-owner --package' "$@"
+    require_options --mdev-owner --package
+    MDEV_OWNER="${PARSED[--mdev-owner]}"
     PACKAGE="${PARSED[--package]}"
-    validate_identifier "$SERIAL" 'serial'
+    prepare_mdev_owner
     validate_package "$PACKAGE"
     run_preflight
     ;;
   start)
-    parse_options '--state --serial --package --conversation-id --run-hash --comparison-hash --fixture' "$@"
-    require_options --state --serial --package --conversation-id --run-hash --comparison-hash --fixture
-    SERIAL="${PARSED[--serial]}"
+    parse_options '--state --mdev-owner --package --conversation-id --run-hash --comparison-hash --fixture' "$@"
+    require_options --mdev-owner --state --package --conversation-id --run-hash --comparison-hash --fixture
+    MDEV_OWNER="${PARSED[--mdev-owner]}"
     PACKAGE="${PARSED[--package]}"
     CONVERSATION_ID="${PARSED[--conversation-id]}"
     RUN_HASH="${PARSED[--run-hash]}"
     COMPARISON_HASH="${PARSED[--comparison-hash]}"
-    validate_identifier "$SERIAL" 'serial'
+    prepare_mdev_owner
     validate_package "$PACKAGE"
     validate_identifier "$CONVERSATION_ID" 'conversation id'
     validate_hash "$RUN_HASH" 'run hash'
@@ -1008,25 +975,31 @@ case "$operation" in
     run_start "${PARSED[--state]}" "${PARSED[--fixture]}"
     ;;
   inject)
-    parse_options '--state --fixture --role' "$@"
+    parse_options '--mdev-owner --state --fixture --role' "$@"
     if [[ -n "${PARSED[--role]+present}" ]]; then
       case "${PARSED[--role]}" in
         request|follow_up|interruption) ;;
         *) die 'invalid fixture role' ;;
       esac
     fi
-    require_options --state --fixture --role
+    require_options --mdev-owner --state --fixture --role
+    MDEV_OWNER="${PARSED[--mdev-owner]}"
+    prepare_mdev_owner
     run_with_decoded_state inject "${PARSED[--state]}" \
       "${PARSED[--fixture]}" "${PARSED[--role]}"
     ;;
   interrupt)
-    parse_options '--state --fixture' "$@"
-    require_options --state --fixture
+    parse_options '--mdev-owner --state --fixture' "$@"
+    require_options --mdev-owner --state --fixture
+    MDEV_OWNER="${PARSED[--mdev-owner]}"
+    prepare_mdev_owner
     run_with_decoded_state interrupt "${PARSED[--state]}" "${PARSED[--fixture]}"
     ;;
   status)
-    parse_options '--state --expect' "$@"
-    require_options --state --expect
+    parse_options '--mdev-owner --state --expect' "$@"
+    require_options --mdev-owner --state --expect
+    MDEV_OWNER="${PARSED[--mdev-owner]}"
+    prepare_mdev_owner
     python3 "$REAL_ROOM_CONTRACT" --validate-expectation "${PARSED[--expect]}" \
       >/dev/null 2>&1 || die 'invalid expectation'
     CHECKPOINT_ERROR_MODE=1
@@ -1038,16 +1011,20 @@ case "$operation" in
     ERROR_REPORTED=0
     ;;
   finalize)
-    parse_options '--state --finalization-output' "$@"
-    require_options --state --finalization-output
+    parse_options '--mdev-owner --state --finalization-output' "$@"
+    require_options --mdev-owner --state --finalization-output
+    MDEV_OWNER="${PARSED[--mdev-owner]}"
+    prepare_mdev_owner
     validate_absent_destination "${PARSED[--finalization-output]}" ||
       die 'invalid finalization destination'
     run_with_decoded_state finalize "${PARSED[--state]}" \
       "${PARSED[--finalization-output]}"
     ;;
   capture)
-    parse_options '--state --finalization --automation-output --private-voice-output --sanitized-voice-output' "$@"
-    require_options --state --finalization --automation-output --private-voice-output --sanitized-voice-output
+    parse_options '--mdev-owner --state --finalization --automation-output --private-voice-output --sanitized-voice-output' "$@"
+    require_options --mdev-owner --state --finalization --automation-output --private-voice-output --sanitized-voice-output
+    MDEV_OWNER="${PARSED[--mdev-owner]}"
+    prepare_mdev_owner
     validate_absent_destination "${PARSED[--automation-output]}" || die 'invalid output destination'
     validate_absent_destination "${PARSED[--private-voice-output]}" || die 'invalid output destination'
     validate_absent_destination "${PARSED[--sanitized-voice-output]}" || die 'invalid output destination'
@@ -1062,8 +1039,10 @@ case "$operation" in
       "${PARSED[--sanitized-voice-output]}"
     ;;
   end)
-    parse_options '--state --finalization --cleanup-output' "$@"
-    require_options --state --finalization --cleanup-output
+    parse_options '--mdev-owner --state --finalization --cleanup-output' "$@"
+    require_options --mdev-owner --state --finalization --cleanup-output
+    MDEV_OWNER="${PARSED[--mdev-owner]}"
+    prepare_mdev_owner
     validate_absent_destination "${PARSED[--cleanup-output]}" || die 'invalid cleanup destination'
     run_with_decoded_state end "${PARSED[--state]}" \
       "${PARSED[--finalization]}" "${PARSED[--cleanup-output]}"

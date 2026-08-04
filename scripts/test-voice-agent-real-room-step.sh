@@ -12,12 +12,15 @@ REAL_LN="$(command -v ln)"
 REAL_RMDIR="$(command -v rmdir)"
 REAL_STAT="$(command -v stat)"
 CURRENT_UID="$(id -u)"
+MDEV_OWNER='OWNER_SECRET_123'
+OTHER_MDEV_OWNER='OTHER_OWNER_SECRET_456'
 TMP_DIR="$(mktemp -d)"
 chmod 700 "$TMP_DIR"
 BIN_DIR="$TMP_DIR/bin"
 mkdir "$BIN_DIR"
 chmod 700 "$BIN_DIR"
-ADB_LOG="$TMP_DIR/adb.argv"
+MDEV_LOG="$TMP_DIR/mdev.argv"
+ADB_LOG="$MDEV_LOG"
 TIMEOUT_LOG="$TMP_DIR/timeout.argv"
 LN_LOG="$TMP_DIR/ln.argv"
 FAKE_STATE="$TMP_DIR/fake-state.json"
@@ -150,7 +153,7 @@ os.execv(executable, [executable, *sys.argv[1:]])
 PY
 chmod 700 "$BIN_DIR/rmdir"
 
-cat > "$BIN_DIR/adb" <<'PY'
+cat > "$BIN_DIR/mdev" <<'PY'
 #!/usr/bin/env python3
 import hashlib
 import json
@@ -213,7 +216,7 @@ def hash_value(character):
 
 def owner_hash(state):
     values = [
-        state["serial"],
+        "sha256:" + hashlib.sha256(os.environ["FAKE_MDEV_OWNER"].encode()).hexdigest(),
         EXPECTED_PACKAGE,
         state["conversation_id"],
         state["run_hash"],
@@ -570,6 +573,33 @@ record(os.environ["FAKE_ADB_LOG"], argv)
 if os.environ.get("FAKE_ADB_BLOCK") == "1":
     time.sleep(10)
 state = load_state()
+expected_prefix = [
+    "android", "adb", "--device", "phone", "--owner",
+    os.environ["FAKE_MDEV_OWNER"], "--",
+]
+if argv[:7] != expected_prefix or len(argv) == 7:
+    raise SystemExit(64)
+command = argv[7:]
+if command == ["get-state"]:
+    if (
+        os.environ.get("FAKE_ADB_DEVICE_LOST") == "1"
+        or state.get("device_lost_after_force_stop")
+        or state.get("device_lost_after_finalize")
+    ):
+        raise SystemExit(1)
+    if (
+        state.get("malformed_after_finalize")
+        or os.environ.get("FAKE_ADB_MALFORMED_DEVICE_ENUMERATION") == "1"
+    ):
+        print("unknown")
+        raise SystemExit(0)
+    device_state = os.environ.get("FAKE_ADB_DEVICE_ENUMERATION_STATE", "device")
+    if device_state != "device":
+        print(device_state)
+        raise SystemExit(1)
+    print("device")
+    raise SystemExit(0)
+argv = ["-s", state["serial"], *command]
 maybe_block(argv)
 
 if argv == ["devices", "-l"]:
@@ -1300,6 +1330,20 @@ if exec_out_run_as_tail is not None and exec_out_run_as_tail[:1] == ["cat"]:
 
 raise SystemExit(9)
 PY
+chmod 700 "$BIN_DIR/mdev"
+
+cat > "$BIN_DIR/adb" <<'PY'
+#!/usr/bin/env python3
+import os
+import sys
+
+with open(os.environ["FAKE_ADB_LOG"], "ab") as handle:
+    handle.write(b"RAW_ADB\0")
+    for value in sys.argv[1:]:
+        handle.write(value.encode() + b"\0")
+    handle.write(b"\0")
+raise SystemExit(97)
+PY
 chmod 700 "$BIN_DIR/adb"
 
 export PATH="$BIN_DIR:$PATH"
@@ -1308,6 +1352,7 @@ export FAKE_TIMEOUT_LOG="$TIMEOUT_LOG"
 export FAKE_LN_LOG="$LN_LOG"
 export FAKE_ADB_STATE="$FAKE_STATE"
 export REAL_TIMEOUT REAL_LN REAL_RMDIR REAL_STAT
+export FAKE_MDEV_OWNER="$MDEV_OWNER"
 export FAKE_REMOTE_APP_DATA_ROOT="$REMOTE_APP_DATA_ROOT"
 export FAKE_RMDIR_BOUNDARY_FILE="$RMDIR_BOUNDARY_FILE"
 export VOICE_STEP_ADB_TIMEOUT_SECONDS=10
@@ -1457,7 +1502,7 @@ PY
 }
 
 activate_fake_run() {
-  python3 - "$FAKE_STATE" "$REMOTE_APP_DATA_ROOT" <<'PY'
+  python3 - "$FAKE_STATE" "$REMOTE_APP_DATA_ROOT" "$MDEV_OWNER" <<'PY'
 import hashlib
 import json
 import os
@@ -1477,7 +1522,7 @@ state["trace_id"] = "trace-new"
 state["remote_directory"] = "files/voice-real-room/" + "a" * 64
 state["owner_hash"] = "sha256:" + hashlib.sha256(
     "\0".join([
-        state["serial"],
+        "sha256:" + hashlib.sha256(sys.argv[3].encode()).hexdigest(),
         "me.rerere.rikkahub.debug",
         state["conversation_id"],
         state["run_hash"],
@@ -1592,7 +1637,8 @@ assert_no_capture_temps() {
 write_valid_state() {
   local destination="$1"
   local package="${2:-me.rerere.rikkahub.debug}"
-  python3 - "$destination" "$package" "$FAKE_STATE" <<'PY'
+  python3 - "$destination" "$package" "$FAKE_STATE" "$MDEV_OWNER" <<'PY'
+import hashlib
 import json
 import os
 import sys
@@ -1602,8 +1648,8 @@ with open(sys.argv[3], encoding="utf-8") as handle:
 uid = fake["package_uid"]
 gid = os.getgid()
 payload = {
-    "schemaVersion": 2,
-    "serial": "DEVICE_SECRET_123",
+    "schemaVersion": 3,
+    "mdevOwnerHash": "sha256:" + hashlib.sha256(sys.argv[4].encode()).hexdigest(),
     "package": sys.argv[2],
     "androidUserId": fake["android_user_id"],
     "packageUid": uid,
@@ -1691,14 +1737,23 @@ PY
 
 run_helper() {
   local argument
-  LAST_PRIVATE_PATHS=("$TMP_DIR" "$FAKE_STATE" "$STDOUT_FILE" "$STDERR_FILE" "$HELPER_TEMP_ROOT")
+  local has_owner=0
+  local -a invocation=("$@")
+  LAST_OPERATION="${1:-unknown}"
   for argument in "$@"; do
+    [[ "$argument" == --mdev-owner ]] && has_owner=1
+  done
+  if [[ "${RUN_HELPER_SKIP_OWNER:-0}" != 1 && "$has_owner" -eq 0 && "${1:-}" =~ ^(preflight|start|inject|interrupt|status|finalize|capture|end)$ ]]; then
+    invocation=("$1" --mdev-owner "$MDEV_OWNER" "${@:2}")
+  fi
+  LAST_PRIVATE_PATHS=("$TMP_DIR" "$FAKE_STATE" "$STDOUT_FILE" "$STDERR_FILE" "$HELPER_TEMP_ROOT")
+  for argument in "${invocation[@]}"; do
     [[ "$argument" == /* ]] && LAST_PRIVATE_PATHS+=("$argument")
   done
   : > "$STDOUT_FILE"
   : > "$STDERR_FILE"
   set +e
-  TMPDIR="$HELPER_TEMP_ROOT" "$HELPER" "$@" >"$STDOUT_FILE" 2>"$STDERR_FILE"
+  TMPDIR="$HELPER_TEMP_ROOT" "$HELPER" "${invocation[@]}" >"$STDOUT_FILE" 2>"$STDERR_FILE"
   RUN_STATUS=$?
   set -e
 }
@@ -1708,7 +1763,8 @@ assert_private_output_absent() {
   combined="$(<"$STDOUT_FILE")$(<"$STDERR_FILE")"
   local marker
   for marker in \
-    DEVICE_SECRET_123 CONVERSATION_SECRET_123 PRIVATE_TRACE RAW_SESSION_SECRET \
+    DEVICE_SECRET_123 OWNER_SECRET_123 OTHER_OWNER_SECRET_456 \
+    CONVERSATION_SECRET_123 PRIVATE_TRACE RAW_SESSION_SECRET \
     fixture-1 trace-new trace-old \
     fixture-secret PROMPT_SECRET TRANSCRIPT_SECRET ANSWER_SECRET \
     ADB_STDOUT_SECRET ADB_STDERR_SECRET; do
@@ -1725,7 +1781,7 @@ assert_exact_output() {
   local expected="$1"
   if [[ "$RUN_STATUS" -ne 0 ]]; then
     if [[ "$(<"$STDERR_FILE")" =~ ^voice-step.error=[A-Za-z[:space:]-]+$ ]]; then
-      fail "success-output test: operation failed ($(tr '\n' ' ' < "$STDERR_FILE"))"
+      fail "success-output test: $LAST_OPERATION failed after $TEST_COUNT assertions ($(tr '\n' ' ' < "$STDERR_FILE"))"
     fi
     fail "success-output test: operation failed"
   fi
@@ -1760,7 +1816,8 @@ assert_rejected() {
   reset_fake
   run_helper "${arguments[@]}"
   [[ "$RUN_STATUS" -ne 0 ]] || fail "rejection test: invalid invocation succeeded"
-  [[ "$(<"$STDERR_FILE")" == *"$expected"* ]] || fail "rejection test: fixed diagnostic mismatch"
+  [[ "$(<"$STDERR_FILE")" == *"$expected"* ]] ||
+    fail "rejection test: expected '$expected', got '$(<"$STDERR_FILE")'"
   [[ ! -s "$STDOUT_FILE" ]] || fail "rejection test: invalid invocation wrote stdout"
   assert_private_output_absent
   pass
@@ -1805,6 +1862,12 @@ import sys
 
 data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
+prefix = [b"android", b"adb", b"--device", b"phone", b"--owner", b"OWNER_SECRET_123", b"--"]
+commands = [
+    [b"-s", b"DEVICE_SECRET_123", *command[len(prefix):]]
+    if command[:len(prefix)] == prefix else command
+    for command in commands
+]
 expected = [value.encode() for value in sys.argv[2:]]
 print(sum(command == expected for command in commands))
 PY
@@ -1847,7 +1910,8 @@ action = sys.argv[2].encode()
 expected_user = sys.argv[3].encode()
 matches = [command for command in commands if action in command]
 assert len(matches) == 1
-assert matches[0][2:7] == [b"shell", b"am", b"start-foreground-service", b"--user", expected_user]
+shell = matches[0].index(b"shell")
+assert matches[0][shell:shell + 5] == [b"shell", b"am", b"start-foreground-service", b"--user", expected_user]
 PY
 }
 
@@ -1929,6 +1993,153 @@ selected() {
   return 1
 }
 
+run_managed_owner_contract_tests() {
+  local fixture="$TMP_DIR/owner-contract.pcm"
+  local state="$TMP_DIR/owner-contract-state.json"
+  local finalization="$TMP_DIR/owner-contract-finalization.json"
+  local hash_a="sha256:$(printf 'a%.0s' {1..64})"
+  local hash_b="sha256:$(printf 'b%.0s' {1..64})"
+  local -a invocation=()
+  local operation
+
+  reset_fake
+  make_fixture "$fixture"
+  activate_fake_run
+  write_valid_state "$state"
+  write_finalization "$finalization"
+
+  for operation in preflight start inject interrupt status finalize capture end; do
+    case "$operation" in
+      preflight) invocation=(preflight --package me.rerere.rikkahub.debug) ;;
+      start) invocation=(start --state "$TMP_DIR/owner-missing-start.json" --package me.rerere.rikkahub.debug --conversation-id conversation-owner --run-hash "$hash_a" --comparison-hash "$hash_b" --fixture "$fixture") ;;
+      inject) invocation=(inject --state "$state" --fixture "$fixture" --role request) ;;
+      interrupt) invocation=(interrupt --state "$state" --fixture "$fixture") ;;
+      status) invocation=(status --state "$state" --expect single_result_announced) ;;
+      finalize) invocation=(finalize --state "$state" --finalization-output "$TMP_DIR/owner-missing-finalization.json") ;;
+      capture) invocation=(capture --state "$state" --finalization "$finalization" --automation-output "$TMP_DIR/owner-missing-automation.jsonl" --private-voice-output "$TMP_DIR/owner-missing-private.ndjson" --sanitized-voice-output "$TMP_DIR/owner-missing-sanitized.ndjson") ;;
+      end) invocation=(end --state "$state" --finalization "$finalization" --cleanup-output "$TMP_DIR/owner-missing-cleanup.json") ;;
+    esac
+    : >"$MDEV_LOG"
+    RUN_HELPER_SKIP_OWNER=1 run_helper "${invocation[@]}"
+    [[ "$RUN_STATUS" -ne 0 && ! -s "$MDEV_LOG" && ! -s "$STDOUT_FILE" ]] \
+      || fail "managed-owner test: $operation accepted a missing owner or accessed the device"
+    assert_private_output_absent
+    pass
+  done
+
+  for operation in inject interrupt status finalize capture end; do
+    case "$operation" in
+      inject) invocation=(inject --mdev-owner "$OTHER_MDEV_OWNER" --state "$state" --fixture "$fixture" --role request) ;;
+      interrupt) invocation=(interrupt --mdev-owner "$OTHER_MDEV_OWNER" --state "$state" --fixture "$fixture") ;;
+      status) invocation=(status --mdev-owner "$OTHER_MDEV_OWNER" --state "$state" --expect single_result_announced) ;;
+      finalize) invocation=(finalize --mdev-owner "$OTHER_MDEV_OWNER" --state "$state" --finalization-output "$TMP_DIR/wrong-owner-finalization.json") ;;
+      capture) invocation=(capture --mdev-owner "$OTHER_MDEV_OWNER" --state "$state" --finalization "$finalization" --automation-output "$TMP_DIR/wrong-owner-automation.jsonl" --private-voice-output "$TMP_DIR/wrong-owner-private.ndjson" --sanitized-voice-output "$TMP_DIR/wrong-owner-sanitized.ndjson") ;;
+      end) invocation=(end --mdev-owner "$OTHER_MDEV_OWNER" --state "$state" --finalization "$finalization" --cleanup-output "$TMP_DIR/wrong-owner-cleanup.json") ;;
+    esac
+    : >"$MDEV_LOG"
+    run_helper "${invocation[@]}"
+    [[ "$RUN_STATUS" -ne 0 && ! -s "$MDEV_LOG" && ! -s "$STDOUT_FILE" ]] \
+      || fail "managed-owner test: $operation reused copied state under another owner"
+    assert_private_output_absent
+    pass
+  done
+
+  cp -- "$state" "$TMP_DIR/copied-owner-state.json"
+  chmod 600 "$TMP_DIR/copied-owner-state.json"
+  : >"$MDEV_LOG"
+  run_helper status --mdev-owner "$OTHER_MDEV_OWNER" \
+    --state "$TMP_DIR/copied-owner-state.json" --expect single_result_announced
+  [[ "$RUN_STATUS" -ne 0 && ! -s "$MDEV_LOG" ]] \
+    || fail 'managed-owner test: copied state was reusable under another owner'
+  assert_private_output_absent
+  pass
+
+  for operation in preflight start; do
+    : >"$MDEV_LOG"
+    if [[ "$operation" == preflight ]]; then
+      run_helper preflight --mdev-owner $'owner\tinvalid' --package me.rerere.rikkahub.debug
+    else
+      run_helper start --mdev-owner $'owner\ninvalid' \
+        --state "$TMP_DIR/invalid-owner-start.json" --package me.rerere.rikkahub.debug \
+        --conversation-id conversation-owner --run-hash "$hash_a" \
+        --comparison-hash "$hash_b" --fixture "$fixture"
+    fi
+    [[ "$RUN_STATUS" -ne 0 && ! -s "$MDEV_LOG" && ! -s "$STDOUT_FILE" ]] \
+      || fail "managed-owner test: $operation accepted an invalid owner"
+    assert_private_output_absent
+    pass
+  done
+}
+
+run_owner_lock_key_test() {
+  local ready="$TMP_DIR/owner-lock-ready"
+  local release="$TMP_DIR/owner-lock-release"
+  local first_stdout="$TMP_DIR/owner-lock-first.stdout"
+  local first_stderr="$TMP_DIR/owner-lock-first.stderr"
+  local first_pid first_status same_status other_status
+  local first_hash="sha256:$(printf '1%.0s' {1..64})"
+  local other_hash="sha256:$(printf '2%.0s' {1..64})"
+
+  bash -s -- "$LIBRARY" "$first_hash" "$ready" "$release" <<'BASH' \
+      >"$first_stdout" 2>"$first_stderr" &
+set -euo pipefail
+source "$1"
+MDEV_OWNER_HASH="$2"
+PACKAGE=me.rerere.rikkahub.debug
+SERIAL=LEGACY_SERIAL_MUST_NOT_KEY_LOCK
+ERROR_REPORTED=0
+HOST_LOCK_FD=''
+HOST_LOCK_ROOT_FD=''
+acquire_host_operation_lock
+: >"$3"
+while [[ ! -e "$4" ]]; do sleep 0.01; done
+BASH
+  first_pid=$!
+  wait_for_path "$ready" || {
+    kill -TERM "$first_pid" 2>/dev/null || true
+    wait "$first_pid" 2>/dev/null || true
+    fail 'owner-lock test: first owner did not acquire its lock'
+  }
+
+  set +e
+  bash -s -- "$LIBRARY" "$other_hash" <<'BASH' >/dev/null 2>&1
+set -euo pipefail
+source "$1"
+MDEV_OWNER_HASH="$2"
+PACKAGE=me.rerere.rikkahub.debug
+SERIAL=LEGACY_SERIAL_MUST_NOT_KEY_LOCK
+ERROR_REPORTED=0
+HOST_LOCK_FD=''
+HOST_LOCK_ROOT_FD=''
+acquire_host_operation_lock
+BASH
+  other_status=$?
+  bash -s -- "$LIBRARY" "$first_hash" <<'BASH' >/dev/null 2>&1
+set -euo pipefail
+source "$1"
+MDEV_OWNER_HASH="$2"
+PACKAGE=me.rerere.rikkahub.debug
+SERIAL=LEGACY_SERIAL_MUST_NOT_KEY_LOCK
+ERROR_REPORTED=0
+HOST_LOCK_FD=''
+HOST_LOCK_ROOT_FD=''
+acquire_host_operation_lock
+BASH
+  same_status=$?
+  set -e
+
+  : >"$release"
+  set +e
+  wait "$first_pid"
+  first_status=$?
+  set -e
+  [[ "$first_status" -eq 0 && "$other_status" -eq 0 && "$same_status" -ne 0 ]] ||
+    fail 'owner-lock test: lock key was not exact owner hash plus package'
+  [[ ! -s "$first_stdout" && ! -s "$first_stderr" ]] ||
+    fail 'owner-lock test: lock owner emitted output'
+  pass
+}
+
 run_general_validation_tests() {
   printf '%s\n' "$TMP_DIR/private-path-probe" > "$STDOUT_FILE"
   if (assert_private_output_absent "$TMP_DIR/private-path-probe") 2>/dev/null; then
@@ -1947,7 +2158,7 @@ run_general_validation_tests() {
   done
 
   assert_rejected 'inject --role invalid' 'invalid fixture role'
-  assert_rejected 'preflight --serial DEVICE_SECRET_123 --serial SECOND --package me.rerere.rikkahub.debug' 'repeated option'
+  assert_rejected 'preflight --mdev-owner OWNER_SECRET_123 --mdev-owner SECOND --package me.rerere.rikkahub.debug' 'repeated option'
   assert_rejected 'start --state one --state two' 'repeated option'
   assert_rejected 'inject --state one --state two' 'repeated option'
   assert_rejected 'interrupt --fixture one --fixture two' 'repeated option'
@@ -1985,7 +2196,7 @@ BASH
     fail "fixture-snapshot test: a later snapshot overwrote earlier immutable results"
   fi
   pass
-  run_helper start --state relative-state --serial DEVICE_SECRET_123 \
+  run_helper start --state relative-state --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id conversation-1 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -1996,14 +2207,15 @@ BASH
   local state="$TMP_DIR/validation-state.json"
   write_valid_state "$state"
   local second_state="$TMP_DIR/validation-state-second.json"
-  python3 - "$second_state" <<'PY'
+  python3 - "$second_state" "$MDEV_OWNER" <<'PY'
+import hashlib
 import json
 import os
 import sys
 
 payload = {
-    "schemaVersion": 2,
-    "serial": "DEVICE_SECRET_123",
+    "schemaVersion": 3,
+    "mdevOwnerHash": "sha256:" + hashlib.sha256(sys.argv[2].encode()).hexdigest(),
     "package": "me.rerere.rikkahub.debug",
     "androidUserId": 0,
     "packageUid": 10123,
@@ -2035,7 +2247,7 @@ second="$(decode_state "$3")"
 [[ "$first" == *":40700:$4:"*$'\n'*$'0123456789abcdef0123456789abcdef\n'* ]]
 BASH
   then
-    fail "state-v2-snapshot test: exact identity receipt did not decode immutably"
+    fail "state-v3-snapshot test: exact owner hash and identity receipt did not decode immutably"
   fi
   pass
   run_helper capture --state "$state" --automation-output relative-output \
@@ -2087,7 +2299,7 @@ BASH
 
   local invalid="$TMP_DIR/invalid-input"
   mkdir "$invalid"
-  run_helper start --state "$TMP_DIR/directory-state.json" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$TMP_DIR/directory-state.json" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id conversation-1 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$invalid"
@@ -2097,7 +2309,7 @@ BASH
   rmdir "$invalid"
 
   mkfifo "$invalid"
-  run_helper start --state "$TMP_DIR/fifo-state.json" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$TMP_DIR/fifo-state.json" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id conversation-1 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$invalid"
@@ -2107,7 +2319,7 @@ BASH
   rm "$invalid"
 
   ln -s "$fixture" "$invalid"
-  run_helper start --state "$TMP_DIR/symlink-state.json" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$TMP_DIR/symlink-state.json" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id conversation-1 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$invalid"
@@ -2117,7 +2329,7 @@ BASH
   rm "$invalid"
 
   chmod 644 "$fixture"
-  run_helper start --state "$TMP_DIR/mode-state.json" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$TMP_DIR/mode-state.json" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id conversation-1 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2127,7 +2339,7 @@ BASH
   chmod 600 "$fixture"
 
   : > "$fixture"
-  run_helper start --state "$TMP_DIR/empty-state.json" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$TMP_DIR/empty-state.json" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id conversation-1 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2181,16 +2393,16 @@ BASH
   pass
 
   reset_fake
-  export FAKE_ADB_TWO_DEVICES=1
-  run_helper preflight --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "device-count test: multiple devices succeeded"
+  export FAKE_ADB_DEVICE_LOST=1
+  run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
+  [[ "$RUN_STATUS" -ne 0 ]] || fail "managed-phone test: offline owner-scoped phone succeeded"
   assert_no_adb_mutations
   assert_private_output_absent
   pass
 
   reset_fake
   export FAKE_ADB_EMULATOR=1
-  run_helper preflight --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
+  run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
   [[ "$RUN_STATUS" -ne 0 ]] || fail "physical-device test: emulator properties succeeded"
   assert_no_adb_mutations
   assert_private_output_absent
@@ -2198,7 +2410,7 @@ BASH
 
   reset_fake
   export FAKE_ADB_NO_RUN_AS=1
-  run_helper preflight --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
+  run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
   [[ "$RUN_STATUS" -ne 0 ]] || fail "run-as test: missing run-as succeeded"
   assert_no_adb_mutations
   assert_private_output_absent
@@ -2206,7 +2418,7 @@ BASH
 
   reset_fake
   export FAKE_TIMEOUT_EXIT=124
-  run_helper preflight --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
+  run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
   [[ "$RUN_STATUS" -ne 0 ]] || fail "timeout test: timed-out ADB succeeded"
   assert_no_adb_mutations
   assert_private_output_absent
@@ -2214,7 +2426,7 @@ BASH
 
   reset_fake
   VOICE_STEP_ADB_TIMEOUT_SECONDS=0 run_helper preflight \
-    --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
   [[ "$RUN_STATUS" -ne 0 ]] || fail "timeout-validation test: zero timeout succeeded"
   [[ ! -s "$ADB_LOG" ]] || fail "timeout-validation test: ADB ran before timeout validation"
   pass
@@ -2224,7 +2436,7 @@ BASH
   export FAKE_ADB_BLOCK=1
   local timeout_started=$SECONDS
   VOICE_STEP_ADB_TIMEOUT_SECONDS=1 run_helper preflight \
-    --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
   local timeout_elapsed=$((SECONDS - timeout_started))
   [[ "$RUN_STATUS" -ne 0 && "$timeout_elapsed" -lt 4 ]] ||
     fail "timeout-enforcement test: blocking ADB was not terminated by the configured deadline"
@@ -2235,7 +2447,11 @@ data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
 bounded = [command for command in commands if b"--signal=TERM" in command]
 assert bounded
-assert bounded[0][:5] == [b"--signal=TERM", b"--kill-after=2s", b"1s", b"adb", b"devices"]
+assert bounded[0][:11] == [
+    b"--signal=TERM", b"--kill-after=2s", b"1s", b"mdev",
+    b"android", b"adb", b"--device", b"phone", b"--owner",
+    b"OWNER_SECRET_123", b"--",
+]
 PY
   assert_private_output_absent
   pass
@@ -2246,11 +2462,12 @@ PY
 
 run_preflight_tests() {
   reset_fake
-  run_helper preflight --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
+  run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
   [[ "$RUN_STATUS" -eq 0 ]] ||
     fail "broadcast-framing test: literal multiline resultData was not consumed as one receiver record"
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=preflight\nvoice-step.device=ready\nvoice-step.package=ready\nvoice-step.automation=ready\nvoice-step.protected_path=ready'
-  [[ "$(command_count devices)" == "2" ]] || fail "preflight-command test: device-ready helper was not reused after exact enumeration"
+  [[ "$(exact_command_count -s DEVICE_SECRET_123 get-state)" == "1" ]] ||
+    fail "preflight-command test: exact owner-scoped get-state was not required once"
   [[ "$(command_count broadcast)" == "1" && "$(command_count .STATUS)" == "1" ]] ||
     fail "preflight-read-only test: STATUS was not the sole broadcast"
   [[ "$(exact_command_count -s DEVICE_SECRET_123 shell cmd activity get-current-user)" == "1" ]] ||
@@ -2267,6 +2484,21 @@ run_preflight_tests() {
   [[ "$(command_count start-foreground-service)" == "0" ]] || fail "preflight-read-only test: service was started"
   [[ "$(command_count mkdir)" == "0" ]] || fail "preflight-read-only test: remote directory was created"
   [[ "$(command_count rm)" == "0" ]] || fail "preflight-read-only test: remote file was removed"
+  if ! python3 - "$MDEV_LOG" "$MDEV_OWNER" <<'PY'
+import sys
+
+raw = open(sys.argv[1], "rb").read()
+commands = [chunk.split(b"\0") for chunk in raw.split(b"\0\0") if chunk]
+prefix = [
+    b"android", b"adb", b"--device", b"phone", b"--owner",
+    sys.argv[2].encode(), b"--",
+]
+assert commands and all(command[:len(prefix)] == prefix for command in commands)
+assert all(b"RAW_ADB" not in command for command in commands)
+PY
+  then
+    fail "managed-transport test: preflight used raw or non-owner-scoped Android access"
+  fi
   pass
 
   reset_fake
@@ -2277,7 +2509,7 @@ state = json.load(open(path, encoding="utf-8"))
 state["automation_state"] = "active"
 json.dump(state, open(path, "w", encoding="utf-8"), separators=(",", ":"))
 PY
-  run_helper preflight --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
+  run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
   [[ "$RUN_STATUS" -ne 0 ]] || fail "preflight-idle test: active automation succeeded"
   assert_no_adb_mutations
   assert_private_output_absent
@@ -2293,7 +2525,7 @@ PY
       ps-header) export FAKE_ADB_MALFORMED_QUIESCENCE=ps-header ;;
       isolated) export FAKE_ADB_MALFORMED_QUIESCENCE=isolated ;;
     esac
-    run_helper preflight --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
+    run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
     [[ "$RUN_STATUS" -ne 0 ]] || fail "preflight-capability test: malformed $malformed_mode readback succeeded"
     assert_no_adb_mutations
     assert_private_output_absent
@@ -2302,7 +2534,7 @@ PY
 
   reset_fake
   export FAKE_ADB_BROADCAST_TRAILING_JUNK=1
-  run_helper preflight --serial DEVICE_SECRET_123 --package me.rerere.rikkahub.debug
+  run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
   [[ "$RUN_STATUS" -ne 0 ]] ||
     fail "broadcast-framing test: trailing junk after the literal multiline resultData succeeded"
   assert_no_adb_mutations
@@ -2315,28 +2547,28 @@ run_start_tests() {
   local fixture="$TMP_DIR/start-fixture.pcm"
   local state="$TMP_DIR/start-state.json"
   make_fixture "$fixture"
-  run_helper start --state "$state" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$state" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=start\nvoice-step.call=active'
   [[ -f "$state" && ! -L "$state" && "$(stat -c '%a' "$state")" == "600" ]] ||
     fail "start-publication test: state was not a mode-0600 regular file"
-  python3 - "$state" "$FAKE_STATE" <<'PY' || fail "start-state test: private state contract mismatch"
-import json, sys
+  python3 - "$state" "$FAKE_STATE" "$MDEV_OWNER" <<'PY' || fail "start-state test: private state contract mismatch"
+import hashlib, json, sys
 with open(sys.argv[1], encoding="utf-8") as handle:
     state = json.load(handle)
 with open(sys.argv[2], encoding="utf-8") as handle:
     fake = json.load(handle)
 assert list(state) == [
-    "schemaVersion", "serial", "package", "androidUserId", "packageUid",
+    "schemaVersion", "mdevOwnerHash", "package", "androidUserId", "packageUid",
     "conversationId", "runHash", "comparisonHash", "fixtureToken",
     "fixtureParentIdentity", "fixtureDirectoryIdentity", "fixtureOwnershipNonce",
     "traceId", "transport",
 ]
 assert state == {
-    "schemaVersion": 2,
-    "serial": "DEVICE_SECRET_123",
+    "schemaVersion": 3,
+    "mdevOwnerHash": "sha256:" + hashlib.sha256(sys.argv[3].encode()).hexdigest(),
     "package": "me.rerere.rikkahub.debug",
     "androidUserId": 0,
     "packageUid": fake["package_uid"],
@@ -2350,6 +2582,8 @@ assert state == {
     "traceId": "trace-new",
     "transport": "livekit_experimental",
 }
+raw = open(sys.argv[1], "rb").read()
+assert b"OWNER_SECRET_123" not in raw and b"DEVICE_SECRET_123" not in raw
 PY
   command_sequence_present voice-step-create-owned-directory voice-step-stage-owned-fixture PREPARE ARM_CAPTURE_FIXTURE start-foreground-service ||
     fail "start-order test: one start mutation sequence was not preserved"
@@ -2389,7 +2623,7 @@ PY
   reset_fake
   rm -f -- "$state"
   export FAKE_ADB_PREEXISTING_REMOTE_DIR=1
-  run_helper start --state "$state" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$state" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2404,7 +2638,7 @@ PY
   reset_fake
   rm -f -- "$state"
   export FAKE_ADB_SUBSTITUTE_RUN_DIRECTORY_BEFORE_CREATE_ROLLBACK=1
-  run_helper start --state "$state" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$state" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2427,7 +2661,7 @@ PY
   reset_fake
   rm -f -- "$state"
   export FAKE_ADB_PRIVATE_NOISE=1
-  run_helper start --state "$state" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$state" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2437,7 +2671,7 @@ PY
   reset_fake
   local raced="$TMP_DIR/raced-state.json"
   export FAKE_ADB_CREATE_DESTINATION_ON_TRACE="$raced"
-  run_helper start --state "$raced" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$raced" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2462,7 +2696,7 @@ PY
   local malformed_rollback="$TMP_DIR/malformed-quiescence-raced-state.json"
   export FAKE_ADB_CREATE_DESTINATION_ON_TRACE="$malformed_rollback"
   export FAKE_ADB_MALFORMED_QUIESCENCE_AFTER_FORCE_STOP=ps-header
-  run_helper start --state "$malformed_rollback" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$malformed_rollback" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2480,7 +2714,7 @@ PY
   local cleanup_signaled="$TMP_DIR/cleanup-signaled-raced-state.json"
   export FAKE_ADB_CREATE_DESTINATION_ON_TRACE="$cleanup_signaled"
   export FAKE_ADB_SIGNAL_DURING_FORCE_STOP=SIGTERM
-  run_helper start --state "$cleanup_signaled" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$cleanup_signaled" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2497,7 +2731,7 @@ PY
   reset_fake
   local signaled="$TMP_DIR/signaled-state.json"
   export FAKE_ADB_SIGNAL_ON_TRACE=1
-  run_helper start --state "$signaled" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$signaled" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2514,7 +2748,7 @@ PY
   local before_link="$TMP_DIR/signal-before-link-state.json"
   export FAKE_LN_SIGNAL_DESTINATION="$before_link"
   export FAKE_LN_SIGNAL_TIMING=before
-  run_helper start --state "$before_link" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$before_link" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2529,7 +2763,7 @@ PY
   local after_link="$TMP_DIR/signal-after-link-state.json"
   export FAKE_LN_SIGNAL_DESTINATION="$after_link"
   export FAKE_LN_SIGNAL_TIMING=after
-  run_helper start --state "$after_link" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$after_link" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2558,7 +2792,7 @@ temporary = path + ".user"
 json.dump(state, open(temporary, "w", encoding="utf-8"), separators=(",", ":"))
 os.replace(temporary, path)
 PY
-  run_helper start --state "$pinned_state" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$pinned_state" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2577,7 +2811,7 @@ json.dump(state, open(temporary, "w", encoding="utf-8"), separators=(",", ":"))
 os.replace(temporary, path)
 PY
   export FAKE_ADB_CREATE_DESTINATION_ON_TRACE="$pinned_race"
-  run_helper start --state "$pinned_race" --serial DEVICE_SECRET_123 \
+  run_helper start --state "$pinned_race" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
@@ -2832,7 +3066,7 @@ run_host_lock_test() {
   export FAKE_ADB_BLOCK_RELEASE="$release"
 
   FAKE_ADB_LOG="$first_log" TMPDIR="$first_tmp" VOICE_STEP_LOCK_ROOT="$first_override" "$HELPER" inject \
-    --state "$state" --fixture "$first_fixture" --role request \
+    --mdev-owner "$MDEV_OWNER" --state "$state" --fixture "$first_fixture" --role request \
     >"$first_stdout" 2>"$first_stderr" &
   first_pid=$!
   if ! wait_for_path "$ready"; then
@@ -2844,14 +3078,14 @@ run_host_lock_test() {
   set +e
   FAKE_ADB_LOG="$second_log" "$REAL_TIMEOUT" 2s env TMPDIR="$second_tmp" \
     VOICE_STEP_LOCK_ROOT="$second_override" \
-    "$HELPER" inject --state "$state" --fixture "$second_fixture" --role follow_up \
+    "$HELPER" inject --mdev-owner "$MDEV_OWNER" --state "$state" --fixture "$second_fixture" --role follow_up \
     >"$second_stdout" 2>"$second_stderr"
   second_status=$?
   set -e
   [[ "$second_status" -ne 0 && "$second_status" -ne 124 ]] ||
     fail "host-lock test: contending helper did not fail promptly"
   [[ ! -s "$second_log" ]] ||
-    fail "host-lock test: contending helper reached ADB while the serial/package lock was held"
+    fail "host-lock test: contending helper reached mdev while the owner/package lock was held"
   [[ "$(stat -c %a "$first_override")" == 755 &&
      "$(stat -c %a "$second_override")" == 755 ]] ||
     fail "host-lock test: caller-selected lock roots were mutated"
@@ -2975,7 +3209,8 @@ run_status_tests() {
   local status_lock_fd
   lock_key="$(python3 - <<'PY'
 import hashlib
-print(hashlib.sha256(b"DEVICE_SECRET_123\0me.rerere.rikkahub.debug").hexdigest())
+owner_hash = "sha256:" + hashlib.sha256(b"OWNER_SECRET_123").hexdigest()
+print(hashlib.sha256((owner_hash + "\0me.rerere.rikkahub.debug").encode()).hexdigest())
 PY
 )"
   lock_directory="/tmp/rikkahub-voice-real-room-locks-${EUID}/$lock_key.lock"
@@ -4557,6 +4792,8 @@ done
 
 if [[ "$SELECT_ALL" -eq 1 ]]; then
   run_general_validation_tests
+  run_managed_owner_contract_tests
+  run_owner_lock_key_test
 fi
 selected preflight && run_preflight_tests
 selected start && run_start_tests

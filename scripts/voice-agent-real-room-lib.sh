@@ -19,12 +19,13 @@ die() {
 
 FIXTURE_MAX_BYTES=16777216
 
-adb_read() {
-  timeout --signal=TERM --kill-after=2s "${VOICE_STEP_ADB_TIMEOUT_SECONDS:-10}s" adb -s "$SERIAL" "$@" 2>/dev/null
+run_mdev_adb() {
+  timeout --signal=TERM --kill-after=2s "${VOICE_STEP_ADB_TIMEOUT_SECONDS:-10}s" \
+    "$MDEV" android adb --device phone --owner "$MDEV_OWNER" -- "$@" 2>/dev/null
 }
 
-adb_global_read() {
-  timeout --signal=TERM --kill-after=2s "${VOICE_STEP_ADB_TIMEOUT_SECONDS:-10}s" adb "$@" 2>/dev/null
+adb_read() {
+  run_mdev_adb "$@"
 }
 
 register_temp_file() {
@@ -86,7 +87,7 @@ validate_runtime() {
   [[ "${VOICE_STEP_POLL_SECONDS:-1}" =~ ^([0-9]+)(\.[0-9]+)?$ ]] ||
     die 'invalid timeout configuration'
   require_command timeout
-  require_command adb
+  require_command "$MDEV"
   require_command python3
   require_command mktemp
   require_command chmod
@@ -101,8 +102,27 @@ validate_runtime() {
   require_command cmp
   require_command flock
   require_command mkdir
-  [[ -x "$READY" ]] || die 'device-ready helper unavailable'
   ensure_ordered_broadcast_output
+}
+
+prepare_mdev_owner() {
+  local owner_hash
+  owner_hash="$(python3 - "$MDEV_OWNER" 2>/dev/null <<'PY'
+import hashlib
+import sys
+
+owner = sys.argv[1]
+encoded = owner.encode("utf-8")
+if (
+    not 1 <= len(encoded) <= 128
+    or any(character.isspace() or ord(character) < 0x20 or ord(character) == 0x7F for character in owner)
+):
+    raise SystemExit(1)
+print("sha256:" + hashlib.sha256(encoded).hexdigest())
+PY
+)" || die 'invalid managed owner'
+  validate_hash "$owner_hash" 'managed owner hash'
+  MDEV_OWNER_HASH="$owner_hash"
 }
 
 validate_identifier() {
@@ -187,7 +207,7 @@ if (
 ):
     raise SystemExit(1)
 PY
-  lock_key="$(python3 - "$SERIAL" "$PACKAGE" 2>/dev/null <<'PY'
+  lock_key="$(python3 - "$MDEV_OWNER_HASH" "$PACKAGE" 2>/dev/null <<'PY'
 import hashlib
 import sys
 
@@ -384,7 +404,7 @@ import sys
 path = sys.argv[1]
 keys = [
     "schemaVersion",
-    "serial",
+    "mdevOwnerHash",
     "package",
     "androidUserId",
     "packageUid",
@@ -445,7 +465,7 @@ if (after.st_dev, after.st_ino, after.st_mode, after.st_size, after.st_mtime_ns,
 if not isinstance(payload, list) or [key for key, _ in payload] != keys:
     raise SystemExit(1)
 state = dict(payload)
-if type(state["schemaVersion"]) is not int or state["schemaVersion"] != 2:
+if type(state["schemaVersion"]) is not int or state["schemaVersion"] != 3:
     raise SystemExit(1)
 if type(state["androidUserId"]) is not int or type(state["packageUid"]) is not int:
     raise SystemExit(1)
@@ -460,9 +480,9 @@ PY
     die 'invalid state'
   fi
   mapfile -t values <<< "$snapshot"
-  [[ "${#values[@]}" == 14 && "${values[0]}" == 2 ]] || die 'invalid state'
+  [[ "${#values[@]}" == 14 && "${values[0]}" == 3 ]] || die 'invalid state'
   [[ "${values[13]}" == "$TRANSPORT_EXPECTED" ]] || die 'invalid state'
-  validate_identifier "${values[1]}" 'serial'
+  validate_hash "${values[1]}" 'managed owner hash'
   [[ "${values[2]}" == "$PACKAGE_EXPECTED" ]] || die 'invalid package'
   validate_android_user_id "${values[3]}"
   validate_package_uid "${values[4]}"
@@ -687,23 +707,14 @@ read_status() {
 }
 
 ensure_device_and_package() {
-  local devices_output
-  local authorized_count
-  local selected_count
+  local device_state
   local qemu
   local hardware
   local package_path
-  if ! devices_output="$(adb_global_read devices -l 2>/dev/null)"; then
-    die 'ADB command failed'
-  fi
-  authorized_count="$(printf '%s\n' "$devices_output" | awk '$2 == "device" { count++ } END { print count + 0 }')"
-  selected_count="$(printf '%s\n' "$devices_output" | awk -v serial="$SERIAL" '$1 == serial && $2 == "device" { count++ } END { print count + 0 }')"
-  [[ "$authorized_count" == 1 && "$selected_count" == 1 ]] || die 'device is not uniquely authorized'
-  if ! VOICE_AGENT_E2E_SERIAL="$SERIAL" \
-      ADB_DEVICE_READY_TIMEOUT_SECONDS="${VOICE_STEP_ADB_TIMEOUT_SECONDS:-10}" \
-      "$READY" "$SERIAL" >/dev/null 2>&1; then
-    die 'device is not ready'
-  fi
+  device_state="$(adb_read get-state 2>/dev/null)" || die 'device is not ready'
+  device_state="${device_state//$'\r'/}"
+  device_state="${device_state//$'\n'/}"
+  [[ "$device_state" == device ]] || die 'device is not ready'
   qemu="$(adb_read shell getprop ro.kernel.qemu 2>/dev/null | tr -d '\r[:space:]')" ||
     die 'ADB command failed'
   hardware="$(adb_read shell getprop ro.hardware 2>/dev/null | tr -d '\r[:space:]')" ||
@@ -832,7 +843,7 @@ fi
 
 compute_remote_owner_hash() {
   local owner_hash
-  owner_hash="$(python3 - "$SERIAL" "$PACKAGE" "$CONVERSATION_ID" \
+  owner_hash="$(python3 - "$MDEV_OWNER_HASH" "$PACKAGE" "$CONVERSATION_ID" \
     "$RUN_HASH" "$COMPARISON_HASH" 2>/dev/null <<'PY'
 import hashlib
 import sys
@@ -1737,7 +1748,7 @@ publish_state() {
     die 'state publication failed'
   register_temp_file "$STATE_PUBLICATION_TEMP"
   chmod 600 -- "$STATE_PUBLICATION_TEMP" 2>/dev/null || die 'state publication failed'
-  if ! python3 - "$STATE_PUBLICATION_TEMP" "$SERIAL" "$PACKAGE" "$ANDROID_USER_ID" \
+  if ! python3 - "$STATE_PUBLICATION_TEMP" "$MDEV_OWNER_HASH" "$PACKAGE" "$ANDROID_USER_ID" \
     "$PACKAGE_UID" "$CONVERSATION_ID" "$RUN_HASH" "$COMPARISON_HASH" "$FIXTURE_TOKEN" \
     "$FIXTURE_PARENT_IDENTITY" "$FIXTURE_DIRECTORY_IDENTITY" "$FIXTURE_OWNERSHIP_NONCE" \
     "$TRACE_ID" 2>/dev/null <<'PY'
@@ -1747,7 +1758,7 @@ import sys
 
 (
     path,
-    serial,
+    mdev_owner_hash,
     package,
     android_user_id,
     package_uid,
@@ -1761,8 +1772,8 @@ import sys
     trace,
 ) = sys.argv[1:]
 payload = {
-    "schemaVersion": 2,
-    "serial": serial,
+    "schemaVersion": 3,
+    "mdevOwnerHash": mdev_owner_hash,
     "package": package,
     "androidUserId": int(android_user_id),
     "packageUid": int(package_uid),
