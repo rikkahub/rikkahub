@@ -517,7 +517,7 @@ prefix, record = text.split(marker, 1)
 if prefix and not prefix.endswith("\n"):
     raise SystemExit(1)
 match = re.fullmatch(r"(-?[0-9]+), data=\"([^\x00\r]*)\"", record, re.DOTALL)
-if match is None:
+if match is None or match.group(2).endswith("\n"):
     raise SystemExit(1)
 sys.stdout.write(match.group(1) + "\n" + match.group(2))
 ' 2>/dev/null)"; then

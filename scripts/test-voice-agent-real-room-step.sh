@@ -1058,6 +1058,10 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
     elif action.endswith(".FINALIZE_BOUND"):
         if os.environ.get("FAKE_ADB_FAIL_FINALIZE") == "1":
             raise SystemExit(1)
+        finalize_success_data = os.environ.get("FAKE_ADB_FINALIZE_SUCCESS_DATA")
+        if finalize_success_data is not None:
+            complete(0, finalize_success_data)
+            raise SystemExit(0)
         finalize_nonzero_data = os.environ.get("FAKE_ADB_FINALIZE_NONZERO_DATA")
         if finalize_nonzero_data is not None:
             complete(1, finalize_nonzero_data)
@@ -1388,7 +1392,7 @@ PY
   unset FAKE_ADB_CAPTURE_CORRUPTION FAKE_ADB_MUTATE_CAPTURE_SOURCE_AFTER_READ
   unset FAKE_ADB_REPLACE_CAPTURE_SOURCE_AFTER_READ FAKE_ADB_CALL_STOP_FAILED
   unset FAKE_ADB_REJECT_FINALIZE FAKE_ADB_FAIL_FINALIZE
-  unset FAKE_ADB_FINALIZE_NONZERO_DATA
+  unset FAKE_ADB_FINALIZE_NONZERO_DATA FAKE_ADB_FINALIZE_SUCCESS_DATA
   unset FAKE_ADB_POST_FINALIZE_STATUS
   unset FAKE_ADB_DEVICE_LOST_ON_FORCE_STOP FAKE_ADB_CAPTURE_CRLF
   unset FAKE_ADB_DEVICE_LOST_AFTER_FINALIZE FAKE_ADB_ROUTE_LOST_AFTER_FINALIZE
@@ -3734,6 +3738,9 @@ PY
     $'status=rejected\nreason=unknown' \
     $'status=error\nerror=unknown' \
     $'status=rejected\nreason=call_not_stopped\nextra=true' \
+    $'status=rejected\nreason=call_not_stopped\n' \
+    $'status=error\nerror=runtime_failure\n' \
+    $'status=rejected\nreason=call_not_stopped\n\n' \
     $'status=ok\naction=finalize'; do
     reset_fake
     activate_fake_run
@@ -3746,6 +3753,17 @@ PY
     assert_private_output_absent
     pass
   done
+
+  reset_fake
+  activate_fake_run
+  rm -f -- "$state" "$finalization"
+  write_valid_state "$state"
+  export FAKE_ADB_FINALIZE_SUCCESS_DATA=$'status=ok\naction=finalize\n'
+  run_helper finalize --state "$state" --finalization-output "$finalization"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$finalization" ]] ||
+    fail "finalize-resultData test: trailing-LF success reply published a record"
+  assert_private_output_absent
+  pass
 
   reset_fake
   activate_fake_run
