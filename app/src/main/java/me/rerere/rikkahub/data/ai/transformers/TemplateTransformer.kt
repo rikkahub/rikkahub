@@ -2,6 +2,8 @@ package me.rerere.rikkahub.data.ai.transformers
 
 import io.pebbletemplates.pebble.PebbleEngine
 import io.pebbletemplates.pebble.loader.Loader
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -10,7 +12,7 @@ import me.rerere.rikkahub.utils.toLocalTime
 import java.io.Reader
 import java.io.StringReader
 import java.io.StringWriter
-import java.time.Instant
+import kotlin.time.toJavaInstant
 
 class TemplateTransformer(
     private val engine: PebbleEngine,
@@ -21,7 +23,10 @@ class TemplateTransformer(
         messages: List<UIMessage>,
     ): List<UIMessage> {
         val template = engine.getTemplate(ctx.assistant.id.toString())
+        val timeZone = TimeZone.currentSystemDefault()
         return messages.map { message ->
+            // 使用消息本身的发送时间而不是当前时间, 保证多次请求时渲染结果稳定, 不破坏 prompt 缓存
+            val createdAt = message.createdAt.toInstant(timeZone).toJavaInstant()
             message.copy(
                 parts = message.parts.map { part ->
                     when (part) {
@@ -31,8 +36,8 @@ class TemplateTransformer(
                                 result, mapOf(
                                     "message" to part.text,
                                     "role" to message.role.name.lowercase(),
-                                    "time" to Instant.now().toLocalTime(),
-                                    "date" to Instant.now().toLocalDate(),
+                                    "time" to createdAt.toLocalTime(),
+                                    "date" to createdAt.toLocalDate(),
                                 )
                             )
                             part.copy(

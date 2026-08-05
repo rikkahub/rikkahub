@@ -12,7 +12,7 @@ import kotlin.uuid.Uuid
 
 class ShareSheetTest {
     @Test
-    fun `decode should restore OpenAI provider correctly`() {
+    fun `share round trip should restore OpenAI settings without models`() {
         val originalId = Uuid.random()
         val original = ProviderSetting.OpenAI(
             id = originalId,

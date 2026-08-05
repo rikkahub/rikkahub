@@ -1,0 +1,37 @@
+#include <iostream>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace chat {
+
+class Session {
+public:
+    explicit Session(std::string model) : model_(std::move(model)) {}
+
+    void append(const std::string &role, const std::string &content) {
+        history_.emplace_back(role + ": " + content);
+    }
+
+    std::size_t size() const noexcept { return history_.size(); }
+
+    const std::vector<std::string> &history() const { return history_; }
+
+private:
+    std::string model_;
+    std::vector<std::string> history_;
+};
+
+}  // namespace chat
+
+int main() {
+    auto session = std::make_unique<chat::Session>("claude-opus-5");
+    session->append("user", "hello");
+    session->append("assistant", "hi there");
+
+    for (const auto &line : session->history()) {
+        std::cout << line << std::endl;
+    }
+
+    return static_cast<int>(session->size());
+}

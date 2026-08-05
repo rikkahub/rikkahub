@@ -1,0 +1,128 @@
+keyword	import
+	 Foundation\n\n
+keyword	@available
+	(
+keyword	iOS
+	 
+number	17
+	, 
+keyword	macOS
+	 
+number	14
+	, 
+operator	*
+	)\n
+keyword	final
+	 
+keyword	class
+	 
+title.class	UserService
+	<
+type	T
+	: 
+type	Sendable
+	>: 
+title.class.inherited	NSObject
+	 {\n    
+keyword	private
+	 
+keyword	let
+	 values: [
+type	T
+	]\n\n    
+keyword	init
+	(
+params	values
+	: [
+type	T
+	]) {\n        
+keyword	self
+	.values 
+operator	=
+	 values\n    }\n\n    
+keyword	func
+	 
+title.function	greeting
+	(
+params	for
+	 
+params	name
+	: 
+type	String
+	, 
+params	count
+	: 
+type	Int
+	 
+operator	=
+	 
+number	1
+	) 
+keyword	async
+	 
+keyword	throws
+	 -> 
+type	String
+	 {\n        
+keyword	let
+	 message 
+operator	=
+	 
+string	#"Hello, 
+subst	\\#(name)
+string	!"#
+	\n        
+keyword	let
+	 total 
+operator	=
+	 
+number	1_024.5e-2
+	\n        
+keyword	let
+	 matcher 
+operator	=
+	 
+regexp	#/^[A-Z][a-z]+$/#
+	\n\n        
+keyword	guard
+	 matcher.wholeMatch(in: name) 
+operator	!=
+	 
+literal	nil
+	 
+keyword	else
+	 {\n            
+keyword	throw
+	 
+type	ServiceError
+	.invalidName\n        }\n\n        
+keyword	return
+	 
+string	"
+subst	\\(message)
+string	 
+subst	\\(count)
+string	 
+subst	\\(total)
+string	"
+	\n    }\n}\n\n
+keyword	precedencegroup
+	 
+title	ForwardApplication
+	 {\n    
+keyword	associativity
+	: 
+keyword	left
+	\n    
+keyword	higherThan
+	: 
+type	AssignmentPrecedence
+	\n}\n\n
+keyword	infix
+	 
+keyword	operator
+	 
+title	|>
+	: 
+type	ForwardApplication
+	\n

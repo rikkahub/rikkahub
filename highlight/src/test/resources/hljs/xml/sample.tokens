@@ -1,0 +1,216 @@
+meta	<!DOCTYPE 
+keyword	html
+meta	>
+	\n
+tag	<
+name	html
+tag	 
+attr	lang
+tag	=
+string	"zh-CN"
+tag	>
+	\n
+tag	<
+name	head
+tag	>
+	\n  
+tag	<
+name	meta
+tag	 
+attr	charset
+tag	=
+string	"utf-8"
+tag	>
+	\n  
+tag	<
+name	meta
+tag	 
+attr	name
+tag	=
+string	"viewport"
+tag	 
+attr	content
+tag	=
+string	"width=device-width, initial-scale=1"
+tag	>
+	\n  
+tag	<
+name	title
+tag	>
+	RikkaHub
+tag	</
+name	title
+tag	>
+	\n  
+tag	<
+name	link
+tag	 
+attr	rel
+tag	=
+string	"stylesheet"
+tag	 
+attr	href
+tag	=
+string	"/assets/app.css"
+tag	>
+	\n  
+tag	<
+name	style
+tag	>
+	\n    
+selector-tag	body
+	 {\n      
+attribute	margin
+	: 
+number	0
+	;\n      
+attribute	font-family
+	: 
+string	"Noto Sans"
+	, sans-serif;\n      
+attribute	background
+	: 
+number	#282c34
+	;\n    }\n\n    
+selector-class	.chat
+	 > 
+selector-class	.message
+selector-pseudo	:hover
+	 {\n      
+attribute	color
+	: 
+built_in	rgba
+	(
+number	255
+	, 
+number	255
+	, 
+number	255
+	, 
+number	0.8
+	);\n    }\n  
+tag	</
+name	style
+tag	>
+	\n
+tag	</
+name	head
+tag	>
+	\n
+tag	<
+name	body
+tag	>
+	\n  
+comment	<!-- 会话列表 -->
+	\n  
+tag	<
+name	div
+tag	 
+attr	id
+tag	=
+string	"root"
+tag	 
+attr	class
+tag	=
+string	"app dark"
+tag	 
+attr	data-theme
+tag	=
+string	'dark'
+tag	>
+	\n    
+tag	<
+name	img
+tag	 
+attr	src
+tag	=
+string	"logo.svg"
+tag	 
+attr	alt
+tag	=
+string	"logo"
+tag	 
+attr	width
+tag	=
+string	48
+tag	 
+attr	height
+tag	=
+string	48
+tag	 />
+	\n    
+tag	<
+name	p
+tag	>
+	Hello 
+symbol	&amp;
+	 welcome 
+symbol	&#128512;
+	 
+symbol	&#x1f600;
+tag	</
+name	p
+tag	>
+	\n    
+tag	<
+name	input
+tag	 
+attr	type
+tag	=
+string	"checkbox"
+tag	 
+attr	checked
+tag	 
+attr	disabled
+tag	>
+	\n    
+tag	<
+name	br
+tag	>
+	\n  
+tag	</
+name	div
+tag	>
+	\n  
+tag	<
+name	script
+tag	 
+attr	type
+tag	=
+string	"module"
+tag	>
+	\n    
+keyword	import
+	 { createApp } 
+keyword	from
+	 
+string	'./app.js'
+	\n\n    
+keyword	const
+	 app = 
+title.function	createApp
+	({ 
+attr	locale
+	: 
+string	'zh-CN'
+	, 
+attr	debug
+	: 
+literal	false
+	 })\n    app.
+title.function	mount
+	(
+string	'#root'
+	)\n  
+tag	</
+name	script
+tag	>
+	\n
+tag	</
+name	body
+tag	>
+	\n
+tag	</
+name	html
+tag	>
+	\n

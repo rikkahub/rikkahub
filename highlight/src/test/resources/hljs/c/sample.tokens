@@ -1,0 +1,150 @@
+meta	#
+keyword	include
+meta	 
+string	<stdio.h>
+	\n
+meta	#
+keyword	include
+meta	 
+string	<stdlib.h>
+	\n
+meta	#
+keyword	include
+meta	 
+string	<string.h>
+	\n\n
+meta	#
+keyword	define
+meta	 MAX_MESSAGES 4096
+	\n
+meta	#
+keyword	define
+meta	 MIN(a, b) ((a) < (b) ? (a) : (b))
+	\n\n
+keyword	typedef
+	 
+keyword	enum
+class	 {
+	\n    ROLE_USER,\n    ROLE_ASSISTANT\n} 
+type	role_t
+	;\n\n
+keyword	typedef
+	 
+keyword	struct
+class	 
+title	message
+class	 {
+	\n    
+type	role_t
+	 role;\n    
+type	char
+	 *content;\n    
+type	size_t
+	 length;\n} 
+type	message_t
+	;\n\n
+type	static
+	 
+type	const
+	 
+type	char
+	 *ROLE_NAMES[] = { 
+string	"user"
+	, 
+string	"assistant"
+	 };\n\n
+comment	/* Appends one message to the session, growing the buffer when needed. */
+	\n
+type	int
+	 
+title.function	session_append
+params	(
+type	message_t
+params	 **messages, 
+type	size_t
+params	 *count, 
+type	role_t
+params	 role, 
+type	const
+params	 
+type	char
+params	 *content)
+	\n{\n    
+keyword	if
+	 (content == 
+literal	NULL
+	) {\n        
+keyword	return
+	 
+number	-1
+	;\n    }\n\n    
+type	message_t
+	 *grown = 
+built_in	realloc
+	(*messages, (*count + 
+number	1
+	) * 
+keyword	sizeof
+	(
+type	message_t
+	));\n    
+keyword	if
+	 (grown == 
+literal	NULL
+	) {\n        
+keyword	return
+	 
+number	-1
+	;\n    }\n\n    grown[*count].role = role;\n    grown[*count].content = strdup(content);\n    grown[*count].length = 
+built_in	strlen
+	(content);\n\n    *messages = grown;\n    *count += 
+number	1
+	;\n    
+keyword	return
+	 
+number	0
+	;\n}\n\n
+type	void
+	 
+title.function	session_print
+params	(
+type	const
+params	 
+type	message_t
+params	 *messages, 
+type	size_t
+params	 count)
+	\n{\n    
+keyword	for
+	 (
+type	size_t
+	 i = 
+number	0
+	; i < count; i++) {\n        
+built_in	printf
+	(
+string	"%s: %s\\n"
+	, ROLE_NAMES[messages[i].role], messages[i].content);\n    }\n}\n\n
+type	int
+	 
+title.function	main
+params	(
+type	void
+params	)
+	\n{\n    
+type	message_t
+	 *messages = 
+literal	NULL
+	;\n    
+type	size_t
+	 count = 
+number	0
+	;\n\n    session_append(&messages, &count, ROLE_USER, 
+string	"hello"
+	);\n    session_print(messages, count);\n\n    
+built_in	free
+	(messages);\n    
+keyword	return
+	 
+number	0
+	;\n}\n

@@ -1,193 +1,84 @@
 package me.rerere.highlight
 
-import android.content.Context
-import com.whl.quickjs.wrapper.QuickJSArray
-import com.whl.quickjs.wrapper.QuickJSContext
-import com.whl.quickjs.wrapper.QuickJSObject
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.serialization.KSerializer
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.descriptors.SerialDescriptor
-import kotlinx.serialization.descriptors.buildClassSerialDescriptor
-import kotlinx.serialization.encoding.Decoder
-import kotlinx.serialization.encoding.Encoder
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonDecoder
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import me.rerere.highlight.HighlightToken.Token.StringContent
-import java.util.concurrent.Executors
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.sp
+import me.rerere.highlight.core.HighlightEngine
+import me.rerere.highlight.languages.builtinLanguages
 
-class Highlighter(ctx: Context) {
-    private val executor = Executors.newSingleThreadExecutor()
+private const val MAX_CODE_LENGTH = 4096
 
-    init {
-        executor.submit {
-            context // init context
-        }
+val LocalCodeHighlighter = staticCompositionLocalOf { CodeHighlighter() }
+
+/**
+ * A pure Kotlin syntax highlighter.
+ *
+ * Grammars are ported from highlight.js 11.11.1 and run on [HighlightEngine], a port of its mode
+ * stack parser. An unsupported language is returned unhighlighted.
+ */
+class CodeHighlighter {
+    private val engine = HighlightEngine(builtinLanguages())
+
+    fun highlight(code: String, language: String): List<HighlightToken> {
+        if (code.isEmpty()) return emptyList()
+
+        return engine.highlight(code, language)
+            ?: listOf(HighlightToken.Plain(code))
     }
 
-    private val script: String by lazy {
-        ctx.resources.openRawResource(R.raw.prism).use {
-            it.bufferedReader().readText()
-        }
-    }
+    fun supports(language: String): Boolean = engine.supports(language)
+}
 
-    private val context: QuickJSContext by lazy {
-        QuickJSContext.create().also {
-            it.evaluate(script)
-        }
-    }
-
-    private val highlightFn by lazy {
-        context.globalObject.getJSFunction("highlight")
-    }
-
-    suspend fun highlight(code: String, language: String) =
-        suspendCancellableCoroutine { continuation ->
-            executor.submit {
-                runCatching {
-                    val result = highlightFn.call(code, language)
-                    require(result is QuickJSArray) {
-                        "highlight result must be an array"
-                    }
-                    val tokens = arrayListOf<HighlightToken>()
-                    for (i in 0 until result.length()) {
-                        when (val element = result[i]) {
-                            is String -> tokens.add(
-                                HighlightToken.Plain(
-                                    content = element,
-                                )
-                            )
-
-                            is QuickJSObject -> {
-                                val json = element.stringify()
-                                val token = format.decodeFromString<HighlightToken.Token>(
-                                    HighlightTokenSerializer, json
-                                )
-                                tokens.add(token)
-                            }
-
-                            else -> error("Unknown type: ${element::class.java.name}")
-                        }
-                    }
-                    result.release()
-                    continuation.resume(tokens)
-                }.onFailure {
-                    it.printStackTrace()
-                    if (continuation.isActive) {
-                        continuation.resumeWithException(it)
-                    }
+@Composable
+fun CodeHighlightText(
+    code: String,
+    language: String,
+    modifier: Modifier = Modifier,
+    colors: HighlightTextColorPalette = HighlightTextColorPalette.Default,
+    fontSize: TextUnit = 12.sp,
+    fontFamily: FontFamily = FontFamily.Monospace,
+    fontStyle: FontStyle = FontStyle.Normal,
+    fontWeight: FontWeight = FontWeight.Normal,
+    lineHeight: TextUnit = TextUnit.Unspecified,
+    overflow: TextOverflow = TextOverflow.Clip,
+    softWrap: Boolean = true,
+    maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1,
+) {
+    val highlighter = LocalCodeHighlighter.current
+    val annotatedString = remember(code, language, colors, highlighter) {
+        if (code.length > MAX_CODE_LENGTH) {
+            AnnotatedString(code)
+        } else {
+            buildAnnotatedString {
+                highlighter.highlight(code, language).forEach { token ->
+                    buildHighlightText(token, colors)
                 }
             }
         }
-
-    fun destroy() {
-        context.destroy()
-    }
-}
-
-private val format by lazy {
-    Json {
-        ignoreUnknownKeys = true
-        prettyPrint = true
-    }
-}
-
-sealed class HighlightToken {
-    data class Plain(
-        val content: String,
-    ) : HighlightToken()
-
-    @Serializable
-    sealed class Token() : HighlightToken() {
-        @Serializable
-        data class StringContent(
-            val content: String,
-            val type: String,
-            val length: Int,
-        ) : Token()
-
-        @Serializable
-        data class StringListContent(
-            val content: List<String>,
-            val type: String,
-            val length: Int,
-        ) : Token()
-
-        @Serializable
-        data class Nested(
-            val content: List<Token>,
-            val type: String,
-            val length: Int,
-        ) : Token()
-    }
-}
-
-object HighlightTokenSerializer : KSerializer<HighlightToken.Token> {
-    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("HighlightToken.Token")
-
-    override fun serialize(
-        encoder: Encoder,
-        value: HighlightToken.Token
-    ) {
-        // not used
     }
 
-    override fun deserialize(decoder: Decoder): HighlightToken.Token {
-        val jsonDecoder = decoder as JsonDecoder
-        val jsonObject = jsonDecoder.decodeJsonElement().jsonObject
-        val type = jsonObject["type"]?.jsonPrimitive?.content
-            ?: error("Missing type field in HighlightToken.Token")
-        val length = jsonObject["length"]?.jsonPrimitive?.int
-            ?: error("Missing length field in HighlightToken.Token")
-        val content = jsonObject["content"]
-            ?: error("Missing content field in HighlightToken.Token")
-
-        return when (content) {
-            is JsonArray -> {
-                val nestedContent = arrayListOf<HighlightToken.Token>()
-
-                content.forEach { part ->
-                    if (part is JsonPrimitive) {
-                        nestedContent += StringContent(
-                            content = part.content,
-                            type = type,
-                            length = length,
-                        )
-                    } else if (part is JsonObject) {
-                        nestedContent += format.decodeFromJsonElement(
-                            HighlightTokenSerializer,
-                            part
-                        )
-                    } else {
-                        error("unknown content part type: $content / $part")
-                    }
-                }
-
-                HighlightToken.Token.Nested(
-                    content = nestedContent,
-                    type = type,
-                    length = length,
-                )
-            }
-
-            is JsonPrimitive -> {
-                val stringContent = content.content
-                HighlightToken.Token.StringContent(
-                    content = stringContent,
-                    type = type,
-                    length = length,
-                )
-            }
-
-            else -> error("Unknown content type: ${content::class.java.name}")
-        }
-    }
+    Text(
+        modifier = modifier,
+        text = annotatedString,
+        fontSize = fontSize,
+        fontFamily = fontFamily,
+        fontStyle = fontStyle,
+        fontWeight = fontWeight,
+        lineHeight = lineHeight,
+        overflow = overflow,
+        softWrap = softWrap,
+        maxLines = maxLines,
+        minLines = minLines,
+    )
 }

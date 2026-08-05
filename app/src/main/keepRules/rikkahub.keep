@@ -1,0 +1,25 @@
+# Keep source locations so obfuscated release stack traces can be retraced.
+-keepattributes SourceFile,LineNumberTable
+
+# Ktor references JVM-only management APIs from its debug detector.
+-dontwarn java.lang.management.ManagementFactory
+-dontwarn java.lang.management.RuntimeMXBean
+
+# Jackson references these JVM-only java.beans annotations.
+-dontwarn java.beans.ConstructorProperties
+-dontwarn java.beans.Transient
+
+# re2j has optional references that are unavailable on Android.
+-dontwarn com.google.re2j.**
+
+# Jackson TypeReference reads its anonymous subclass's generic superclass at runtime.
+-keepattributes Signature,InnerClasses,EnclosingMethod
+-keep,allowobfuscation class * extends com.fasterxml.jackson.core.type.TypeReference
+
+# JLaTeXMath loads these optional alphabet registrations by their binary names.
+-keep,allowoptimization class org.scilab.forge.jlatexmath.cyrillic.CyrillicRegistration {
+    public <init>();
+}
+-keep,allowoptimization class org.scilab.forge.jlatexmath.greek.GreekRegistration {
+    public <init>();
+}

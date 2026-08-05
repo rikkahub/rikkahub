@@ -63,10 +63,6 @@
   <string name="assistant_page_chat_model_desc">어시스턴트의 기본 채팅 모델 설정. 미설정 시 전역 기본 채팅 모델 사용</string>
   <string name="assistant_page_clone">복제</string>
   <string name="assistant_page_confirm">확인</string>
-  <string name="assistant_page_context_message_count">컨텍스트 메시지 수: %d</string>
-  <string name="assistant_page_context_message_desc">과거 메시지 중 몇 개를 모델에 컨텍스트로 보낼지 제어. 이 수를 초과한 메시지는 무시되고 가장 최근 N개 메시지만 유지되어 토큰을 절약할 수 있습니다</string>
-  <string name="assistant_page_context_message_size">컨텍스트 메시지 수</string>
-  <string name="assistant_page_context_message_unlimited">무제한 컨텍스트 메시지</string>
   <string name="assistant_page_creative">창의적</string>
   <string name="assistant_page_current_assistant">현재 어시스턴트</string>
   <string name="assistant_page_custom_bodies">사용자 정의 본문</string>
@@ -468,8 +464,6 @@
   <string name="placeholder_battery_level">배터리 잔량</string>
   <string name="placeholder_char">어시스턴트명</string>
   <string name="placeholder_current_date">날짜</string>
-  <string name="placeholder_current_datetime">날짜와 시간</string>
-  <string name="placeholder_current_time">시간</string>
   <string name="placeholder_device_info">기기 정보</string>
   <string name="placeholder_locale">로케일</string>
   <string name="placeholder_model_id">모델 ID</string>
@@ -700,6 +694,12 @@
   <string name="setting_display_page_volume_key_scroll_ratio">스크롤 양</string>
   <string name="setting_display_page_volume_key_scroll_title">볼륨 키 페이지 스크롤</string>
   <string name="setting_files_page_cancel_action">취소</string>
+  <string name="setting_files_page_clean_action">정리</string>
+  <string name="setting_files_page_clean_confirmation">이 카테고리의 모든 파일이 영구적으로 삭제됩니다. 이 작업은 실행 취소할 수 없습니다.</string>
+  <string name="setting_files_page_clean_content_description">파일 정리</string>
+  <string name="setting_files_page_clean_failed_toast">일부 파일을 정리하지 못했습니다</string>
+  <string name="setting_files_page_clean_title">파일을 정리할까요?</string>
+  <string name="setting_files_page_cleaned_toast">파일을 정리했습니다</string>
   <string name="setting_files_page_delete_action">삭제</string>
   <string name="setting_files_page_delete_content_description">삭제</string>
   <string name="setting_files_page_delete_failed_toast">삭제 실패</string>
@@ -1061,6 +1061,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="text_area_save">저장</string>
   <string name="theme_name_autumn">가을 노랑</string>
   <string name="theme_name_black">중립 검정</string>
+  <string name="theme_name_minimal">미니멀 화이트</string>
   <string name="theme_name_ocean">해양 청색</string>
   <string name="theme_name_sakura">벚꽃 핑크</string>
   <string name="theme_name_spring">들판 녹색</string>
@@ -1252,7 +1253,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_asr_configure_step_hotwords_desc">고유명사/도메인 용어 인식 정확도를 높이기 위한 쉼표로 구분된 핫워드 목록</string>
   <string name="log_page_record_requests">요청 기록</string>
   <string name="log_page_record_requests_desc">요청 헤더, 본문 및 응답 메타데이터를 기록합니다.</string>
-  <string name="assistant_page_context_message_truncation_warning">컨텍스트를 제한하면 빈번한 컨텍스트 절단이 발생하고 프롬프트 캐싱을 방해할 수 있습니다.</string>
   <string name="chat_message_tool_recent_chats">최근 채팅 보기</string>
   <string name="chat_message_tool_conversation_search">검색 기록: %1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">화면 시간</string>
@@ -1281,4 +1281,9 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_page_delete_folder_generating">이 폴더의 일부 대화가 아직 생성 중입니다. 삭제하기 전에 중지해 주세요.</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 괄호 안 내용 읽지 않기</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">활성화하면 TTS가 괄호 안의 내용을 읽지 않습니다</string>
+  <string name="assistant_page_context_message_limit">컨텍스트 메시지 제한</string>
+  <string name="assistant_page_context_message_limit_desc">모델로 전송되는 최근 메시지 수를 제한합니다. 제한을 초과하면 한 번에 하나씩 메시지를 삭제하는 대신 컨텍스트가 한 번에 약 절반으로 줄어들어 요청 접두사가 안정적으로 유지되고 프롬프트 캐싱이 여러 턴 동안 계속 작동합니다.</string>
+  <string name="assistant_page_context_message_limit_count">컨텍스트 메시지 한도: %d</string>
+  <string name="assistant_page_context_message_limit_unlimited">무제한 컨텍스트 메시지</string>
+  <string name="assistant_page_context_message_limit_warning">컨텍스트 제한 시 컨텍스트가 정리될 때마다 프롬프트 캐시가 무효화됩니다. 제한이 클수록 정리 빈도가 낮아지며, 무제한일 경우 정리되지 않아 캐시가 완전히 보존됩니다.</string>
 </resources>

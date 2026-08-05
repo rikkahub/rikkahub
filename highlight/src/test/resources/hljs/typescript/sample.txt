@@ -1,0 +1,54 @@
+import type { Readable } from 'node:stream';
+
+namespace Rikka {
+  export const version: string = '1.0.0';
+}
+
+export enum Level {
+  Debug = 0,
+  Info = 1,
+}
+
+export interface Options extends Record<string, unknown> {
+  name: string;
+  retries?: number;
+  readonly level: Level;
+}
+
+type Handler<T> = (payload: T, index?: number) => Promise<void>;
+
+@Injectable()
+export abstract class Client<T extends object = Options> {
+  private readonly cache = new Map<string, T>();
+  protected timeout: number = 30_000;
+
+  public constructor(private options: Options, public label = 'client') {}
+
+  abstract send(body: T): Promise<Response>;
+
+  async retry<R>(task: () => Promise<R>, times = 3): Promise<R | null> {
+    for (let i = 0; i < times; i++) {
+      try {
+        return await task();
+      } catch (error: unknown) {
+        if (!(error instanceof Error)) throw error;
+      }
+    }
+    return null;
+  }
+
+  get name(): string {
+    return `${this.label}:${this.options.name}`;
+  }
+}
+
+function isReadable(value: unknown): value is Readable {
+  return typeof value === 'object' && value !== null && 'pipe' in value;
+}
+
+const handle: Handler<Options> = async (payload, index) => {
+  const level = payload.level satisfies Level;
+  console.log(level, index ?? 0, isReadable(payload));
+};
+
+export default handle;

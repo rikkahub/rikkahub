@@ -1,0 +1,46 @@
+comment	# top level comment
+	\n
+attr	title
+	 = 
+string	"TOML Example"
+	\n\n
+section	[owner]
+	\n
+attr	name
+	 = 
+string	"Rikka"
+	\n
+attr	dob
+	 = 
+number	1979
+	-
+number	05
+	-
+number	27
+	\n
+attr	enabled
+	 = 
+literal	true
+	\n
+attr	ratio
+	 = 
+number	1_000_000
+	\n\n
+section	[servers.alpha]
+	\n
+attr	ip
+	 = 
+string	'10.0.0.1'
+	\n
+attr	ports
+	 = [ 
+number	8001
+	, 
+number	8001
+	, 
+number	8002
+	 ]\n
+attr	banner
+	 = 
+string	"""\nmulti line\n"""
+	\n

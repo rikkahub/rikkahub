@@ -7,13 +7,13 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.files.SkillManager
+import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.data.files.SkillPaths
 
 fun createSkillTools(
     enabledSkills: Set<String>,
     allSkills: List<SkillMetadata>,
-    skillManager: SkillManager,
 ): List<Tool> {
     val available = allSkills.filter { it.name in enabledSkills }
     if (available.isEmpty()) return emptyList()
@@ -61,15 +61,14 @@ fun createSkillTools(
             execute = {
                 val name = it.jsonObject["name"]?.jsonPrimitive?.content
                     ?: error("name is required")
-                if (name !in enabledSkills) {
-                    error("Skill '$name' is not available. Available skills: ${enabledSkills.joinToString()}")
-                }
+                val skill = available.firstOrNull { skill -> skill.name == name }
+                    ?: error("Skill '$name' is not available. Available skills: ${available.joinToString { it.name }}")
                 val path = it.jsonObject["path"]?.jsonPrimitive?.content
                 val content = if (path.isNullOrBlank()) {
-                    skillManager.readSkillBody(name)
-                        ?: error("Skill '$name' not found")
+                    require(skill.skillFile.exists()) { "Skill '$name' not found" }
+                    SkillFrontmatterParser.extractBody(skill.skillFile.readText())
                 } else {
-                    val target = skillManager.resolveSkillFile(name, path)
+                    val target = SkillPaths.resolveSkillFile(skill.skillDir, path)
                         ?: error("Path '$path' is outside the skill directory")
                     require(target.exists()) { "File '$path' not found in skill '$name'" }
                     target.readText()

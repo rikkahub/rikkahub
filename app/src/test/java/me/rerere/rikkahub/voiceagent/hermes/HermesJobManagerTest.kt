@@ -932,11 +932,13 @@ class HermesJobManagerTest {
             it.status == HermesQueueStatus.Complete
         }
 
-        assertTrue(
-            statuses.any {
+        withTimeout(500) {
+            while (statuses.none {
                 it is VoiceToolStatus.HermesAnswered && it.callId == "call-done"
-            },
-        )
+            }) {
+                delay(10)
+            }
+        }
 
         toolApi.complete(response(callId = "call-active", answer = "active answer"))
         conversationStore.awaitHermesRecord("call-active") {

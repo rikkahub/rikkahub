@@ -63,10 +63,6 @@
   <string name="assistant_page_chat_model_desc">设置助手的默认聊天模型，如果不设置，则使用全局默认聊天模型</string>
   <string name="assistant_page_clone">复制</string>
   <string name="assistant_page_confirm">确定</string>
-  <string name="assistant_page_context_message_count">上下文消息数量: %d</string>
-  <string name="assistant_page_context_message_desc">控制多少条历史消息会被作为上下文发送给模型, 超过此数量的消息会被忽略，只有最近的N条消息会被保留，可以节省token</string>
-  <string name="assistant_page_context_message_size">上下文消息数量</string>
-  <string name="assistant_page_context_message_unlimited">无限制的上下文消息</string>
   <string name="assistant_page_creative">创造</string>
   <string name="assistant_page_current_assistant">当前助手</string>
   <string name="assistant_page_custom_bodies">自定义 Body</string>
@@ -470,8 +466,6 @@
   <string name="placeholder_battery_level">电池电量</string>
   <string name="placeholder_char">助手名称</string>
   <string name="placeholder_current_date">日期</string>
-  <string name="placeholder_current_datetime">日期和时间</string>
-  <string name="placeholder_current_time">时间</string>
   <string name="placeholder_device_info">设备信息</string>
   <string name="placeholder_locale">语言环境</string>
   <string name="placeholder_model_id">模型ID</string>
@@ -732,6 +726,12 @@
   <string name="setting_display_page_volume_key_scroll_ratio">滚动幅度</string>
   <string name="setting_display_page_volume_key_scroll_title">音量键翻页</string>
   <string name="setting_files_page_cancel_action">取消</string>
+  <string name="setting_files_page_clean_action">清理</string>
+  <string name="setting_files_page_clean_confirmation">将永久删除此分类中的全部文件，此操作无法撤销。</string>
+  <string name="setting_files_page_clean_content_description">清理文件</string>
+  <string name="setting_files_page_clean_failed_toast">部分文件清理失败</string>
+  <string name="setting_files_page_clean_title">清理文件？</string>
+  <string name="setting_files_page_cleaned_toast">文件已清理</string>
   <string name="setting_files_page_delete_action">删除</string>
   <string name="setting_files_page_delete_content_description">删除</string>
   <string name="setting_files_page_delete_failed_toast">删除失败</string>
@@ -1093,6 +1093,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="text_area_save">保存</string>
   <string name="theme_name_autumn">秋黄</string>
   <string name="theme_name_black">中性黑</string>
+  <string name="theme_name_minimal">极简白</string>
   <string name="theme_name_ocean">海湾蓝</string>
   <string name="theme_name_sakura">樱花粉</string>
   <string name="theme_name_spring">原野绿</string>
@@ -1254,7 +1255,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="error_mcp_invalid_server_name">无效的MCP服务器名称（仅允许字母数字字符）：%1$s</string>
   <string name="log_page_record_requests">记录请求</string>
   <string name="log_page_record_requests_desc">捕获请求标头、正文和响应元数据</string>
-  <string name="assistant_page_context_message_truncation_warning">限制上下文可能导致频繁的上下文截断，并阻止提示词缓存</string>
   <string name="chat_message_tool_recent_chats">查看最近的对话</string>
   <string name="chat_message_tool_conversation_search">搜索历史：%1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">屏幕时间</string>
@@ -1281,4 +1281,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_folder_add">新建</string>
   <string name="chat_page_delete_folder_confirm">删除文件夹 "%1$s"？其中的对话不会被删除，只会从文件夹中移除。</string>
   <string name="chat_page_delete_folder_generating">此文件夹中有对话仍在生成中，请停止后再删除。</string>
+  <string name="assistant_page_context_message_limit">上下文消息限制</string>
+  <string name="assistant_page_context_message_limit_desc">限制发送给模型的最近消息数量。超出限制时，上下文会一次性缩减至约一半，而非每轮丢弃一条消息，从而保持请求前缀稳定，并使提示词缓存在多轮对话中持续生效。</string>
+  <string name="assistant_page_context_message_limit_count">上下文消息限制: %d</string>
+  <string name="assistant_page_context_message_limit_unlimited">无限上下文消息</string>
+  <string name="assistant_page_context_message_limit_warning">限制上下文会在每次上下文被修剪时使提示词缓存失效。更大的限制修剪频率更低；无限制则从不修剪，并保持缓存完全完好。</string>
 </resources>

@@ -1,6 +1,24 @@
 {
   "version": 1,
   "skills": {
+    "claude-api": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/claude-api/SKILL.md",
+      "computedHash": "adf50b5ad4d1a4a1026455c77311fe56051d41912d2b5f7fc987f14eb4dfd4ba"
+    },
+    "gemini-api-dev": {
+      "source": "google-gemini/gemini-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gemini-api-dev/SKILL.md",
+      "computedHash": "d3503bd642acd53b54594d214a1a0c2ed67a615832398c7c9e2f53d49a085fc2"
+    },
+    "gemini-interactions-api": {
+      "source": "google-gemini/gemini-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gemini-interactions-api/SKILL.md",
+      "computedHash": "d823975c4eb6d5a65525025d47386ee6008c11132e794c16935687f7ce85e10f"
+    },
     "material-3-expressive": {
       "source": "albermonte/android-skills",
       "sourceType": "github",

@@ -1,0 +1,256 @@
+keyword	import
+	 
+keyword	type
+	 { 
+title.class	Readable
+	 } 
+keyword	from
+	 
+string	'node:stream'
+	;\n\n
+keyword	namespace
+	 
+title.class	Rikka
+	 {\n  
+keyword	export
+	 
+keyword	const
+	 
+attr	version
+	: 
+built_in	string
+	 = 
+string	'1.0.0'
+	;\n}\n\n
+keyword	export
+	 
+keyword	enum
+	 
+title.class	Level
+	 {\n  
+title.class	Debug
+	 = 
+number	0
+	,\n  
+title.class	Info
+	 = 
+number	1
+	,\n}\n\n
+keyword	export
+	 
+keyword	interface
+	 
+title.class	Options
+	 
+keyword	extends
+	 
+title.class	Record
+	<
+built_in	string
+	, 
+built_in	unknown
+	> {\n  
+attr	name
+	: 
+built_in	string
+	;\n  
+attr	retries
+	?: 
+built_in	number
+	;\n  
+keyword	readonly
+	 
+attr	level
+	: 
+title.class	Level
+	;\n}\n\n
+keyword	type
+	 
+title.class	Handler
+	<T> = 
+function	(
+attr	payload
+params	: T, 
+attr	index
+params	?: 
+built_in	number
+function	) =>
+	 
+title.class	Promise
+	<
+built_in	void
+	>;\n\n
+meta	@Injectable
+	()\n
+keyword	export
+	 
+keyword	abstract
+	 
+keyword	class
+	 
+title.class	Client
+	<T 
+keyword	extends
+	 
+built_in	object
+	 = 
+title.class	Options
+	> {\n  
+keyword	private
+	 
+keyword	readonly
+	 cache = 
+keyword	new
+	 
+title.class	Map
+	<
+built_in	string
+	, T>();\n  
+keyword	protected
+	 
+attr	timeout
+	: 
+built_in	number
+	 = 
+number	30_000
+	;\n\n  
+keyword	public
+	 
+title.function	constructor
+	(
+keyword	private
+params	 
+attr	options
+params	: 
+title.class	Options
+params	, 
+keyword	public
+params	 label = 
+string	'client'
+	) {}\n\n  
+keyword	abstract
+	 
+title.function	send
+	(
+attr	body
+	: T): 
+title.class	Promise
+	<
+title.class	Response
+	>;\n\n  
+keyword	async
+	 retry<R>(
+attr	task
+	: 
+function	() =>
+	 
+title.class	Promise
+	<R>, times = 
+number	3
+	): 
+title.class	Promise
+	<R | 
+literal	null
+	> {\n    
+keyword	for
+	 (
+keyword	let
+	 i = 
+number	0
+	; i < times; i++) {\n      
+keyword	try
+	 {\n        
+keyword	return
+	 
+keyword	await
+	 
+title.function	task
+	();\n      } 
+keyword	catch
+	 (
+attr	error
+	: 
+built_in	unknown
+	) {\n        
+keyword	if
+	 (!(error 
+keyword	instanceof
+	 
+title.class	Error
+	)) 
+keyword	throw
+	 error;\n      }\n    }\n    
+keyword	return
+	 
+literal	null
+	;\n  }\n\n  
+keyword	get
+	 
+title.function	name
+	(): 
+built_in	string
+	 {\n    
+keyword	return
+	 
+string	`
+subst	${
+variable.language	this
+subst	.label}
+string	:
+subst	${
+variable.language	this
+subst	.options.name}
+string	`
+	;\n  }\n}\n\n
+keyword	function
+	 
+title.function	isReadable
+	(
+attr	value
+params	: 
+built_in	unknown
+	): value is 
+title.class	Readable
+	 {\n  
+keyword	return
+	 
+keyword	typeof
+	 value === 
+string	'object'
+	 && value !== 
+literal	null
+	 && 
+string	'pipe'
+	 
+keyword	in
+	 value;\n}\n\n
+keyword	const
+	 
+attr	handle
+	: 
+title.class	Handler
+	<
+title.class	Options
+	> = 
+title.function	async
+	 (payload, index) => {\n  
+keyword	const
+	 level = payload.
+property	level
+	 
+keyword	satisfies
+	 
+title.class	Level
+	;\n  
+variable.language	console
+	.
+title.function	log
+	(level, index ?? 
+number	0
+	, 
+title.function	isReadable
+	(payload));\n};\n\n
+keyword	export
+	 
+keyword	default
+	 handle;\n

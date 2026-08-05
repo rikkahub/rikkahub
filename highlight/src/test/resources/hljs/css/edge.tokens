@@ -1,0 +1,140 @@
+comment	/* 
+doctag	TODO:
+comment	 校对一遍这些边界情况 */
+	\n
+keyword	@font-face
+	 {\n  
+attribute	font-family
+	: 
+string	"Rikka"
+	;\n  
+attribute	src
+	: 
+built_in	url
+	(
+string	data:font/woff2;base64,d09GMgABAAAAAA
+	) 
+built_in	format
+	(
+string	"woff2"
+	);\n  unicode-range: U+
+number	0000
+	-
+number	00
+	FF;\n}\n\n
+keyword	@supports
+	 (
+attribute	display
+	: 
+attribute	grid
+	) 
+keyword	and
+	 (
+keyword	not
+	 (
+attribute	display
+	: inline-grid)) {\n  
+selector-class	.grid
+	 {\n    
+attribute	display
+	: grid;\n    
+attribute	grid-template-columns
+	: 
+built_in	repeat
+	(auto-fill, 
+built_in	minmax
+	(
+number	120px
+	, 
+number	1
+	fr));\n  }\n}\n\n
+selector-tag	a
+selector-pseudo	:not
+	(
+selector-class	.external
+	)
+selector-pseudo	:focus-visible
+	,\n
+selector-tag	input
+selector-attr	[type=
+string	"checkbox"
+selector-attr	 i]
+selector-pseudo	:checked
+	 + 
+selector-tag	label
+selector-pseudo	::before
+	 {\n  
+attribute	outline
+	: 
+number	2px
+	 dashed currentColor;\n  -webkit-
+attribute	appearance
+	: none;\n  -moz-osx-
+attribute	font-smoothing
+	: grayscale;\n}\n\n
+selector-pseudo	::selection
+	 {\n  
+attribute	background
+	: 
+number	#61afef33
+	;\n}\n\n
+selector-class	.util
+	 {\n  
+attribute	margin
+	: -
+number	0.5em
+	 auto 
+number	1.25rem
+	 
+number	2vw
+	;\n  
+attribute	width
+	: 
+built_in	calc
+	(
+number	100%
+	 - 
+number	2
+	 * 
+built_in	var
+	(--spacing, 
+number	8px
+	));\n  
+attribute	animation
+	: fade 
+number	300ms
+	 
+built_in	cubic-bezier
+	(
+number	0.4
+	, 
+number	0
+	, 
+number	0.2
+	, 
+number	1
+	) 
+number	1
+	 both;\n}\n\n
+selector-tag	svg
+	 > 
+selector-tag	g
+selector-attr	[fill]
+	 
+selector-tag	circle
+	,\n
+selector-tag	table
+	 
+selector-tag	tbody
+	 
+selector-tag	td
+selector-pseudo	:first-of-type
+	 {\n  
+attribute	stroke-width
+	: 
+number	1.5
+	;\n  
+attribute	z-index
+	: 
+number	10
+	;\n}\n

@@ -63,10 +63,6 @@
   <string name="assistant_page_chat_model_desc">Установить модель чата по умолчанию для ассистента. Если не задано, будет использована глобальная модель чата по умолчанию</string>
   <string name="assistant_page_clone">Клонировать</string>
   <string name="assistant_page_confirm">Подтвердить</string>
-  <string name="assistant_page_context_message_count">Размер контекстных сообщений: %d</string>
-  <string name="assistant_page_context_message_desc">Управляет количеством исторических сообщений, отправляемых модели в качестве контекста. Сообщения, превышающие это число, будут игнорироваться; будут сохранены только последние N сообщений, что позволяет экономить токены</string>
-  <string name="assistant_page_context_message_size">Размер контекстного сообщения</string>
-  <string name="assistant_page_context_message_unlimited">Неограниченные контекстные сообщения</string>
   <string name="assistant_page_creative">Творческий</string>
   <string name="assistant_page_current_assistant">Текущий ассистент</string>
   <string name="assistant_page_custom_bodies">Пользовательский контекст</string>
@@ -468,8 +464,6 @@
   <string name="placeholder_battery_level">Уровень заряда</string>
   <string name="placeholder_char">Имя ассистента</string>
   <string name="placeholder_current_date">Дата</string>
-  <string name="placeholder_current_datetime">Дата и время</string>
-  <string name="placeholder_current_time">Время</string>
   <string name="placeholder_device_info">Информация об устройстве</string>
   <string name="placeholder_locale">Язык</string>
   <string name="placeholder_model_id">ID модели</string>
@@ -700,6 +694,12 @@
   <string name="setting_display_page_volume_key_scroll_ratio">Величина прокрутки</string>
   <string name="setting_display_page_volume_key_scroll_title">Прокрутка страниц клавишами громкости</string>
   <string name="setting_files_page_cancel_action">Отмена</string>
+  <string name="setting_files_page_clean_action">Очистить</string>
+  <string name="setting_files_page_clean_confirmation">Все файлы в этой категории будут удалены без возможности восстановления.</string>
+  <string name="setting_files_page_clean_content_description">Очистить файлы</string>
+  <string name="setting_files_page_clean_failed_toast">Не удалось удалить некоторые файлы</string>
+  <string name="setting_files_page_clean_title">Очистить файлы?</string>
+  <string name="setting_files_page_cleaned_toast">Файлы удалены</string>
   <string name="setting_files_page_delete_action">Удалить</string>
   <string name="setting_files_page_delete_content_description">Удалить</string>
   <string name="setting_files_page_delete_failed_toast">Не удалось удалить</string>
@@ -1061,6 +1061,7 @@
   <string name="text_area_save">Сохранить</string>
   <string name="theme_name_autumn">Осенний жёлтый</string>
   <string name="theme_name_black">Нейтральный чёрный</string>
+  <string name="theme_name_minimal">Минималистичный белый</string>
   <string name="theme_name_ocean">Океанический синий</string>
   <string name="theme_name_sakura">Сакура Розовый</string>
   <string name="theme_name_spring">Луговой зелёный</string>
@@ -1252,7 +1253,6 @@
   <string name="setting_asr_configure_step_hotwords_desc">Список горячих слов через запятую для повышения точности распознавания имён собственных и терминов предметной области</string>
   <string name="log_page_record_requests">Записывать запросы</string>
   <string name="log_page_record_requests_desc">Записывать заголовки запросов, тела и метаданные ответов</string>
-  <string name="assistant_page_context_message_truncation_warning">Ограничение контекста может привести к частому усечению контекста и предотвратить кэширование промптов</string>
   <string name="chat_message_tool_recent_chats">Посмотреть недавние чаты</string>
   <string name="chat_message_tool_conversation_search">История поиска: %1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">Экранное время</string>
@@ -1281,4 +1281,9 @@
   <string name="chat_page_delete_folder_generating">Некоторые беседы в этой папке все еще генерируются. Пожалуйста, остановите их перед удалением.</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS не читает текст в скобках</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">Если включено, TTS не будет читать содержимое в скобках</string>
+  <string name="assistant_page_context_message_limit">Лимит контекстных сообщений</string>
+  <string name="assistant_page_context_message_limit_desc">Ограничивает количество последних сообщений, отправляемых модели. Когда лимит превышен, контекст сокращается примерно вдвое за один шаг, вместо удаления одного сообщения за каждый оборот, благодаря чему префикс запроса остаётся стабильным, и кэширование промптов продолжает работать на протяжении многих оборотов.</string>
+  <string name="assistant_page_context_message_limit_count">Лимит сообщений контекста: %d</string>
+  <string name="assistant_page_context_message_limit_unlimited">Неограниченные сообщения контекста</string>
+  <string name="assistant_page_context_message_limit_warning">Ограничение контекста аннулирует кэш промпта каждый раз, когда контекст усекается. Больший лимит усекает реже; безлимитный не усекает никогда и сохраняет кэш полностью нетронутым.</string>
 </resources>

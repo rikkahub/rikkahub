@@ -1,0 +1,15 @@
+# top level comment
+title = "TOML Example"
+
+[owner]
+name = "Rikka"
+dob = 1979-05-27
+enabled = true
+ratio = 1_000_000
+
+[servers.alpha]
+ip = '10.0.0.1'
+ports = [ 8001, 8001, 8002 ]
+banner = """
+multi line
+"""

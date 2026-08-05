@@ -1,0 +1,100 @@
+comment	-- Seed the chat history tables.
+	\n
+keyword	CREATE TABLE
+	 conversation (\n    id          
+type	INTEGER
+	 
+keyword	PRIMARY KEY
+	,\n    assistant   
+type	VARCHAR
+	(
+number	64
+	) 
+keyword	NOT NULL
+	,\n    title       
+type	VARCHAR
+	(
+number	255
+	),\n    created_at  
+type	TIMESTAMP
+	 
+keyword	DEFAULT
+	 
+built_in	CURRENT_TIMESTAMP
+	,\n    pinned      
+type	BOOLEAN
+	 
+keyword	DEFAULT
+	 
+literal	false
+	\n);\n\n
+keyword	INSERT INTO
+	 conversation (id, assistant, title)\n
+keyword	VALUES
+	 (
+number	1
+	, 
+string	'rikka'
+	, 
+string	'Hello, world!'
+	), (
+number	2
+	, 
+string	'rikka'
+	, 
+string	'It''s fine'
+	);\n\n
+keyword	SELECT
+	 c.id,\n       
+built_in	COUNT
+	(
+operator	*
+	) 
+keyword	AS
+	 total,\n       
+built_in	MAX
+	(m.created_at) 
+keyword	AS
+	 last_seen\n  
+keyword	FROM
+	 conversation c\n  
+keyword	JOIN
+	 message m 
+keyword	ON
+	 m.conversation_id 
+operator	=
+	 c.id\n 
+keyword	WHERE
+	 c.pinned 
+keyword	IS
+	 
+keyword	NOT NULL
+	\n   
+keyword	AND
+	 m.role 
+operator	<>
+	 
+string	'system'
+	\n 
+keyword	GROUP
+	 
+keyword	BY
+	 c.id\n
+keyword	HAVING
+	 
+built_in	COUNT
+	(
+operator	*
+	) 
+operator	>
+	 
+number	3
+	\n 
+keyword	ORDER
+	 
+keyword	BY
+	 last_seen 
+keyword	DESC
+	\n LIMIT 
+number	10
+	;\n

@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.setting
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,8 +25,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -55,6 +59,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,6 +71,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
@@ -84,6 +91,8 @@ import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.hugeicons.stroke.MessageBlocked
+import me.rerere.hugeicons.stroke.View
+import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
@@ -102,6 +111,7 @@ import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.extendColors
+import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -248,6 +258,42 @@ private fun McpServerItem(
     val status by mcpManager.getStatus(item).collectAsStateWithLifecycle(McpStatus.Idle)
     val dismissBoxState = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
+    var errorDetail by remember { mutableStateOf<McpStatus.Error?>(null) }
+
+    errorDetail?.let { error ->
+        val context = LocalContext.current
+        val fullText = error.detail ?: error.message
+        AlertDialog(
+            onDismissRequest = { errorDetail = null },
+            title = { Text(item.commonOptions.name.ifBlank { "MCP" }) },
+            text = {
+                SelectionContainer {
+                    Text(
+                        text = fullText,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .heightIn(max = 320.dp)
+                            .verticalScroll(rememberScrollState()),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        context.writeClipboardText(fullText)
+                        errorDetail = null
+                    }
+                ) {
+                    Text(stringResource(R.string.copy))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { errorDetail = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
     SwipeToDismissBox(
         state = dismissBoxState,
         backgroundContent = {
@@ -343,12 +389,14 @@ private fun McpServerItem(
                         }
                     }
                     if (status is McpStatus.Error) {
+                        val error = status as McpStatus.Error
                         Text(
-                            text = (status as McpStatus.Error).message,
+                            text = error.message,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clickable { errorDetail = error },
                         )
                     }
                     if (status == McpStatus.NeedsAuthorization) {
@@ -681,6 +729,7 @@ private fun McpCommonOptionsConfigure(
                 config.commonOptions.headers.forEachIndexed { index, header ->
                     var headerName by remember(header.first) { mutableStateOf(header.first) }
                     var headerValue by remember(header.second) { mutableStateOf(header.second) }
+                    var headerValueVisible by rememberSaveable { mutableStateOf(false) }
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -733,6 +782,15 @@ private fun McpCommonOptionsConfigure(
                                 },
                                 label = { Text(stringResource(R.string.setting_mcp_page_header_value)) },
                                 modifier = Modifier.fillMaxWidth(),
+                                visualTransformation = if (headerValueVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { headerValueVisible = !headerValueVisible }) {
+                                        Icon(
+                                            if (headerValueVisible) HugeIcons.ViewOff else HugeIcons.View,
+                                            contentDescription = null
+                                        )
+                                    }
+                                },
                                 placeholder = { Text(stringResource(R.string.setting_mcp_page_header_value_placeholder)) }
                             )
                         }

@@ -1,0 +1,207 @@
+keyword	package
+	 com.example.edge;\n\n
+keyword	import
+	 java.util.function.Function;\n\n
+keyword	sealed
+	 
+keyword	interface
+	 
+title.class	Shape
+	 
+keyword	permits
+	 Circle, Square {}\n\n
+keyword	record
+	 
+title.class	Circle
+params	(
+type	double
+params	 radius, String label)
+	 
+keyword	implements
+	 
+title.class	Shape
+	 {}\n\n
+keyword	non-sealed
+	 
+keyword	class
+	 
+title.class	Square
+	 
+keyword	implements
+	 
+title.class	Shape
+	 {\n    
+type	int
+	 
+variable	side
+	 
+operator	=
+	 
+number	1
+	;\n}\n\n
+keyword	public
+	 
+keyword	class
+	 
+title.class	Edge
+	 {\n    
+keyword	static
+	 
+keyword	final
+	 
+type	String
+	 
+variable	BLOCK
+	 
+operator	=
+	 
+string	"""\n        hello "world"\n            indented line\n        """
+	;\n\n    
+keyword	static
+	 
+keyword	final
+	 
+type	int
+	 
+variable	HEX
+	 
+operator	=
+	 
+number	0xCAFE_BABE
+	;\n    
+keyword	static
+	 
+keyword	final
+	 
+type	int
+	 
+variable	OCTAL
+	 
+operator	=
+	 
+number	0755
+	;\n    
+keyword	static
+	 
+keyword	final
+	 
+type	int
+	 
+variable	BINARY
+	 
+operator	=
+	 
+number	0b1010_1010
+	;\n    
+keyword	static
+	 
+keyword	final
+	 
+type	long
+	 
+variable	BIG
+	 
+operator	=
+	 
+number	9_007_199_254_740_991L
+	;\n    
+keyword	static
+	 
+keyword	final
+	 
+type	float
+	 
+variable	FLT
+	 
+operator	=
+	 
+number	1_0.5e-3f
+	;\n    
+keyword	static
+	 
+keyword	final
+	 
+type	double
+	 
+variable	HEXFLOAT
+	 
+operator	=
+	 
+number	0x1.8p3
+	;\n    
+keyword	static
+	 
+keyword	final
+	 
+type	double
+	 
+variable	BARE
+	 
+operator	=
+	 
+number	.5d
+	;\n\n    
+type	String
+	 
+variable	café
+	 
+operator	=
+	 
+string	"latin-1 identifier"
+	;\n\n    
+meta	@SafeVarargs
+	\n    
+meta	@SuppressWarnings({"unchecked", "rawtypes"})
+	\n    
+keyword	static
+	 <T> 
+keyword	void
+	 
+title.function	accept
+params	(Function<Map<String, List<T>>, T> mapper, T... values)
+	 {\n        
+type	var
+	 
+variable	count
+	 
+operator	=
+	 values.length;\n        
+keyword	for
+	 (T value : values) {\n            System.out.println(mapper.apply(
+literal	null
+	));\n        }\n    }\n\n    
+keyword	static
+	 String 
+title.function	describe
+params	(Object subject)
+	 {\n        
+keyword	return
+	 
+keyword	switch
+	 (subject) {\n            
+keyword	case
+	 Integer number 
+keyword	when
+	 number > 
+number	0
+	 -> 
+string	"positive"
+	;\n            
+keyword	case
+	 String text -> text;\n            
+keyword	default
+	 -> 
+string	"other"
+	;\n        };\n    }\n\n    
+comment	/* A plain block comment, kept short. */
+	\n    
+keyword	static
+	 
+type	int
+	 
+variable	counter
+	 
+operator	=
+	 
+number	0
+	;\n}\n

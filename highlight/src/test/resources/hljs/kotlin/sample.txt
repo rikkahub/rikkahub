@@ -1,0 +1,32 @@
+package me.rerere.demo
+
+import kotlinx.coroutines.delay
+
+/**
+ * A tiny chat session.
+ *
+ * @author Rikka
+ */
+class ChatSession(private val model: String) {
+    var history: MutableList<String> = mutableListOf()
+        private set
+
+    suspend fun send(prompt: String, retries: Int = 3): String {
+        require(prompt.isNotBlank()) { "empty prompt" }
+        repeat(retries) { attempt ->
+            delay(100L * attempt)
+        }
+        history += prompt
+        return "$model: $prompt"
+    }
+
+    companion object {
+        const val MAX_TOKENS = 4_096
+        private const val TEMPERATURE = 0.7
+    }
+}
+
+fun main() {
+    val session = ChatSession("opus")
+    println("hello, ${session.model}")
+}

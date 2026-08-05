@@ -1,0 +1,77 @@
+// Raw identifiers, raw strings, lifetimes and every numeric suffix.
+#![allow(dead_code, unused_variables)]
+#[cfg(test)]
+#[doc = "an attribute holding a string"]
+mod tests {}
+
+/* outer /* nested */ still a comment */
+
+type r#Alias = Vec<u8>;
+union r#union { a: u32, b: f32 }
+
+struct Holder<'a> {
+    slice: &'a [u8],
+    name: &'static str,
+}
+
+fn r#match<'a, T: Clone>(r#type: &'a T, r#fn: usize) -> &'a T {
+    r#type
+}
+
+const RAW: &str = r"no \escapes here";
+const HASHED: &str = r#"he said "hi" and left"#;
+const DEEP: &str = r##"contains "# inside"##;
+const BYTES: &[u8] = b"byte string";
+const RAW_BYTES: &[u8] = br#"raw "byte" string"#;
+
+fn literals() {
+    let ch = 'x';
+    let nl = '\n';
+    let quote = '\'';
+    let hex = '\x41';
+    let uni = 'A';
+    let byte = b'A';
+
+    let b = 0b1010_1010u8;
+    let o = 0o777i32;
+    let h = 0xFF_FFu16;
+    let n = 1_000_000usize;
+    let neg = 1i128;
+    let f = 3.14f64;
+    let e = 1.5e-9f32;
+    let plain = 42;
+
+    let mut total = 0usize;
+    let boxed: Box<Option<Result<String, ()>>> = Box::new(None);
+}
+
+macro_rules! twice {
+    ($e:expr) => {
+        $e + $e
+    };
+}
+
+impl<'a> Iterator for Holder<'a> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        None
+    }
+}
+
+fn control_flow(xs: &[i32]) {
+    if (xs.len() > 0) {
+        while (total(xs) < 10) {}
+    }
+    match (xs.first()) {
+        Some(x) => drop(x),
+        None => unreachable!(),
+    }
+    for i in 0..xs.len() {
+        assert_eq!(xs[i], xs[i]);
+    }
+}
+
+fn total(xs: &[i32]) -> i32 {
+    xs.iter().sum()
+}

@@ -23,7 +23,8 @@ data class Assistant(
     val systemPrompt: String = "",
     val temperature: Float? = null,
     val topP: Float? = null,
-    val contextMessageSize: Int = 0,
+    // 上下文消息条数上限, 超出后阶梯式截断; 0 表示不限制
+    val contextMessageLimit: Int = 0,
     val streamOutput: Boolean = true,
     val enableMemory: Boolean = false,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
@@ -38,6 +39,7 @@ data class Assistant(
     val customBodies: List<CustomBody> = emptyList(),
     val mcpServers: Set<Uuid> = emptySet(),
     val localTools: List<LocalToolOption> = listOf(LocalToolOption.TimeInfo),
+    val enableWebSearch: Boolean = false, // 网络搜索开关(每个助手独立)
     val workspaceId: Uuid? = null,
     val background: String? = null, // 聊天页背景图地址(本地文件 URI 或网络 URL), 为 null 时无背景
     val backgroundOpacity: Float = 1.0f, // 背景图不透明度(0~1)

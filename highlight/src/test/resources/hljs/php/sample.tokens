@@ -1,0 +1,114 @@
+meta	<?php
+	\n\n
+keyword	namespace
+	 
+title.class	App
+	\\
+title.class	Domain
+	;\n\n
+keyword	use
+	 
+title	RuntimeException
+	 
+keyword	as
+	 
+title	BaseException
+	;\n\n
+meta	#[Route
+	(
+string	'/users'
+	, 
+attr	methods
+	: [
+string	'GET'
+	])
+meta	]
+	\n
+keyword	final
+	 
+keyword	readonly
+	 
+keyword	class
+class	 
+title	UserService
+class	 
+keyword	implements
+class	 
+title	Service
+class	\n
+	{\n    
+keyword	public
+	 
+keyword	const
+	 
+variable.constant	DEFAULT_LIMIT
+	 = 
+number	25
+	;\n\n    
+keyword	public
+	 
+keyword	function
+function	 
+title	find
+function	(
+params	\n        
+keyword	private
+params	 Repository 
+variable	$repository
+params	,\n        
+keyword	int
+params	 
+variable	$limit
+params	 = 
+built_in	self
+params	::
+variable.constant	DEFAULT_LIMIT
+params	,\n    
+function	): 
+title	array
+function	 
+	{\n        
+comment	/** 
+doctag	@var
+comment	 list<User> $users */
+	\n        
+variable	$users
+	 = 
+variable.language	$this
+	->repository->
+title.function.invoke	all
+	(
+attr	limit
+	: 
+variable	$limit
+	);\n        
+variable	$message
+	 = 
+string	"Found 
+subst	{$limit}
+string	 users"
+	;\n        
+variable	$hex
+	 = 
+number	0xCA_FE
+	;\n\n        
+keyword	return
+	 
+title.function.invoke	array_map
+	(\n            fn (User 
+variable	$user
+	) => 
+variable	$user
+	->name,\n            
+variable	$users
+	,\n        );\n    }\n}\n\n
+variable	$query
+	 = 
+string	<<<SQL\nSELECT * FROM users WHERE active = 
+subst	{$active}
+string	\nSQL
+	;\n\n
+variable	$literal
+	 = 
+string	<<<'TEXT'\n$this is not interpolated\nTEXT
+	;\n

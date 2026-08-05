@@ -1,0 +1,25 @@
+/* Multi-word types and keyword combos, plus the odd corners of the grammar. */
+ALTER TABLE metrics
+    ADD CONSTRAINT metrics_pk PRIMARY KEY (id),
+    ADD score DOUBLE PRECISION,
+    ADD payload CHARACTER LARGE OBJECT,
+    ADD seen TIMESTAMP WITH TIMEZONE,
+    ADD gone TIMESTAMP WITHOUT TIMEZONE;
+
+SELECT "select" AS "quoted ""identifier""",
+       @cutoff,
+       @user_id_1,
+       CAST(score AS DECIMAL(10, 4)),
+       ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY score DESC NULLS LAST),
+       PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY score),
+       COALESCE(label, 'n/a'),
+       CURRENT_DATE,
+       CURRENT_TIMESTAMP,
+       SESSION_USER,
+       0x1f, 42, -7, 3.14, 1.5e-9,
+       a + b - c * d / e % f ^ g ~ h,
+       x && y, x || y, x != y, x <> y, x <= y, x >= y, x << 2, x >> 2, x <=> y
+  FROM metrics
+ WHERE label LIKE 'a%'
+   AND is_ok = unknown -- trailing line comment
+ GROUP BY GROUPING SETS ((a), (b));
