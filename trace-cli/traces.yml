@@ -83,6 +83,94 @@ traces:
                 description: A focused search query for one topic.
             required: [query]
             additionalProperties: false
+  # OpenRouter：OpenAI Chat Completions 兼容协议。
+  - name: openrouter-completions-tool
+    provider: openai-chat
+    baseUrl: https://openrouter.ai/api/v1
+    endpoint: /chat/completions
+    apiKeyEnv: OPENROUTER_API_KEY
+    model: anthropic/claude-sonnet-5
+    body:
+      reasoning:
+        effort: high
+      messages:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      tools:
+        - type: function
+          function:
+            name: search_web
+            description: Search the web for current information and return relevant sources.
+            parameters:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: A focused search query for one topic.
+              required: [query]
+              additionalProperties: false
+  # OpenRouter：OpenAI Responses 兼容协议。
+  - name: openrouter-gpt-responses-tool
+    provider: openai-responses
+    baseUrl: https://openrouter.ai/api/v1
+    endpoint: /responses
+    apiKeyEnv: OPENROUTER_API_KEY
+    model: openai/gpt-5.6-terra
+    body:
+      store: false
+      input:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      reasoning:
+        summary: auto
+        effort: high
+      include:
+        - reasoning.encrypted_content
+      tools:
+        - type: function
+          name: search_web
+          description: Search the web for current information and return relevant sources.
+          strict: true
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: A focused search query for one topic.
+            required: [query]
+            additionalProperties: false
+  # OpenRouter：Anthropic Messages 兼容协议。
+  - name: openrouter-claude-tool
+    provider: claude
+    baseUrl: https://openrouter.ai/api/v1
+    endpoint: /messages
+    apiKeyEnv: OPENROUTER_API_KEY
+    auth:
+      header: Authorization
+      scheme: Bearer
+    model: anthropic/claude-sonnet-5
+    body:
+      max_tokens: 4096
+      thinking:
+        type: adaptive
+        display: summarized
+      output_config:
+        effort: high
+      messages:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      tools:
+        - name: search_web
+          description: Search the web for current information and return relevant sources.
+          strict: true
+          input_schema:
+            type: object
+            properties:
+              query:
+                type: string
+                description: A focused search query for one topic.
+            required: [query]
+            additionalProperties: false
   # OpenAI 官方：Responses API。
   - name: openai-responses-tool
     provider: openai-responses

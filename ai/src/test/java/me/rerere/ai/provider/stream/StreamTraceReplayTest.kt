@@ -20,6 +20,7 @@ import me.rerere.ai.provider.providers.GoogleStreamDecoder
 import me.rerere.ai.provider.providers.openai.ChatCompletionsStreamDecoder
 import me.rerere.ai.provider.providers.openai.ResponseApiStreamDecoder
 import me.rerere.ai.ui.GoogleThoughtMetadata
+import me.rerere.ai.ui.OpenRouterReasoningMetadata
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.UIMessage
@@ -35,6 +36,11 @@ class StreamTraceReplayTest {
     @Test
     fun `replay DeepSeek Claude protocol trace`() {
         assertTrace("generated/claude/deepseek-anthropic-tool", ClaudeStreamDecoder())
+    }
+
+    @Test
+    fun `replay OpenRouter Claude protocol trace`() {
+        assertTrace("generated/claude/openrouter-claude-tool", ClaudeStreamDecoder())
     }
 
     @Test
@@ -63,6 +69,15 @@ class StreamTraceReplayTest {
     }
 
     @Test
+    fun `replay OpenRouter Chat Completions trace`() {
+        assertTrace(
+            "generated/openai-chat/openrouter-completions-tool",
+            ChatCompletionsStreamDecoder(),
+            ::assertOpenRouterCompletionsTraceSemantics,
+        )
+    }
+
+    @Test
     fun `replay DeepSeek Responses API trace`() {
         assertTrace(
             "generated/openai-responses/deepseek-responses-tool",
@@ -74,6 +89,14 @@ class StreamTraceReplayTest {
     fun `replay OpenAI Responses API trace`() {
         assertTrace(
             "generated/openai-responses/openai-responses-tool",
+            ResponseApiStreamDecoder(),
+        )
+    }
+
+    @Test
+    fun `replay OpenRouter Responses API trace`() {
+        assertTrace(
+            "generated/openai-responses/openrouter-gpt-responses-tool",
             ResponseApiStreamDecoder(),
         )
     }
@@ -126,6 +149,30 @@ class StreamTraceReplayTest {
         }
         assertTrue("$path should provide a query for every tool call", queries.all { !it.isNullOrBlank() })
         assertEquals("$path should contain three distinct searches", tools.size, queries.toSet().size)
+    }
+
+    private fun assertOpenRouterCompletionsTraceSemantics(
+        path: String,
+        message: UIMessage,
+        chunks: List<StreamChunk>,
+    ) {
+        assertToolTraceSemantics(path, message, chunks)
+
+        val reasoningDetails = message.parts
+            .filterIsInstance<UIMessagePart.Reasoning>()
+            .firstNotNullOfOrNull { it.metadataAs<OpenRouterReasoningMetadata>()?.reasoningDetails }
+        assertEquals("$path should preserve one structured reasoning block", 1, reasoningDetails?.size)
+
+        val reasoningDetail = reasoningDetails?.single()?.jsonObject
+        assertEquals(
+            "$path should preserve the Anthropic reasoning format",
+            "anthropic-claude-v1",
+            reasoningDetail?.get("format")?.jsonPrimitive?.contentOrNull,
+        )
+        assertTrue(
+            "$path should preserve the Anthropic reasoning signature",
+            !reasoningDetail?.get("signature")?.jsonPrimitive?.contentOrNull.isNullOrBlank(),
+        )
     }
 
     private fun assertImageTraceSemantics(path: String, message: UIMessage, chunks: List<StreamChunk>) {

@@ -1,4 +1,4 @@
-import type { LoadedTraceCase, Provider, ProviderRequest } from "./types";
+import type { ApiKeyAuth, LoadedTraceCase, Provider, ProviderRequest } from "./types";
 
 const PROVIDER_DEFAULTS: Record<Provider, { baseUrl: string; apiKeyEnv: string }> = {
   "openai-responses": {
@@ -35,24 +35,25 @@ export function buildProviderRequest(trace: LoadedTraceCase, apiKey: string): Pr
   };
 
   let defaultEndpoint: string;
+  let defaultAuth: ApiKeyAuth;
   const endpointModel = trace.model ?? asNonEmptyString(body.model);
   switch (trace.provider) {
     case "openai-responses":
       requireModel(body, trace.model);
       body.stream = true;
-      headers.Authorization = `Bearer ${apiKey}`;
+      defaultAuth = { header: "Authorization", scheme: "Bearer" };
       defaultEndpoint = "/responses";
       break;
     case "openai-chat":
       requireModel(body, trace.model);
       body.stream = true;
-      headers.Authorization = `Bearer ${apiKey}`;
+      defaultAuth = { header: "Authorization", scheme: "Bearer" };
       defaultEndpoint = "/chat/completions";
       break;
     case "claude":
       requireModel(body, trace.model);
       body.stream = true;
-      headers["x-api-key"] = apiKey;
+      defaultAuth = { header: "x-api-key" };
       headers["anthropic-version"] ??= "2023-06-01";
       defaultEndpoint = "/messages";
       break;
@@ -60,11 +61,14 @@ export function buildProviderRequest(trace: LoadedTraceCase, apiKey: string): Pr
       const model = endpointModel;
       if (!model) throw new Error(`${trace.name}: Google trace requires model`);
       delete body.model;
-      headers["x-goog-api-key"] = apiKey;
+      defaultAuth = { header: "x-goog-api-key" };
       defaultEndpoint = `/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
       break;
     }
   }
+
+  const auth = trace.auth ?? defaultAuth;
+  headers[auth.header] = auth.scheme ? `${auth.scheme} ${apiKey}` : apiKey;
 
   return {
     url: resolveEndpoint(baseUrl, trace.endpoint ?? defaultEndpoint, endpointModel),

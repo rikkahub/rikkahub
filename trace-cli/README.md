@@ -75,6 +75,10 @@ traces:
     provider: openai-responses
     model: gpt-5.6
     apiKeyEnv: OPENAI_API_KEY
+    # 可选：覆盖 provider 默认认证方式，例如 OpenRouter Anthropic Messages 使用 Bearer。
+    auth:
+      header: Authorization
+      scheme: Bearer
     baseUrl: https://api.openai.com/v1
     # endpoint 可省略，也可以是相对 baseUrl 的路径或完整 URL。
     endpoint: /responses

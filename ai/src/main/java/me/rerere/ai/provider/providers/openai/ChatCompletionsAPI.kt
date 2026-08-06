@@ -40,9 +40,11 @@ import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.StreamChunk
+import me.rerere.ai.ui.OpenRouterReasoningMetadata
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
@@ -517,7 +519,8 @@ class ChatCompletionsAPI(
                 else -> false
             }
         }
-        val hasReasoning = !reasoningPart?.reasoning.isNullOrBlank()
+        val reasoningDetails = reasoningPart?.metadataAs<OpenRouterReasoningMetadata>()?.reasoningDetails
+        val hasReasoning = !reasoningPart?.reasoning.isNullOrBlank() || !reasoningDetails.isNullOrEmpty()
         if (!hasUsableContent && !hasReasoning && tools.isEmpty()) {
             return null
         }
@@ -527,7 +530,11 @@ class ChatCompletionsAPI(
 
             // reasoning_content
             if (hasReasoning) {
-                put("reasoning_content", reasoningPart.reasoning)
+                if (!reasoningDetails.isNullOrEmpty()) {
+                    put("reasoning_details", reasoningDetails)
+                } else {
+                    put("reasoning_content", reasoningPart.reasoning)
+                }
             }
 
             // content

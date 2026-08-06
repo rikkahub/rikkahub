@@ -10,6 +10,10 @@ const traceCaseSchema = z.object({
   provider: z.enum(PROVIDERS),
   model: z.string().trim().min(1).optional(),
   apiKeyEnv: z.string().trim().min(1).optional(),
+  auth: z.object({
+    header: z.string().trim().min(1),
+    scheme: z.string().trim().min(1).optional(),
+  }).optional(),
   baseUrl: z.url().optional(),
   endpoint: z.string().trim().min(1).optional(),
   output: z.string().trim().min(1).optional(),

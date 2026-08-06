@@ -18,6 +18,16 @@ describe("buildProviderRequest", () => {
     const request = buildProviderRequest(trace("openai-responses"), "secret");
     expect(redactRequest(request).headers.Authorization).toBe("<redacted>");
   });
+
+  test("supports overriding provider authentication", () => {
+    const input = trace("claude");
+    input.auth = { header: "Authorization", scheme: "Bearer" };
+
+    const request = buildProviderRequest(input, "secret");
+
+    expect(request.headers.Authorization).toBe("Bearer secret");
+    expect(request.headers["x-api-key"]).toBeUndefined();
+  });
 });
 
 function trace(provider: Provider): LoadedTraceCase {

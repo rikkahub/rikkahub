@@ -2,20 +2,25 @@ package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.stream.DecodeResult
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.provider.stream.StreamChunkDecoder
 import me.rerere.ai.ui.StreamChunk
+import me.rerere.ai.ui.OpenRouterReasoningMetadata
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.json
 import me.rerere.ai.util.parseErrorDetail
 import me.rerere.common.http.jsonArrayOrNull
@@ -26,6 +31,7 @@ import kotlin.time.Clock
 internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
     private val streamState = ChatCompletionsStreamState()
     private val toolIdsByIndex = mutableMapOf<Int, String>()
+    private val reasoningDetailsByIndex = linkedMapOf<Int, JsonObject>()
     private var responseId: String? = null
     private var responseModel: String? = null
     private var finishReason: String? = null
@@ -98,13 +104,19 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
                     ?.get("thinking")?.jsonArrayOrNull?.getOrNull(0)?.jsonObjectOrNull
                     ?.get("text")?.jsonPrimitiveOrNull?.contentOrNull
             }
+        val reasoningMetadata = accumulateReasoningDetails(payload["reasoning_details"]?.jsonArrayOrNull)
         val images = payload["images"] as? JsonArray ?: JsonArray(emptyList())
 
         return UIMessage(
             role = role,
             parts = buildList {
-                if (!reasoning.isNullOrEmpty()) {
-                    add(UIMessagePart.Reasoning(reasoning, Clock.System.now(), null))
+                if (!reasoning.isNullOrEmpty() || reasoningMetadata != null) {
+                    add(UIMessagePart.Reasoning(
+                        reasoning = reasoning.orEmpty(),
+                        createdAt = Clock.System.now(),
+                        finishedAt = null,
+                        metadata = reasoningMetadata,
+                    ))
                 }
                 if (content.isNotEmpty()) add(UIMessagePart.Text(content))
                 images.forEach { image ->
@@ -118,6 +130,31 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
             },
             annotations = parseAnnotations(payload["annotations"]?.jsonArrayOrNull ?: JsonArray(emptyList())),
         )
+    }
+
+    private fun accumulateReasoningDetails(details: JsonArray?): JsonObject? {
+        if (details == null) return null
+        details.forEachIndexed { fallbackIndex, element ->
+            val incoming = element.jsonObject
+            val index = incoming["index"]?.jsonPrimitive?.intOrNull ?: fallbackIndex
+            reasoningDetailsByIndex[index] = mergeReasoningDetail(reasoningDetailsByIndex[index], incoming)
+        }
+        return OpenRouterReasoningMetadata(
+            reasoningDetails = JsonArray(reasoningDetailsByIndex.toSortedMap().values.toList()),
+        ).toMetadata()
+    }
+
+    private fun mergeReasoningDetail(existing: JsonObject?, incoming: JsonObject): JsonObject = buildJsonObject {
+        existing?.forEach { (key, value) -> put(key, value) }
+        incoming.forEach { (key, value) ->
+            val delta = value.jsonPrimitiveOrNull?.contentOrNull
+            if (existing != null && key in REASONING_DETAIL_DELTA_FIELDS && delta != null) {
+                val previous = existing[key]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty()
+                put(key, JsonPrimitive(previous + delta))
+            } else {
+                put(key, value)
+            }
+        }
     }
 
     private fun parseAnnotations(array: JsonArray): List<UIMessageAnnotation> = array.map { element ->
@@ -213,5 +250,9 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
         }
         private fun nextId(sourceId: String?, kind: String): String =
             "${sourceId?.takeIf(String::isNotBlank)?.let { "$it:" }.orEmpty()}$kind-${++sequence}"
+    }
+
+    private companion object {
+        val REASONING_DETAIL_DELTA_FIELDS = setOf("text", "summary", "data", "signature")
     }
 }

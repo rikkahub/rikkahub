@@ -7,6 +7,11 @@ export const PROVIDERS = [
 
 export type Provider = (typeof PROVIDERS)[number];
 
+export interface ApiKeyAuth {
+  header: string;
+  scheme?: string;
+}
+
 export interface TraceDefaults {
   outputRoot?: string;
   timeoutMs?: number;
@@ -18,6 +23,7 @@ export interface TraceCase {
   provider: Provider;
   model?: string;
   apiKeyEnv?: string;
+  auth?: ApiKeyAuth;
   baseUrl?: string;
   endpoint?: string;
   output?: string;

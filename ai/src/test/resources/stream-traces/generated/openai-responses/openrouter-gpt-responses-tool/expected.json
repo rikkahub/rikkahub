@@ -1,0 +1,45 @@
+{
+    "role": "ASSISTANT",
+    "parts": [
+        {
+            "type": "reasoning",
+            "text": "**Searching for current research**\n\nI need to gather current research by searching the web. It's important to look for each official release, so I can ensure the information I find is accurate and up-to-date. I'll focus on finding reliable sources that provide the necessary data. I'm considering the best search terms to use and making sure to collect everything I need to provide a thorough overview. Let's dive into this!",
+            "metadata": {
+                "reasoning_id": "rs_01fd3a5f6d72fd8a016a746cd7b25c819eae1aa5ee0930c363",
+                "encrypted_content": "gAAAAABqdGzYLQCrfl51jO6iMTtpYnlu8sEGqPXLtr8Z4NuefIp4wtoySfdtHV8uf_OEUsmgthq-X4_Js1e3qDHDOgQxYSLM8ypAjeZZn6BKC0_Xb9DOjUaNKWH5klSGSpRMG5vNxIhB9XbCvG52evh3xQMAltMyF423RJq16dwA8DLwveWVVK4ffT0sio9dcpmxPE-AydaeKIq-7Y3IqGkCXoEjTExBhb7pGRf4gkPGiDHVLuqSmpkYU66PkwNA4e_zt1-O4HRupz5ZjVzUMG_2ChvpRW3Q-cJBIZsLYkY7LzML7_Gd1jz-aptxVgsLcpj9y92zWas_rbjezzt4PAizcW0P399FVIgxD9o87dTyRp0H0k9Dg8W5u6bZweARpyABBrUKOmiXZ1fz1xTEGEIrZilLVze_gam-Mfcze0tdVvPh-tl7oQfUWPq8mmBVqPxyt_LEXiTB7NQU-rCuMsTvpTvWhsrC7rdRb2bwtf6fXrJWRkPlJCLI5UCVsF05PhSbR11Gbnj4EZD0pRUFYKk8JuOnaPFlFTbWJrZ8H1FqRZeqVNyFX_9Uk0axMeWir2CBofkzhWRc9ZJb0mmysL4xUvRR7BVAKDvnoyu-WSbWc_7NpeuXjEjGNOOioz736_dAOBaZMqUeYwM3tsVWZFJPi-cML8GzyUDGb1LDAWQBpWSPQCwNemIBbh5vXZBrKjbeIQLcOeMsKYq_-LiGJb2iyT5hWThPkpQibJSYGozvcqeFzf6pO7ATck6iN-x7lHMTZT998a3OdfvxLzSxyYxZfk1ZsOCM1lK2dS4SbOp2R16YZod5ECF-HuIF95mn-9jEQ2xm31XtGMFFhq5vvJ4grk0wNEfgr0KMJsvszrudFUB0N2Fn_5PrOuXeok8UlkrNgCJA2Dun-6g2lNYilG11q37do5ijgfwXwFesacp7W0wQgNdDNwIfzz39to41horhNlg-5oRfBWBpbtxzfyzLil5vIag4Zm_IuomLE2z-kI0ye_j2JgttdSx-VP-EsVXk9D0X6fJR.eyJlbmRwb2ludF9zbHVnIjoib3BlbmFpL2dwdC01LjYtdGVycmEtMjAyNjA3MDl8b3BlbmFpIn0"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "call_jxrMDqGP6TJVGnSs5N6Da7wL",
+            "name": "search_web",
+            "input": {
+                "query": "site:kotlinlang.org latest stable Kotlin release 2025 release date"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "call_Ui2T8VFLFGKJGYhOSODkdNoK",
+            "name": "search_web",
+            "input": {
+                "query": "site:ktor.io latest stable Ktor release release date 2025"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "call_oRthVAbkEW0INIDSqhVCBJ38",
+            "name": "search_web",
+            "input": {
+                "query": "site:jetbrains.com Compose Multiplatform latest stable release release date 2025"
+            }
+        }
+    ],
+    "annotations": [],
+    "usage": {
+        "promptTokens": 83,
+        "completionTokens": 125,
+        "cachedTokens": 0,
+        "totalTokens": 208
+    },
+    "finished": true
+}

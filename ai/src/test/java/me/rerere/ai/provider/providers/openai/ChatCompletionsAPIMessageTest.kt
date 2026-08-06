@@ -2,13 +2,18 @@ package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.OpenRouterReasoningMetadata
+import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
@@ -383,6 +388,33 @@ class ChatCompletionsAPIMessageTest {
         assertEquals("assistant", result[1].jsonObject["role"]?.jsonPrimitive?.content)
         assertEquals("thinking", result[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
         assertEquals("", result[1].jsonObject["content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `assistant should preserve OpenRouter reasoning details`() {
+        val reasoningDetails = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "reasoning.text")
+                put("text", "thinking")
+                put("format", "unknown")
+                put("index", 0)
+            })
+        }
+        val messages = listOf(
+            UIMessage.user("Question"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.Reasoning(
+                    reasoning = "thinking",
+                    metadata = OpenRouterReasoningMetadata(reasoningDetails).toMetadata(),
+                )),
+            ),
+        )
+
+        val assistant = invokeBuildMessages(messages)[1].jsonObject
+
+        assertEquals(reasoningDetails, assistant["reasoning_details"])
+        assertFalse(assistant.containsKey("reasoning_content"))
     }
 
     // ==================== Helper Functions ====================

@@ -2,6 +2,7 @@ package me.rerere.ai.ui
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
@@ -37,6 +38,15 @@ data class OpenAIReasoningMetadata(
     val reasoningId: String? = null,
     @SerialName("encrypted_content")
     val encryptedContent: String? = null,
+) : PartMetadata
+
+/**
+ * OpenRouter Chat Completions 的结构化 reasoning_details，工具调用续轮时需要原样回传。
+ */
+@Serializable
+data class OpenRouterReasoningMetadata(
+    @SerialName("openrouter_reasoning_details")
+    val reasoningDetails: JsonArray? = null,
 ) : PartMetadata
 
 /**
