@@ -17,5 +17,5 @@ UPDATE_STREAM_TRACE_SNAPSHOTS=true ../gradlew testDebugUnitTest \
   --tests me.rerere.ai.provider.stream.StreamTraceReplayTest
 ```
 
-快照会规范化工具调用 ID，并将签名、加密思考等不稳定元数据记录为存在性标记；思考文本、
-工具名称与参数、token usage 等内容仍会完整保留。
+快照会保留工具调用 ID，并将签名、加密思考等不稳定元数据记录为存在性标记；思考文本、
+工具名称与参数、token usage 等内容也会完整保留。

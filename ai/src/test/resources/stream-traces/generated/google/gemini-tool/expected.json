@@ -7,7 +7,7 @@
         },
         {
             "type": "tool",
-            "id": "tool-1",
+            "id": "google-trace:tool-1",
             "name": "search_web",
             "input": {
                 "query": "\"Kotlin\" latest stable release version date 2024"
@@ -18,7 +18,7 @@
         },
         {
             "type": "tool",
-            "id": "tool-2",
+            "id": "google-trace:tool-2",
             "name": "search_web",
             "input": {
                 "query": "\"Ktor\" latest stable release version date 2024"
@@ -26,7 +26,7 @@
         },
         {
             "type": "tool",
-            "id": "tool-3",
+            "id": "google-trace:tool-3",
             "name": "search_web",
             "input": {
                 "query": "\"Compose Multiplatform\" latest stable release version date 2024"

@@ -127,62 +127,56 @@ class StreamTraceReplayTest {
         target.writeText(prettyJson.encodeToString(JsonObject.serializer(), snapshot) + "\n")
     }
 
-    private fun UIMessage.toTraceSnapshot(): JsonObject {
-        val stableToolIds = parts.filterIsInstance<UIMessagePart.Tool>()
-            .mapIndexed { index, tool -> tool.toolCallId to "tool-${index + 1}" }
-            .toMap()
-
-        return buildJsonObject {
-            put("role", role.name)
-            put("parts", buildJsonArray {
-                parts.forEach { part ->
-                    add(buildJsonObject {
-                        when (part) {
-                            is UIMessagePart.Text -> {
-                                put("type", "text")
-                                put("text", part.text)
-                            }
-                            is UIMessagePart.Reasoning -> {
-                                put("type", "reasoning")
-                                put("text", part.reasoning)
-                            }
-                            is UIMessagePart.Tool -> {
-                                put("type", "tool")
-                                put("id", stableToolIds.getValue(part.toolCallId))
-                                put("name", part.toolName)
-                                put("input", json.parseToJsonElement(part.input))
-                            }
-                            is UIMessagePart.Image -> {
-                                put("type", "image")
-                                put("url", part.url)
-                            }
-                            else -> error("Unsupported trace part: ${part::class.simpleName}")
+    private fun UIMessage.toTraceSnapshot(): JsonObject = buildJsonObject {
+        put("role", role.name)
+        put("parts", buildJsonArray {
+            parts.forEach { part ->
+                add(buildJsonObject {
+                    when (part) {
+                        is UIMessagePart.Text -> {
+                            put("type", "text")
+                            put("text", part.text)
                         }
-                        part.metadata?.toStableMetadata()?.let { put("metadata", it) }
+                        is UIMessagePart.Reasoning -> {
+                            put("type", "reasoning")
+                            put("text", part.reasoning)
+                        }
+                        is UIMessagePart.Tool -> {
+                            put("type", "tool")
+                            put("id", part.toolCallId)
+                            put("name", part.toolName)
+                            put("input", json.parseToJsonElement(part.input))
+                        }
+                        is UIMessagePart.Image -> {
+                            put("type", "image")
+                            put("url", part.url)
+                        }
+                        else -> error("Unsupported trace part: ${part::class.simpleName}")
+                    }
+                    part.metadata?.toStableMetadata()?.let { put("metadata", it) }
+                })
+            }
+        })
+        putJsonArray("annotations") {
+            annotations.forEach { annotation ->
+                when (annotation) {
+                    is UIMessageAnnotation.UrlCitation -> add(buildJsonObject {
+                        put("type", "url_citation")
+                        put("title", annotation.title)
+                        put("url", annotation.url)
                     })
                 }
-            })
-            putJsonArray("annotations") {
-                annotations.forEach { annotation ->
-                    when (annotation) {
-                        is UIMessageAnnotation.UrlCitation -> add(buildJsonObject {
-                            put("type", "url_citation")
-                            put("title", annotation.title)
-                            put("url", annotation.url)
-                        })
-                    }
-                }
             }
-            usage?.let { usage ->
-                putJsonObject("usage") {
-                    put("promptTokens", usage.promptTokens)
-                    put("completionTokens", usage.completionTokens)
-                    put("cachedTokens", usage.cachedTokens)
-                    put("totalTokens", usage.totalTokens)
-                }
-            }
-            put("finished", finishedAt != null)
         }
+        usage?.let { usage ->
+            putJsonObject("usage") {
+                put("promptTokens", usage.promptTokens)
+                put("completionTokens", usage.completionTokens)
+                put("cachedTokens", usage.cachedTokens)
+                put("totalTokens", usage.totalTokens)
+            }
+        }
+        put("finished", finishedAt != null)
     }
 
     private fun JsonObject.toStableMetadata(): JsonObject? = buildJsonObject {

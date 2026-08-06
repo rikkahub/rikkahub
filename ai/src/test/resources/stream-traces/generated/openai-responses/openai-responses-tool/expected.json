@@ -11,7 +11,7 @@
         },
         {
             "type": "tool",
-            "id": "tool-1",
+            "id": "call_awjcmFzYr75gWazGGDpa8fC0",
             "name": "search_web",
             "input": {
                 "query": "site:kotlinlang.org latest stable Kotlin release official 2026 2.2 2.3"
@@ -19,7 +19,7 @@
         },
         {
             "type": "tool",
-            "id": "tool-2",
+            "id": "call_g0IAe9DY5HxgrmFWZ7XoaUki",
             "name": "search_web",
             "input": {
                 "query": "site:ktor.io latest stable Ktor release official 2026"
@@ -27,7 +27,7 @@
         },
         {
             "type": "tool",
-            "id": "tool-3",
+            "id": "call_hRaiXjFOXeEFCdjO3TmQI7te",
             "name": "search_web",
             "input": {
                 "query": "site:jetbrains.com compose multiplatform latest stable release official 2026 OR site:kotlinlang.org Compose Multiplatform 1.9 1.10"

@@ -14,7 +14,7 @@
         },
         {
             "type": "tool",
-            "id": "tool-1",
+            "id": "call_00_LaJFBgxLWSHGELSjrsix6761",
             "name": "search_web",
             "input": {
                 "query": "Kotlin latest stable release version 2025 release notes"
@@ -22,7 +22,7 @@
         },
         {
             "type": "tool",
-            "id": "tool-2",
+            "id": "call_01_oL2y2WmThLvDy4UnmYp91734",
             "name": "search_web",
             "input": {
                 "query": "Ktor latest stable release version 2025"
@@ -30,7 +30,7 @@
         },
         {
             "type": "tool",
-            "id": "tool-3",
+            "id": "call_02_6Kqc6E6Yfsna7wxO3ebX5772",
             "name": "search_web",
             "input": {
                 "query": "Compose Multiplatform latest stable release version 2025"
