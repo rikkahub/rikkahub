@@ -1,0 +1,151 @@
+version: 1
+
+defaults:
+  # 相对于本 YAML 文件解析。
+  outputRoot: ../ai/src/test/resources/stream-traces/generated
+  timeoutMs: 120000
+
+traces:
+  # DeepSeek：OpenAI Chat Completions 协议。
+  - name: deepseek-chat-tool
+    provider: openai-chat
+    baseUrl: https://api.deepseek.com
+    endpoint: /chat/completions
+    apiKeyEnv: DEEPSEEK_API_KEY
+    model: deepseek-v4-flash
+    body:
+      messages:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      tools:
+        - type: function
+          function:
+            name: search_web
+            description: Search the web for current information and return relevant sources.
+            parameters:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: A focused search query for one topic.
+              required: [query]
+              additionalProperties: false
+  # DeepSeek：OpenAI Responses 兼容协议。
+  # 如果实际网关路径不同，只需修改 baseUrl 或 endpoint。
+  - name: deepseek-responses-tool
+    provider: openai-responses
+    baseUrl: https://api.deepseek.com
+    endpoint: /responses
+    apiKeyEnv: DEEPSEEK_API_KEY
+    model: deepseek-v4-flash
+    body:
+      store: false
+      input:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      reasoning:
+        summary: auto
+        effort: high
+      include:
+        - reasoning.encrypted_content
+      tools:
+        - type: function
+          name: search_web
+          description: Search the web for current information and return relevant sources.
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: A focused search query for one topic.
+            required: [query]
+            additionalProperties: false
+  # DeepSeek：Anthropic Messages 兼容协议。
+  - name: deepseek-anthropic-tool
+    provider: claude
+    baseUrl: https://api.deepseek.com/anthropic
+    endpoint: /messages
+    apiKeyEnv: DEEPSEEK_API_KEY
+    model: deepseek-v4-flash
+    body:
+      max_tokens: 256
+      messages:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      tools:
+        - name: search_web
+          description: Search the web for current information and return relevant sources.
+          input_schema:
+            type: object
+            properties:
+              query:
+                type: string
+                description: A focused search query for one topic.
+            required: [query]
+            additionalProperties: false
+  # OpenAI 官方：Responses API。
+  - name: openai-responses-tool
+    provider: openai-responses
+    baseUrl: https://api.openai.com/v1
+    endpoint: /responses
+    apiKeyEnv: OPENAI_API_KEY
+    model: gpt-5.6-sol
+    body:
+      store: false
+      input:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      reasoning:
+        summary: auto
+        effort: high
+      include:
+        - reasoning.encrypted_content
+      tools:
+        - type: function
+          name: search_web
+          description: Search the web for current information and return relevant sources.
+          strict: true
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: A focused search query for one topic.
+            required: [query]
+            additionalProperties: false
+  # Gemini 官方：Generate Content SSE 协议。
+  - name: gemini-tool
+    provider: google
+    apiKeyEnv: GEMINI_API_KEY
+    model: gemini-3.1-pro-preview
+    body:
+      generationConfig:
+        thinkingConfig:
+          includeThoughts: true
+          thinkingLevel: high
+      contents:
+        - role: user
+          parts:
+            - text: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      tools:
+        - functionDeclarations:
+            - name: search_web
+              description: Search the web for current information and return relevant sources.
+              parameters:
+                type: object
+                properties:
+                  query:
+                    type: string
+                    description: A focused search query for one topic.
+                required: [query]
+      safetySettings:
+        - category: HARM_CATEGORY_HARASSMENT
+          threshold: OFF
+        - category: HARM_CATEGORY_HATE_SPEECH
+          threshold: OFF
+        - category: HARM_CATEGORY_SEXUALLY_EXPLICIT
+          threshold: OFF
+        - category: HARM_CATEGORY_DANGEROUS_CONTENT
+          threshold: OFF
+        - category: HARM_CATEGORY_CIVIC_INTEGRITY
+          threshold: OFF
