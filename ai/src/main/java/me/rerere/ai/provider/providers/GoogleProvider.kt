@@ -39,6 +39,7 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
+import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.GoogleThoughtMetadata
 import me.rerere.ai.ui.StreamChunk
@@ -231,10 +232,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
 
-        val streamState = GoogleStreamState()
         val responseId = Uuid.random().toString()
-        var finishReason: String? = null
-        var finishEmitted = false
+        val decoder = GoogleStreamDecoder(responseId, params.model.modelId)
 
         fun sendChunks(chunks: Iterable<StreamChunk>) {
             chunks.forEach { chunk ->
@@ -242,12 +241,6 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                     Log.w(TAG, "onEvent: chunk dropped (${e?.message})")
                 }
             }
-        }
-
-        fun finishStream() {
-            if (finishEmitted) return
-            finishEmitted = true
-            sendChunks(streamState.finish(finishReason, responseId, params.model.modelId))
         }
 
         val listener = object : EventSourceListener() {
@@ -260,31 +253,9 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 Log.i(TAG, "onEvent: $data")
 
                 try {
-                    val jsonData = json.parseToJsonElement(data).jsonObject
-                    val reason =
-                        jsonData["promptFeedback"]?.jsonObject?.get("blockReason")?.jsonPrimitiveOrNull?.contentOrNull
-                    if (reason != null) {
-                        close(RuntimeException("Prompt feedback: $reason"))
-                        return
-                    }
-                    parseUsageMeta(jsonData["usageMetadata"] as? JsonObject)?.let { usage ->
-                        trySend(StreamChunk.Usage(usage)).onFailure { e ->
-                            Log.w(TAG, "onEvent: usage dropped (${e?.message})")
-                        }
-                    }
-
-                    val candidateObj = jsonData["candidates"]?.jsonArray?.firstOrNull()?.jsonObject ?: return
-                    candidateObj["finishReason"]?.jsonPrimitive?.contentOrNull?.let {
-                        finishReason = it
-                    }
-                    val content = candidateObj["content"]?.jsonObject ?: return
-                    val groundingMetadata = candidateObj["groundingMetadata"]?.jsonObject
-                    val message = parseMessage(buildJsonObject {
-                        put("role", JsonPrimitive("model"))
-                        put("content", content)
-                        groundingMetadata?.let { put("groundingMetadata", it) }
-                    })
-                    sendChunks(streamState.append(message, responseId))
+                    val result = decoder.accept(SseEvent(id = id, event = type, data = data))
+                    sendChunks(result.chunks)
+                    if (result.completed) close()
                 } catch (e: Throwable) {
                     Log.e(TAG, "Failed to parse stream event: $data", e)
                     close(e)
@@ -327,7 +298,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
             override fun onClosed(eventSource: EventSource) {
                 println("[onClosed] 连接已关闭")
-                finishStream()
+                sendChunks(decoder.onClosed())
                 close()
             }
         }
@@ -341,93 +312,6 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         }
         // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
     }.buffer(Channel.UNLIMITED)
-
-    private class GoogleStreamState {
-        private var sequence = 0
-        private var textId: String? = null
-        private var reasoningId: String? = null
-        private var imageId: String? = null
-        private val openToolIds = linkedSetOf<String>()
-
-        fun append(message: UIMessage, responseId: String): List<StreamChunk> = buildList {
-            val imageCount = message.parts.count { it is UIMessagePart.Image }
-            var emittedImages = 0
-            message.parts.forEach { part ->
-                when (part) {
-                    is UIMessagePart.Text -> if (part.text.isNotEmpty()) {
-                        addAll(closeReasoning())
-                        addAll(closeImage())
-                        addAll(closeTools())
-                        val id = textId ?: nextId(responseId, "text").also {
-                            textId = it
-                            add(StreamChunk.TextStart(it))
-                        }
-                        add(StreamChunk.TextDelta(id, part.text))
-                    }
-
-                    is UIMessagePart.Reasoning -> if (part.reasoning.isNotEmpty() || part.metadata != null) {
-                        addAll(closeText())
-                        addAll(closeImage())
-                        addAll(closeTools())
-                        val id = reasoningId ?: nextId(responseId, "reasoning").also {
-                            reasoningId = it
-                            add(StreamChunk.ReasoningStart(it, part.metadata))
-                        }
-                        add(StreamChunk.ReasoningDelta(id, part.reasoning, part.metadata))
-                    }
-
-                    is UIMessagePart.Tool -> {
-                        addAll(closeText())
-                        addAll(closeReasoning())
-                        addAll(closeImage())
-                        val id = part.toolCallId.ifBlank { nextId(responseId, "tool") }
-                        if (openToolIds.add(id)) add(StreamChunk.ToolCallStart(id, part.toolName, part.metadata))
-                        if (part.input.isNotEmpty()) {
-                            add(StreamChunk.ToolCallDelta(id, inputDelta = part.input, metadata = part.metadata))
-                        }
-                    }
-
-                    is UIMessagePart.Image -> {
-                        addAll(closeText())
-                        addAll(closeReasoning())
-                        addAll(closeTools())
-                        if (imageCount > 1 && emittedImages > 0) addAll(closeImage())
-                        val id = imageId ?: nextId(responseId, "image").also {
-                            imageId = it
-                            add(StreamChunk.ImageStart(it, metadata = part.metadata))
-                        }
-                        add(StreamChunk.ImageDelta(id, part.url.substringAfter(";base64,", part.url), part.metadata))
-                        emittedImages++
-                    }
-
-                    else -> Unit
-                }
-            }
-            if (message.annotations.isNotEmpty()) add(StreamChunk.Annotations(message.annotations))
-        }
-
-        fun finish(reason: String?, responseId: String, model: String): List<StreamChunk> = buildList {
-            addAll(closeText())
-            addAll(closeReasoning())
-            addAll(closeImage())
-            addAll(closeTools())
-            add(StreamChunk.Finish(reason, responseId, model))
-        }
-
-        private fun closeText() = textId?.let { textId = null; listOf(StreamChunk.TextEnd(it)) }.orEmpty()
-        private fun closeReasoning() = reasoningId?.let {
-            reasoningId = null
-            listOf(StreamChunk.ReasoningEnd(it))
-        }.orEmpty()
-        private fun closeImage() = imageId?.let { imageId = null; listOf(StreamChunk.ImageEnd(it)) }.orEmpty()
-        private fun closeTools() = openToolIds.toList().map { StreamChunk.ToolCallEnd(it) }.also {
-            openToolIds.clear()
-        }
-        private fun nextId(responseId: String, kind: String): String {
-            sequence++
-            return "$responseId:$kind-$sequence"
-        }
-    }
 
     private fun buildCompletionRequestBody(
         messages: List<UIMessage>,

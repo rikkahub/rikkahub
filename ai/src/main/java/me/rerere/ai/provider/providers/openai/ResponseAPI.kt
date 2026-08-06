@@ -31,6 +31,7 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
@@ -130,8 +131,7 @@ class ResponseAPI(
 
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
 
-        val streamState = ResponseStreamState()
-        var finishEmitted = false
+        val decoder = ResponseApiStreamDecoder()
 
         fun sendChunks(chunks: Iterable<StreamChunk>) {
             chunks.forEach { chunk ->
@@ -148,22 +148,11 @@ class ResponseAPI(
                 type: String?,
                 data: String
             ) {
-                if (data == "[DONE]") {
-                    if (!finishEmitted) {
-                        finishEmitted = true
-                        sendChunks(streamState.finish())
-                    }
-                    close()
-                    return
-                }
                 Log.d(TAG, "onEvent: $id/$type $data")
                 try {
-                    val event = json.parseToJsonElement(data).jsonObject
-                    sendChunks(parseResponseEvent(event, streamState))
-                    if (type == "response.completed") {
-                        finishEmitted = true
-                        close()
-                    }
+                    val result = decoder.accept(SseEvent(id = id, event = type, data = data))
+                    sendChunks(result.chunks)
+                    if (result.completed) close()
                 } catch (e: Throwable) {
                     close(e)
                 }
@@ -192,10 +181,7 @@ class ResponseAPI(
             }
 
             override fun onClosed(eventSource: EventSource) {
-                if (!finishEmitted) {
-                    finishEmitted = true
-                    sendChunks(streamState.finish())
-                }
+                sendChunks(decoder.onClosed())
                 close()
             }
         }
@@ -306,7 +292,14 @@ class ResponseAPI(
 
     internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
         messages
-            .filter { it.isValidToUpload() && it.role != MessageRole.SYSTEM }
+            .filter { message ->
+                message.role != MessageRole.SYSTEM && (
+                    message.isValidToUpload() || message.parts.any { part ->
+                        part is UIMessagePart.Reasoning &&
+                            part.metadataAs<OpenAIReasoningMetadata>()?.encryptedContent != null
+                    }
+                )
+            }
             .forEach { message ->
                 if (message.role == MessageRole.ASSISTANT) {
                     addAssistantItems(message)
@@ -473,230 +466,6 @@ class ResponseAPI(
                 }
             }
         })
-    }
-
-    private fun parseResponseEvent(
-        jsonObject: JsonObject,
-        streamState: ResponseStreamState,
-    ): List<StreamChunk> {
-        val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
-        val itemId = jsonObject["item_id"]?.jsonPrimitive?.contentOrNull
-        val contentIndex = jsonObject["content_index"]?.jsonPrimitive?.intOrNull ?: 0
-        val summaryIndex = jsonObject["summary_index"]?.jsonPrimitive?.intOrNull ?: contentIndex
-        val textId = itemId?.let { "$it:text:$contentIndex" }
-        val reasoningId = itemId?.let { "$it:reasoning:$summaryIndex" }
-
-        return when (chunkType) {
-            "response.output_text.delta" -> {
-                streamState.textDelta(
-                    textId ?: error("item_id not found"),
-                    jsonObject["delta"]?.jsonPrimitive?.contentOrNull ?: "",
-                )
-            }
-
-            "response.reasoning_summary_text.delta", "response.reasoning_text.delta" -> {
-                streamState.reasoningDelta(
-                    reasoningId ?: error("item_id not found"),
-                    jsonObject["delta"]?.jsonPrimitive?.contentOrNull ?: "",
-                    streamState.reasoningMetadata[itemId],
-                )
-            }
-
-            "response.content_part.added" -> {
-                val part = jsonObject["part"]?.jsonObject ?: return emptyList()
-                when (part["type"]?.jsonPrimitive?.contentOrNull) {
-                    "output_text" -> streamState.startText(textId ?: error("item_id not found"))
-                    else -> emptyList()
-                }
-            }
-
-            "response.content_part.done", "response.output_text.done" -> {
-                streamState.endText(textId ?: error("item_id not found"))
-            }
-
-            "response.reasoning_summary_part.added" -> streamState.startReasoning(
-                reasoningId ?: error("item_id not found"),
-                streamState.reasoningMetadata[itemId],
-            )
-
-            "response.reasoning_summary_part.done",
-            "response.reasoning_summary_text.done",
-            "response.reasoning_text.done",
-                -> streamState.endReasoning(
-                    reasoningId ?: error("item_id not found"),
-                    streamState.reasoningMetadata[itemId],
-                )
-
-            "response.output_item.added" -> {
-                val item = jsonObject["item"]?.jsonObject ?: error("chunk item not found")
-                val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
-                val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
-                when (type) {
-                    "function_call" -> {
-                        val callId = item["call_id"]?.jsonPrimitive?.contentOrNull ?: id
-                        streamState.toolCallIdsByItemId[id] = callId
-                        streamState.startTool(
-                            id = callId,
-                            name = item["name"]?.jsonPrimitive?.content ?: "",
-                            initialInput = item["arguments"]?.jsonPrimitive?.content ?: "",
-                        )
-                    }
-
-                    "image_generation_call" -> streamState.startImage(id)
-
-                    "reasoning" -> {
-                        streamState.reasoningMetadata[id] = OpenAIReasoningMetadata(
-                            reasoningId = id,
-                            encryptedContent = item["encrypted_content"]?.jsonPrimitive?.contentOrNull,
-                        ).toMetadata()
-                        emptyList()
-                    }
-
-                    else -> emptyList()
-                }
-            }
-
-            "response.output_item.done" -> {
-                val item = jsonObject["item"]?.jsonObject ?: error("chunk item not found")
-                val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
-                val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
-                when (type) {
-                    "reasoning" -> {
-                        val metadata = OpenAIReasoningMetadata(
-                            reasoningId = id,
-                            encryptedContent = item["encrypted_content"]?.jsonPrimitive?.content,
-                        ).toMetadata()
-                        streamState.reasoningMetadata[id] = metadata
-                        streamState.endReasoningItem(id, metadata)
-                    }
-
-                    "image_generation_call" -> buildList {
-                        addAll(streamState.startImage(id))
-                        item["result"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotEmpty() }?.let {
-                            add(StreamChunk.ImageSnapshot(id, it))
-                        }
-                        addAll(streamState.endImage(id))
-                    }
-
-                    "function_call" -> streamState.endTool(streamState.toolCallIdsByItemId.remove(id) ?: id)
-                    else -> emptyList()
-                }
-            }
-
-            "response.function_call_arguments.delta" -> {
-                val requiredItemId = itemId ?: error("item_id not found")
-                val toolCallId = streamState.toolCallIdsByItemId[requiredItemId] ?: requiredItemId
-                streamState.toolDelta(
-                    toolCallId,
-                    jsonObject["delta"]?.jsonPrimitive?.content ?: "",
-                )
-            }
-
-            "response.function_call_arguments.done" -> {
-                val requiredItemId = itemId ?: error("item_id not found")
-                val toolCallId = streamState.toolCallIdsByItemId[requiredItemId] ?: requiredItemId
-                buildList {
-                    if (toolCallId !in streamState.toolIdsWithInput) {
-                        addAll(streamState.toolDelta(
-                            toolCallId,
-                            jsonObject["arguments"]?.jsonPrimitive?.contentOrNull ?: "",
-                        ))
-                    }
-                    addAll(streamState.endTool(toolCallId))
-                }
-            }
-
-            "response.image_generation_call.partial_image" -> {
-                val requiredItemId = itemId ?: error("item_id not found")
-                buildList {
-                    addAll(streamState.startImage(requiredItemId))
-                    add(StreamChunk.ImageSnapshot(
-                        requiredItemId,
-                        jsonObject["partial_image_b64"]?.jsonPrimitive?.contentOrNull ?: "",
-                    ))
-                }
-            }
-
-            "response.completed" -> {
-                val response = jsonObject["response"]?.jsonObject
-                buildList {
-                    parseTokenUsage(response?.get("usage")?.jsonObject)?.let {
-                        add(StreamChunk.Usage(it))
-                    }
-                    addAll(streamState.finish(
-                        finishReason = response?.get("status")?.jsonPrimitive?.contentOrNull,
-                        responseId = response?.get("id")?.jsonPrimitive?.contentOrNull,
-                        model = response?.get("model")?.jsonPrimitive?.contentOrNull,
-                    ))
-                }
-            }
-
-            else -> emptyList()
-        }
-    }
-
-    private class ResponseStreamState {
-        val toolCallIdsByItemId = mutableMapOf<String, String>()
-        val toolIdsWithInput = mutableSetOf<String>()
-        val reasoningMetadata = mutableMapOf<String, JsonObject>()
-        private val openTextIds = linkedSetOf<String>()
-        private val openReasoningIds = linkedSetOf<String>()
-        private val openImageIds = linkedSetOf<String>()
-        private val openToolIds = linkedSetOf<String>()
-        private var finished = false
-
-        fun startText(id: String) = if (openTextIds.add(id)) listOf(StreamChunk.TextStart(id)) else emptyList()
-        fun textDelta(id: String, text: String) = startText(id) + StreamChunk.TextDelta(id, text)
-        fun endText(id: String) = if (openTextIds.remove(id)) listOf(StreamChunk.TextEnd(id)) else emptyList()
-
-        fun startReasoning(id: String, metadata: JsonObject?) =
-            if (openReasoningIds.add(id)) listOf(StreamChunk.ReasoningStart(id, metadata)) else emptyList()
-
-        fun reasoningDelta(id: String, text: String, metadata: JsonObject?) =
-            startReasoning(id, metadata) + StreamChunk.ReasoningDelta(id, text, metadata)
-
-        fun endReasoning(id: String, metadata: JsonObject?) =
-            if (openReasoningIds.remove(id)) listOf(StreamChunk.ReasoningEnd(id, metadata)) else emptyList()
-
-        fun endReasoningItem(itemId: String, metadata: JsonObject?): List<StreamChunk> =
-            openReasoningIds.filter { it.startsWith("$itemId:reasoning:") }.flatMap { endReasoning(it, metadata) }
-
-        fun startImage(id: String) = if (openImageIds.add(id)) listOf(StreamChunk.ImageStart(id)) else emptyList()
-        fun endImage(id: String) = if (openImageIds.remove(id)) listOf(StreamChunk.ImageEnd(id)) else emptyList()
-
-        fun startTool(id: String, name: String, initialInput: String): List<StreamChunk> = buildList {
-            if (openToolIds.add(id)) add(StreamChunk.ToolCallStart(id, name))
-            if (initialInput.isNotEmpty()) addAll(toolDelta(id, initialInput))
-        }
-
-        fun toolDelta(id: String, input: String): List<StreamChunk> = buildList {
-            if (openToolIds.add(id)) add(StreamChunk.ToolCallStart(id))
-            if (input.isNotEmpty()) {
-                toolIdsWithInput += id
-                add(StreamChunk.ToolCallDelta(id, inputDelta = input))
-            }
-        }
-
-        fun endTool(id: String) = if (openToolIds.remove(id)) {
-            toolIdsWithInput.remove(id)
-            listOf(StreamChunk.ToolCallEnd(id))
-        } else emptyList()
-
-        fun finish(
-            finishReason: String? = null,
-            responseId: String? = null,
-            model: String? = null,
-        ): List<StreamChunk> {
-            if (finished) return emptyList()
-            finished = true
-            return buildList {
-                openTextIds.toList().forEach { addAll(endText(it)) }
-                openReasoningIds.toList().forEach { addAll(endReasoning(it, reasoningMetadata[it.substringBefore(':')])) }
-                openImageIds.toList().forEach { addAll(endImage(it)) }
-                openToolIds.toList().forEach { addAll(endTool(it)) }
-                add(StreamChunk.Finish(finishReason, responseId, model))
-            }
-        }
     }
 
     private fun parseResponseOutput(jsonObject: JsonObject): TextGenerationResult {

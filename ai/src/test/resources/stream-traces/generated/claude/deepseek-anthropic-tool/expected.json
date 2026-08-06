@@ -1,0 +1,48 @@
+{
+    "role": "ASSISTANT",
+    "parts": [
+        {
+            "type": "reasoning",
+            "text": "The user wants me to research Kotlin, Ktor, and Compose Multiplatform independently. I should search for their latest stable releases, including release dates and official source URLs. Let me do multiple searches in parallel.",
+            "metadata": {
+                "hasSignature": true
+            }
+        },
+        {
+            "type": "text",
+            "text": "I'll research each of these technologies independently. Let me search for their latest stable releases."
+        },
+        {
+            "type": "tool",
+            "id": "tool-1",
+            "name": "search_web",
+            "input": {
+                "query": "Kotlin latest stable release version 2025 release notes"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "tool-2",
+            "name": "search_web",
+            "input": {
+                "query": "Ktor latest stable release version 2025"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "tool-3",
+            "name": "search_web",
+            "input": {
+                "query": "Compose Multiplatform latest stable release version 2025"
+            }
+        }
+    ],
+    "annotations": [],
+    "usage": {
+        "promptTokens": 401,
+        "completionTokens": 197,
+        "cachedTokens": 384,
+        "totalTokens": 598
+    },
+    "finished": true
+}

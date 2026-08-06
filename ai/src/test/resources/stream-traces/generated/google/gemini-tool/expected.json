@@ -1,0 +1,44 @@
+{
+    "role": "ASSISTANT",
+    "parts": [
+        {
+            "type": "reasoning",
+            "text": "**Defining the Technologies**\n\nOkay, I'm starting by establishing a firm grasp of the goal: researching Kotlin, Ktor, and Compose Multiplatform separately. I need to gather details on their latest stable releases, including release dates and official source URLs.\n\n\n"
+        },
+        {
+            "type": "tool",
+            "id": "tool-1",
+            "name": "search_web",
+            "input": {
+                "query": "\"Kotlin\" latest stable release version date 2024"
+            },
+            "metadata": {
+                "hasThoughtSignature": true
+            }
+        },
+        {
+            "type": "tool",
+            "id": "tool-2",
+            "name": "search_web",
+            "input": {
+                "query": "\"Ktor\" latest stable release version date 2024"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "tool-3",
+            "name": "search_web",
+            "input": {
+                "query": "\"Compose Multiplatform\" latest stable release version date 2024"
+            }
+        }
+    ],
+    "annotations": [],
+    "usage": {
+        "promptTokens": 88,
+        "completionTokens": 342,
+        "cachedTokens": 0,
+        "totalTokens": 430
+    },
+    "finished": true
+}

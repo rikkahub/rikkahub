@@ -1,0 +1,45 @@
+{
+    "role": "ASSISTANT",
+    "parts": [
+        {
+            "type": "reasoning",
+            "text": "**Searching for stable versions**\n\nI need to gather the latest stable version dates from official sources. It seems I should search independently for each one, ensuring I'm careful that the information is current for 2025. I think it makes sense to utilize multiple queries and perform these searches in parallel. This way, I can collect all the relevant information without missing anything important! Let's get started on that.",
+            "metadata": {
+                "hasReasoningId": true,
+                "hasEncryptedContent": true
+            }
+        },
+        {
+            "type": "tool",
+            "id": "tool-1",
+            "name": "search_web",
+            "input": {
+                "query": "site:kotlinlang.org latest stable Kotlin release official 2026 2.2 2.3"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "tool-2",
+            "name": "search_web",
+            "input": {
+                "query": "site:ktor.io latest stable Ktor release official 2026"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "tool-3",
+            "name": "search_web",
+            "input": {
+                "query": "site:jetbrains.com compose multiplatform latest stable release official 2026 OR site:kotlinlang.org Compose Multiplatform 1.9 1.10"
+            }
+        }
+    ],
+    "annotations": [],
+    "usage": {
+        "promptTokens": 83,
+        "completionTokens": 174,
+        "cachedTokens": 0,
+        "totalTokens": 257
+    },
+    "finished": true
+}

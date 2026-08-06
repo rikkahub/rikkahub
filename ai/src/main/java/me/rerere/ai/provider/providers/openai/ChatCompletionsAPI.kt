@@ -35,6 +35,7 @@ import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
@@ -148,12 +149,7 @@ class ChatCompletionsAPI(
         // just for debugging response body
         // println(client.newCall(request).await().body?.string())
 
-        val streamState = ChatCompletionsStreamState()
-        var responseId: String? = null
-        var responseModel: String? = null
-        var finishReason: String? = null
-        var finishEmitted = false
-        val toolIdsByIndex = mutableMapOf<Int, String>()
+        val decoder = ChatCompletionsStreamDecoder()
 
         fun sendChunks(chunks: Iterable<StreamChunk>) {
             chunks.forEach { chunk ->
@@ -163,12 +159,6 @@ class ChatCompletionsAPI(
             }
         }
 
-        fun finishStream() {
-            if (finishEmitted) return
-            finishEmitted = true
-            sendChunks(streamState.finish(finishReason, responseId, responseModel))
-        }
-
         val listener = object : EventSourceListener() {
             override fun onEvent(
                 eventSource: EventSource,
@@ -176,73 +166,11 @@ class ChatCompletionsAPI(
                 type: String?,
                 data: String
             ) {
-                if (data == "[DONE]") {
-                    println("[onEvent] (done) 结束流: $data")
-                    finishStream()
-                    close()
-                    return
-                }
                 Log.d(TAG, "onEvent: $data")
                 try {
-                    data
-                        .trim()
-                        .split("\n")
-                        .filter { it.isNotBlank() }
-                        .map { json.parseToJsonElement(it).jsonObject }
-                        .forEach {
-                        if (it["error"] != null) {
-                            val error = it["error"]!!.parseErrorDetail()
-                            close(error)
-                            return
-                        }
-                        responseId = it["id"]?.jsonPrimitive?.contentOrNull ?: responseId
-                        responseModel = it["model"]?.jsonPrimitive?.contentOrNull ?: responseModel
-
-                        val choices = it["choices"]?.jsonArray ?: JsonArray(emptyList())
-                        choices.firstOrNull()?.jsonObject?.let { choice ->
-                            (choice["delta"]?.jsonObject ?: choice["message"]?.jsonObject)?.let { message ->
-                                val messageWithoutTools = JsonObject(message.filterKeys { key -> key != "tool_calls" })
-                                sendChunks(streamState.append(parseMessage(messageWithoutTools), responseId))
-
-                                message["tool_calls"]?.jsonArray?.forEachIndexed { fallbackIndex, element ->
-                                    val toolCall = element.jsonObject
-                                    val index = toolCall["index"]?.jsonPrimitive?.intOrNull ?: fallbackIndex
-                                    val toolId = toolCall["id"]?.jsonPrimitive?.contentOrNull
-                                        ?.also { id -> toolIdsByIndex[index] = id }
-                                        ?: toolIdsByIndex.getOrPut(index) {
-                                            "${responseId ?: "response"}:tool-$index"
-                                        }
-                                    val function = toolCall["function"]?.jsonObject
-                                    sendChunks(
-                                        streamState.append(
-                                            UIMessage(
-                                                role = MessageRole.ASSISTANT,
-                                                parts = listOf(
-                                                    UIMessagePart.Tool(
-                                                        toolCallId = toolId,
-                                                        toolName = function?.get("name")
-                                                            ?.jsonPrimitive?.contentOrNull ?: "",
-                                                        input = function?.get("arguments")
-                                                            ?.jsonPrimitive?.contentOrNull ?: "",
-                                                        output = emptyList(),
-                                                    )
-                                                )
-                                            ),
-                                            responseId,
-                                        )
-                                    )
-                                }
-                            }
-                            choice["finish_reason"]?.jsonPrimitive?.contentOrNull?.let { reason ->
-                                finishReason = reason
-                            }
-                        }
-                        parseTokenUsage(it["usage"] as? JsonObject)?.let { usage ->
-                            trySend(StreamChunk.Usage(usage)).onFailure { e ->
-                                Log.w(TAG, "onEvent: usage dropped (${e?.message})")
-                            }
-                        }
-                    }
+                    val result = decoder.accept(SseEvent(id = id, event = type, data = data))
+                    sendChunks(result.chunks)
+                    if (result.completed) close()
                 } catch (e: Throwable) {
                     close(e)
                 }
@@ -272,7 +200,7 @@ class ChatCompletionsAPI(
             }
 
             override fun onClosed(eventSource: EventSource) {
-                finishStream()
+                sendChunks(decoder.onClosed())
                 close()
             }
         }
@@ -285,97 +213,6 @@ class ChatCompletionsAPI(
         }
         // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
     }.buffer(Channel.UNLIMITED)
-
-    private class ChatCompletionsStreamState {
-        private var sequence = 0
-        private var textId: String? = null
-        private var reasoningId: String? = null
-        private var imageId: String? = null
-        private val openToolIds = linkedSetOf<String>()
-        private var lastToolId: String? = null
-
-        fun append(message: UIMessage, sourceId: String?): List<StreamChunk> = buildList {
-            message.parts.forEach { part ->
-                when (part) {
-                    is UIMessagePart.Text -> if (part.text.isNotEmpty()) {
-                        addAll(closeReasoning())
-                        addAll(closeImage())
-                        addAll(closeTools())
-                        val id = textId ?: nextId(sourceId, "text").also {
-                            textId = it
-                            add(StreamChunk.TextStart(it))
-                        }
-                        add(StreamChunk.TextDelta(id, part.text))
-                    }
-
-                    is UIMessagePart.Reasoning -> if (part.reasoning.isNotEmpty() || part.metadata != null) {
-                        addAll(closeText())
-                        addAll(closeImage())
-                        addAll(closeTools())
-                        val id = reasoningId ?: nextId(sourceId, "reasoning").also {
-                            reasoningId = it
-                            add(StreamChunk.ReasoningStart(it, part.metadata))
-                        }
-                        add(StreamChunk.ReasoningDelta(id, part.reasoning, part.metadata))
-                    }
-
-                    is UIMessagePart.Tool -> {
-                        addAll(closeText())
-                        addAll(closeReasoning())
-                        addAll(closeImage())
-                        val id = part.toolCallId.ifBlank { lastToolId ?: nextId(sourceId, "tool") }
-                        var nameDelta = part.toolName
-                        if (openToolIds.add(id)) {
-                            nameDelta = ""
-                            add(StreamChunk.ToolCallStart(id, part.toolName, part.metadata))
-                        }
-                        lastToolId = id
-                        if (nameDelta.isNotEmpty() || part.input.isNotEmpty()) {
-                            add(StreamChunk.ToolCallDelta(id, nameDelta, part.input, part.metadata))
-                        }
-                    }
-
-                    is UIMessagePart.Image -> {
-                        addAll(closeText())
-                        addAll(closeReasoning())
-                        addAll(closeTools())
-                        val id = imageId ?: nextId(sourceId, "image").also {
-                            imageId = it
-                            add(StreamChunk.ImageStart(it, metadata = part.metadata))
-                        }
-                        add(StreamChunk.ImageDelta(id, part.url.substringAfter(";base64,", part.url), part.metadata))
-                    }
-
-                    else -> Unit
-                }
-            }
-            if (message.annotations.isNotEmpty()) add(StreamChunk.Annotations(message.annotations))
-        }
-
-        fun finish(reason: String?, responseId: String?, model: String?): List<StreamChunk> = buildList {
-            addAll(closeText())
-            addAll(closeReasoning())
-            addAll(closeImage())
-            addAll(closeTools())
-            add(StreamChunk.Finish(reason, responseId, model))
-        }
-
-        private fun closeText() = textId?.let { textId = null; listOf(StreamChunk.TextEnd(it)) }.orEmpty()
-        private fun closeReasoning() = reasoningId?.let {
-            reasoningId = null
-            listOf(StreamChunk.ReasoningEnd(it))
-        }.orEmpty()
-        private fun closeImage() = imageId?.let { imageId = null; listOf(StreamChunk.ImageEnd(it)) }.orEmpty()
-        private fun closeTools() = openToolIds.toList().map { StreamChunk.ToolCallEnd(it) }.also {
-            openToolIds.clear()
-            lastToolId = null
-        }
-        private fun nextId(sourceId: String?, kind: String): String {
-            sequence++
-            return "${sourceId?.takeIf { it.isNotBlank() }?.let { "$it:" }.orEmpty()}$kind-$sequence"
-        }
-    }
-
 
     private fun buildChatCompletionRequest(
         messages: List<UIMessage>,

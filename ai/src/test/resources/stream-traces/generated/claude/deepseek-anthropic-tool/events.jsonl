@@ -1,0 +1,133 @@
+{"data":"{\"type\":\"message_start\",\"message\":{\"id\":\"e4f274b2-dde6-4538-b702-cad2e8dd690e\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"deepseek-v4-flash\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":17,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":384,\"output_tokens\":0,\"service_tier\":\"standard\"}}}","event":"message_start"}
+{"data":"{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}","event":"content_block_start"}
+{"data":"{\"type\":\"ping\"}","event":"ping"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"The\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" user\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" wants\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" me\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" to\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" research\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" Kot\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"lin\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\",\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" K\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"tor\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\",\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" and\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" Comp\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"ose\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" Multi\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"platform\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" independently\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\".\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" I\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" should\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" search\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" for\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" their\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" latest\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" stable\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" releases\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\",\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" including\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" release\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" dates\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" and\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" official\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" source\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" URLs\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\".\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" Let\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" me\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" do\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" multiple\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" searches\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" in\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" parallel\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\".\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"e4f274b2-dde6-4538-b702-cad2e8dd690e\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_stop\",\"index\":0}","event":"content_block_stop"}
+{"data":"{\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}","event":"content_block_start"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"I\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"'ll\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" research\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" each\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" of\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" these\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" technologies\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" independently\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\".\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" Let\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" me\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" search\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" for\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" their\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" latest\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" stable\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" releases\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\".\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_stop\",\"index\":1}","event":"content_block_stop"}
+{"data":"{\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_00_LaJFBgxLWSHGELSjrsix6761\",\"name\":\"search_web\",\"input\":{}}}","event":"content_block_start"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"query\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\": \"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"K\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"ot\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"lin\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" latest\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" stable\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" release\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" version\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" \"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"202\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"5\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" release\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" notes\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"}\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_stop\",\"index\":2}","event":"content_block_stop"}
+{"data":"{\"type\":\"content_block_start\",\"index\":3,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_01_oL2y2WmThLvDy4UnmYp91734\",\"name\":\"search_web\",\"input\":{}}}","event":"content_block_start"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"query\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\": \"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"K\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"tor\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" latest\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" stable\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" release\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" version\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" \"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"202\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"5\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":3,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"}\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_stop\",\"index\":3}","event":"content_block_stop"}
+{"data":"{\"type\":\"content_block_start\",\"index\":4,\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_02_6Kqc6E6Yfsna7wxO3ebX5772\",\"name\":\"search_web\",\"input\":{}}}","event":"content_block_start"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"query\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\": \"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"Com\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"pose\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" Multi\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"platform\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" latest\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" stable\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" release\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" version\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\" \"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"202\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"5\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_delta\",\"index\":4,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"}\"}}","event":"content_block_delta"}
+{"data":"{\"type\":\"content_block_stop\",\"index\":4}","event":"content_block_stop"}
+{"data":"{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":17,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":384,\"output_tokens\":197,\"service_tier\":\"standard\"}}","event":"message_delta"}
+{"data":"{\"type\":\"message_stop\"}","event":"message_stop"}
