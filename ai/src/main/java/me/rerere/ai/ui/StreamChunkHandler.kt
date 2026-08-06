@@ -9,12 +9,58 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.TextGenerationResult
 import kotlin.time.Clock
 
-/** 将同一条响应中的通用流事件按事件 id 合并到消息列表。每条流应使用独立实例。 */
+/**
+ * 将 Provider 产生的通用流事件合并为一条 [UIMessage]。
+ *
+ * 文本、推理和图片可能交错到达，因此不能只更新最后一个 part。本类会在收到对应的 `Start`
+ * 事件时，记录事件 id 在 [UIMessage.parts] 中的位置；后续 `Delta`、`Snapshot` 和 `End`
+ * 事件再通过同一 id 定位并更新该 part。工具调用则直接使用
+ * [UIMessagePart.Tool.toolCallId] 定位。
+ *
+ * [handle] 不会修改传入的消息列表，而是返回包含更新后消息的新列表。如果列表末尾不是助手
+ * 消息，第一个事件会自动创建一条空的助手消息。收到 [StreamChunk.Finish] 后，会标记消息完成
+ * 并清除内部状态。
+ *
+ * ## 工作过程
+ *
+ * 1. 接收一个 [StreamChunk]，检查消息列表非空。
+ * 2. 如果列表末尾不是助手消息，创建一条带有当前 [model] id 的空助手消息。
+ * 3. 根据事件类型更新助手消息：
+ *    - `TextStart/Delta/End`：创建、追加并结束文本 part。
+ *    - `ReasoningStart/Delta/End`：创建、追加并标记推理 part 的完成时间。
+ *    - `ToolCallStart/Delta/End`：按调用 id 创建工具 part，并逐步拼接工具名和输入参数。
+ *    - `ImageStart/Delta/End`：创建图片 part，并逐步追加 Base64 数据。
+ *    - `ImageSnapshot`：用最新的完整 Base64 快照替换同 id 图片的旧数据。
+ *    - `Annotations`：追加并去重消息注解。
+ *    - `Usage`：将本次用量合并到消息已有的 Token 用量中。
+ *    - `Finish`：设置消息完成时间，结束尚未关闭的推理 part，并清空事件索引。
+ * 4. 使用 [UIMessage.copy] 生成更新后的助手消息，将其替换到列表末尾并返回新列表。
+ *
+ * 一段文本流的典型调用顺序如下：
+ *
+ * ```
+ * TextStart(id) -> TextDelta(id, ...) -> TextDelta(id, ...) -> TextEnd(id) -> Finish
+ * ```
+ *
+ * [StreamChunk.Finish] 只代表响应流正常结束，并不保证一定到达。网络错误、协议解析失败或上层取消
+ * Flow 时，流可能直接异常结束。此时已经合并的内容仍然保留，但消息的 `finishedAt` 可能为空，尚未
+ * 收到 `ReasoningEnd` 的推理 part 也不会由本类自动结束。调用方应在 Flow 的完成或异常处理中执行
+ * 必要的 UI 收尾，并丢弃当前 handler；不要将它复用于下一条响应流。
+ *
+ * 该类保存着一次响应流的合并状态，不是无状态转换器。每条并发响应流都必须使用独立实例，且
+ * 事件应按 Provider 产生的顺序交给同一实例处理。
+ */
 class StreamChunkHandler(private val model: Model? = null) {
+    // Map 的值是对应 part 在当前助手消息 parts 列表中的下标。
     private val textPartIndexes = mutableMapOf<String, Int>()
     private val reasoningPartIndexes = mutableMapOf<String, Int>()
     private val imagePartIndexes = mutableMapOf<String, Int>()
 
+    /**
+     * 将一个 [chunk] 合并进消息列表末尾的助手消息，并返回新的消息列表。
+     *
+     * @throws IllegalArgumentException 当 [messages] 为空时抛出
+     */
     fun handle(messages: List<UIMessage>, chunk: StreamChunk): List<UIMessage> {
         require(messages.isNotEmpty()) { "messages must not be empty" }
 
@@ -37,6 +83,7 @@ class StreamChunkHandler(private val model: Model? = null) {
             }
             is StreamChunk.TextDelta -> {
                 val index = textPartIndexes[chunk.id]
+                // 容忍 Provider 未发送 Start：首次收到 Delta 时直接创建对应 part。
                 if (index == null || parts.getOrNull(index) !is UIMessagePart.Text) {
                     copy(parts = parts + UIMessagePart.Text(chunk.text)).also {
                         textPartIndexes[chunk.id] = parts.size
@@ -103,6 +150,7 @@ class StreamChunkHandler(private val model: Model? = null) {
             }
 
             is StreamChunk.ToolCallDelta -> copy(parts = parts.map { part ->
+                // 工具调用可以并行生成，通过 toolCallId 而不是 part 位置识别目标。
                 if (part is UIMessagePart.Tool && part.toolCallId == chunk.id) {
                     part.copy(
                         toolName = part.toolName + chunk.toolNameDelta,
@@ -150,6 +198,8 @@ class StreamChunkHandler(private val model: Model? = null) {
                 } else {
                     copy(parts = parts.toMutableList().apply {
                         val image = get(index) as UIMessagePart.Image
+                        // Snapshot 是一张完整的可渲染图片，只替换 data URL 的数据部分；
+                        // 与 ImageDelta 不同，它不会把数据追加到上一帧之后。
                         val dataUrlPrefix = image.url.substringBefore(",").takeIf { it.startsWith("data:") }
                             ?: "data:image/png;base64"
                         set(index, image.copy(
@@ -166,6 +216,7 @@ class StreamChunkHandler(private val model: Model? = null) {
             is StreamChunk.Finish -> copy(
                 finishedAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
             ).finishReasoning().also {
+                // Finish 同时结束尚未显式结束的 reasoning，并释放本次响应流的索引状态。
                 textPartIndexes.clear()
                 reasoningPartIndexes.clear()
                 imagePartIndexes.clear()
