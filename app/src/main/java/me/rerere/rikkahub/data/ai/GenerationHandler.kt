@@ -28,7 +28,7 @@ import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.ToolApprovalState
-import me.rerere.ai.ui.handleStreamChunk
+import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.handleTextGenerationResult
 import me.rerere.ai.ui.limitContext
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
@@ -416,12 +416,13 @@ class GenerationHandler(
             }
         )
         if (stream) {
+            val streamChunkHandler = StreamChunkHandler(model)
             providerImpl.streamText(
                 providerSetting = provider,
                 messages = internalMessages,
                 params = params
             ).collect {
-                messages = messages.handleStreamChunk(chunk = it, model = model)
+                messages = streamChunkHandler.handle(messages, it)
                 onUpdateMessages(messages)
             }
         } else {
@@ -491,6 +492,7 @@ class GenerationHandler(
 
             var messages = listOf(UIMessage.user(prompt))
             var translatedText = ""
+            val streamChunkHandler = StreamChunkHandler(model)
 
             providerHandler.streamText(
                 providerSetting = provider,
@@ -500,7 +502,7 @@ class GenerationHandler(
                     reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
                 ),
             ).collect { chunk ->
-                messages = messages.handleStreamChunk(chunk)
+                messages = streamChunkHandler.handle(messages, chunk)
                 translatedText = messages.lastOrNull()?.toText() ?: ""
 
                 if (translatedText.isNotBlank()) {

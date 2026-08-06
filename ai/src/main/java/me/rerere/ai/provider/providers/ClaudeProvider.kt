@@ -169,8 +169,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             Log.i(TAG, "streamText: $it")
         }
 
-        val normalizer = StreamChunkNormalizer()
-        val blockKinds = mutableMapOf<Int, Pair<String, String?>>()
+        val blocks = mutableMapOf<Int, ClaudeStreamBlock>()
         var responseId: String? = null
         var responseModel: String? = null
         var finishReason: String? = null
@@ -187,7 +186,17 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         fun finishStream() {
             if (finishEmitted) return
             finishEmitted = true
-            sendChunks(normalizer.finish(finishReason, responseId, responseModel))
+            blocks.values.forEach { block ->
+                val end = when (block.kind) {
+                    "text" -> StreamChunk.TextEnd(block.id)
+                    "thinking", "redacted_thinking" -> StreamChunk.ReasoningEnd(block.id, block.metadata)
+                    "tool_use" -> StreamChunk.ToolCallEnd(block.id)
+                    else -> null
+                }
+                end?.let { trySend(it) }
+            }
+            blocks.clear()
+            trySend(StreamChunk.Finish(finishReason, responseId, responseModel))
         }
 
         val listener = object : EventSourceListener() {
@@ -226,25 +235,74 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     val index = dataJson["index"]?.jsonPrimitive?.intOrNull
                     val contentBlock = dataJson["content_block"]?.jsonObject
                     if (type == "content_block_start" && index != null && contentBlock != null) {
-                        blockKinds[index] = Pair(
-                            contentBlock["type"]?.jsonPrimitive?.contentOrNull ?: "",
-                            contentBlock["id"]?.jsonPrimitive?.contentOrNull,
-                        )
+                        val kind = contentBlock["type"]?.jsonPrimitive?.contentOrNull ?: ""
+                        val blockId = contentBlock["id"]?.jsonPrimitive?.contentOrNull
+                            ?: "${responseId ?: id ?: "response"}:block-$index"
+                        val metadata = when (kind) {
+                            "thinking" -> contentBlock["signature"]?.jsonPrimitive?.contentOrNull?.let {
+                                ClaudeReasoningMetadata(signature = it).toMetadata()
+                            }
+                            else -> null
+                        }
+                        blocks[index] = ClaudeStreamBlock(kind, blockId, metadata)
+                        sendChunks(buildList {
+                            when (kind) {
+                                "text" -> add(StreamChunk.TextStart(blockId))
+                                "thinking", "redacted_thinking" -> add(StreamChunk.ReasoningStart(blockId, metadata))
+                                "tool_use" -> {
+                                    add(StreamChunk.ToolCallStart(
+                                        id = blockId,
+                                        toolName = contentBlock["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                                    ))
+                                    val input = contentBlock["input"]?.jsonObject
+                                    if (input != null && input.isNotEmpty()) {
+                                        add(StreamChunk.ToolCallDelta(
+                                            id = blockId,
+                                            inputDelta = json.encodeToString(input),
+                                        ))
+                                    }
+                                }
+                            }
+                        })
                     }
 
-                    val deltaMessage = parseMessage(buildJsonArray {
-                        contentBlock?.let { add(it) }
-                        dataJson["delta"]?.jsonObject?.let { add(it) }
-                    })
-                    sendChunks(normalizer.append(deltaMessage, responseId ?: id))
+                    if (type == "content_block_delta" && index != null) {
+                        val block = blocks[index] ?: error("Unknown content block index: $index")
+                        val delta = dataJson["delta"]?.jsonObject ?: JsonObject(emptyMap())
+                        sendChunks(buildList {
+                            when (delta["type"]?.jsonPrimitive?.contentOrNull) {
+                                "text_delta" -> add(StreamChunk.TextDelta(
+                                    block.id,
+                                    delta["text"]?.jsonPrimitive?.contentOrNull ?: "",
+                                ))
+                                "thinking_delta" -> add(StreamChunk.ReasoningDelta(
+                                    block.id,
+                                    delta["thinking"]?.jsonPrimitive?.contentOrNull ?: "",
+                                    block.metadata,
+                                ))
+                                "signature_delta" -> {
+                                    val metadata = delta["signature"]?.jsonPrimitive?.contentOrNull?.let {
+                                        ClaudeReasoningMetadata(signature = it).toMetadata()
+                                    }
+                                    blocks[index] = block.copy(metadata = metadata ?: block.metadata)
+                                    add(StreamChunk.ReasoningDelta(block.id, "", metadata))
+                                }
+                                "input_json_delta" -> add(StreamChunk.ToolCallDelta(
+                                    id = block.id,
+                                    inputDelta = delta["partial_json"]?.jsonPrimitive?.contentOrNull ?: "",
+                                ))
+                            }
+                        })
+                    }
 
                     if (type == "content_block_stop" && index != null) {
-                        val (kind, blockId) = blockKinds.remove(index) ?: Pair("", null)
-                        when (kind) {
-                            "text" -> sendChunks(normalizer.closeText())
-                            "thinking", "redacted_thinking" -> sendChunks(normalizer.closeReasoning())
-                            "tool_use" -> blockId?.let { sendChunks(normalizer.closeTool(it)) }
-                        }
+                        val block = blocks.remove(index) ?: error("Unknown content block index: $index")
+                        sendChunks(listOfNotNull(when (block.kind) {
+                            "text" -> StreamChunk.TextEnd(block.id)
+                            "thinking", "redacted_thinking" -> StreamChunk.ReasoningEnd(block.id, block.metadata)
+                            "tool_use" -> StreamChunk.ToolCallEnd(block.id)
+                            else -> null
+                        }))
                     }
 
                     if (type == "message_stop") {
@@ -293,6 +351,12 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         }
         // trySend 在缓冲满时会静默丢弃 delta，导致回复中间缺字 (#1295)，因此缓冲必须无界
     }.buffer(Channel.UNLIMITED)
+
+    private data class ClaudeStreamBlock(
+        val kind: String,
+        val id: String,
+        val metadata: JsonObject? = null,
+    )
 
     private fun buildMessageRequest(
         providerSetting: ProviderSetting.Claude,

@@ -13,12 +13,13 @@ class StreamChunkTest {
     @Test
     fun `text lifecycle should create and update assistant message`() {
         var messages = listOf(UIMessage.user("hello"))
+        val handler = StreamChunkHandler(model)
 
-        messages = messages.handleStreamChunk(StreamChunk.TextStart("text-1"), model)
-        messages = messages.handleStreamChunk(StreamChunk.TextDelta("text-1", "hel"), model)
-        messages = messages.handleStreamChunk(StreamChunk.TextDelta("text-1", "lo"), model)
-        messages = messages.handleStreamChunk(StreamChunk.TextEnd("text-1"), model)
-        messages = messages.handleStreamChunk(StreamChunk.Finish(finishReason = "stop"), model)
+        messages = handler.handle(messages, StreamChunk.TextStart("text-1"))
+        messages = handler.handle(messages, StreamChunk.TextDelta("text-1", "hel"))
+        messages = handler.handle(messages, StreamChunk.TextDelta("text-1", "lo"))
+        messages = handler.handle(messages, StreamChunk.TextEnd("text-1"))
+        messages = handler.handle(messages, StreamChunk.Finish(finishReason = "stop"))
 
         assertEquals(2, messages.size)
         assertEquals(MessageRole.ASSISTANT, messages.last().role)
@@ -30,23 +31,22 @@ class StreamChunkTest {
     @Test
     fun `reasoning tool and usage events should preserve semantic order`() {
         var messages = listOf(UIMessage.user("use a tool"))
+        val handler = StreamChunkHandler(model)
 
-        messages = messages.handleStreamChunk(StreamChunk.ReasoningStart("reasoning-1"), model)
-        messages = messages.handleStreamChunk(StreamChunk.ReasoningDelta("reasoning-1", "think"), model)
-        messages = messages.handleStreamChunk(StreamChunk.ReasoningEnd("reasoning-1"), model)
-        messages = messages.handleStreamChunk(StreamChunk.ToolCallStart("call-1"), model)
-        messages = messages.handleStreamChunk(
+        messages = handler.handle(messages, StreamChunk.ReasoningStart("reasoning-1"))
+        messages = handler.handle(messages, StreamChunk.ReasoningDelta("reasoning-1", "think"))
+        messages = handler.handle(messages, StreamChunk.ReasoningEnd("reasoning-1"))
+        messages = handler.handle(messages, StreamChunk.ToolCallStart("call-1"))
+        messages = handler.handle(messages,
             StreamChunk.ToolCallDelta(
                 id = "call-1",
                 toolNameDelta = "search",
                 inputDelta = "{\"q\":\"test\"}",
             ),
-            model,
         )
-        messages = messages.handleStreamChunk(StreamChunk.ToolCallEnd("call-1"), model)
-        messages = messages.handleStreamChunk(
+        messages = handler.handle(messages, StreamChunk.ToolCallEnd("call-1"))
+        messages = handler.handle(messages,
             StreamChunk.Usage(TokenUsage(promptTokens = 10, completionTokens = 5)),
-            model,
         )
 
         val assistant = messages.last()
@@ -57,5 +57,37 @@ class StreamChunkTest {
         assertEquals("search", tool.toolName)
         assertEquals("{\"q\":\"test\"}", tool.input)
         assertEquals(15, assistant.usage?.totalTokens)
+    }
+
+    @Test
+    fun `interleaved text chunks should be merged by id`() {
+        var messages = listOf(UIMessage.user("hello"))
+        val handler = StreamChunkHandler(model)
+
+        messages = handler.handle(messages, StreamChunk.TextStart("text-1"))
+        messages = handler.handle(messages, StreamChunk.TextDelta("text-1", "A"))
+        messages = handler.handle(messages, StreamChunk.TextStart("text-2"))
+        messages = handler.handle(messages, StreamChunk.TextDelta("text-2", "B"))
+        messages = handler.handle(messages, StreamChunk.TextDelta("text-1", "C"))
+        messages = handler.handle(messages, StreamChunk.TextEnd("text-2"))
+        messages = handler.handle(messages, StreamChunk.TextEnd("text-1"))
+
+        val textParts = messages.last().parts.filterIsInstance<UIMessagePart.Text>()
+        assertEquals(listOf("AC", "B"), textParts.map { it.text })
+    }
+
+    @Test
+    fun `image snapshots should replace previous image data`() {
+        var messages = listOf(UIMessage.user("draw an image"))
+        val handler = StreamChunkHandler(model)
+
+        messages = handler.handle(messages, StreamChunk.ImageStart("image-1"))
+        messages = handler.handle(messages, StreamChunk.ImageSnapshot("image-1", "partial-1"))
+        messages = handler.handle(messages, StreamChunk.ImageSnapshot("image-1", "partial-2"))
+        messages = handler.handle(messages, StreamChunk.ImageSnapshot("image-1", "final"))
+        messages = handler.handle(messages, StreamChunk.ImageEnd("image-1"))
+
+        val image = messages.last().parts.single() as UIMessagePart.Image
+        assertEquals("data:image/png;base64,final", image.url)
     }
 }

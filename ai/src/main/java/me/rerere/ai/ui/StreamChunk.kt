@@ -84,6 +84,15 @@ sealed class StreamChunk {
         val metadata: JsonObject? = null,
     ) : StreamChunk()
 
+    /** A complete renderable image snapshot that replaces previously received data for the same id. */
+    @Serializable
+    @SerialName("image_snapshot")
+    data class ImageSnapshot(
+        val id: String,
+        val data: String,
+        val metadata: JsonObject? = null,
+    ) : StreamChunk()
+
     @Serializable
     @SerialName("image_end")
     data class ImageEnd(val id: String) : StreamChunk()

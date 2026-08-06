@@ -32,7 +32,6 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.providers.PartGroup
-import me.rerere.ai.provider.providers.StreamChunkNormalizer
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.StreamChunk
@@ -131,8 +130,7 @@ class ResponseAPI(
 
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
 
-        val normalizer = StreamChunkNormalizer()
-        val toolCallIdsByItemId = mutableMapOf<String, String>()
+        val streamState = ResponseStreamState()
         var finishEmitted = false
 
         fun sendChunks(chunks: Iterable<StreamChunk>) {
@@ -153,7 +151,7 @@ class ResponseAPI(
                 if (data == "[DONE]") {
                     if (!finishEmitted) {
                         finishEmitted = true
-                        sendChunks(normalizer.finish())
+                        sendChunks(streamState.finish())
                     }
                     close()
                     return
@@ -161,7 +159,7 @@ class ResponseAPI(
                 Log.d(TAG, "onEvent: $id/$type $data")
                 try {
                     val event = json.parseToJsonElement(data).jsonObject
-                    sendChunks(parseResponseEvent(event, normalizer, toolCallIdsByItemId))
+                    sendChunks(parseResponseEvent(event, streamState))
                     if (type == "response.completed") {
                         finishEmitted = true
                         close()
@@ -196,7 +194,7 @@ class ResponseAPI(
             override fun onClosed(eventSource: EventSource) {
                 if (!finishEmitted) {
                     finishEmitted = true
-                    sendChunks(normalizer.finish())
+                    sendChunks(streamState.finish())
                 }
                 close()
             }
@@ -479,34 +477,55 @@ class ResponseAPI(
 
     private fun parseResponseEvent(
         jsonObject: JsonObject,
-        normalizer: StreamChunkNormalizer,
-        toolCallIdsByItemId: MutableMap<String, String>,
+        streamState: ResponseStreamState,
     ): List<StreamChunk> {
         val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
+        val itemId = jsonObject["item_id"]?.jsonPrimitive?.contentOrNull
+        val contentIndex = jsonObject["content_index"]?.jsonPrimitive?.intOrNull ?: 0
+        val summaryIndex = jsonObject["summary_index"]?.jsonPrimitive?.intOrNull ?: contentIndex
+        val textId = itemId?.let { "$it:text:$contentIndex" }
+        val reasoningId = itemId?.let { "$it:reasoning:$summaryIndex" }
 
         return when (chunkType) {
             "response.output_text.delta" -> {
-                normalizer.append(
-                    UIMessage.assistant(jsonObject["delta"]?.jsonPrimitive?.contentOrNull ?: ""),
-                    jsonObject["item_id"]?.jsonPrimitive?.contentOrNull,
+                streamState.textDelta(
+                    textId ?: error("item_id not found"),
+                    jsonObject["delta"]?.jsonPrimitive?.contentOrNull ?: "",
                 )
             }
 
             "response.reasoning_summary_text.delta", "response.reasoning_text.delta" -> {
-                normalizer.append(
-                    UIMessage(
-                        role = MessageRole.ASSISTANT,
-                        parts = listOf(
-                            UIMessagePart.Reasoning(
-                                reasoning = jsonObject["delta"]?.jsonPrimitive?.contentOrNull ?: "",
-                                createdAt = Clock.System.now(),
-                                finishedAt = null,
-                            )
-                        )
-                    ),
-                    jsonObject["item_id"]?.jsonPrimitive?.contentOrNull,
+                streamState.reasoningDelta(
+                    reasoningId ?: error("item_id not found"),
+                    jsonObject["delta"]?.jsonPrimitive?.contentOrNull ?: "",
+                    streamState.reasoningMetadata[itemId],
                 )
             }
+
+            "response.content_part.added" -> {
+                val part = jsonObject["part"]?.jsonObject ?: return emptyList()
+                when (part["type"]?.jsonPrimitive?.contentOrNull) {
+                    "output_text" -> streamState.startText(textId ?: error("item_id not found"))
+                    else -> emptyList()
+                }
+            }
+
+            "response.content_part.done", "response.output_text.done" -> {
+                streamState.endText(textId ?: error("item_id not found"))
+            }
+
+            "response.reasoning_summary_part.added" -> streamState.startReasoning(
+                reasoningId ?: error("item_id not found"),
+                streamState.reasoningMetadata[itemId],
+            )
+
+            "response.reasoning_summary_part.done",
+            "response.reasoning_summary_text.done",
+            "response.reasoning_text.done",
+                -> streamState.endReasoning(
+                    reasoningId ?: error("item_id not found"),
+                    streamState.reasoningMetadata[itemId],
+                )
 
             "response.output_item.added" -> {
                 val item = jsonObject["item"]?.jsonObject ?: error("chunk item not found")
@@ -515,48 +534,23 @@ class ResponseAPI(
                 when (type) {
                     "function_call" -> {
                         val callId = item["call_id"]?.jsonPrimitive?.contentOrNull ?: id
-                        toolCallIdsByItemId[id] = callId
-                        normalizer.append(
-                            UIMessage(
-                                role = MessageRole.ASSISTANT,
-                                parts = listOf(
-                                    UIMessagePart.Tool(
-                                        toolCallId = callId,
-                                        toolName = item["name"]?.jsonPrimitive?.content ?: "",
-                                        input = item["arguments"]?.jsonPrimitive?.content ?: "",
-                                        output = emptyList(),
-                                    )
-                                )
-                            ),
-                            id,
+                        streamState.toolCallIdsByItemId[id] = callId
+                        streamState.startTool(
+                            id = callId,
+                            name = item["name"]?.jsonPrimitive?.content ?: "",
+                            initialInput = item["arguments"]?.jsonPrimitive?.content ?: "",
                         )
                     }
 
-                    "image_generation_call" -> normalizer.append(
-                        UIMessage(
-                            role = MessageRole.ASSISTANT,
-                            parts = listOf(UIMessagePart.Image(url = "")),
-                        ),
-                        id,
-                    )
+                    "image_generation_call" -> streamState.startImage(id)
 
-                    "reasoning" -> normalizer.append(
-                        UIMessage(
-                            role = MessageRole.ASSISTANT,
-                            parts = listOf(
-                                UIMessagePart.Reasoning(
-                                    reasoning = "",
-                                    createdAt = Clock.System.now(),
-                                    finishedAt = null,
-                                    metadata = OpenAIReasoningMetadata(
-                                        reasoningId = id,
-                                        encryptedContent = item["encrypted_content"]?.jsonPrimitive?.content,
-                                    ).toMetadata(),
-                                )
-                            )
-                        ),
-                        id,
-                    )
+                    "reasoning" -> {
+                        streamState.reasoningMetadata[id] = OpenAIReasoningMetadata(
+                            reasoningId = id,
+                            encryptedContent = item["encrypted_content"]?.jsonPrimitive?.contentOrNull,
+                        ).toMetadata()
+                        emptyList()
+                    }
 
                     else -> emptyList()
                 }
@@ -572,81 +566,54 @@ class ResponseAPI(
                             reasoningId = id,
                             encryptedContent = item["encrypted_content"]?.jsonPrimitive?.content,
                         ).toMetadata()
-                        normalizer.append(
-                            UIMessage(
-                                role = MessageRole.ASSISTANT,
-                                parts = listOf(
-                                    UIMessagePart.Reasoning(
-                                        reasoning = "",
-                                        createdAt = Clock.System.now(),
-                                        finishedAt = null,
-                                        metadata = metadata,
-                                    )
-                                )
-                            ),
-                            id,
-                        ) + normalizer.closeReasoning(metadata)
+                        streamState.reasoningMetadata[id] = metadata
+                        streamState.endReasoningItem(id, metadata)
                     }
 
-                    "image_generation_call" -> normalizer.append(
-                        UIMessage(
-                            role = MessageRole.ASSISTANT,
-                            parts = listOf(
-                                UIMessagePart.Image(
-                                    url = item["result"]?.jsonPrimitive?.content ?: error("result not found")
-                                )
-                            )
-                        ),
-                        id,
-                    ) + normalizer.closeImage()
+                    "image_generation_call" -> buildList {
+                        addAll(streamState.startImage(id))
+                        item["result"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotEmpty() }?.let {
+                            add(StreamChunk.ImageSnapshot(id, it))
+                        }
+                        addAll(streamState.endImage(id))
+                    }
 
-                    "function_call" -> normalizer.closeTool(toolCallIdsByItemId.remove(id) ?: id)
+                    "function_call" -> streamState.endTool(streamState.toolCallIdsByItemId.remove(id) ?: id)
                     else -> emptyList()
                 }
             }
 
             "response.function_call_arguments.delta" -> {
-                val itemId = jsonObject["item_id"]?.jsonPrimitive?.content ?: error("item_id not found")
-                val toolCallId = toolCallIdsByItemId[itemId] ?: itemId
-                normalizer.append(
-                    UIMessage(
-                        role = MessageRole.ASSISTANT,
-                        parts = listOf(
-                            UIMessagePart.Tool(
-                                toolCallId = toolCallId,
-                                toolName = "",
-                                input = jsonObject["delta"]?.jsonPrimitive?.content ?: "",
-                                output = emptyList(),
-                            )
-                        )
-                    ),
+                val requiredItemId = itemId ?: error("item_id not found")
+                val toolCallId = streamState.toolCallIdsByItemId[requiredItemId] ?: requiredItemId
+                streamState.toolDelta(
                     toolCallId,
+                    jsonObject["delta"]?.jsonPrimitive?.content ?: "",
                 )
             }
 
             "response.function_call_arguments.done" -> {
-                val itemId = jsonObject["item_id"]?.jsonPrimitive?.content ?: error("item_id not found")
-                val toolCallId = toolCallIdsByItemId[itemId] ?: itemId
+                val requiredItemId = itemId ?: error("item_id not found")
+                val toolCallId = streamState.toolCallIdsByItemId[requiredItemId] ?: requiredItemId
                 buildList {
-                    if (!normalizer.hasToolInput(toolCallId)) {
-                        addAll(
-                            normalizer.append(
-                                UIMessage(
-                                    role = MessageRole.ASSISTANT,
-                                    parts = listOf(
-                                        UIMessagePart.Tool(
-                                            toolCallId = toolCallId,
-                                            toolName = "",
-                                            input = jsonObject["arguments"]?.jsonPrimitive?.contentOrNull ?: "",
-                                            output = emptyList(),
-                                        )
-                                    )
-                                ),
-                                itemId,
-                            )
-                        )
+                    if (toolCallId !in streamState.toolIdsWithInput) {
+                        addAll(streamState.toolDelta(
+                            toolCallId,
+                            jsonObject["arguments"]?.jsonPrimitive?.contentOrNull ?: "",
+                        ))
                     }
-                    addAll(normalizer.closeTool(toolCallId))
+                    addAll(streamState.endTool(toolCallId))
+                }
+            }
+
+            "response.image_generation_call.partial_image" -> {
+                val requiredItemId = itemId ?: error("item_id not found")
+                buildList {
+                    addAll(streamState.startImage(requiredItemId))
+                    add(StreamChunk.ImageSnapshot(
+                        requiredItemId,
+                        jsonObject["partial_image_b64"]?.jsonPrimitive?.contentOrNull ?: "",
+                    ))
                 }
             }
 
@@ -656,17 +623,79 @@ class ResponseAPI(
                     parseTokenUsage(response?.get("usage")?.jsonObject)?.let {
                         add(StreamChunk.Usage(it))
                     }
-                    addAll(
-                        normalizer.finish(
-                            finishReason = response?.get("status")?.jsonPrimitive?.contentOrNull,
-                            responseId = response?.get("id")?.jsonPrimitive?.contentOrNull,
-                            model = response?.get("model")?.jsonPrimitive?.contentOrNull,
-                        )
-                    )
+                    addAll(streamState.finish(
+                        finishReason = response?.get("status")?.jsonPrimitive?.contentOrNull,
+                        responseId = response?.get("id")?.jsonPrimitive?.contentOrNull,
+                        model = response?.get("model")?.jsonPrimitive?.contentOrNull,
+                    ))
                 }
             }
 
             else -> emptyList()
+        }
+    }
+
+    private class ResponseStreamState {
+        val toolCallIdsByItemId = mutableMapOf<String, String>()
+        val toolIdsWithInput = mutableSetOf<String>()
+        val reasoningMetadata = mutableMapOf<String, JsonObject>()
+        private val openTextIds = linkedSetOf<String>()
+        private val openReasoningIds = linkedSetOf<String>()
+        private val openImageIds = linkedSetOf<String>()
+        private val openToolIds = linkedSetOf<String>()
+        private var finished = false
+
+        fun startText(id: String) = if (openTextIds.add(id)) listOf(StreamChunk.TextStart(id)) else emptyList()
+        fun textDelta(id: String, text: String) = startText(id) + StreamChunk.TextDelta(id, text)
+        fun endText(id: String) = if (openTextIds.remove(id)) listOf(StreamChunk.TextEnd(id)) else emptyList()
+
+        fun startReasoning(id: String, metadata: JsonObject?) =
+            if (openReasoningIds.add(id)) listOf(StreamChunk.ReasoningStart(id, metadata)) else emptyList()
+
+        fun reasoningDelta(id: String, text: String, metadata: JsonObject?) =
+            startReasoning(id, metadata) + StreamChunk.ReasoningDelta(id, text, metadata)
+
+        fun endReasoning(id: String, metadata: JsonObject?) =
+            if (openReasoningIds.remove(id)) listOf(StreamChunk.ReasoningEnd(id, metadata)) else emptyList()
+
+        fun endReasoningItem(itemId: String, metadata: JsonObject?): List<StreamChunk> =
+            openReasoningIds.filter { it.startsWith("$itemId:reasoning:") }.flatMap { endReasoning(it, metadata) }
+
+        fun startImage(id: String) = if (openImageIds.add(id)) listOf(StreamChunk.ImageStart(id)) else emptyList()
+        fun endImage(id: String) = if (openImageIds.remove(id)) listOf(StreamChunk.ImageEnd(id)) else emptyList()
+
+        fun startTool(id: String, name: String, initialInput: String): List<StreamChunk> = buildList {
+            if (openToolIds.add(id)) add(StreamChunk.ToolCallStart(id, name))
+            if (initialInput.isNotEmpty()) addAll(toolDelta(id, initialInput))
+        }
+
+        fun toolDelta(id: String, input: String): List<StreamChunk> = buildList {
+            if (openToolIds.add(id)) add(StreamChunk.ToolCallStart(id))
+            if (input.isNotEmpty()) {
+                toolIdsWithInput += id
+                add(StreamChunk.ToolCallDelta(id, inputDelta = input))
+            }
+        }
+
+        fun endTool(id: String) = if (openToolIds.remove(id)) {
+            toolIdsWithInput.remove(id)
+            listOf(StreamChunk.ToolCallEnd(id))
+        } else emptyList()
+
+        fun finish(
+            finishReason: String? = null,
+            responseId: String? = null,
+            model: String? = null,
+        ): List<StreamChunk> {
+            if (finished) return emptyList()
+            finished = true
+            return buildList {
+                openTextIds.toList().forEach { addAll(endText(it)) }
+                openReasoningIds.toList().forEach { addAll(endReasoning(it, reasoningMetadata[it.substringBefore(':')])) }
+                openImageIds.toList().forEach { addAll(endImage(it)) }
+                openToolIds.toList().forEach { addAll(endTool(it)) }
+                add(StreamChunk.Finish(finishReason, responseId, model))
+            }
         }
     }
 
