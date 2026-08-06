@@ -5,7 +5,7 @@
             "type": "reasoning",
             "text": "The user wants me to research Kotlin, Ktor, and Compose Multiplatform independently. I should search for their latest stable releases, including release dates and official source URLs. Let me do multiple searches in parallel.",
             "metadata": {
-                "hasSignature": true
+                "signature": "e4f274b2-dde6-4538-b702-cad2e8dd690e"
             }
         },
         {

@@ -17,5 +17,7 @@ UPDATE_STREAM_TRACE_SNAPSHOTS=true ../gradlew testDebugUnitTest \
   --tests me.rerere.ai.provider.stream.StreamTraceReplayTest
 ```
 
-快照会保留工具调用 ID，并将签名、加密思考等不稳定元数据记录为存在性标记；思考文本、
-工具名称与参数、token usage 等内容也会完整保留。
+快照会保留工具调用 ID、完整 metadata、思考文本、工具名称与参数及 token usage。图片数据保留在
+`events.jsonl`，快照只记录 MIME 类型、解码后的字节数和 SHA-256，避免重复存储大段 Base64。
+Gemini 图像轨迹还会逐字比较 Provider 原始签名与解码后 metadata，验证签名在流式转换过程中
+未被修改。

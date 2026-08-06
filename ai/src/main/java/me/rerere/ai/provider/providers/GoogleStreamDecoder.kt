@@ -94,7 +94,7 @@ internal class GoogleStreamDecoder(
                 UIMessagePart.Reasoning("[Draft Image]\n", Clock.System.now(), null)
             } else {
                 UIMessagePart.Image(
-                    url = inlineData["data"]?.jsonPrimitive?.contentOrNull ?: "",
+                    url = "data:$mimeType;base64,${inlineData["data"]?.jsonPrimitive?.contentOrNull ?: ""}",
                     metadata = GoogleThoughtMetadata(
                         thoughtSignature = part["thoughtSignature"]?.jsonPrimitive?.contentOrNull,
                     ).toMetadata(),
@@ -165,7 +165,12 @@ internal class GoogleStreamDecoder(
                         addAll(closeText()); addAll(closeReasoning()); addAll(closeTools())
                         if (imageCount > 1 && emittedImages > 0) addAll(closeImage())
                         val id = imageId ?: nextId(responseId, "image").also {
-                            imageId = it; add(StreamChunk.ImageStart(it, metadata = part.metadata))
+                            imageId = it
+                            add(StreamChunk.ImageStart(
+                                id = it,
+                                mimeType = part.url.substringAfter("data:").substringBefore(";base64,"),
+                                metadata = part.metadata,
+                            ))
                         }
                         add(StreamChunk.ImageDelta(id, part.url.substringAfter(";base64,", part.url), part.metadata))
                         emittedImages++

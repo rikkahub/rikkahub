@@ -149,3 +149,19 @@ traces:
           threshold: OFF
         - category: HARM_CATEGORY_CIVIC_INTEGRITY
           threshold: OFF
+  # Gemini 官方：原生图像生成 SSE 协议。
+  - name: gemini-image
+    provider: google
+    baseUrl: https://generativelanguage.googleapis.com/v1
+    apiKeyEnv: GEMINI_API_KEY
+    model: gemini-3.1-flash-image
+    body:
+      generationConfig:
+        responseModalities: [TEXT, IMAGE]
+        thinkingConfig:
+          includeThoughts: true
+          thinkingLevel: high
+      contents:
+        - role: user
+          parts:
+            - text: "Create a picture of a nano banana dish in a fancy restaurant with a Gemini theme"

@@ -5,7 +5,7 @@
             "type": "reasoning",
             "text": "The user wants me to research Kotlin, Ktor, and Compose Multiplatform independently, and compare their latest stable releases including release dates and official source URLs. Let me search for each of these.\n\nLet me do searches for all three in parallel.",
             "metadata": {
-                "hasReasoningId": true
+                "reasoning_id": "e88be50f-4f79-49c8-94ad-85ffa0a21644"
             }
         },
         {
