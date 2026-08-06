@@ -39,11 +39,13 @@ class ChatCompletionsAPIMessageTest {
     // Helper to invoke private buildMessages method via reflection
     private fun invokeBuildMessages(
         messages: List<UIMessage>,
-        includeHistoryReasoning: Boolean = true
+        includeHistoryReasoning: Boolean = true,
+        includeOpenRouterReasoningDetails: Boolean = false,
     ): JsonArray {
         val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
             "buildMessages",
             List::class.java,
+            Boolean::class.javaPrimitiveType,
             Boolean::class.javaPrimitiveType,
             List::class.java
         )
@@ -52,6 +54,7 @@ class ChatCompletionsAPIMessageTest {
             api,
             messages,
             includeHistoryReasoning,
+            includeOpenRouterReasoningDetails,
             listOf(Modality.TEXT, Modality.IMAGE)
         ) as JsonArray
     }
@@ -411,10 +414,39 @@ class ChatCompletionsAPIMessageTest {
             ),
         )
 
-        val assistant = invokeBuildMessages(messages)[1].jsonObject
+        val assistant = invokeBuildMessages(
+            messages,
+            includeOpenRouterReasoningDetails = true,
+        )[1].jsonObject
 
         assertEquals(reasoningDetails, assistant["reasoning_details"])
         assertFalse(assistant.containsKey("reasoning_content"))
+    }
+
+    @Test
+    fun `assistant should not send OpenRouter reasoning details to other hosts`() {
+        val reasoningDetails = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "reasoning.text")
+                put("text", "thinking")
+                put("signature", "signature")
+            })
+        }
+        val messages = listOf(
+            UIMessage.user("Question"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.Reasoning(
+                    reasoning = "thinking",
+                    metadata = OpenRouterReasoningMetadata(reasoningDetails).toMetadata(),
+                )),
+            ),
+        )
+
+        val assistant = invokeBuildMessages(messages)[1].jsonObject
+
+        assertFalse(assistant.containsKey("reasoning_details"))
+        assertEquals("thinking", assistant["reasoning_content"]?.jsonPrimitive?.content)
     }
 
     // ==================== Helper Functions ====================

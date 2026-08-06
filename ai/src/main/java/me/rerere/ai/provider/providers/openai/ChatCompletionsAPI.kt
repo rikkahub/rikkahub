@@ -223,6 +223,7 @@ class ChatCompletionsAPI(
         stream: Boolean = false,
     ): JsonObject {
         val host = providerSetting.baseUrl.toHttpUrl().host
+        val isOpenRouter = host == "openrouter.ai"
         return buildJsonObject {
             put("model", params.model.modelId)
             put(
@@ -230,6 +231,7 @@ class ChatCompletionsAPI(
                 buildMessages(
                     messages = messages,
                     includeHistoryReasoning = providerSetting.includeHistoryReasoning,
+                    includeOpenRouterReasoningDetails = isOpenRouter,
                     supportInputModalities = params.model.inputModalities,
                 )
             )
@@ -250,7 +252,7 @@ class ChatCompletionsAPI(
             }
 
             // open router适配
-            if(host == "openrouter.ai") {
+            if(isOpenRouter) {
                 if(params.model.outputModalities.contains(Modality.IMAGE)) {
                     put("modalities", buildJsonArray {
                         add("image")
@@ -430,6 +432,7 @@ class ChatCompletionsAPI(
     private fun buildMessages(
         messages: List<UIMessage>,
         includeHistoryReasoning: Boolean = true,
+        includeOpenRouterReasoningDetails: Boolean = false,
         supportInputModalities: List<Modality> = listOf(Modality.TEXT, Modality.IMAGE),
     ) = buildJsonArray {
         val filteredMessages = messages.filter { it.isValidToUpload() }
@@ -439,6 +442,7 @@ class ChatCompletionsAPI(
                 addAssistantMessages(
                     message = message,
                     includeReasoning = includeHistoryReasoning,
+                    includeOpenRouterReasoningDetails = includeOpenRouterReasoningDetails,
                     supportInputModalities = supportInputModalities,
                 )
             } else {
@@ -450,6 +454,7 @@ class ChatCompletionsAPI(
     private fun JsonArrayBuilder.addAssistantMessages(
         message: UIMessage,
         includeReasoning: Boolean,
+        includeOpenRouterReasoningDetails: Boolean,
         supportInputModalities: List<Modality>,
     ) {
         val groups = groupPartsByToolBoundary(message.parts)
@@ -475,7 +480,8 @@ class ChatCompletionsAPI(
                     buildAssistantMessageJson(
                         contentParts = contentBuffer,
                         tools = group.tools,
-                        reasoningPart = reasoningPart
+                        reasoningPart = reasoningPart,
+                        includeOpenRouterReasoningDetails = includeOpenRouterReasoningDetails,
                     )?.let { assistantMessage ->
                         add(assistantMessage)
                     }
@@ -500,7 +506,8 @@ class ChatCompletionsAPI(
             buildAssistantMessageJson(
                 contentParts = contentBuffer,
                 tools = emptyList(),
-                reasoningPart = reasoningPart
+                reasoningPart = reasoningPart,
+                includeOpenRouterReasoningDetails = includeOpenRouterReasoningDetails,
             )?.let { assistantMessage ->
                 add(assistantMessage)
             }
@@ -510,7 +517,8 @@ class ChatCompletionsAPI(
     private fun buildAssistantMessageJson(
         contentParts: List<UIMessagePart>,
         tools: List<UIMessagePart.Tool>,
-        reasoningPart: UIMessagePart.Reasoning?
+        reasoningPart: UIMessagePart.Reasoning?,
+        includeOpenRouterReasoningDetails: Boolean,
     ): JsonObject? {
         val hasUsableContent = contentParts.any { part ->
             when (part) {
@@ -519,7 +527,11 @@ class ChatCompletionsAPI(
                 else -> false
             }
         }
-        val reasoningDetails = reasoningPart?.metadataAs<OpenRouterReasoningMetadata>()?.reasoningDetails
+        val reasoningDetails = if (includeOpenRouterReasoningDetails) {
+            reasoningPart?.metadataAs<OpenRouterReasoningMetadata>()?.reasoningDetails
+        } else {
+            null
+        }
         val hasReasoning = !reasoningPart?.reasoning.isNullOrBlank() || !reasoningDetails.isNullOrEmpty()
         if (!hasUsableContent && !hasReasoning && tools.isEmpty()) {
             return null
@@ -533,7 +545,7 @@ class ChatCompletionsAPI(
                 if (!reasoningDetails.isNullOrEmpty()) {
                     put("reasoning_details", reasoningDetails)
                 } else {
-                    put("reasoning_content", reasoningPart.reasoning)
+                    put("reasoning_content", reasoningPart?.reasoning.orEmpty())
                 }
             }
 
