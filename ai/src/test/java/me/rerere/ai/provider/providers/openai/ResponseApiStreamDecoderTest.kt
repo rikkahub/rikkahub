@@ -2,12 +2,14 @@ package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.ui.OpenAIReasoningMetadata
+import me.rerere.ai.ui.ReasoningType
 import me.rerere.ai.ui.ServerToolMetadata
 import me.rerere.ai.ui.ServerToolStatus
 import me.rerere.ai.ui.StreamChunk
@@ -86,6 +88,50 @@ class ResponseApiStreamDecoderTest {
             "encrypted",
             reasoningParts.single().metadataAs<OpenAIReasoningMetadata>()?.encryptedContent,
         )
+        assertEquals(ReasoningType.SUMMARY_TEXT, reasoningParts.single().reasoningType)
+    }
+
+    @Test
+    fun `raw reasoning and summary with the same index should remain distinct`() {
+        val decoder = ResponseApiStreamDecoder()
+        val chunks = buildList {
+            addAll(decoder.decode(reasoningItemEvent("response.output_item.added")))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.reasoning_text.delta")
+                put("item_id", "rs_test")
+                put("content_index", 0)
+                put("delta", "raw")
+            }))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.reasoning_summary_text.delta")
+                put("item_id", "rs_test")
+                put("summary_index", 0)
+                put("delta", "summary")
+            }))
+            addAll(decoder.decode(reasoningItemEvent("response.output_item.done", "encrypted")))
+        }
+
+        val handler = StreamChunkHandler(Model(modelId = "test-model"))
+        val messages = chunks.fold(listOf(UIMessage.user("hello"))) { messages, chunk ->
+            handler.handle(messages, chunk)
+        }
+        val reasoningParts = messages.last().parts.filterIsInstance<UIMessagePart.Reasoning>()
+
+        assertEquals(2, reasoningParts.size)
+        assertEquals("raw", reasoningParts.single { it.reasoningType == ReasoningType.REASONING_TEXT }.reasoning)
+        assertEquals("summary", reasoningParts.single { it.reasoningType == ReasoningType.SUMMARY_TEXT }.reasoning)
+
+        val reasoningItem = api.buildMessages(messages).last().jsonObject
+        assertEquals(
+            "summary",
+            reasoningItem["summary"]?.jsonArray?.single()?.jsonObject
+                ?.get("text")?.jsonPrimitive?.content,
+        )
+        assertEquals(
+            "raw",
+            reasoningItem["content"]?.jsonArray?.single()?.jsonObject
+                ?.get("text")?.jsonPrimitive?.content,
+        )
     }
 
     @Test
@@ -139,6 +185,43 @@ class ResponseApiStreamDecoderTest {
         assertEquals(ServerToolStatus.COMPLETED, tool.status)
         assertEquals(null, tool.output)
         assertEquals("Kotlin", tool.input?.jsonObject?.get("query")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `non streaming response should distinguish raw reasoning and summary`() {
+        val result = api.parseResponseOutput(buildJsonObject {
+            put("id", "resp_1")
+            put("model", "test-model")
+            put("status", "completed")
+            put("output", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", "reasoning")
+                    put("id", "rs_test")
+                    put("encrypted_content", "encrypted")
+                    put("summary", buildJsonArray {
+                        add(buildJsonObject {
+                            put("type", "summary_text")
+                            put("text", "summary")
+                        })
+                    })
+                    put("content", buildJsonArray {
+                        add(buildJsonObject {
+                            put("type", "reasoning_text")
+                            put("text", "raw")
+                        })
+                    })
+                })
+            })
+        })
+
+        val reasoningParts = result.message.parts.filterIsInstance<UIMessagePart.Reasoning>()
+        assertEquals(2, reasoningParts.size)
+        assertEquals("raw", reasoningParts.single { it.reasoningType == ReasoningType.REASONING_TEXT }.reasoning)
+        assertEquals("summary", reasoningParts.single { it.reasoningType == ReasoningType.SUMMARY_TEXT }.reasoning)
+        reasoningParts.forEach {
+            assertEquals("rs_test", it.metadataAs<OpenAIReasoningMetadata>()?.reasoningId)
+            assertEquals("encrypted", it.metadataAs<OpenAIReasoningMetadata>()?.encryptedContent)
+        }
     }
 
     private fun webSearchItem(status: String) = buildJsonObject {

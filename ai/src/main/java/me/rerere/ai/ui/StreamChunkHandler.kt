@@ -109,6 +109,7 @@ class StreamChunkHandler(private val model: Model? = null) {
                     createdAt = Clock.System.now(),
                     finishedAt = null,
                     metadata = chunk.metadata,
+                    reasoningType = chunk.reasoningType,
                 )).also { reasoningPartIndexes[chunk.id] = parts.size }
             }
 
@@ -120,6 +121,7 @@ class StreamChunkHandler(private val model: Model? = null) {
                         createdAt = Clock.System.now(),
                         finishedAt = null,
                         metadata = chunk.metadata,
+                        reasoningType = chunk.reasoningType,
                     )).also { reasoningPartIndexes[chunk.id] = parts.size }
                 } else {
                     copy(parts = parts.toMutableList().apply {
@@ -127,6 +129,7 @@ class StreamChunkHandler(private val model: Model? = null) {
                         set(index, reasoning.copy(
                             reasoning = reasoning.reasoning + chunk.text,
                             metadata = chunk.metadata ?: reasoning.metadata,
+                            reasoningType = chunk.reasoningType,
                         ))
                     })
                 }
@@ -369,12 +372,15 @@ private fun UIMessage.appendMessage(delta: UIMessage): UIMessage {
                     acc
                 } else {
                     val lastPart = acc.lastOrNull()
-                    if (lastPart is UIMessagePart.Reasoning) {
+                    if (lastPart is UIMessagePart.Reasoning &&
+                        lastPart.reasoningType == deltaPart.reasoningType
+                    ) {
                         acc.dropLast(1) + UIMessagePart.Reasoning(
                             reasoning = lastPart.reasoning + deltaPart.reasoning,
                             createdAt = lastPart.createdAt,
                             finishedAt = null,
                             metadata = deltaPart.metadata ?: lastPart.metadata,
+                            reasoningType = lastPart.reasoningType,
                         )
                     } else {
                         acc + deltaPart

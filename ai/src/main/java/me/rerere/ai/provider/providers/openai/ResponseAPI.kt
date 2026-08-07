@@ -37,6 +37,7 @@ import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.OpenAIReasoningMetadata
+import me.rerere.ai.ui.ReasoningType
 import me.rerere.ai.ui.ServerToolMetadata
 import me.rerere.ai.ui.ServerToolProtocol
 import me.rerere.ai.ui.ServerToolStatus
@@ -320,27 +321,55 @@ class ResponseAPI(
         for (group in groups) {
             when (group) {
                 is PartGroup.Content -> {
+                    val emittedReasoningIds = mutableSetOf<String>()
                     group.parts.forEach { part ->
                         when (part) {
                             is UIMessagePart.Reasoning -> {
+                                val reasoningMetadata = part.metadataAs<OpenAIReasoningMetadata>()
+                                val reasoningId = reasoningMetadata?.reasoningId
+                                if (reasoningId != null && !emittedReasoningIds.add(reasoningId)) {
+                                    return@forEach
+                                }
                                 // 先输出累积的文本/图片内容
                                 if (contentBuffer.isNotEmpty()) {
                                     addContentItem(MessageRole.ASSISTANT, contentBuffer)
                                     contentBuffer.clear()
                                 }
                                 // 输出 reasoning item
-                                val reasoningMetadata = part.metadataAs<OpenAIReasoningMetadata>()
+                                val reasoningParts = if (reasoningId == null) {
+                                    listOf(part)
+                                } else {
+                                    group.parts.filterIsInstance<UIMessagePart.Reasoning>().filter {
+                                        it.metadataAs<OpenAIReasoningMetadata>()?.reasoningId == reasoningId
+                                    }
+                                }
                                 add(buildJsonObject {
                                     put("type", "reasoning")
-                                    reasoningMetadata?.reasoningId?.let {
-                                        put("id", it)
-                                    }
+                                    reasoningId?.let { put("id", it) }
                                     put("summary", buildJsonArray {
-                                        add(buildJsonObject {
-                                            put("type", "summary_text")
-                                            put("text", part.reasoning)
-                                        })
+                                        reasoningParts
+                                            .filter { it.reasoningType == ReasoningType.SUMMARY_TEXT }
+                                            .filter { it.reasoning.isNotEmpty() }
+                                            .forEach {
+                                                add(buildJsonObject {
+                                                    put("type", "summary_text")
+                                                    put("text", it.reasoning)
+                                                })
+                                            }
                                     })
+                                    val content = reasoningParts
+                                        .filter { it.reasoningType == ReasoningType.REASONING_TEXT }
+                                        .filter { it.reasoning.isNotEmpty() }
+                                    if (content.isNotEmpty()) {
+                                        put("content", buildJsonArray {
+                                            content.forEach {
+                                                add(buildJsonObject {
+                                                    put("type", "reasoning_text")
+                                                    put("text", it.reasoning)
+                                                })
+                                            }
+                                        })
+                                    }
                                     reasoningMetadata?.encryptedContent?.let {
                                         put("encrypted_content", it)
                                     }
@@ -514,8 +543,11 @@ class ResponseAPI(
             val type = output["type"]?.jsonPrimitive?.content ?: error("output type not found")
             when (type) {
                 "reasoning" -> {
-                    val summary = output["summary"]?.jsonArray ?: error("summary not found")
-                    summary.map { it.jsonObject }.forEach { part ->
+                    val reasoningMetadata = OpenAIReasoningMetadata(
+                        reasoningId = output["id"]?.jsonPrimitive?.contentOrNull,
+                        encryptedContent = output["encrypted_content"]?.jsonPrimitive?.contentOrNull,
+                    ).toMetadata()
+                    output["summary"]?.jsonArray.orEmpty().map { it.jsonObject }.forEach { part ->
                         val partType = part["type"]?.jsonPrimitive?.content ?: error("part type not found")
                         when (partType) {
                             "summary_text" -> {
@@ -524,10 +556,25 @@ class ResponseAPI(
                                     UIMessagePart.Reasoning(
                                         reasoning = text,
                                         createdAt = Clock.System.now(),
-                                        finishedAt = Clock.System.now()
+                                        finishedAt = Clock.System.now(),
+                                        metadata = reasoningMetadata,
+                                        reasoningType = ReasoningType.SUMMARY_TEXT,
                                     )
                                 )
                             }
+                        }
+                    }
+                    output["content"]?.jsonArray.orEmpty().map { it.jsonObject }.forEach { part ->
+                        if (part["type"]?.jsonPrimitive?.contentOrNull == "reasoning_text") {
+                            parts.add(
+                                UIMessagePart.Reasoning(
+                                    reasoning = part["text"]?.jsonPrimitive?.content ?: error("text not found"),
+                                    createdAt = Clock.System.now(),
+                                    finishedAt = Clock.System.now(),
+                                    metadata = reasoningMetadata,
+                                    reasoningType = ReasoningType.REASONING_TEXT,
+                                )
+                            )
                         }
                     }
                 }

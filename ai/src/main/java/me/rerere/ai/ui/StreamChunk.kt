@@ -31,6 +31,7 @@ sealed class StreamChunk {
     data class ReasoningStart(
         val id: String,
         val metadata: JsonObject? = null,
+        val reasoningType: ReasoningType = ReasoningType.REASONING_TEXT,
     ) : StreamChunk()
 
     @Serializable
@@ -39,6 +40,7 @@ sealed class StreamChunk {
         val id: String,
         val text: String,
         val metadata: JsonObject? = null,
+        val reasoningType: ReasoningType = ReasoningType.REASONING_TEXT,
     ) : StreamChunk()
 
     @Serializable

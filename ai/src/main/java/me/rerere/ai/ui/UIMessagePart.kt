@@ -59,6 +59,16 @@ enum class ServerToolStatus {
     FAILED,
 }
 
+/** The kind of text carried by a reasoning part. */
+@Serializable
+enum class ReasoningType {
+    @SerialName("reasoning_text")
+    REASONING_TEXT,
+
+    @SerialName("summary_text")
+    SUMMARY_TEXT,
+}
+
 @Serializable
 sealed class UIMessagePart {
     abstract val metadata: JsonObject?
@@ -106,7 +116,8 @@ sealed class UIMessagePart {
         val reasoning: String,
         val createdAt: Instant = Clock.System.now(),
         val finishedAt: Instant? = Clock.System.now(),
-        override var metadata: JsonObject? = null
+        override var metadata: JsonObject? = null,
+        val reasoningType: ReasoningType = ReasoningType.REASONING_TEXT,
     ) : UIMessagePart()
 
     @Deprecated("Deprecated")
