@@ -349,6 +349,12 @@ private fun MessagePartsBlock(
                                     )
                                 }
                             }
+
+                            is ThinkingStep.ServerToolStep -> {
+                                key(step.tool.toolCallId.ifBlank { step.hashCode().toString() }) {
+                                    ChatMessageServerToolStep(tool = step.tool)
+                                }
+                            }
                         }
                     }
                 }
