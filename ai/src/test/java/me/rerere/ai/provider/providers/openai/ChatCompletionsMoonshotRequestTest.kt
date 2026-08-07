@@ -20,7 +20,7 @@ import org.junit.Test
  * Unit tests for Moonshot (api.moonshot.cn) thinking.keep handling:
  * - K2.6 kept-thinking via thinking.keep = "all" (#1586)
  */
-class ChatCompletionsAPIMoonshotTest {
+class ChatCompletionsMoonshotRequestTest {
 
     private lateinit var api: ChatCompletionsAPI
 

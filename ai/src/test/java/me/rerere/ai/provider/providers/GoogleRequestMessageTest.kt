@@ -23,7 +23,7 @@ import org.junit.Test
  * - parts array containing text, functionCall, functionResponse
  * - thought: true for reasoning parts
  */
-class GoogleProviderMessageTest {
+class GoogleRequestMessageTest {
 
     private lateinit var provider: GoogleProvider
 

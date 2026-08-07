@@ -20,7 +20,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-class ClaudeProviderPromptCacheTest {
+class ClaudePromptCacheRequestTest {
     private lateinit var provider: ClaudeProvider
 
     @Before

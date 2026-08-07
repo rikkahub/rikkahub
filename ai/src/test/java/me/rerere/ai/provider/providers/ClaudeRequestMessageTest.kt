@@ -24,7 +24,7 @@ import org.junit.Test
  * - tool_result blocks in a separate user message immediately following
  * - thinking blocks for reasoning
  */
-class ClaudeProviderMessageTest {
+class ClaudeRequestMessageTest {
 
     private lateinit var provider: ClaudeProvider
 

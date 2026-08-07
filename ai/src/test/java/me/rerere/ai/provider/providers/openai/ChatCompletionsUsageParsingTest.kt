@@ -13,7 +13,7 @@ import org.junit.Test
 /**
  * Unit tests for ChatCompletionsAPI token usage parsing.
  */
-class ChatCompletionsAPIUsageTest {
+class ChatCompletionsUsageParsingTest {
 
     private lateinit var api: ChatCompletionsAPI
 

@@ -1,8 +1,7 @@
-package me.rerere.ai
+package me.rerere.ai.registry
 
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.ModelAbility
-import me.rerere.ai.registry.ModelRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

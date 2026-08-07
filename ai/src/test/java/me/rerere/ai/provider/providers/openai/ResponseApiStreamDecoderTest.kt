@@ -19,7 +19,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class ResponseAPIStreamTest {
+class ResponseApiStreamDecoderTest {
     private val api = ResponseAPI(OkHttpClient())
 
     @Test

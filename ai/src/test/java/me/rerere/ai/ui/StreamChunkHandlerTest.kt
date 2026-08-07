@@ -7,7 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
 
-class StreamChunkTest {
+class StreamChunkHandlerTest {
     private val model = Model(modelId = "test-model")
 
     @Test

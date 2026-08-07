@@ -8,7 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.time.Clock
 
-class ProviderMessageUtilsTest {
+class ProviderMessageGroupingTest {
 
     // ==================== groupPartsByToolBoundary Tests ====================
 

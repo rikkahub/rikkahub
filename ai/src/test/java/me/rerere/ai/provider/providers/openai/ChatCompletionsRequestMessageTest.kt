@@ -27,7 +27,7 @@ import org.junit.Test
  * Tests the conversion from UIMessage list to OpenAI API format,
  * specifically focusing on multi-round reasoning/tool scenarios.
  */
-class ChatCompletionsAPIMessageTest {
+class ChatCompletionsRequestMessageTest {
 
     private lateinit var api: ChatCompletionsAPI
 

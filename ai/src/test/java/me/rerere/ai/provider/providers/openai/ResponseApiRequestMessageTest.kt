@@ -32,7 +32,7 @@ import org.junit.Test
  * - function_call items for tool invocations
  * - function_call_output items for tool results
  */
-class ResponseAPIMessageTest {
+class ResponseApiRequestMessageTest {
 
     private lateinit var api: ResponseAPI
 
