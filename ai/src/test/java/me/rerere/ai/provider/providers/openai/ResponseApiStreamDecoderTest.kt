@@ -1,12 +1,15 @@
 package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.ui.OpenAIReasoningMetadata
+import me.rerere.ai.ui.ServerToolMetadata
+import me.rerere.ai.ui.ServerToolStatus
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.UIMessage
@@ -83,6 +86,69 @@ class ResponseApiStreamDecoderTest {
             "encrypted",
             reasoningParts.single().metadataAs<OpenAIReasoningMetadata>()?.encryptedContent,
         )
+    }
+
+    @Test
+    fun `web search events should produce one completed server tool`() {
+        val decoder = ResponseApiStreamDecoder()
+        val chunks = buildList {
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.output_item.added")
+                put("item", webSearchItem("in_progress"))
+            }))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.web_search_call.searching")
+                put("item_id", "ws_1")
+            }))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.web_search_call.completed")
+                put("item_id", "ws_1")
+            }))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.output_item.done")
+                put("item", webSearchItem("completed"))
+            }))
+        }
+
+        val handler = StreamChunkHandler(Model(modelId = "test-model"))
+        val messages = chunks.fold(listOf(UIMessage.user("search"))) { messages, chunk ->
+            handler.handle(messages, chunk)
+        }
+        val tool = messages.last().parts.single() as UIMessagePart.ServerTool
+
+        assertEquals("ws_1", tool.toolCallId)
+        assertEquals("web_search", tool.toolName)
+        assertEquals("search", tool.input?.jsonObject?.get("type")?.jsonPrimitive?.content)
+        assertEquals(ServerToolStatus.COMPLETED, tool.status)
+        assertEquals(
+            "web_search_call",
+            tool.metadataAs<ServerToolMetadata>()?.call?.get("type")?.jsonPrimitive?.content,
+        )
+    }
+
+    @Test
+    fun `non streaming response should parse web search without synthetic output`() {
+        val result = api.parseResponseOutput(buildJsonObject {
+            put("id", "resp_1")
+            put("model", "test-model")
+            put("status", "completed")
+            put("output", buildJsonArray { add(webSearchItem("completed")) })
+        })
+
+        val tool = result.message.parts.single() as UIMessagePart.ServerTool
+        assertEquals(ServerToolStatus.COMPLETED, tool.status)
+        assertEquals(null, tool.output)
+        assertEquals("Kotlin", tool.input?.jsonObject?.get("query")?.jsonPrimitive?.content)
+    }
+
+    private fun webSearchItem(status: String) = buildJsonObject {
+        put("type", "web_search_call")
+        put("id", "ws_1")
+        put("status", status)
+        put("action", buildJsonObject {
+            put("type", "search")
+            put("query", "Kotlin")
+        })
     }
 
     private fun reasoningItemEvent(type: String, encryptedContent: String? = null) = buildJsonObject {

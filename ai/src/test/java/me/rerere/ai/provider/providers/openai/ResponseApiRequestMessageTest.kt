@@ -2,9 +2,11 @@ package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
@@ -16,6 +18,10 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.ServerToolMetadata
+import me.rerere.ai.ui.ServerToolProtocol
+import me.rerere.ai.ui.ServerToolStatus
+import me.rerere.ai.ui.toMetadata
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -396,6 +402,61 @@ class ResponseApiRequestMessageTest {
         )
 
         assertFalse("tools key should not be written", requestBody.containsKey("tools"))
+    }
+
+    @Test
+    fun `server tool should replay the original response item`() {
+        val rawItem = buildJsonObject {
+            put("type", "web_search_call")
+            put("id", "ws_1")
+            put("status", "completed")
+            put("action", buildJsonObject { put("type", "search") })
+        }
+        val messages = listOf(
+            UIMessage.user("search"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.ServerTool(
+                    toolCallId = "ws_1",
+                    toolName = "web_search",
+                    status = ServerToolStatus.COMPLETED,
+                    metadata = ServerToolMetadata(call = rawItem).toMetadata(),
+                )),
+            ),
+        )
+
+        val item = invokeBuildMessages(messages).last().jsonObject
+        assertEquals(rawItem, item)
+    }
+
+    @Test
+    fun `server tool should not replay Claude blocks into Responses input`() {
+        val claudeCall = buildJsonObject {
+            put("type", "server_tool_use")
+            put("id", "srvtoolu_1")
+            put("name", "web_search")
+            put("input", buildJsonObject {})
+        }
+        val messages = listOf(
+            UIMessage.user("search"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.ServerTool(
+                    toolCallId = "srvtoolu_1",
+                    toolName = "web_search",
+                    status = ServerToolStatus.COMPLETED,
+                    metadata = ServerToolMetadata(
+                        protocol = ServerToolProtocol.ANTHROPIC_MESSAGES,
+                        call = claudeCall,
+                    ).toMetadata(),
+                )),
+            ),
+        )
+
+        val items = invokeBuildMessages(messages)
+
+        assertEquals(1, items.size)
+        assertEquals("user", items.single().jsonObject["role"]?.jsonPrimitive?.content)
     }
 
     // ==================== Helper Functions ====================

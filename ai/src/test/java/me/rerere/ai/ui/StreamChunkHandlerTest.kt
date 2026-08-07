@@ -1,5 +1,9 @@
 package me.rerere.ai.ui
 
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Model
@@ -89,5 +93,34 @@ class StreamChunkHandlerTest {
 
         val image = messages.last().parts.single() as UIMessagePart.Image
         assertEquals("data:image/png;base64,final", image.url)
+    }
+
+    @Test
+    fun `server tool lifecycle should merge streamed input result and metadata`() {
+        var messages = listOf(UIMessage.user("search"))
+        val handler = StreamChunkHandler(model)
+
+        messages = handler.handle(messages, StreamChunk.ServerToolStart(
+            id = "srv-1",
+            toolName = "web_search",
+            metadata = buildJsonObject { put("call", "raw") },
+        ))
+        messages = handler.handle(messages, StreamChunk.ServerToolInputDelta("srv-1", "{\"query\":"))
+        messages = handler.handle(messages, StreamChunk.ServerToolInputDelta("srv-1", "\"Kotlin\"}"))
+        messages = handler.handle(messages, StreamChunk.ServerToolInputEnd("srv-1"))
+        messages = handler.handle(messages, StreamChunk.ServerToolEnd(
+            id = "srv-1",
+            output = buildJsonObject { put("result", "docs") },
+            status = ServerToolStatus.COMPLETED,
+            metadata = buildJsonObject { put("result", "raw") },
+        ))
+
+        val tool = messages.last().parts.single() as UIMessagePart.ServerTool
+        assertEquals("web_search", tool.toolName)
+        assertEquals("Kotlin", tool.input?.jsonObject?.get("query")?.jsonPrimitive?.content)
+        assertEquals("docs", tool.output?.jsonObject?.get("result")?.jsonPrimitive?.content)
+        assertEquals(ServerToolStatus.COMPLETED, tool.status)
+        assertEquals("raw", tool.metadata?.get("call")?.jsonPrimitive?.content)
+        assertEquals("raw", tool.metadata?.get("result")?.jsonPrimitive?.content)
     }
 }

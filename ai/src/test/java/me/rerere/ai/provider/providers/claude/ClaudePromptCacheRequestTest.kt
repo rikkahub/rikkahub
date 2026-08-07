@@ -1,4 +1,4 @@
-package me.rerere.ai.provider.providers
+package me.rerere.ai.provider.providers.claude
 
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
@@ -11,6 +11,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.providers.ClaudeProvider
 import me.rerere.ai.ui.UIMessage
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals

@@ -4,7 +4,9 @@ import java.io.File
 import java.security.MessageDigest
 import java.util.Base64
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -21,6 +23,8 @@ import me.rerere.ai.provider.providers.openai.ChatCompletionsStreamDecoder
 import me.rerere.ai.provider.providers.openai.ResponseApiStreamDecoder
 import me.rerere.ai.ui.GoogleThoughtMetadata
 import me.rerere.ai.ui.OpenRouterReasoningMetadata
+import me.rerere.ai.ui.ServerToolMetadata
+import me.rerere.ai.ui.ServerToolStatus
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.UIMessage
@@ -34,8 +38,12 @@ import org.junit.Test
 
 class StreamTraceReplayTest {
     @Test
-    fun `replay DeepSeek Claude protocol trace`() {
-        assertTrace("generated/claude/deepseek-anthropic-tool", ClaudeStreamDecoder())
+    fun `replay DeepSeek Claude mixed tool trace`() {
+        assertTrace(
+            "generated/claude/deepseek-anthropic-tool",
+            ClaudeStreamDecoder(),
+            ::assertClaudeMixedToolTraceSemantics,
+        )
     }
 
     @Test
@@ -82,6 +90,15 @@ class StreamTraceReplayTest {
         assertTrace(
             "generated/openai-responses/deepseek-responses-tool",
             ResponseApiStreamDecoder(),
+        )
+    }
+
+    @Test
+    fun `replay DeepSeek Responses API server tool trace`() {
+        assertTrace(
+            "generated/openai-responses/deepseek-responses-server-tool",
+            ResponseApiStreamDecoder(),
+            ::assertServerToolTraceSemantics,
         )
     }
 
@@ -175,6 +192,87 @@ class StreamTraceReplayTest {
         )
     }
 
+    private fun assertClaudeMixedToolTraceSemantics(
+        path: String,
+        message: UIMessage,
+        chunks: List<StreamChunk>,
+    ) {
+        val clientTool = message.parts.filterIsInstance<UIMessagePart.Tool>().single()
+        val serverTool = message.parts.filterIsInstance<UIMessagePart.ServerTool>().single()
+        val clientToolStartIndex = chunks.indexOfFirst { it is StreamChunk.ToolCallStart }
+        val serverToolStartIndex = chunks.indexOfFirst { it is StreamChunk.ServerToolStart }
+        val serverToolEndIndex = chunks.indexOfFirst { it is StreamChunk.ServerToolEnd }
+        val finishIndex = chunks.indexOfFirst { it is StreamChunk.Finish }
+
+        assertEquals("$path should emit exactly one Finish", 1, chunks.count { it is StreamChunk.Finish })
+        assertEquals("list_memories", clientTool.toolName)
+        assertEquals(
+            "Kotlin",
+            json.parseToJsonElement(clientTool.input).jsonObject["topic"]?.jsonPrimitive?.contentOrNull,
+        )
+        assertEquals("web_search", serverTool.toolName)
+        assertEquals(ServerToolStatus.COMPLETED, serverTool.status)
+        assertTrue("$path should preserve the server tool input", serverTool.input != null)
+        assertTrue("$path should preserve server search results", (serverTool.output as? JsonArray)?.isNotEmpty() == true)
+        assertEquals(
+            "server_tool_use",
+            serverTool.metadataAs<ServerToolMetadata>()?.call
+                ?.get("type")?.jsonPrimitive?.contentOrNull,
+        )
+        assertEquals(
+            "web_search_tool_result",
+            serverTool.metadataAs<ServerToolMetadata>()?.result
+                ?.get("type")?.jsonPrimitive?.contentOrNull,
+        )
+        assertTrue("$path should emit the client tool before the server tool", clientToolStartIndex in 0..<serverToolStartIndex)
+        assertTrue("$path should finish the server tool before the response", serverToolEndIndex in 0..<finishIndex)
+    }
+
+    private fun assertServerToolTraceSemantics(
+        path: String,
+        message: UIMessage,
+        chunks: List<StreamChunk>,
+    ) {
+        val tools = message.parts.filterIsInstance<UIMessagePart.ServerTool>()
+
+        assertEquals("$path should emit exactly one Finish", 1, chunks.count { it is StreamChunk.Finish })
+        assertTrue("$path should emit ServerToolStart", chunks.any { it is StreamChunk.ServerToolStart })
+        assertTrue("$path should emit ServerToolEnd", chunks.any { it is StreamChunk.ServerToolEnd })
+        assertTrue("$path should contain server tools", tools.isNotEmpty())
+        assertEquals("$path should only use web_search", setOf("web_search"), tools.map { it.toolName }.toSet())
+        assertEquals("$path should preserve distinct IDs", tools.size, tools.map { it.toolCallId }.toSet().size)
+        assertTrue("$path should preserve every tool input", tools.all { it.input != null })
+        assertTrue("$path should finish every server tool", tools.all(UIMessagePart.ServerTool::isFinished))
+        assertTrue(
+            "$path should contain a completed server tool",
+            tools.any { it.status == ServerToolStatus.COMPLETED },
+        )
+
+        if (path.contains("openai-responses")) {
+            assertTrue("$path should preserve OpenAI call items", tools.all {
+                it.metadataAs<ServerToolMetadata>()?.call
+                    ?.get("type")?.jsonPrimitive?.contentOrNull == "web_search_call"
+            })
+            assertTrue("$path should not synthesize OpenAI search output", tools.all { it.output == null })
+            assertTrue(
+                "$path should preserve failed OpenAI server tool status",
+                tools.any { it.status == ServerToolStatus.FAILED },
+            )
+        } else {
+            assertTrue("$path should preserve Claude call blocks", tools.all {
+                it.metadataAs<ServerToolMetadata>()?.call
+                    ?.get("type")?.jsonPrimitive?.contentOrNull == "server_tool_use"
+            })
+            assertTrue("$path should preserve Claude result blocks", tools.all {
+                it.metadataAs<ServerToolMetadata>()?.result
+                    ?.get("type")?.jsonPrimitive?.contentOrNull == "web_search_tool_result"
+            })
+            assertTrue("$path should preserve Claude search results", tools.all {
+                (it.output as? JsonArray)?.isNotEmpty() == true
+            })
+        }
+    }
+
     private fun assertImageTraceSemantics(path: String, message: UIMessage, chunks: List<StreamChunk>) {
         val reasoning = message.parts.filterIsInstance<UIMessagePart.Reasoning>()
         val images = message.parts.filterIsInstance<UIMessagePart.Image>()
@@ -266,6 +364,29 @@ class StreamTraceReplayTest {
                             put("name", part.toolName)
                             put("input", json.parseToJsonElement(part.input))
                         }
+                        is UIMessagePart.ServerTool -> {
+                            put("type", "server_tool")
+                            put("id", part.toolCallId)
+                            put("name", part.toolName)
+                            put("status", part.status.name)
+                            part.input?.let { put("input", it) }
+                            (part.output as? JsonArray)?.let { output ->
+                                put("resultCount", output.size)
+                                putJsonArray("resultTypes") {
+                                    output.mapNotNull { result ->
+                                        (result as? JsonObject)?.get("type")?.jsonPrimitive?.contentOrNull
+                                    }.distinct().forEach { add(it) }
+                                }
+                            }
+                            part.metadataAs<ServerToolMetadata>()?.let { metadata ->
+                                metadata.call?.get("type")?.jsonPrimitive?.contentOrNull?.let {
+                                    put("callType", it)
+                                }
+                                metadata.result?.get("type")?.jsonPrimitive?.contentOrNull?.let {
+                                    put("resultType", it)
+                                }
+                            }
+                        }
                         is UIMessagePart.Image -> {
                             put("type", "image")
                             val header = part.url.substringBefore(",")
@@ -276,7 +397,9 @@ class StreamTraceReplayTest {
                         }
                         else -> error("Unsupported trace part: ${part::class.simpleName}")
                     }
-                    part.metadata?.let { put("metadata", it) }
+                    if (part !is UIMessagePart.ServerTool) {
+                        part.metadata?.let { put("metadata", it) }
+                    }
                 })
             }
         })

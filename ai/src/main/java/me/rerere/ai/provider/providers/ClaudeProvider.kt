@@ -9,10 +9,12 @@ import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonArrayBuilder
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -28,6 +30,8 @@ import kotlinx.serialization.json.putJsonArray
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.core.merge
+import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
@@ -41,8 +45,14 @@ import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.ClaudeReasoningMetadata
+import me.rerere.ai.ui.ServerToolMetadata
+import me.rerere.ai.ui.ServerToolProtocol
+import me.rerere.ai.ui.ServerToolStatus
+import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.handleTextGenerationResult
 import me.rerere.ai.ui.metadataAs
+import me.rerere.ai.ui.resolvedProtocol
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
@@ -66,6 +76,99 @@ import kotlin.time.Clock
 
 private const val TAG = "ClaudeProvider"
 private const val ANTHROPIC_VERSION = "2023-06-01"
+private const val CLAUDE_PAUSE_TURN = "pause_turn"
+private const val MAX_PAUSE_TURN_CONTINUATIONS = 5
+
+internal suspend fun generateClaudeWithPauseTurn(
+    messages: List<UIMessage>,
+    model: Model,
+    maxContinuations: Int = MAX_PAUSE_TURN_CONTINUATIONS,
+    request: suspend (List<UIMessage>) -> TextGenerationResult,
+): TextGenerationResult {
+    require(maxContinuations >= 0) { "maxContinuations must be non-negative" }
+
+    var requestMessages = messages
+    var combinedMessage = UIMessage(role = MessageRole.ASSISTANT, parts = emptyList())
+    var combinedUsage: TokenUsage? = null
+
+    repeat(maxContinuations + 1) { continuationCount ->
+        val result = request(requestMessages)
+        combinedMessage = listOf(combinedMessage)
+            .handleTextGenerationResult(result, model)
+            .last()
+        combinedUsage = combinedUsage.sum(result.usage)
+
+        if (result.finishReason != CLAUDE_PAUSE_TURN || continuationCount == maxContinuations) {
+            return result.copy(
+                message = combinedMessage.copy(usage = combinedUsage),
+                usage = combinedUsage,
+            )
+        }
+
+        // pause_turn 要求原样回放当前 assistant 响应，不能额外插入 "Continue" user 消息。
+        requestMessages = requestMessages.handleTextGenerationResult(result, model)
+    }
+
+    error("unreachable")
+}
+
+internal fun streamClaudeWithPauseTurn(
+    messages: List<UIMessage>,
+    model: Model,
+    maxContinuations: Int = MAX_PAUSE_TURN_CONTINUATIONS,
+    request: (List<UIMessage>) -> Flow<StreamChunk>,
+): Flow<StreamChunk> = flow {
+    require(maxContinuations >= 0) { "maxContinuations must be non-negative" }
+
+    var requestMessages = messages
+    var completedUsage: TokenUsage? = null
+
+    repeat(maxContinuations + 1) { continuationCount ->
+        val handler = StreamChunkHandler(model)
+        var responseMessages = requestMessages
+        var passUsage: TokenUsage? = null
+        var finish: StreamChunk.Finish? = null
+
+        request(requestMessages).collect { chunk ->
+            responseMessages = handler.handle(responseMessages, chunk)
+            when (chunk) {
+                is StreamChunk.Usage -> {
+                    passUsage = passUsage.merge(chunk.usage)
+                    completedUsage.sum(passUsage)?.let { emit(StreamChunk.Usage(it)) }
+                }
+
+                is StreamChunk.Finish -> {
+                    finish = chunk
+                    if (chunk.finishReason != CLAUDE_PAUSE_TURN ||
+                        continuationCount == maxContinuations
+                    ) {
+                        emit(chunk)
+                    }
+                }
+
+                else -> emit(chunk)
+            }
+        }
+
+        if (finish?.finishReason != CLAUDE_PAUSE_TURN || continuationCount == maxContinuations) {
+            return@flow
+        }
+
+        completedUsage = completedUsage.sum(passUsage)
+        requestMessages = responseMessages
+    }
+}
+
+private fun TokenUsage?.sum(other: TokenUsage?): TokenUsage? {
+    if (this == null) return other
+    if (other == null) return this
+    return TokenUsage(
+        promptTokens = promptTokens + other.promptTokens,
+        completionTokens = completionTokens + other.completionTokens,
+        cachedTokens = cachedTokens + other.cachedTokens,
+        totalTokens = totalTokens + other.totalTokens,
+    )
+}
 
 class ClaudeProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Claude> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
@@ -112,6 +215,16 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): TextGenerationResult = withContext(Dispatchers.IO) {
+        generateClaudeWithPauseTurn(messages, params.model) { requestMessages ->
+            generateTextOnce(providerSetting, requestMessages, params)
+        }
+    }
+
+    private suspend fun generateTextOnce(
+        providerSetting: ProviderSetting.Claude,
+        messages: List<UIMessage>,
+        params: TextGenerationParams,
+    ): TextGenerationResult {
         val requestBody = buildMessageRequest(providerSetting, messages, params)
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/messages")
@@ -139,7 +252,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         val stopReason = bodyJson["stop_reason"]?.jsonPrimitive?.contentOrNull ?: "unknown"
         val usage = parseTokenUsage(bodyJson)
 
-        TextGenerationResult(
+        return TextGenerationResult(
             id = id,
             model = model,
             message = parseMessage(content),
@@ -152,6 +265,14 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         providerSetting: ProviderSetting.Claude,
         messages: List<UIMessage>,
         params: TextGenerationParams
+    ): Flow<StreamChunk> = streamClaudeWithPauseTurn(messages, params.model) { requestMessages ->
+        streamTextOnce(providerSetting, requestMessages, params)
+    }
+
+    private fun streamTextOnce(
+        providerSetting: ProviderSetting.Claude,
+        messages: List<UIMessage>,
+        params: TextGenerationParams,
     ): Flow<StreamChunk> = callbackFlow {
         val requestBody = buildMessageRequest(providerSetting, messages, params, stream = true)
         val request = Request.Builder()
@@ -307,17 +428,42 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             }
 
             // 处理工具
-            if (params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()) {
-                putJsonArray("tools") {
-                    params.tools.forEachIndexed { index, tool ->
+            val useFunctionTools =
+                params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()
+            val toolDefinitions = buildList {
+                if (useFunctionTools) {
+                    params.tools.forEach { tool ->
                         add(buildJsonObject {
                             put("name", tool.name)
                             put("description", tool.description)
                             put("input_schema", json.encodeToJsonElement(tool.parameters()))
-                            if (providerSetting.promptCaching && index == params.tools.lastIndex) {
-                                put("cache_control", cacheControlEphemeral(providerSetting.promptCacheTtl))
-                            }
                         })
+                    }
+                }
+                params.model.tools.forEach { builtInTool ->
+                    when (builtInTool) {
+                        BuiltInTools.Search -> add(buildJsonObject {
+                            put("type", "web_search_20250305")
+                            put("name", "web_search")
+                        })
+                        BuiltInTools.UrlContext,
+                        BuiltInTools.ImageGeneration,
+                            -> Unit
+                    }
+                }
+            }
+            if (toolDefinitions.isNotEmpty()) {
+                putJsonArray("tools") {
+                    toolDefinitions.forEachIndexed { index, definition ->
+                        if (providerSetting.promptCaching && index == toolDefinitions.lastIndex) {
+                            add(JsonObject(
+                                definition + mapOf(
+                                    "cache_control" to cacheControlEphemeral(providerSetting.promptCacheTtl)
+                                )
+                            ))
+                        } else {
+                            add(definition)
+                        }
                     }
                 }
             }
@@ -396,7 +542,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         for (group in groups) {
             when (group) {
                 is PartGroup.Content -> {
-                    group.parts.mapNotNull { it.toContentBlock() }.forEach { contentBuffer.add(it) }
+                    group.parts.toContentBlocks().forEach { contentBuffer.add(it) }
                 }
 
                 is PartGroup.Tools -> {
@@ -434,9 +580,77 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         add(buildJsonObject {
             put("role", message.role.name.lowercase())
             putJsonArray("content") {
-                message.parts.mapNotNull { it.toContentBlock() }.forEach { add(it) }
+                message.parts.flatMap { it.toContentBlocks() }.forEach { add(it) }
             }
         })
+    }
+
+    private fun UIMessagePart.toContentBlocks(): List<JsonObject> = when (this) {
+        is UIMessagePart.ServerTool -> serverToolContentBlocks()
+        else -> listOfNotNull(toContentBlock())
+    }
+
+    /**
+     * 解析后 server tool 的 call/result 会合并到同一个 part。回放连续 server tool 时
+     * 按原始 content block index 还原顺序；旧消息没有 index 时回退为先 calls、后 results。
+     */
+    private fun List<UIMessagePart>.toContentBlocks(): List<JsonObject> = buildList {
+        val serverTools = mutableListOf<UIMessagePart.ServerTool>()
+
+        fun flushServerTools() {
+            val calls = mutableListOf<Pair<JsonObject, Int?>>()
+            val results = mutableListOf<Pair<JsonObject, Int?>>()
+            serverTools.forEach { tool ->
+                val blocks = tool.serverToolContentBlocks()
+                val metadata = tool.metadataAs<ServerToolMetadata>()
+                blocks.firstOrNull()?.let { calls.add(it to metadata?.callIndex) }
+                blocks.getOrNull(1)?.let { results.add(it to metadata?.resultIndex) }
+            }
+            val blocks = calls + results
+            val orderedBlocks = if (blocks.all { it.second != null }) {
+                blocks.sortedBy { it.second }
+            } else {
+                blocks
+            }
+            orderedBlocks.forEach { add(it.first) }
+            serverTools.clear()
+        }
+
+        for (part in this@toContentBlocks) {
+            if (part is UIMessagePart.ServerTool) {
+                serverTools.add(part)
+            } else {
+                flushServerTools()
+                addAll(part.toContentBlocks())
+            }
+        }
+        flushServerTools()
+    }
+
+    private fun UIMessagePart.ServerTool.serverToolContentBlocks(): List<JsonObject> {
+        val metadata = metadataAs<ServerToolMetadata>()
+        val protocol = metadata?.resolvedProtocol()
+        if (protocol != null && protocol != ServerToolProtocol.ANTHROPIC_MESSAGES) return emptyList()
+
+        return buildList {
+            val rawCall = metadata?.call.takeIf { protocol == ServerToolProtocol.ANTHROPIC_MESSAGES }
+            add(rawCall?.let {
+                if (input == null) it else JsonObject(it + mapOf("input" to input))
+            } ?: buildJsonObject {
+                    put("type", "server_tool_use")
+                    put("id", toolCallId)
+                    put("name", toolName)
+                    input?.let { put("input", it) }
+                })
+            val rawResult = metadata?.result.takeIf { protocol == ServerToolProtocol.ANTHROPIC_MESSAGES }
+            if (isFinished && (output != null || rawResult != null)) {
+                add(rawResult ?: buildJsonObject {
+                    put("type", "${toolName}_tool_result")
+                    put("tool_use_id", toolCallId)
+                    output?.let { put("content", it) }
+                })
+            }
+        }
     }
 
     private fun UIMessagePart.toContentBlock(): JsonObject? = when (this) {
@@ -484,10 +698,11 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
         }
     }
 
-    private fun parseMessage(content: JsonArray): UIMessage {
+    internal fun parseMessage(content: JsonArray): UIMessage {
         val parts = mutableListOf<UIMessagePart>()
+        val serverToolIndexes = mutableMapOf<String, Int>()
 
-        content.forEach { contentBlock ->
+        content.forEachIndexed { blockIndex, contentBlock ->
             val block = contentBlock.jsonObject
             val type = block["type"]?.jsonPrimitive?.contentOrNull
 
@@ -534,7 +749,23 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                     )
                 }
 
-                "input_json_delta" -> {
+                else -> if (type.isClaudeServerToolUseType()) {
+                    val id = block["id"]?.jsonPrimitive?.contentOrNull ?: ""
+                    serverToolIndexes[id] = parts.size
+                    parts.add(
+                        UIMessagePart.ServerTool(
+                            toolCallId = id,
+                            toolName = block["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                            input = block["input"],
+                            status = ServerToolStatus.IN_PROGRESS,
+                            metadata = ServerToolMetadata(
+                                protocol = ServerToolProtocol.ANTHROPIC_MESSAGES,
+                                call = block,
+                                callIndex = blockIndex,
+                            ).toMetadata(),
+                        )
+                    )
+                } else if (type == "input_json_delta") {
                     val input = block["partial_json"]?.jsonPrimitive?.contentOrNull
                     parts.add(
                         UIMessagePart.Tool(
@@ -544,6 +775,41 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
                             output = emptyList()
                         )
                     )
+                } else if (type.isClaudeServerToolResultType()) {
+                    val id = block["tool_use_id"]?.jsonPrimitive?.contentOrNull ?: ""
+                    val output = block["content"]
+                    val status = if (output.isClaudeServerToolError()) {
+                        ServerToolStatus.FAILED
+                    } else {
+                        ServerToolStatus.COMPLETED
+                    }
+                    val index = serverToolIndexes[id]
+                    if (index == null || parts.getOrNull(index) !is UIMessagePart.ServerTool) {
+                        parts.add(UIMessagePart.ServerTool(
+                            toolCallId = id,
+                            toolName = type?.removeSuffix("_tool_result") ?: "",
+                            output = output,
+                            status = status,
+                            metadata = ServerToolMetadata(
+                                protocol = ServerToolProtocol.ANTHROPIC_MESSAGES,
+                                result = block,
+                                resultIndex = blockIndex,
+                            ).toMetadata(),
+                        ))
+                    } else {
+                        val tool = parts[index] as UIMessagePart.ServerTool
+                        parts[index] = tool.copy(
+                            output = output,
+                            status = status,
+                            metadata = ServerToolMetadata(
+                                protocol = ServerToolProtocol.ANTHROPIC_MESSAGES,
+                                call = tool.metadataAs<ServerToolMetadata>()?.call,
+                                callIndex = tool.metadataAs<ServerToolMetadata>()?.callIndex,
+                                result = block,
+                                resultIndex = blockIndex,
+                            ).toMetadata(),
+                        )
+                    }
                 }
             }
         }
@@ -573,4 +839,15 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
             cachedTokens = cachedInputTokens,
         )
     }
+}
+
+internal fun String?.isClaudeServerToolResultType(): Boolean =
+    this != null && this != "tool_result" && endsWith("_tool_result")
+
+internal fun String?.isClaudeServerToolUseType(): Boolean =
+    this == "server_tool_use" || (this != null && this != "tool_use" && endsWith("_tool_use"))
+
+internal fun JsonElement?.isClaudeServerToolError(): Boolean {
+    val content = this as? JsonObject ?: return false
+    return content["type"]?.jsonPrimitive?.contentOrNull?.endsWith("_error") == true
 }

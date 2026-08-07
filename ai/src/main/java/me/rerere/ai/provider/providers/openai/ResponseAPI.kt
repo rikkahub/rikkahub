@@ -37,9 +37,13 @@ import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.OpenAIReasoningMetadata
+import me.rerere.ai.ui.ServerToolMetadata
+import me.rerere.ai.ui.ServerToolProtocol
+import me.rerere.ai.ui.ServerToolStatus
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
+import me.rerere.ai.ui.resolvedProtocol
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
@@ -355,6 +359,14 @@ class ResponseAPI(
                                 contentBuffer.add(part)
                             }
 
+                            is UIMessagePart.ServerTool -> {
+                                if (contentBuffer.isNotEmpty()) {
+                                    addContentItem(MessageRole.ASSISTANT, contentBuffer)
+                                    contentBuffer.clear()
+                                }
+                                addServerToolItem(part)
+                            }
+
                             else -> {}
                         }
                     }
@@ -421,6 +433,30 @@ class ResponseAPI(
         }
     }
 
+    private fun JsonArrayBuilder.addServerToolItem(tool: UIMessagePart.ServerTool) {
+        val metadata = tool.metadataAs<ServerToolMetadata>()
+        val protocol = metadata?.resolvedProtocol()
+        if (protocol != null && protocol != ServerToolProtocol.OPENAI_RESPONSES) return
+
+        val rawCall = metadata?.call.takeIf { protocol == ServerToolProtocol.OPENAI_RESPONSES }
+        if (rawCall != null) {
+            add(rawCall)
+            return
+        }
+
+        add(buildJsonObject {
+            put("type", "${tool.toolName.removeSuffix("_call")}_call")
+            put("id", tool.toolCallId)
+            put("status", tool.status.toOpenAIStatus())
+            tool.input?.let { input ->
+                if (tool.toolName.removeSuffix("_call") == "web_search") put("action", input)
+                else if (input is JsonObject) input.forEach { (key, value) -> put(key, value) }
+                else put("input", input)
+            }
+            tool.output?.let { put("output", it) }
+        })
+    }
+
     private fun JsonArrayBuilder.addUserItems(message: UIMessage) {
         val contentParts = message.parts.filter { it is UIMessagePart.Text || it is UIMessagePart.Image }
         if (contentParts.isNotEmpty()) {
@@ -468,7 +504,7 @@ class ResponseAPI(
         })
     }
 
-    private fun parseResponseOutput(jsonObject: JsonObject): TextGenerationResult {
+    internal fun parseResponseOutput(jsonObject: JsonObject): TextGenerationResult {
         println(jsonObject)
         val outputs = jsonObject["output"]?.jsonArray ?: error("output not found")
         val parts = arrayListOf<UIMessagePart>()
@@ -529,6 +565,10 @@ class ResponseAPI(
                         }
                     }
                 }
+
+                else -> if (isOpenAIServerToolCall(type)) {
+                    parts.add(output.toOpenAIServerTool())
+                }
             }
         }
 
@@ -554,6 +594,46 @@ class ResponseAPI(
                 ?: 0
         )
     }
+}
+
+internal fun isOpenAIServerToolCall(type: String): Boolean =
+    type.endsWith("_call") && type !in setOf(
+        "function_call",
+        "custom_tool_call",
+        "computer_call",
+        "local_shell_call",
+        "shell_call",
+        "image_generation_call",
+    )
+
+internal fun JsonObject.toOpenAIServerTool(): UIMessagePart.ServerTool {
+    val type = get("type")?.jsonPrimitive?.contentOrNull ?: "server_tool_call"
+    val protocolFields = setOf("type", "id", "status", "result", "output")
+    val input = get("action") ?: JsonObject(filterKeys { it !in protocolFields })
+        .takeUnless { it.isEmpty() }
+    return UIMessagePart.ServerTool(
+        toolCallId = get("id")?.jsonPrimitive?.contentOrNull ?: "",
+        toolName = type.removeSuffix("_call"),
+        input = input,
+        output = get("output") ?: get("result"),
+        status = get("status")?.jsonPrimitive?.contentOrNull.toServerToolStatus(),
+        metadata = ServerToolMetadata(
+            protocol = ServerToolProtocol.OPENAI_RESPONSES,
+            call = this,
+        ).toMetadata(),
+    )
+}
+
+internal fun String?.toServerToolStatus(): ServerToolStatus = when (this) {
+    "completed" -> ServerToolStatus.COMPLETED
+    "failed", "incomplete", "cancelled" -> ServerToolStatus.FAILED
+    else -> ServerToolStatus.IN_PROGRESS
+}
+
+private fun ServerToolStatus.toOpenAIStatus(): String = when (this) {
+    ServerToolStatus.IN_PROGRESS -> "in_progress"
+    ServerToolStatus.COMPLETED -> "completed"
+    ServerToolStatus.FAILED -> "failed"
 }
 
 private fun isModelAllowTemperature(model: Model): Boolean {

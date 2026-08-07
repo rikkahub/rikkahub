@@ -80,31 +80,8 @@ traces:
         - web_search_call.action.sources
       tools:
         - type: web_search
-  # DeepSeek：Anthropic Messages 兼容协议。
+  # DeepSeek：Anthropic Messages 兼容协议，同时调用客户端与服务端工具。
   - name: deepseek-anthropic-tool
-    provider: claude
-    baseUrl: https://api.deepseek.com/anthropic
-    endpoint: /messages
-    apiKeyEnv: DEEPSEEK_API_KEY
-    model: deepseek-v4-flash
-    body:
-      max_tokens: 256
-      messages:
-        - role: user
-          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
-      tools:
-        - name: search_web
-          description: Search the web for current information and return relevant sources.
-          input_schema:
-            type: object
-            properties:
-              query:
-                type: string
-                description: A focused search query for one topic.
-            required: [query]
-            additionalProperties: false
-  # DeepSeek：Anthropic Messages 兼容协议，由服务端执行网页搜索。
-  - name: deepseek-anthropic-server-tool
     provider: claude
     baseUrl: https://api.deepseek.com/anthropic
     endpoint: /messages
@@ -114,8 +91,27 @@ traces:
       max_tokens: 4096
       messages:
         - role: user
-          content: "Use web search to find the latest stable Kotlin release. Return its version, release date, and official source URL."
+          content: >-
+            You must call both available tools in the first tool-use step, without waiting for one
+            before calling the other. Use the client-side list_memories tool to retrieve saved user
+            preferences about Kotlin, and independently use the server-side web_search tool to find
+            the latest stable Kotlin release. Do not use one tool for both tasks. After both results
+            are available, recommend whether the user should upgrade, citing the release date and
+            official source URL.
+      tool_choice:
+        type: auto
+        disable_parallel_tool_use: false
       tools:
+        - name: list_memories
+          description: List saved user memories relevant to a topic.
+          input_schema:
+            type: object
+            properties:
+              topic:
+                type: string
+                description: Topic used to filter saved memories.
+            required: [topic]
+            additionalProperties: false
         - type: web_search_20250305
           name: web_search
           max_uses: 3

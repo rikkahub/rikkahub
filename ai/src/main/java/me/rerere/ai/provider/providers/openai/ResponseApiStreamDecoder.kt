@@ -10,6 +10,7 @@ import me.rerere.ai.provider.stream.DecodeResult
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.provider.stream.StreamChunkDecoder
 import me.rerere.ai.ui.OpenAIReasoningMetadata
+import me.rerere.ai.ui.ServerToolStatus
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.json
@@ -86,7 +87,9 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
                         ).toMetadata()
                         emptyList()
                     }
-                    else -> emptyList()
+                    else -> if (isOpenAIServerToolCall(type)) {
+                        state.startServerTool(item.toOpenAIServerTool())
+                    } else emptyList()
                 }
             }
             "response.output_item.done" -> {
@@ -110,7 +113,17 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
                         addAll(state.endImage(id))
                     }
                     "function_call" -> state.endTool(state.toolCallIdsByItemId.remove(id) ?: id)
-                    else -> emptyList()
+                    else -> if (isOpenAIServerToolCall(type)) {
+                        val tool = item.toOpenAIServerTool()
+                        state.endServerTool(
+                            id = tool.toolCallId,
+                            input = tool.input,
+                            output = tool.output,
+                            status = tool.status.takeUnless { it == ServerToolStatus.IN_PROGRESS }
+                                ?: ServerToolStatus.COMPLETED,
+                            metadata = tool.metadata,
+                        )
+                    } else emptyList()
                 }
             }
             "response.function_call_arguments.delta" -> {
@@ -154,7 +167,21 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
                     ))
                 }
             }
-            else -> emptyList()
+            else -> parseServerToolStatusEvent(chunkType, itemId)
+        }
+    }
+
+    private fun parseServerToolStatusEvent(chunkType: String, itemId: String?): List<StreamChunk> {
+        val event = chunkType.removePrefix("response.")
+        val itemType = event.substringBeforeLast('.', missingDelimiterValue = "")
+        val providerStatus = event.substringAfterLast('.', missingDelimiterValue = "")
+        if (!isOpenAIServerToolCall(itemType) || itemId == null) return emptyList()
+
+        return when (providerStatus) {
+            "completed" -> state.endServerTool(itemId, status = ServerToolStatus.COMPLETED)
+            "failed", "cancelled", "incomplete" ->
+                state.endServerTool(itemId, status = ServerToolStatus.FAILED)
+            else -> state.startServerTool(itemId, itemType.removeSuffix("_call"))
         }
     }
 
@@ -177,6 +204,7 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
         private val openReasoningIds = linkedSetOf<String>()
         private val openImageIds = linkedSetOf<String>()
         private val openToolIds = linkedSetOf<String>()
+        private val openServerToolIds = linkedSetOf<String>()
         var finished = false
             private set
 
@@ -218,6 +246,31 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
             listOf(StreamChunk.ToolCallEnd(id))
         } else emptyList()
 
+        fun startServerTool(tool: me.rerere.ai.ui.UIMessagePart.ServerTool): List<StreamChunk> =
+            startServerTool(tool.toolCallId, tool.toolName, tool.input, tool.metadata)
+
+        fun startServerTool(
+            id: String,
+            toolName: String,
+            input: kotlinx.serialization.json.JsonElement? = null,
+            metadata: JsonObject? = null,
+        ): List<StreamChunk> = if (openServerToolIds.add(id)) {
+            listOf(StreamChunk.ServerToolStart(id, toolName, input, metadata))
+        } else if (input != null || metadata != null) {
+            listOf(StreamChunk.ServerToolStart(id, toolName, input, metadata))
+        } else emptyList()
+
+        fun endServerTool(
+            id: String,
+            input: kotlinx.serialization.json.JsonElement? = null,
+            output: kotlinx.serialization.json.JsonElement? = null,
+            status: ServerToolStatus,
+            metadata: JsonObject? = null,
+        ): List<StreamChunk> {
+            openServerToolIds.remove(id)
+            return listOf(StreamChunk.ServerToolEnd(id, input, output, status, metadata))
+        }
+
         fun finish(
             finishReason: String? = null,
             responseId: String? = null,
@@ -233,6 +286,7 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
                 openReasoningIds.toList().forEach { addAll(endReasoning(it, null)) }
                 openImageIds.toList().forEach { addAll(endImage(it)) }
                 openToolIds.toList().forEach { addAll(endTool(it)) }
+                openServerToolIds.clear()
                 add(StreamChunk.Finish(finishReason, responseId, model))
             }
         }

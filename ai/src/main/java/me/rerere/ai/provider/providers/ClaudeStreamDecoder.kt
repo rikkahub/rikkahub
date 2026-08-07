@@ -10,6 +10,9 @@ import me.rerere.ai.provider.stream.DecodeResult
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.provider.stream.StreamChunkDecoder
 import me.rerere.ai.ui.ClaudeReasoningMetadata
+import me.rerere.ai.ui.ServerToolMetadata
+import me.rerere.ai.ui.ServerToolProtocol
+import me.rerere.ai.ui.ServerToolStatus
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.json
@@ -47,6 +50,7 @@ internal class ClaudeStreamDecoder : StreamChunkDecoder {
             if (event.event == "content_block_start" && index != null && contentBlock != null) {
                 val kind = contentBlock["type"]?.jsonPrimitive?.contentOrNull ?: ""
                 val blockId = contentBlock["id"]?.jsonPrimitive?.contentOrNull
+                    ?: contentBlock["tool_use_id"]?.jsonPrimitive?.contentOrNull
                     ?: "${responseId ?: event.id ?: "response"}:block-$index"
                 val metadata = when (kind) {
                     "thinking" -> contentBlock["signature"]?.jsonPrimitive?.contentOrNull?.let {
@@ -71,6 +75,34 @@ internal class ClaudeStreamDecoder : StreamChunkDecoder {
                             ))
                         }
                     }
+                    else -> if (kind.isClaudeServerToolUseType()) {
+                        add(StreamChunk.ServerToolStart(
+                            id = blockId,
+                            toolName = contentBlock["name"]?.jsonPrimitive?.contentOrNull ?: "",
+                            input = contentBlock["input"],
+                            metadata = ServerToolMetadata(
+                                protocol = ServerToolProtocol.ANTHROPIC_MESSAGES,
+                                call = contentBlock,
+                                callIndex = index,
+                            ).toMetadata(),
+                        ))
+                    } else if (kind.isClaudeServerToolResultType()) {
+                        val output = contentBlock["content"]
+                        add(StreamChunk.ServerToolEnd(
+                            id = blockId,
+                            output = output,
+                            status = if (output.isClaudeServerToolError()) {
+                                ServerToolStatus.FAILED
+                            } else {
+                                ServerToolStatus.COMPLETED
+                            },
+                            metadata = ServerToolMetadata(
+                                protocol = ServerToolProtocol.ANTHROPIC_MESSAGES,
+                                result = contentBlock,
+                                resultIndex = index,
+                            ).toMetadata(),
+                        ))
+                    }
                 }
             }
 
@@ -94,10 +126,14 @@ internal class ClaudeStreamDecoder : StreamChunkDecoder {
                         blocks[index] = block.copy(metadata = metadata ?: block.metadata)
                         add(StreamChunk.ReasoningDelta(block.id, "", metadata))
                     }
-                    "input_json_delta" -> add(StreamChunk.ToolCallDelta(
-                        id = block.id,
-                        inputDelta = delta["partial_json"]?.jsonPrimitive?.contentOrNull ?: "",
-                    ))
+                    "input_json_delta" -> {
+                        val partialJson = delta["partial_json"]?.jsonPrimitive?.contentOrNull ?: ""
+                        if (block.kind.isClaudeServerToolUseType()) {
+                            add(StreamChunk.ServerToolInputDelta(block.id, partialJson))
+                        } else {
+                            add(StreamChunk.ToolCallDelta(id = block.id, inputDelta = partialJson))
+                        }
+                    }
                 }
             }
 
@@ -130,7 +166,11 @@ internal class ClaudeStreamDecoder : StreamChunkDecoder {
         "text" -> StreamChunk.TextEnd(block.id)
         "thinking", "redacted_thinking" -> StreamChunk.ReasoningEnd(block.id, block.metadata)
         "tool_use" -> StreamChunk.ToolCallEnd(block.id)
-        else -> null
+        else -> if (block.kind.isClaudeServerToolUseType()) {
+            StreamChunk.ServerToolInputEnd(block.id)
+        } else {
+            null
+        }
     }
 
     private fun parseTokenUsage(bodyJson: JsonObject): TokenUsage? {

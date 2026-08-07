@@ -2,6 +2,7 @@ package me.rerere.ai.ui
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import me.rerere.ai.core.TokenUsage
 
@@ -67,6 +68,37 @@ sealed class StreamChunk {
     @Serializable
     @SerialName("tool_call_end")
     data class ToolCallEnd(val id: String) : StreamChunk()
+
+    @Serializable
+    @SerialName("server_tool_start")
+    data class ServerToolStart(
+        val id: String,
+        val toolName: String,
+        val input: JsonElement? = null,
+        val metadata: JsonObject? = null,
+    ) : StreamChunk()
+
+    @Serializable
+    @SerialName("server_tool_input_delta")
+    data class ServerToolInputDelta(
+        val id: String,
+        val inputDelta: String,
+        val metadata: JsonObject? = null,
+    ) : StreamChunk()
+
+    @Serializable
+    @SerialName("server_tool_input_end")
+    data class ServerToolInputEnd(val id: String) : StreamChunk()
+
+    @Serializable
+    @SerialName("server_tool_end")
+    data class ServerToolEnd(
+        val id: String,
+        val input: JsonElement? = null,
+        val output: JsonElement? = null,
+        val status: ServerToolStatus,
+        val metadata: JsonObject? = null,
+    ) : StreamChunk()
 
     @Serializable
     @SerialName("image_start")

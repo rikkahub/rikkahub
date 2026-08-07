@@ -2,11 +2,14 @@ package me.rerere.ai.ui
 
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.core.merge
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.TextGenerationResult
+import me.rerere.ai.util.json
 import kotlin.time.Clock
 
 /**
@@ -29,6 +32,7 @@ import kotlin.time.Clock
  *    - `TextStart/Delta/End`：创建、追加并结束文本 part。
  *    - `ReasoningStart/Delta/End`：创建、追加并标记推理 part 的完成时间。
  *    - `ToolCallStart/Delta/End`：按调用 id 创建工具 part，并逐步拼接工具名和输入参数。
+ *    - `ServerToolStart/InputDelta/InputEnd/End`：追踪服务端工具的 JSON 输入、结果和状态。
  *    - `ImageStart/Delta/End`：创建图片 part，并逐步追加 Base64 数据。
  *    - `ImageSnapshot`：用最新的完整 Base64 快照替换同 id 图片的旧数据。
  *    - `Annotations`：追加并去重消息注解。
@@ -55,6 +59,7 @@ class StreamChunkHandler(private val model: Model? = null) {
     private val textPartIndexes = mutableMapOf<String, Int>()
     private val reasoningPartIndexes = mutableMapOf<String, Int>()
     private val imagePartIndexes = mutableMapOf<String, Int>()
+    private val serverToolInputBuffers = mutableMapOf<String, StringBuilder>()
 
     /**
      * 将一个 [chunk] 合并进消息列表末尾的助手消息，并返回新的消息列表。
@@ -161,6 +166,70 @@ class StreamChunkHandler(private val model: Model? = null) {
             })
 
             is StreamChunk.ToolCallEnd -> this
+            is StreamChunk.ServerToolStart -> {
+                val index = parts.indexOfFirst {
+                    it is UIMessagePart.ServerTool && it.toolCallId == chunk.id
+                }
+                if (index < 0) {
+                    copy(parts = parts + UIMessagePart.ServerTool(
+                        toolCallId = chunk.id,
+                        toolName = chunk.toolName,
+                        input = chunk.input,
+                        status = ServerToolStatus.IN_PROGRESS,
+                        metadata = chunk.metadata,
+                    ))
+                } else {
+                    copy(parts = parts.toMutableList().apply {
+                        val tool = get(index) as UIMessagePart.ServerTool
+                        set(index, tool.copy(
+                            toolName = chunk.toolName.ifBlank { tool.toolName },
+                            input = chunk.input ?: tool.input,
+                            metadata = mergeMetadata(tool.metadata, chunk.metadata),
+                        ))
+                    })
+                }
+            }
+
+            is StreamChunk.ServerToolInputDelta -> {
+                val buffer = serverToolInputBuffers.getOrPut(chunk.id) { StringBuilder() }
+                buffer.append(chunk.inputDelta)
+                updateServerTool(chunk.id) { tool ->
+                    tool.copy(metadata = mergeMetadata(tool.metadata, chunk.metadata))
+                }
+            }
+
+            is StreamChunk.ServerToolInputEnd -> {
+                val input = serverToolInputBuffers.remove(chunk.id)?.toString()?.takeIf { it.isNotBlank() }
+                    ?.let(::parseServerToolJson)
+                if (input == null) this else updateServerTool(chunk.id) { it.copy(input = input) }
+            }
+
+            is StreamChunk.ServerToolEnd -> {
+                val bufferedInput = serverToolInputBuffers.remove(chunk.id)?.toString()?.takeIf { it.isNotBlank() }
+                    ?.let(::parseServerToolJson)
+                val index = parts.indexOfFirst {
+                    it is UIMessagePart.ServerTool && it.toolCallId == chunk.id
+                }
+                if (index < 0) {
+                    copy(parts = parts + UIMessagePart.ServerTool(
+                        toolCallId = chunk.id,
+                        toolName = "",
+                        input = chunk.input ?: bufferedInput,
+                        output = chunk.output,
+                        status = chunk.status,
+                        metadata = chunk.metadata,
+                    ))
+                } else {
+                    updateServerTool(chunk.id) { tool ->
+                        tool.copy(
+                            input = chunk.input ?: bufferedInput ?: tool.input,
+                            output = chunk.output ?: tool.output,
+                            status = chunk.status,
+                            metadata = mergeMetadata(tool.metadata, chunk.metadata),
+                        )
+                    }
+                }
+            }
             is StreamChunk.ImageStart -> {
                 if (chunk.id in imagePartIndexes) this
                 else copy(parts = parts + UIMessagePart.Image(
@@ -220,9 +289,27 @@ class StreamChunkHandler(private val model: Model? = null) {
                 textPartIndexes.clear()
                 reasoningPartIndexes.clear()
                 imagePartIndexes.clear()
+                serverToolInputBuffers.clear()
             }
         }
     }
+
+    private fun UIMessage.updateServerTool(
+        id: String,
+        transform: (UIMessagePart.ServerTool) -> UIMessagePart.ServerTool,
+    ): UIMessage = copy(parts = parts.map { part ->
+        if (part is UIMessagePart.ServerTool && part.toolCallId == id) transform(part) else part
+    })
+}
+
+private fun parseServerToolJson(value: String) = runCatching {
+    json.parseToJsonElement(value)
+}.getOrElse { JsonPrimitive(value) }
+
+private fun mergeMetadata(old: JsonObject?, new: JsonObject?): JsonObject? = when {
+    old == null -> new
+    new == null -> old
+    else -> JsonObject(old + new)
 }
 
 fun List<UIMessage>.handleTextGenerationResult(
@@ -317,6 +404,27 @@ private fun UIMessage.appendMessage(delta: UIMessage): UIMessage {
                                 part
                             }
                         }
+                    }
+                }
+            }
+
+            is UIMessagePart.ServerTool -> {
+                val existingPart = acc.find {
+                    it is UIMessagePart.ServerTool && it.toolCallId == deltaPart.toolCallId
+                } as? UIMessagePart.ServerTool
+                if (existingPart == null) {
+                    acc + deltaPart
+                } else {
+                    acc.map { part ->
+                        if (part is UIMessagePart.ServerTool && part.toolCallId == deltaPart.toolCallId) {
+                            part.copy(
+                                toolName = deltaPart.toolName.ifBlank { part.toolName },
+                                input = deltaPart.input ?: part.input,
+                                output = deltaPart.output ?: part.output,
+                                status = deltaPart.status,
+                                metadata = mergeMetadata(part.metadata, deltaPart.metadata),
+                            )
+                        } else part
                     }
                 }
             }

@@ -3,46 +3,45 @@
     "parts": [
         {
             "type": "reasoning",
-            "text": "The user wants me to research Kotlin, Ktor, and Compose Multiplatform independently. I should search for their latest stable releases, including release dates and official source URLs. Let me do multiple searches in parallel.",
+            "text": "The user wants me to call both tools in the first tool-use step, without waiting for one before calling the other. Let me do that.\n\n1. list_memories with topic \"Kotlin\" to get user preferences.\n2. web_search for latest stable Kotlin release.\n\nLet me make both calls in parallel.",
             "metadata": {
-                "signature": "e4f274b2-dde6-4538-b702-cad2e8dd690e"
+                "signature": "3e407712-42b8-482e-a3a9-6b1d7e5578fd"
             }
         },
         {
             "type": "text",
-            "text": "I'll research each of these technologies independently. Let me search for their latest stable releases."
+            "text": "I'll call both tools simultaneously to retrieve your Kotlin preferences and search for the latest stable release."
         },
         {
             "type": "tool",
-            "id": "call_00_LaJFBgxLWSHGELSjrsix6761",
-            "name": "search_web",
+            "id": "call_00_XhNVYXv4E4uRl8RNzknO0591",
+            "name": "list_memories",
             "input": {
-                "query": "Kotlin latest stable release version 2025 release notes"
+                "topic": "Kotlin"
             }
         },
         {
-            "type": "tool",
-            "id": "call_01_oL2y2WmThLvDy4UnmYp91734",
-            "name": "search_web",
+            "type": "server_tool",
+            "id": "call_01_fOlFybIgj4x2biukT0SK8909",
+            "name": "web_search",
+            "status": "COMPLETED",
             "input": {
-                "query": "Ktor latest stable release version 2025"
-            }
-        },
-        {
-            "type": "tool",
-            "id": "call_02_6Kqc6E6Yfsna7wxO3ebX5772",
-            "name": "search_web",
-            "input": {
-                "query": "Compose Multiplatform latest stable release version 2025"
-            }
+                "query": "latest stable Kotlin release version 2025"
+            },
+            "resultCount": 10,
+            "resultTypes": [
+                "web_search_result"
+            ],
+            "callType": "server_tool_use",
+            "resultType": "web_search_tool_result"
         }
     ],
     "annotations": [],
     "usage": {
-        "promptTokens": 401,
-        "completionTokens": 197,
-        "cachedTokens": 384,
-        "totalTokens": 598
+        "promptTokens": 494,
+        "completionTokens": 171,
+        "cachedTokens": 256,
+        "totalTokens": 665
     },
     "finished": true
 }

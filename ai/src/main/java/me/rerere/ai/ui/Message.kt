@@ -205,7 +205,7 @@ private fun List<UIMessage>.alignContextStart(startIndex: Int): Int {
 /**
  * Sort message parts by type priority:
  * - Reasoning (-1): shown first
- * - Text, Tool, ToolCall, ToolResult, Search (0): middle
+ * - Text, Tool, ServerTool, ToolCall, ToolResult, Search (0): middle
  * - Image, Video, Audio, Document (1): shown last
  *
  * WARNING: This function is intended for migration only.
@@ -228,6 +228,7 @@ fun List<UIMessagePart>.toSortedMessageParts(): List<UIMessagePart> {
             is UIMessagePart.Reasoning -> -1
             is UIMessagePart.Text -> 0
             is UIMessagePart.Tool -> 0
+            is UIMessagePart.ServerTool -> 0
             is UIMessagePart.ToolCall -> 0
             is UIMessagePart.ToolResult -> 0
             is UIMessagePart.Search -> 0

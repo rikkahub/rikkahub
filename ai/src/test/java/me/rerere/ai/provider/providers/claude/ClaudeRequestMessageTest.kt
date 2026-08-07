@@ -1,13 +1,22 @@
-package me.rerere.ai.provider.providers
+package me.rerere.ai.provider.providers.claude
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.ClaudePromptCacheTtl
+import me.rerere.ai.provider.providers.ClaudeProvider
+import me.rerere.ai.ui.ClaudeReasoningMetadata
+import me.rerere.ai.ui.ServerToolMetadata
+import me.rerere.ai.ui.ServerToolProtocol
+import me.rerere.ai.ui.ServerToolStatus
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.toMetadata
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -186,6 +195,97 @@ class ClaudeRequestMessageTest {
         }?.jsonObject
         assertEquals("Let me think about this...",
             thinkingBlock?.get("thinking")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `thinking and server tool history should be preserved before client tool result`() {
+        val serverToolCall = buildJsonObject {
+            put("type", "server_tool_use")
+            put("id", "server_call_1")
+            put("name", "web_search")
+            put("input", buildJsonObject { put("query", "GPT-5.6 Sol") })
+        }
+        val serverToolResult = buildJsonObject {
+            put("type", "web_search_tool_result")
+            put("tool_use_id", "server_call_1")
+            put("content", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", "web_search_result")
+                    put("title", "Search result")
+                    put("url", "https://example.com")
+                })
+            })
+        }
+        val assistantMessage = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Reasoning(
+                    reasoning = "First thinking",
+                    metadata = ClaudeReasoningMetadata(signature = "signature_1").toMetadata(),
+                ),
+                UIMessagePart.ServerTool(
+                    toolCallId = "server_call_1",
+                    toolName = "web_search",
+                    input = serverToolCall["input"],
+                    output = serverToolResult["content"],
+                    status = ServerToolStatus.COMPLETED,
+                    metadata = ServerToolMetadata(
+                        protocol = ServerToolProtocol.ANTHROPIC_MESSAGES,
+                        call = serverToolCall,
+                        callIndex = 1,
+                        result = serverToolResult,
+                        resultIndex = 2,
+                    ).toMetadata(),
+                ),
+                UIMessagePart.Reasoning(
+                    reasoning = "Second thinking",
+                    metadata = ClaudeReasoningMetadata(signature = "signature_2").toMetadata(),
+                ),
+                createExecutedTool(
+                    callId = "client_call_1",
+                    name = "list_conversations",
+                    input = "{}",
+                    output = "Conversation list",
+                ),
+            ),
+        )
+
+        val result = invokeBuildMessages(listOf(UIMessage.user("Find context"), assistantMessage))
+
+        assertEquals(3, result.size)
+        val assistantContent = result[1].jsonObject["content"]?.jsonArray
+        assertEquals(
+            listOf(
+                "thinking",
+                "server_tool_use",
+                "web_search_tool_result",
+                "thinking",
+                "tool_use",
+            ),
+            assistantContent?.map { it.jsonObject["type"]?.jsonPrimitive?.content },
+        )
+        assertEquals(
+            listOf("signature_1", "signature_2"),
+            assistantContent
+                ?.filter { it.jsonObject["type"]?.jsonPrimitive?.content == "thinking" }
+                ?.map { it.jsonObject["signature"]?.jsonPrimitive?.content },
+        )
+        assertEquals(
+            listOf("First thinking", "Second thinking"),
+            assistantContent
+                ?.filter { it.jsonObject["type"]?.jsonPrimitive?.content == "thinking" }
+                ?.map { it.jsonObject["thinking"]?.jsonPrimitive?.content },
+        )
+        assertEquals(
+            "client_call_1",
+            assistantContent?.last()?.jsonObject?.get("id")?.jsonPrimitive?.content,
+        )
+
+        val toolResultMessage = result[2].jsonObject
+        assertEquals("user", toolResultMessage["role"]?.jsonPrimitive?.content)
+        val toolResult = toolResultMessage["content"]?.jsonArray?.single()?.jsonObject
+        assertEquals("tool_result", toolResult?.get("type")?.jsonPrimitive?.content)
+        assertEquals("client_call_1", toolResult?.get("tool_use_id")?.jsonPrimitive?.content)
     }
 
     @Test
