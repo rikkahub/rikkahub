@@ -1283,5 +1283,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_context_message_limit_count">上下文消息限制: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">无限上下文消息</string>
   <string name="assistant_page_context_message_limit_warning">限制上下文会在每次上下文被修剪时使提示词缓存失效。更大的限制修剪频率更低；无限制则从不修剪，并保持缓存完全完好。</string>
+  <string name="setting_display_page_enable_diagram_rendering_title">启用 TikZ 渲染</string>
+  <string name="setting_display_page_enable_diagram_rendering_desc">在工作区中至少安装 texlive-latex-extra lmodern poppler-utils 三个包后，即可自动将 tikzcd / xymatrix / AMScd 图表编译为矢量图内嵌显示</string>
+  <string name="setting_display_page_tikz_font_size_title">TikZ 默认字号</string>
+  <string name="setting_display_page_tikz_min_font_size_title">TikZ 最小字号</string>
 </resources>
 

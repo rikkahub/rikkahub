@@ -1285,4 +1285,8 @@
   <string name="assistant_page_context_message_limit_count">Context message limit: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">Unlimited context messages</string>
   <string name="assistant_page_context_message_limit_warning">Limiting context invalidates the prompt cache each time the context is trimmed. A larger limit trims less often; unlimited never trims and keeps the cache fully intact.</string>
+  <string name="setting_display_page_enable_diagram_rendering_title">Enable TikZ Rendering</string>
+  <string name="setting_display_page_enable_diagram_rendering_desc">After installing at least texlive-latex-extra lmodern poppler-utils in workspace, renders tikzcd / xymatrix / AMScd diagrams as inline vector graphics</string>
+  <string name="setting_display_page_tikz_font_size_title">TikZ Font Size</string>
+  <string name="setting_display_page_tikz_min_font_size_title">TikZ Min Font Size</string>
 </resources>

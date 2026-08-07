@@ -609,6 +609,9 @@ data class DisplaySetting(
     val sendOnEnter: Boolean = false,
     val enableAutoScroll: Boolean = true,
     val enableLatexRendering: Boolean = true,
+    val enableDiagramRendering: Boolean = false, // 需要工作区安装 LaTeX 后才开启
+    val diagramFontSize: Float = 18f, // TikZ 默认字号 dp（TeX 10pt 字 → 显示字号；K=字号/10）
+    val diagramMinFontSize: Float = 14f, // TikZ 最小字号 dp（超宽图降级下限，再超则横向滚动）
     val enableBlurEffect: Boolean = false,
     val chatFontFamily: ChatFontFamily = ChatFontFamily.DEFAULT,
     val chatCustomFontPath: String = "",

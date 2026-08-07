@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +56,7 @@ import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
+import me.rerere.rikkahub.ui.components.richtext.LatexCapability
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import java.io.File
@@ -256,6 +258,65 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                             )
                         },
                     )
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_enable_diagram_rendering_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_enable_diagram_rendering_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.enableDiagramRendering,
+                                onCheckedChange = { enabled ->
+                                    updateDisplaySetting(displaySetting.copy(enableDiagramRendering = enabled))
+                                    if (enabled) {
+                                        scope.launch(Dispatchers.IO) {
+                                            LatexCapability.recheck(context)
+                                        }
+                                    }
+                                }
+                            )
+                        },
+                    )
+                    if (displaySetting.enableDiagramRendering) {
+                        item(
+                            headlineContent = { Text(stringResource(R.string.setting_display_page_tikz_font_size_title)) },
+                            supportingContent = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Slider(
+                                        value = displaySetting.diagramFontSize,
+                                        onValueChange = {
+                                            updateDisplaySetting(displaySetting.copy(diagramFontSize = it))
+                                        },
+                                        valueRange = 14f..26f,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(text = "${displaySetting.diagramFontSize.roundToInt()}dp")
+                                }
+                            }
+                        )
+                        item(
+                            headlineContent = { Text(stringResource(R.string.setting_display_page_tikz_min_font_size_title)) },
+                            supportingContent = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Slider(
+                                        value = displaySetting.diagramMinFontSize,
+                                        onValueChange = {
+                                            updateDisplaySetting(displaySetting.copy(diagramMinFontSize = it))
+                                        },
+                                        valueRange = 10f..18f,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(text = "${displaySetting.diagramMinFontSize.roundToInt()}dp")
+                                }
+                            }
+                        )
+                    }
                     item(
                         headlineContent = { Text(stringResource(R.string.setting_display_page_chat_font_family_title)) },
                         supportingContent = {
