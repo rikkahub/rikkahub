@@ -60,6 +60,26 @@ traces:
                 description: A focused search query for one topic.
             required: [query]
             additionalProperties: false
+  # DeepSeek：OpenAI Responses 兼容协议，由服务端执行网页搜索。
+  - name: deepseek-responses-server-tool
+    provider: openai-responses
+    baseUrl: https://api.deepseek.com
+    endpoint: /responses
+    apiKeyEnv: DEEPSEEK_API_KEY
+    model: deepseek-v4-flash
+    body:
+      store: false
+      input:
+        - role: user
+          content: "Use web search to find the latest stable Kotlin release. Return its version, release date, and official source URL."
+      reasoning:
+        summary: auto
+        effort: high
+      include:
+        - reasoning.encrypted_content
+        - web_search_call.action.sources
+      tools:
+        - type: web_search
   # DeepSeek：Anthropic Messages 兼容协议。
   - name: deepseek-anthropic-tool
     provider: claude
@@ -83,6 +103,22 @@ traces:
                 description: A focused search query for one topic.
             required: [query]
             additionalProperties: false
+  # DeepSeek：Anthropic Messages 兼容协议，由服务端执行网页搜索。
+  - name: deepseek-anthropic-server-tool
+    provider: claude
+    baseUrl: https://api.deepseek.com/anthropic
+    endpoint: /messages
+    apiKeyEnv: DEEPSEEK_API_KEY
+    model: deepseek-v4-flash
+    body:
+      max_tokens: 4096
+      messages:
+        - role: user
+          content: "Use web search to find the latest stable Kotlin release. Return its version, release date, and official source URL."
+      tools:
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 3
   # OpenRouter：OpenAI Chat Completions 兼容协议。
   - name: openrouter-completions-tool
     provider: openai-chat
