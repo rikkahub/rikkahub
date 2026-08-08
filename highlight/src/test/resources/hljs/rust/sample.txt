@@ -1,0 +1,52 @@
+use std::collections::HashMap;
+use std::fmt;
+
+/// A chat participant.
+#[derive(Debug, Clone, PartialEq)]
+pub struct User {
+    pub name: String,
+    pub age: u8,
+}
+
+impl User {
+    pub fn new(name: &str, age: u8) -> Self {
+        Self {
+            name: name.to_string(),
+            age,
+        }
+    }
+
+    pub fn greet(&self) -> String {
+        format!("Hello, {}!", self.name)
+    }
+}
+
+impl fmt::Display for User {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} ({})", self.name, self.age)
+    }
+}
+
+trait Greeter {
+    fn greeting(&self) -> String;
+}
+
+enum Role {
+    User,
+    Assistant,
+}
+
+fn main() {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    let users = vec![User::new("Rikka", 18), User::new("Rerere", 20)];
+
+    for user in &users {
+        *counts.entry(user.name.clone()).or_insert(0) += 1;
+        println!("{}", user.greet());
+    }
+
+    match users.first() {
+        Some(first) => println!("first = {}", first),
+        None => eprintln!("nobody here"),
+    }
+}

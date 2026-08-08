@@ -1,0 +1,68 @@
+keyword	package
+	 main\n\n
+keyword	import
+	 
+string	"fmt"
+	\n\n
+comment	// Server holds the listener config.
+	\n
+keyword	type
+	 Server 
+keyword	struct
+	 {\n\taddress 
+type	string
+	\n\tport    
+type	int
+	\n}\n\n
+comment	/* block comment */
+	\n
+keyword	const
+	 mask = 
+number	0xCA_FE
+	\n\n
+keyword	func
+function	 
+params	(s *Server)
+	 Start(port 
+type	int
+	) 
+type	error
+	 {\n\tvalues := 
+built_in	make
+	([]
+type	int
+	, 
+number	0
+	, 
+number	4
+	)\n\tvalues = 
+built_in	append
+	(values, 
+number	1
+	, 
+number	2
+	)\n\traw := 
+string	`back\ntick`
+	\n\tfmt.Println(
+built_in	len
+	(values), raw, 
+string	'x'
+	, 
+string	"quoted"
+	, 
+number	1.5e3
+	, 
+number	0o755
+	)\n\t
+keyword	if
+	 port == 
+number	0
+	 {\n\t\t
+keyword	return
+	 
+literal	nil
+	\n\t}\n\t
+keyword	return
+	 
+literal	nil
+	\n}\n

@@ -1,0 +1,124 @@
+meta	<?xml version=
+string	"1.0"
+meta	 encoding=
+string	"UTF-8"
+meta	?>
+	\n
+meta	<!DOCTYPE 
+keyword	note
+meta	 
+keyword	SYSTEM
+meta	 
+string	"note.dtd"
+meta	 [\n  <!ENTITY 
+keyword	author
+meta	 
+string	"Rikka"
+meta	>\n  <!ELEMENT 
+keyword	note
+meta	 (
+keyword	to
+meta	, 
+keyword	from
+meta	, 
+keyword	body
+meta	)>\n  <!ATTLIST 
+keyword	note
+meta	 
+keyword	id
+meta	 
+keyword	ID
+meta	 
+keyword	#REQUIRED
+meta	>\n]>
+	\n
+meta	<?xml-stylesheet type=
+string	"text/xsl"
+meta	 href=
+string	"note.xsl"
+meta	?>
+	\n
+tag	<
+name	rss
+tag	 
+attr	xmlns:content
+tag	=
+string	"http://purl.org/rss/1.0/modules/content/"
+tag	 
+attr	version
+tag	=
+string	"2.0"
+tag	>
+	\n  
+tag	<
+name	content:encoded
+tag	>
+	<![CDATA[<p>raw & unescaped <b>markup</b></p>]]>
+tag	</
+name	content:encoded
+tag	>
+	\n  
+tag	<
+name	note:标题
+tag	 
+attr	xml:lang
+tag	=
+string	"zh"
+tag	>
+	中文标签名
+tag	</
+name	note:标题
+tag	>
+	\n  
+tag	<
+name	_private
+tag	 
+attr	data-x
+tag	=
+string	bare
+tag	 
+attr	attr
+tag	 = 
+string	"spaced"
+tag	 
+attr	flag
+tag	/>
+	\n  
+tag	<
+name	ns:item
+tag	 
+attr	ns:key
+tag	=
+string	'single'
+tag	 />
+	\n  
+tag	<
+name	empty
+tag	/>
+	\n  
+tag	<>
+	fragment
+tag	</>
+	\n  
+tag	<
+name	p
+tag	>
+	2 
+symbol	&lt;
+	 3 
+symbol	&amp;&amp;
+	 4 
+symbol	&gt;
+	 1
+tag	</
+name	p
+tag	>
+	\n  
+comment	<!-- 
+doctag	TODO:
+comment	 补充更多字段 -->
+	\n
+tag	</
+name	rss
+tag	>
+	\n

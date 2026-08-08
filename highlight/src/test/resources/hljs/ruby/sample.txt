@@ -1,0 +1,31 @@
+#!/usr/bin/env ruby
+
+# @param name [String]
+module RikkaHub
+  class User < ApplicationRecord
+    include Comparable
+
+    DEFAULT_AGE = 18
+    attr_reader :name, :age
+
+    def initialize(name, age: DEFAULT_AGE)
+      @name = name
+      @age = age
+    end
+
+    def greet(prefix = "Hello")
+      message = "#{prefix}, #{name}!"
+      pattern = %r{\A[A-Z][a-z]+\z}
+      payload = <<~TEXT
+        user: #{name}
+        age: #{age}
+      TEXT
+
+      puts payload if pattern.match?(name)
+      message
+    end
+  end
+end
+
+users = [RikkaHub::User.new("Rikka")]
+users.each { |user| puts user.greet }

@@ -1,0 +1,45 @@
+package com.example.chat;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * A tiny chat session.
+ *
+ * TODO: support streaming replies.
+ * Questions go to rikka@example.com, not to the tracker.
+ *
+ * @author Rikka
+ * @since 1.0
+ */
+public final class ChatSession implements AutoCloseable {
+    private static final int MAX_TOKENS = 4_096;
+    private static final double TEMPERATURE = 0.7;
+
+    private final String model;
+    private final List<Map<String, String>> history;
+
+    public ChatSession(String model, List<Map<String, String>> history) {
+        this.model = model;
+        this.history = history;
+    }
+
+    @Override
+    public void close() {
+        history.clear();
+    }
+
+    // Sends one message and returns the reply.
+    public String send(String prompt) throws IllegalStateException {
+        if (prompt == null || prompt.isBlank()) {
+            throw new IllegalStateException("empty prompt");
+        }
+        char marker = ':';
+        boolean shout = marker == '!';
+        long started = System.nanoTime();
+        for (Map<String, String> turn : history) {
+            System.out.println(turn.get("content"));
+        }
+        return "%s%c %s".formatted(model, marker, prompt);
+    }
+}

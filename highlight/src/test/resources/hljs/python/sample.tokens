@@ -1,0 +1,208 @@
+string	"""Small chat session helper."""
+	\n\n
+keyword	from
+	 __future__ 
+keyword	import
+	 annotations\n\n
+keyword	import
+	 asyncio\n
+keyword	from
+	 dataclasses 
+keyword	import
+	 dataclass, field\n
+keyword	from
+	 typing 
+keyword	import
+	 
+type	Any
+	, 
+type	Dict
+	, 
+type	List
+	, 
+type	Optional
+	\n\nDEFAULT_MODEL = 
+string	"claude-opus-5"
+	\nMAX_TOKENS = 
+number	4_096
+	\nTEMPERATURE = 
+number	0.7
+	\n\n\n
+meta	@dataclass
+	\n
+keyword	class
+	 
+title.class	ChatSession
+	:\n    
+string	"""A single conversation with one assistant."""
+	\n\n    model: 
+built_in	str
+	 = DEFAULT_MODEL\n    history: 
+type	List
+	[
+type	Dict
+	[
+built_in	str
+	, 
+built_in	str
+	]] = field(default_factory=
+built_in	list
+	)\n    _closed: 
+built_in	bool
+	 = 
+literal	False
+	\n\n    
+keyword	def
+	 
+title.function	append
+	(
+params	self, role: 
+built_in	str
+params	, content: 
+built_in	str
+	) -> 
+literal	None
+	:\n        
+keyword	if
+	 
+keyword	not
+	 content:\n            
+keyword	return
+	\n        
+variable.language	self
+	.history.append({
+string	"role"
+	: role, 
+string	"content"
+	: content})\n\n    
+keyword	async
+	 
+keyword	def
+	 
+title.function	ask
+	(
+params	self, prompt: 
+built_in	str
+params	, retries: 
+built_in	int
+params	 = 
+number	3
+	) -> 
+type	Optional
+	[
+built_in	str
+	]:\n        
+variable.language	self
+	.append(
+string	"user"
+	, prompt)\n        
+keyword	for
+	 attempt 
+keyword	in
+	 
+built_in	range
+	(retries):\n            
+keyword	try
+	:\n                reply = 
+keyword	await
+	 
+variable.language	self
+	._send(prompt)\n            
+keyword	except
+	 TimeoutError:\n                
+keyword	await
+	 asyncio.sleep(
+number	0.5
+	 * attempt)\n                
+keyword	continue
+	\n            
+keyword	else
+	:\n                
+variable.language	self
+	.append(
+string	"assistant"
+	, reply)\n                
+keyword	return
+	 reply\n        
+keyword	return
+	 
+literal	None
+	\n\n    
+keyword	async
+	 
+keyword	def
+	 
+title.function	_send
+	(
+params	self, prompt: 
+built_in	str
+	) -> 
+built_in	str
+	:\n        
+keyword	await
+	 asyncio.sleep(
+number	0
+	)\n        
+keyword	return
+	 
+string	f"
+subst	{self.model}
+string	: 
+subst	{prompt}
+string	"
+	\n\n    
+keyword	def
+	 
+title.function	summary
+	(
+params	self
+	) -> 
+built_in	str
+	:\n        roles = [message[
+string	"role"
+	] 
+keyword	for
+	 message 
+keyword	in
+	 
+variable.language	self
+	.history]\n        
+keyword	return
+	 
+string	", "
+	.join(roles) 
+keyword	or
+	 
+string	"empty"
+	\n\n
+meta	    @staticmethod
+	\n    
+keyword	def
+	 
+title.function	describe
+	(
+params	payload: 
+type	Any
+	) -> 
+built_in	str
+	:\n        
+comment	# A plain comment, and a 
+doctag	TODO:
+comment	 doctag inside it.
+	\n        
+keyword	return
+	 
+built_in	repr
+	(payload)\n\n\n
+keyword	def
+	 
+title.function	main
+	() -> 
+literal	None
+	:\n    session = ChatSession(model=DEFAULT_MODEL)\n    
+built_in	print
+	(session.summary())\n\n\n
+keyword	if
+	 __name__ == 
+string	"__main__"
+	:\n    main()\n

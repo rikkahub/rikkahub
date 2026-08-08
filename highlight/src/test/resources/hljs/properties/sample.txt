@@ -1,0 +1,17 @@
+# Application settings
+! Legacy comment style
+
+app.name = RikkaHub
+app.version=1.4.0
+app.locale : zh-CN
+app.debug false
+
+server.hosts = api.example.com, \
+               cdn.example.com
+
+path.windows = C:\\Users\\rikka
+message.greeting = Hello, \u4e16\u754c!
+key\=with\=equals = escaped value
+
+empty.value =
+no.value

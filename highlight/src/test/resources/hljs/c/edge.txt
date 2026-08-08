@@ -1,0 +1,75 @@
+#pragma once
+#ifndef EDGE_H
+#define EDGE_H
+
+#include "local.h"
+#include <stdatomic.h>
+#include <stdint.h>
+
+#define GROW(x) \
+    do {        \
+        (x) *= 2; \
+    } while (0)
+
+#if defined(__STDC_VERSION__)
+#  define HAS_C11 1
+#elif defined(_MSC_VER)
+#  define HAS_C11 0
+#else
+#  warning unknown compiler
+#endif
+
+// A line comment continued with a backslash \
+   and this is still the very same comment
+
+/* TODO: a doctag inside a block comment */
+
+static atomic_int counter;
+static _Atomic long total;
+static uint32_t mask;
+static _Thread_local int depth;
+
+static const int BINARY = 0b1010;
+static const unsigned HEX = 0xDEADBEEF;
+static const long BIG = 1000000L;
+static const unsigned long long HUGE_ONE = 42ULL;
+static const float RATIO = 3.14f;
+static const double HALF = .5;
+static const double TINY = 1e-3;
+static const double HEXFLOAT = 0x1.8p3;
+
+static const char PLAIN = 'a';
+static const char ESCAPED = '\n';
+static const char HEX_CHAR = '\x41';
+static const char OCT_CHAR = '\101';
+static const char UNI_CHAR = 'A';
+
+static const char *UTF8 = u8"utf-8";
+static const char *UTF16 = u"utf-16";
+static const char *UTF32 = U"utf-32";
+static const char *WIDE = L"wide";
+static const char *RAW = R"(no \n escapes here)";
+static const char *DELIMITED = R"sql(SELECT )" FROM t)sql";
+
+_Static_assert(sizeof(int) >= 4, "int is too narrow");
+
+alignas(16) static char scratch[64];
+
+extern void declare_one(int), declare_two(char);
+
+static inline uint32_t rotate(uint32_t value, unsigned shift)
+{
+    return (value << shift) | (value >> (32 - shift));
+}
+
+int main(void)
+{
+    counter = 0;
+    total = BIG;
+    mask = HEX;
+    depth = BINARY;
+    GROW(mask);
+    return rotate(mask, 3) == 0 ? 0 : 1;
+}
+
+#endif

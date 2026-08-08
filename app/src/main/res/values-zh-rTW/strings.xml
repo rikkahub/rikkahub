@@ -63,10 +63,6 @@
   <string name="assistant_page_chat_model_desc">設定助手的預設聊天模型，如果不設定，則使用全域預設聊天模型</string>
   <string name="assistant_page_clone">複製</string>
   <string name="assistant_page_confirm">確定</string>
-  <string name="assistant_page_context_message_count">上下文訊息數量: %d</string>
-  <string name="assistant_page_context_message_desc">控制多少條歷史訊息會被作為上下文發送給模型, 超過此數量的訊息會被忽略，只有最近的N條訊息會被保留，可以節省token</string>
-  <string name="assistant_page_context_message_size">上下文訊息數量</string>
-  <string name="assistant_page_context_message_unlimited">無限上下文訊息</string>
   <string name="assistant_page_creative">創造</string>
   <string name="assistant_page_current_assistant">當前助手</string>
   <string name="assistant_page_custom_bodies">自定義 Body</string>
@@ -466,8 +462,6 @@
   <string name="placeholder_battery_level">電池電量</string>
   <string name="placeholder_char">助手名稱</string>
   <string name="placeholder_current_date">日期</string>
-  <string name="placeholder_current_datetime">日期和時間</string>
-  <string name="placeholder_current_time">時間</string>
   <string name="placeholder_device_info">設備資訊</string>
   <string name="placeholder_locale">語言環境</string>
   <string name="placeholder_model_id">模型ID</string>
@@ -1059,6 +1053,7 @@
   <string name="text_area_save">儲存</string>
   <string name="theme_name_autumn">秋葉黃</string>
   <string name="theme_name_black">中性黑</string>
+  <string name="theme_name_minimal">極簡白</string>
   <string name="theme_name_ocean">海灣藍</string>
   <string name="theme_name_sakura">櫻花粉</string>
   <string name="theme_name_spring">原野綠</string>
@@ -1250,7 +1245,6 @@
   <string name="setting_asr_configure_step_hotwords_desc">以逗號分隔的熱詞清單，用於提升專有名詞／領域術語的辨識準確率</string>
   <string name="log_page_record_requests">記錄請求</string>
   <string name="log_page_record_requests_desc">擷取請求標頭、請求主體和回應元數據</string>
-  <string name="assistant_page_context_message_truncation_warning">限制上下文可能導致頻繁的上下文截斷，並妨礙提示詞快取</string>
   <string name="chat_message_tool_recent_chats">查看最近聊天</string>
   <string name="chat_message_tool_conversation_search">搜尋歷史：%1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">螢幕使用時間</string>
@@ -1283,5 +1277,10 @@
   <string name="workspace_detail_install_from_local_file">從本機檔案安裝</string>
   <string name="workspace_detail_install_from_url">或從網址安裝</string>
   <string name="tool_ui_shell_truncated">輸出已截斷</string>
+  <string name="assistant_page_context_message_limit">上下文訊息限制</string>
+  <string name="assistant_page_context_message_limit_desc">限制發送給模型的最近訊息數量。當超出限制時，上下文會一次性修剪到大約一半，而不是每次輪次刪除一條訊息，這樣請求前綴保持穩定，提示詞緩存可以在多次輪次中繼續運作。</string>
+  <string name="assistant_page_context_message_limit_count">上下文訊息限制：%d</string>
+  <string name="assistant_page_context_message_limit_unlimited">無限上下文訊息</string>
+  <string name="assistant_page_context_message_limit_warning">限制上下文會在每次上下文被裁減時使提示詞快取失效。較大的限制裁減頻率較低；無限則永不裁減並保持快取完整。</string>
 </resources>
 

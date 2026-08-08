@@ -1,0 +1,225 @@
+meta	#!/usr/bin/env node
+	\n
+meta	'use strict'
+	;\n\n
+keyword	import
+	 { readFile } 
+keyword	from
+	 
+string	'node:fs/promises'
+	;\n\n
+comment	/**\n * Greets a user.\n * 
+doctag	@param
+comment	 {
+type	string
+comment	} 
+variable	name
+comment	 - the name to greet\n */
+	\n
+keyword	export
+	 
+keyword	default
+	 
+keyword	class
+	 
+title.class	Greeter
+	 
+keyword	extends
+	 
+title.class.inherited	Base.Component
+	 {\n  
+keyword	static
+	 
+variable.constant	VERSION
+	 = 
+string	'1.0.0'
+	;\n  #secret = 
+number	0b1010
+	;\n\n  
+title.function	constructor
+	(
+params	name = 
+string	'world'
+params	, { loud = 
+literal	false
+params	 } = {}
+	) {\n    
+variable.language	super
+	(name);\n    
+variable.language	this
+	.
+property	name
+	 = name;\n    
+variable.language	this
+	.
+property	count
+	 = 
+number	0xCA_FE
+	;\n    
+variable.language	this
+	.
+property	ratio
+	 = 
+number	.5e3
+	;\n  }\n\n  
+keyword	get
+	 
+title.function	label
+	() {\n    
+keyword	return
+	 
+string	`Hello, 
+subst	${
+variable.language	this
+subst	.name.toUpperCase()}
+string	!`
+	;\n  }\n\n  
+keyword	set
+	 
+title.function	label
+	(
+params	value
+	) {\n    
+variable.language	this
+	.
+property	name
+	 = value;\n  }\n\n  
+keyword	async
+	 
+title.function	greet
+	(
+params	times = 
+number	3n
+	) {\n    
+keyword	const
+	 
+title.function	delay
+	 = (
+params	ms
+	) => 
+keyword	new
+	 
+title.class	Promise
+	(
+function	(
+params	resolve
+function	) =>
+	 
+built_in	setTimeout
+	(resolve, ms));\n    
+keyword	for
+	 (
+keyword	let
+	 i = 
+number	0
+	; i < times; i++) {\n      
+keyword	await
+	 
+title.function	delay
+	(
+number	1_000
+	);\n      
+variable.language	console
+	.
+title.function	log
+	(
+variable.language	this
+	.
+property	label
+	.
+title.function	replace
+	(
+regexp	/l+o/gi
+	, 
+string	'-'
+	));\n    }\n    
+keyword	return
+	 [
+number	1
+	, 
+number	2
+	, 
+number	3
+	].
+title.function	map
+	(
+function	(
+params	x
+function	) =>
+	 x * 
+number	2
+	).
+title.function	filter
+	(
+title.class	Boolean
+	);\n  }\n}\n\n
+keyword	function
+	 
+title.function	parse
+	(
+params	input
+	) {\n  
+keyword	try
+	 {\n    
+keyword	return
+	 
+title.class	JSON
+	.
+title.function	parse
+	(input);\n  } 
+keyword	catch
+	 (error) {\n    
+keyword	if
+	 (error 
+keyword	instanceof
+	 
+title.class	SyntaxError
+	) 
+keyword	return
+	 
+literal	null
+	;\n    
+keyword	throw
+	 error;\n  }\n}\n\n
+keyword	const
+	 
+variable.constant	MAX_RETRIES
+	 = 
+number	5
+	;\n
+keyword	let
+	 total = 
+number	0o755
+	,\n  flag = 
+literal	true
+	;\n
+keyword	const
+	 template = 
+string	`sum: 
+subst	${total + MAX_RETRIES}
+string	`
+	;\n
+keyword	const
+	 
+title.function	render
+	 = () => 
+tag	<
+name	div
+tag	 
+attr	className
+tag	=
+string	"row"
+tag	>
+	{template}
+tag	</
+name	div
+tag	>
+	;\n\n
+variable.language	module
+	.
+property	exports
+	 = { 
+title.class	Greeter
+	, parse, render, 
+variable.constant	MAX_RETRIES
+	, flag };\n

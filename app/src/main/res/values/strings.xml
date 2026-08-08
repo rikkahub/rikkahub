@@ -63,10 +63,6 @@
   <string name="assistant_page_chat_model_desc">Set the default chat model for the assistant. If not set, the global default chat model will be used</string>
   <string name="assistant_page_clone">Clone</string>
   <string name="assistant_page_confirm">Confirm</string>
-  <string name="assistant_page_context_message_count">Context Message Size: %d</string>
-  <string name="assistant_page_context_message_desc">Controls how many historical messages will be sent to the model as context. Messages exceeding this number will be ignored, only the most recent N messages will be retained, which can save tokens</string>
-  <string name="assistant_page_context_message_size">Context Message Size</string>
-  <string name="assistant_page_context_message_unlimited">Unlimited context messages</string>
   <string name="assistant_page_creative">Creative</string>
   <string name="assistant_page_current_assistant">Current Assistant</string>
   <string name="assistant_page_custom_bodies">Custom Body</string>
@@ -473,8 +469,6 @@
   <string name="placeholder_battery_level">Battery Level</string>
   <string name="placeholder_char">Assistant Name</string>
   <string name="placeholder_current_date">Date</string>
-  <string name="placeholder_current_datetime">Date and Time</string>
-  <string name="placeholder_current_time">Time</string>
   <string name="placeholder_device_info">Device Info</string>
   <string name="placeholder_locale">Locale</string>
   <string name="placeholder_model_id">Model ID</string>
@@ -1009,6 +1003,8 @@
   <string name="setting_tts_page_base_url_description">API base URL endpoint</string>
   <string name="setting_tts_page_base_url_placeholder">https://api.openai.com/v1</string>
   <string name="setting_tts_page_default_name">System TTS</string>
+  <string name="setting_tts_page_default_playback_speed">Default playback speed</string>
+  <string name="setting_tts_page_default_playback_speed_description">Applied locally to every TTS provider without changing its synthesis settings.</string>
   <string name="setting_tts_page_edit_provider">Edit Provider</string>
   <string name="setting_tts_page_emotion">Emotion</string>
   <string name="setting_tts_page_emotion_description">Emotion style for speech synthesis</string>
@@ -1116,6 +1112,8 @@
   <string name="text_area_save">Save</string>
   <string name="theme_name_autumn">Autumn Yellow</string>
   <string name="theme_name_black">Neutral Black</string>
+  <string name="theme_name_claude">Claude</string>
+  <string name="theme_name_minimal">Minimal White</string>
   <string name="theme_name_ocean">Ocean Blue</string>
   <string name="theme_name_sakura">Sakura Pink</string>
   <string name="theme_name_spring">Meadow Green</string>
@@ -1260,7 +1258,6 @@
   <string name="setting_mcp_page_name_invalid">Name can only contain English letters and numbers</string>
   <string name="log_page_record_requests">Record requests</string>
   <string name="log_page_record_requests_desc">Capture request headers, bodies, and response metadata</string>
-  <string name="assistant_page_context_message_truncation_warning">Limiting context may cause frequent context truncation and prevent prompt caching</string>
   <string name="chat_message_tool_recent_chats">View recent chats</string>
   <string name="chat_message_tool_conversation_search">Search history: %1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">Screen Time</string>
@@ -1287,5 +1284,10 @@
   <string name="workspace_detail_install_from_local_file">Install from local file</string>
   <string name="workspace_detail_install_from_url">Or install from a URL</string>
   <string name="tool_ui_shell_truncated">output truncated</string>
+  <string name="assistant_page_context_message_limit">Context Message Limit</string>
+  <string name="assistant_page_context_message_limit_desc">Caps how many recent messages are sent to the model. When the limit is exceeded, the context is trimmed down to about half in one step instead of dropping one message per turn, so the request prefix stays stable and prompt caching keeps working for many turns.</string>
+  <string name="assistant_page_context_message_limit_count">Context message limit: %d</string>
+  <string name="assistant_page_context_message_limit_unlimited">Unlimited context messages</string>
+  <string name="assistant_page_context_message_limit_warning">Limiting context invalidates the prompt cache each time the context is trimmed. A larger limit trims less often; unlimited never trims and keeps the cache fully intact.</string>
 </resources>
 

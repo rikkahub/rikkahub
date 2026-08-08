@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# build helper
+NAME="rikka"
+readonly ROOT=/usr/local/share
+
+greet() {
+    local who="${1:-world}"
+    echo "hello, $who from ${NAME}"
+    printf '%s\n' 'single quoted'
+}
+
+if [ -d "$ROOT" ]; then
+    for f in $(ls "$ROOT"); do
+        echo "$f" | tr a-z A-Z
+    done
+fi
+
+count=$(( 2 + 3 * 4 ))
+cat <<-EOF
+	here doc body $NAME
+EOF

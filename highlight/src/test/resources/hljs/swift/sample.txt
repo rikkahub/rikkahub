@@ -1,0 +1,29 @@
+import Foundation
+
+@available(iOS 17, macOS 14, *)
+final class UserService<T: Sendable>: NSObject {
+    private let values: [T]
+
+    init(values: [T]) {
+        self.values = values
+    }
+
+    func greeting(for name: String, count: Int = 1) async throws -> String {
+        let message = #"Hello, \#(name)!"#
+        let total = 1_024.5e-2
+        let matcher = #/^[A-Z][a-z]+$/#
+
+        guard matcher.wholeMatch(in: name) != nil else {
+            throw ServiceError.invalidName
+        }
+
+        return "\(message) \(count) \(total)"
+    }
+}
+
+precedencegroup ForwardApplication {
+    associativity: left
+    higherThan: AssignmentPrecedence
+}
+
+infix operator |>: ForwardApplication

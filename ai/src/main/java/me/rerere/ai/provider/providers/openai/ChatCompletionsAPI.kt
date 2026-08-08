@@ -381,6 +381,11 @@ class ChatCompletionsAPI(
                     "api.moonshot.cn" -> {
                         put("thinking", buildJsonObject {
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
+                            // K2.6 的 thinking.keep 默认为 null（忽略历史思考），思考开启时
+                            // 需显式传 "all" 才是保留式思考；文档推荐与 enabled 搭配（#1586）
+                            if (level.isEnabled && ModelRegistry.KIMI_K2_6.match(params.model.modelId)) {
+                                put("keep", "all")
+                            }
                         })
                     }
 
@@ -449,7 +454,13 @@ class ChatCompletionsAPI(
     }
 
     private fun isModelAllowTemperature(model: Model): Boolean {
-        return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && !ModelRegistry.GPT_5.match(model.modelId)
+        val isMoonshotRestricted = ModelRegistry.KIMI_K2_5.match(model.modelId) ||
+                ModelRegistry.KIMI_K2_6.match(model.modelId) ||
+                ModelRegistry.KIMI_K3.match(model.modelId) ||
+                ModelRegistry.KIMI_K3_ALIAS.match(model.modelId)
+        return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && 
+               !ModelRegistry.GPT_5.match(model.modelId) && 
+               !isMoonshotRestricted
     }
 
     private fun buildMessages(
@@ -791,7 +802,11 @@ class ChatCompletionsAPI(
             promptTokens = jsonObject["prompt_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
             completionTokens = jsonObject["completion_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
             totalTokens = jsonObject["total_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
+            // 各 provider 汇报缓存命中的字段形状不统一，按方言兜底解析（#1576）：
+            // OpenAI 嵌套 -> Moonshot 顶层 cached_tokens -> DeepSeek prompt_cache_hit_tokens
             cachedTokens = jsonObject["prompt_tokens_details"]?.jsonObjectOrNull?.get("cached_tokens")?.jsonPrimitive?.intOrNull
+                ?: jsonObject["cached_tokens"]?.jsonPrimitive?.intOrNull
+                ?: jsonObject["prompt_cache_hit_tokens"]?.jsonPrimitive?.intOrNull
                 ?: 0
         )
     }

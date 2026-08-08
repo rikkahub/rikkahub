@@ -46,7 +46,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.common.http.jsonObjectOrNull
-import me.rerere.highlight.HighlightText
+import me.rerere.highlight.CodeHighlightText
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Clipboard
 import me.rerere.hugeicons.stroke.Delete01
@@ -772,7 +772,7 @@ private fun SearchWebPreview(
             }
         } else {
             item {
-                HighlightText(
+                CodeHighlightText(
                     code = JsonInstantPretty.encodeToString(content),
                     language = "json",
                     fontSize = 12.sp

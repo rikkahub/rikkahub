@@ -122,6 +122,19 @@ val DEFAULT_PROVIDERS = listOf(
         )
     ),
     ProviderSetting.OpenAI(
+        id = Uuid.parse("d6c4d8c6-3f62-4ca9-a6f3-7ade6b15ecc3"),
+        name = "月之暗面",
+        baseUrl = "https://api.moonshot.cn/v1",
+        apiKey = "",
+        enabled = true,
+        builtIn = true,
+        balanceOption = BalanceOption(
+            enabled = true,
+            apiPath = "/users/me/balance",
+            resultPath = "data.available_balance"
+        )
+    ),
+    ProviderSetting.OpenAI(
         id = Uuid.parse("d5734028-d39b-4d41-9841-fd648d65440e"),
         name = "OpenRouter",
         baseUrl = "https://openrouter.ai/api/v1",
@@ -177,19 +190,6 @@ val DEFAULT_PROVIDERS = listOf(
         apiKey = "",
         enabled = false,
         builtIn = true
-    ),
-    ProviderSetting.OpenAI(
-        id = Uuid.parse("d6c4d8c6-3f62-4ca9-a6f3-7ade6b15ecc3"),
-        name = "月之暗面",
-        baseUrl = "https://api.moonshot.cn/v1",
-        apiKey = "",
-        enabled = false,
-        builtIn = true,
-        balanceOption = BalanceOption(
-            enabled = true,
-            apiPath = "/users/me/balance",
-            resultPath = "data.available_balance"
-        )
     ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("3bc40dc1-b11a-46fa-863b-6306971223be"),

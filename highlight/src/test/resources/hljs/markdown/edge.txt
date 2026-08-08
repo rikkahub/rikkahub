@@ -1,0 +1,35 @@
+Setext heading
+==============
+
+Another one
+-----------
+
+***Bold and italic***, __underscored bold__, _underscored italic_, and
+**bold with [a link](./relative.md) inside**.
+
+Empty texts: [](https://example.com), [text]().
+
+Reference styles: [alt][ref], [ref][], ![image](data:image/png;base64,AAAA).
+
+Schemes: [ftp](ftp://example.com/x), [mail](mailto:a@example.com), [j](javascript:void 0).
+
+~~~sql
+SELECT 1;
+~~~
+
+````
+A fence four backticks wide.
+````
+
+    indented code block
+    second line
+
+Entities: &amp; &#169; &#x1F600; &nbsp;
+
+* * *
+- - -
+___
+
+| a | b |
+| - | - |
+| 1 | 2 |

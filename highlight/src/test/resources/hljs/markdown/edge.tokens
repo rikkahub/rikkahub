@@ -1,0 +1,63 @@
+section	Setext heading\n==============
+	\n\n
+section	Another one\n-----------
+	\n\n
+strong	**
+emphasis	*Bold and italic*
+strong	**
+	, 
+strong	__underscored bold__
+	, 
+emphasis	_underscored italic_
+	, and\n
+strong	**bold with [
+string	a link
+strong	](
+link	./relative.md
+strong	) inside**
+	.\n\nEmpty texts: [](
+link	https://example.com
+	), [
+string	text
+	]().\n\nReference styles: [
+string	alt
+	][
+symbol	ref
+	], [
+string	ref
+	][], ![
+string	image
+	](
+link	data:image/png;base64,AAAA
+	).\n\nSchemes: [
+string	ftp
+	](
+link	ftp://example.com/x
+	), [
+string	mail
+	](
+link	mailto:a@example.com
+	), [
+string	j
+	](
+link	javascript:void 0
+	).\n\n
+code	~~~sql\nSELECT 1;\n~~~
+	\n\n
+code	````\nA fence four backticks wide.\n````
+	\n\n
+code	    indented code block\n    second line\n
+	\nEntities: 
+literal	&amp;
+	 
+literal	&#169;
+	 
+literal	&#x1F600;
+	 
+literal	&nbsp;
+	\n\n
+bullet	*
+	 * *\n
+bullet	-
+	 - -\n
+strong	___\n\n| a | b |\n| - | - |\n| 1 | 2 |\n

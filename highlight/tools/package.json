@@ -1,0 +1,12 @@
+{
+  "name": "rikkahub-highlight-fixtures",
+  "private": true,
+  "type": "module",
+  "description": "Generates golden token fixtures from highlight.js, the source of truth for the Kotlin highlighter.",
+  "scripts": {
+    "generate": "node generate-hljs-fixtures.mjs"
+  },
+  "dependencies": {
+    "highlight.js": "11.11.1"
+  }
+}

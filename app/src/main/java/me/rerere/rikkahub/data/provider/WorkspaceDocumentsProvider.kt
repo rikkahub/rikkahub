@@ -52,7 +52,10 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
             add(Root.COLUMN_ROOT_ID, ROOT_ID)
             add(Root.COLUMN_DOCUMENT_ID, ROOT_DOC_ID)
             add(Root.COLUMN_TITLE, ctx.getString(R.string.app_name))
-            add(Root.COLUMN_FLAGS, Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD)
+            add(
+                Root.COLUMN_FLAGS,
+                Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD or Root.FLAG_SUPPORTS_CREATE,
+            )
             add(Root.COLUMN_ICON, R.mipmap.ic_launcher)
             add(Root.COLUMN_MIME_TYPES, "*/*")
         }
@@ -154,6 +157,53 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
         return buildDocId(target.root, relPathOf(target.root, dest))
     }
 
+    override fun copyDocument(sourceDocumentId: String, targetParentDocumentId: String): String {
+        val source = parseDocId(sourceDocumentId)
+        val targetParent = parseDocId(targetParentDocumentId)
+        require(!source.isRoot && source.relPath.isNotEmpty()) { "Cannot copy this document" }
+        require(!targetParent.isRoot) { "Cannot copy to root" }
+        val srcFile = resolveFile(source.root, source.relPath)
+        val destDir = resolveFile(targetParent.root, targetParent.relPath)
+        require(destDir.isDirectory) { "Target is not a directory" }
+        val dest = uniqueChild(destDir, srcFile.name)
+        // 防止把目录复制到自身内部
+        require(!dest.canonicalPath.startsWith(srcFile.canonicalPath + File.separator)) {
+            "Cannot copy a directory into itself"
+        }
+        require(srcFile.copyRecursively(dest)) { "Failed to copy: $sourceDocumentId" }
+        notifyChange(targetParentDocumentId)
+        return buildDocId(targetParent.root, relPathOf(targetParent.root, dest))
+    }
+
+    override fun moveDocument(
+        sourceDocumentId: String,
+        sourceParentDocumentId: String?,
+        targetParentDocumentId: String,
+    ): String {
+        val source = parseDocId(sourceDocumentId)
+        val targetParent = parseDocId(targetParentDocumentId)
+        require(!source.isRoot && source.relPath.isNotEmpty()) { "Cannot move this document" }
+        require(!targetParent.isRoot) { "Cannot move to root" }
+        val srcFile = resolveFile(source.root, source.relPath)
+        val destDir = resolveFile(targetParent.root, targetParent.relPath)
+        require(destDir.isDirectory) { "Target is not a directory" }
+        val dest = uniqueChild(destDir, srcFile.name)
+        // 防止把目录移动到自身内部
+        require(!dest.canonicalPath.startsWith(srcFile.canonicalPath + File.separator)) {
+            "Cannot move a directory into itself"
+        }
+        if (!srcFile.renameTo(dest)) {
+            // 所有 workspace 都在应用私有目录下，renameTo 一般可行；失败则回退为复制+删除
+            require(srcFile.copyRecursively(dest)) { "Failed to move: $sourceDocumentId" }
+            require(if (srcFile.isDirectory) srcFile.deleteRecursively() else srcFile.delete()) {
+                "Failed to remove source after move: $sourceDocumentId"
+            }
+        }
+        notifyChange(buildDocId(source.root, source.relPath.substringBeforeLast('/', "")))
+        notifyChange(targetParentDocumentId)
+        return buildDocId(targetParent.root, relPathOf(targetParent.root, dest))
+    }
+
     override fun getDocumentType(documentId: String): String {
         val target = parseDocId(documentId)
         if (target.isRoot) return Document.MIME_TYPE_DIR
@@ -179,9 +229,11 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
             // workspace 根目录：仅允许在其内部创建文件，不能删除/重命名 workspace 本身
             relPath.isEmpty() -> Document.FLAG_DIR_SUPPORTS_CREATE
             isDir -> Document.FLAG_DIR_SUPPORTS_CREATE or
-                Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME
+                Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME or
+                Document.FLAG_SUPPORTS_COPY or Document.FLAG_SUPPORTS_MOVE
             else -> Document.FLAG_SUPPORTS_WRITE or
-                Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME
+                Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME or
+                Document.FLAG_SUPPORTS_COPY or Document.FLAG_SUPPORTS_MOVE
         }
         cursor.newRow().apply {
             add(Document.COLUMN_DOCUMENT_ID, buildDocId(root, relPath))
@@ -226,7 +278,7 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
         val base = manager().filesDir(root).canonicalFile
         base.mkdirs()
         val normalized = relPath.trim().trimStart('/')
-        require(!normalized.contains(' ')) { "Path contains invalid character" }
+        require(!normalized.contains('\u0000')) { "Path contains invalid character" }
         if (normalized.isEmpty()) return base
         val target = File(base, normalized).canonicalFile
         require(target.path == base.path || target.path.startsWith(base.path + File.separator)) {

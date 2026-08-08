@@ -386,7 +386,7 @@ class GenerationHandler(
                 }
             }
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
-            addAll(messages.limitContext(assistant.contextMessageSize))
+            addAll(messages.limitContext(assistant.contextMessageLimit))
         }.transforms(
             transformers = transformers,
             context = context,

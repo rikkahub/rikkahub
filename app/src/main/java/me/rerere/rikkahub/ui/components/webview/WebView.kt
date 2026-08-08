@@ -6,6 +6,8 @@ import android.util.Log
 import android.view.ViewGroup.LayoutParams
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -47,6 +49,14 @@ internal class MyWebChromeClient(private val state: WebViewState) : WebChromeCli
 }
 
 internal class MyWebViewClient(private val state: WebViewState) : WebViewClient() {
+    override fun shouldInterceptRequest(
+        view: WebView,
+        request: WebResourceRequest
+    ): WebResourceResponse? {
+        return WebViewLocalAssets.intercept(view.context.applicationContext, request.url)
+            ?: super.shouldInterceptRequest(view, request)
+    }
+
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
         state.isLoading = true
@@ -75,6 +85,14 @@ private fun WebView.resetState(
         webChromeClient = null
         webViewClient = WebViewClient()
     }
+}
+
+private fun WebView.release(interfaces: Map<String, Any>) {
+    resetState(interfaces, clearClients = true)
+    loadUrl("about:blank")
+    clearHistory()
+    removeAllViews()
+    destroy()
 }
 
 @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
@@ -124,10 +142,10 @@ fun WebView(
                 Log.d(TAG, "AndroidView: Resetting WebView")
             },
             onRelease = {
-                it.resetState(state.interfaces, clearClients = true)
                 if (state.webView === it) {
                     state.webView = null
                 }
+                it.release(state.interfaces)
                 Log.d(TAG, "AndroidView: Releasing WebView")
             },
             update = { webView ->

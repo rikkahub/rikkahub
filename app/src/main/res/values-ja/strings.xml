@@ -63,10 +63,6 @@
   <string name="assistant_page_chat_model_desc">アシスタントのデフォルトチャットモデルを設定します。設定しない場合は、グローバルデフォルトチャットモデルが使用されます</string>
   <string name="assistant_page_clone">複製</string>
   <string name="assistant_page_confirm">確認</string>
-  <string name="assistant_page_context_message_count">コンテキストメッセージサイズ: %d</string>
-  <string name="assistant_page_context_message_desc">モデルに送信される履歴メッセージの数を制御します。この数を超えるメッセージは無視され、最新のN個のメッセージのみが保持されます。これによりトークンを節約できます</string>
-  <string name="assistant_page_context_message_size">コンテキストメッセージサイズ</string>
-  <string name="assistant_page_context_message_unlimited">無制限のコンテキストメッセージ</string>
   <string name="assistant_page_creative">創造的</string>
   <string name="assistant_page_current_assistant">現在のアシスタント</string>
   <string name="assistant_page_custom_bodies">カスタムボディ</string>
@@ -466,8 +462,6 @@
   <string name="placeholder_battery_level">バッテリー残量</string>
   <string name="placeholder_char">アシスタント名</string>
   <string name="placeholder_current_date">日付</string>
-  <string name="placeholder_current_datetime">日付と時間</string>
-  <string name="placeholder_current_time">時間</string>
   <string name="placeholder_device_info">デバイス情報</string>
   <string name="placeholder_locale">ロケール</string>
   <string name="placeholder_model_id">モデルID</string>
@@ -1061,6 +1055,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="text_area_save">保存</string>
   <string name="theme_name_autumn">秋の黄色</string>
   <string name="theme_name_black">ニュートラルブラック</string>
+  <string name="theme_name_minimal">ミニマルホワイト</string>
   <string name="theme_name_ocean">オーシャンブルー</string>
   <string name="theme_name_sakura">サクラピンク</string>
   <string name="theme_name_spring">メドウグリーン</string>
@@ -1252,7 +1247,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_asr_configure_step_hotwords_desc">固有名詞や専門用語の認識精度を高める、カンマ区切りのホットワード一覧</string>
   <string name="log_page_record_requests">リクエスト記録</string>
   <string name="log_page_record_requests_desc">リクエストヘッダー、ボディ、レスポンスメタデータをキャプチャします</string>
-  <string name="assistant_page_context_message_truncation_warning">コンテキストを制限すると、頻繁なコンテキストの切り詰めが発生し、プロンプトキャッシュが妨げられる可能性があります。</string>
   <string name="chat_message_tool_recent_chats">最近のチャットを表示</string>
   <string name="chat_message_tool_conversation_search">検索履歴: %1$s</string>
   <string name="assistant_page_local_tools_screen_time_title">スクリーンタイム</string>
@@ -1285,5 +1279,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_detail_install_from_local_file">ローカルファイルからインストール</string>
   <string name="workspace_detail_install_from_url">または URL からインストール</string>
   <string name="tool_ui_shell_truncated">出力は切り詰められました</string>
+  <string name="assistant_page_context_message_limit">コンテキストメッセージ上限</string>
+  <string name="assistant_page_context_message_limit_desc">モデルに送信する直近のメッセージ数の上限を設定します。上限を超えた場合、ターンごとに1件ずつ削除するのではなく、一度にコンテキストを約半分まで切り詰めます。これによりリクエストのプレフィックスが安定し、プロンプトキャッシュが多くのターンにわたって有効に働きます。</string>
+  <string name="assistant_page_context_message_limit_count">コンテキストメッセージ制限: %d</string>
+  <string name="assistant_page_context_message_limit_unlimited">コンテキストメッセージ無制限</string>
+  <string name="assistant_page_context_message_limit_warning">コンテキストの制限は、コンテキストが切り詰められるたびにプロンプトキャッシュを無効化します。制限が大きいほど切り詰めの頻度が減り、無制限なら切り詰めが発生せず、キャッシュは完全に保持されます。</string>
 </resources>
 

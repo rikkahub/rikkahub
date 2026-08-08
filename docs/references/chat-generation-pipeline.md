@@ -34,7 +34,7 @@ ChatService.sendMessage()
             ├─ [若无待处理 Tool] generateInternal()
             │       ├── 构建 internalMessages
             │       │       ├── System message（系统提示 + 记忆 + tool.systemPrompt）
-            │       │       ├── limitContext() 按 contextMessageSize 裁剪历史
+            │       │       ├── limitContext() 按 contextMessageLimit 阶梯式裁剪历史
             │       │       └── InputTransformers 管道
             │       ├── 构建 TextGenerationParams
             │       └── 调用 Provider

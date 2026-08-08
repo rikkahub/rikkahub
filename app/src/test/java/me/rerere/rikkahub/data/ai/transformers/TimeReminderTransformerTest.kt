@@ -5,6 +5,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -20,10 +21,13 @@ class TimeReminderTransformerTest {
         msg.parts.filterIsInstance<UIMessagePart.Text>().joinToString("") { it.text }
 
     @Test
-    fun `single message should not inject time reminder`() {
+    fun `single message should inject current time before first user message`() {
         val messages = listOf(userMessage("Hello", LocalDateTime(2026, 2, 22, 10, 0, 0)))
         val result = applyTimeReminder(messages)
-        assertEquals(1, result.size)
+        assertEquals(2, result.size)
+        assertTrue(getMessageText(result[0]).contains("<time_reminder>"))
+        assertFalse(getMessageText(result[0]).contains("since last message"))
+        assertEquals("Hello", getMessageText(result[1]))
     }
 
     @Test
@@ -33,7 +37,8 @@ class TimeReminderTransformerTest {
             userMessage("World", LocalDateTime(2026, 2, 22, 10, 30, 0)), // 30 分钟
         )
         val result = applyTimeReminder(messages)
-        assertEquals(2, result.size)
+        assertEquals(3, result.size)
+        assertEquals("World", getMessageText(result[2]))
     }
 
     @Test
@@ -43,7 +48,8 @@ class TimeReminderTransformerTest {
             userMessage("World", LocalDateTime(2026, 2, 22, 11, 0, 0)), // 恰好 1 小时
         )
         val result = applyTimeReminder(messages)
-        assertEquals(2, result.size)
+        assertEquals(3, result.size)
+        assertEquals("World", getMessageText(result[2]))
     }
 
     @Test
@@ -53,12 +59,12 @@ class TimeReminderTransformerTest {
             userMessage("World", LocalDateTime(2026, 2, 22, 12, 0, 0)), // 2 小时
         )
         val result = applyTimeReminder(messages)
-        assertEquals(3, result.size)
+        assertEquals(4, result.size)
         // 注入消息在原第二条之前
-        val injected = getMessageText(result[1])
+        val injected = getMessageText(result[2])
         assertTrue(injected.contains("<time_reminder>"))
         assertTrue(injected.contains("since last message"))
-        assertEquals("World", getMessageText(result[2]))
+        assertEquals("World", getMessageText(result[3]))
     }
 
     @Test
@@ -68,7 +74,7 @@ class TimeReminderTransformerTest {
             userMessage("World", LocalDateTime(2026, 2, 22, 12, 0, 0)), // 2 小时
         )
         val result = applyTimeReminder(messages)
-        val injected = getMessageText(result[1])
+        val injected = getMessageText(result[2])
         // 星期几和时间之间有逗号分隔
         assertTrue(injected.contains(","))
         assertTrue(injected.contains("2 h since last message"))
@@ -81,7 +87,7 @@ class TimeReminderTransformerTest {
             userMessage("World", LocalDateTime(2026, 2, 22, 10, 0, 0)), // 2 天
         )
         val result = applyTimeReminder(messages)
-        val injected = getMessageText(result[1])
+        val injected = getMessageText(result[2])
         assertTrue(injected.contains("2 d since last message"))
     }
 
@@ -93,12 +99,13 @@ class TimeReminderTransformerTest {
             userMessage("Msg 3", LocalDateTime(2026, 2, 22, 10, 0, 0)), // 1 天
         )
         val result = applyTimeReminder(messages)
-        assertEquals(5, result.size) // 3 条原始 + 2 条注入
-        assertTrue(getMessageText(result[0]) == "Msg 1")
-        assertTrue(getMessageText(result[1]).contains("<time_reminder>"))
-        assertTrue(getMessageText(result[2]) == "Msg 2")
-        assertTrue(getMessageText(result[3]).contains("<time_reminder>"))
-        assertTrue(getMessageText(result[4]) == "Msg 3")
+        assertEquals(6, result.size) // 3 条原始 + 首条时间提醒 + 2 条间隔提醒
+        assertTrue(getMessageText(result[0]).contains("<time_reminder>"))
+        assertEquals("Msg 1", getMessageText(result[1]))
+        assertTrue(getMessageText(result[2]).contains("<time_reminder>"))
+        assertEquals("Msg 2", getMessageText(result[3]))
+        assertTrue(getMessageText(result[4]).contains("<time_reminder>"))
+        assertEquals("Msg 3", getMessageText(result[5]))
     }
 
     @Test

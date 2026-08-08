@@ -9,7 +9,6 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,14 +51,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import me.rerere.highlight.HighlightText
 import me.rerere.highlight.HighlightTextColorPalette
-import me.rerere.highlight.Highlighter
-import me.rerere.highlight.LocalHighlighter
 import me.rerere.highlight.buildHighlightText
+import me.rerere.highlight.CodeHighlightText
+import me.rerere.highlight.CodeHighlighter
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
@@ -277,7 +274,7 @@ private fun CodeBlockWithLineNumbersWrapped(
                         softWrap = false,
                         modifier = Modifier.padding(end = 8.dp)
                     )
-                    HighlightText(
+                    CodeHighlightText(
                         code = line,
                         language = language,
                         fontSize = textStyle.fontSize,
@@ -337,7 +334,7 @@ private fun CodeBlockDefault(
 
         // 代码列
         SelectionContainer {
-            HighlightText(
+            CodeHighlightText(
                 code = displayCode,
                 language = language,
                 modifier = Modifier.animateContentSize(),
@@ -507,7 +504,7 @@ private fun buildCodePreviewHtml(code: String, language: String): String {
 
 class HighlightCodeVisualTransformation(
     val language: String,
-    val highlighter: Highlighter,
+    val highlighter: CodeHighlighter,
     val darkMode: Boolean
 ) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
@@ -516,12 +513,10 @@ class HighlightCodeVisualTransformation(
             if (text.text.isEmpty()) {
                 AnnotatedString("")
             } else {
-                runBlocking {
-                    val tokens = highlighter.highlight(text.text, language)
-                    buildAnnotatedString {
-                        tokens.forEach { token ->
-                            buildHighlightText(token, colorPalette)
-                        }
+                val tokens = highlighter.highlight(text.text, language)
+                buildAnnotatedString {
+                    tokens.forEach { token ->
+                        buildHighlightText(token, colorPalette)
                     }
                 }
             }
@@ -532,15 +527,6 @@ class HighlightCodeVisualTransformation(
         return TransformedText(
             text = annotatedString,
             offsetMapping = OffsetMapping.Identity
-        )
-    }
-
-    companion object {
-        @Composable
-        fun regex() = HighlightCodeVisualTransformation(
-            language = "regex",
-            highlighter = LocalHighlighter.current,
-            darkMode = LocalDarkMode.current,
         )
     }
 }

@@ -1,0 +1,70 @@
+meta	#version 450 core
+	\n\n
+keyword	layout
+	(
+keyword	location
+	 = 
+number	0
+	) 
+keyword	in
+	 
+type	vec3
+	 position;\n
+keyword	layout
+	(
+keyword	location
+	 = 
+number	1
+	) 
+keyword	in
+	 
+type	vec2
+	 texCoord;\n
+keyword	layout
+	(
+keyword	binding
+	 = 
+number	0
+	) 
+keyword	uniform
+	 
+type	sampler2D
+	 albedo;\n\n
+keyword	out
+	 
+type	vec4
+	 fragmentColor;\n\n
+type	void
+	 main()\n{\n    
+type	vec3
+	 normal = 
+built_in	normalize
+	(
+built_in	cross
+	(
+built_in	dFdx
+	(position), 
+built_in	dFdy
+	(position)));\n    
+type	vec4
+	 color = 
+built_in	texture
+	(albedo, texCoord);\n\n    
+keyword	if
+	 (color.a < 
+number	0.01
+	) {\n        
+keyword	discard
+	;\n    }\n\n    fragmentColor = 
+type	vec4
+	(color.rgb * 
+built_in	abs
+	(normal.z), 
+number	1.0
+	);\n    
+built_in	gl_Position
+	 = 
+type	vec4
+	(position, 
+number	1.0
+	);\n}\n
