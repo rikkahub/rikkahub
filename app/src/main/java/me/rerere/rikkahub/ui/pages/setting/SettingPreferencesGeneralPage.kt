@@ -185,6 +185,18 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                         },
                     )
                     item(
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_manual_image_compression_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_manual_image_compression_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = displaySetting.manualImageCompression,
+                                onCheckedChange = {
+                                    updateDisplaySetting(displaySetting.copy(manualImageCompression = it))
+                                }
+                            )
+                        },
+                    )
+                    item(
                         headlineContent = { Text(stringResource(R.string.setting_display_page_paste_long_text_as_file_title)) },
                         supportingContent = { Text(stringResource(R.string.setting_display_page_paste_long_text_as_file_desc)) },
                         trailingContent = {

@@ -7,7 +7,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
+import androidx.core.net.toFile
 import androidx.exifinterface.media.ExifInterface
+import java.io.ByteArrayOutputStream
 import java.io.File
 import com.drew.imaging.ImageMetadataReader
 import com.drew.imaging.png.PngChunkType
@@ -33,12 +35,14 @@ object ImageUtils {
      * @param context Android上下文
      * @param uri 图片URI
      * @param maxSize 最大尺寸限制，默认1024px
+     * @param config 解码时的 Bitmap 配置，PNG 需 ARGB_8888 保留透明度，JPEG 可用 RGB_565 省内存
      * @return 压缩后的Bitmap，失败返回null
      */
     fun loadOptimizedBitmap(
         context: Context,
         uri: Uri,
-        maxSize: Int = 1024
+        maxSize: Int = 1024,
+        config: Bitmap.Config = Bitmap.Config.RGB_565
     ): Bitmap? {
         return runCatching {
             // 第一步：获取图片的原始尺寸，不加载到内存
@@ -56,7 +60,7 @@ object ImageUtils {
             // 第二步：使用采样率加载压缩后的图片
             val loadOptions = BitmapFactory.Options().apply {
                 inSampleSize = sampleSize
-                inPreferredConfig = Bitmap.Config.RGB_565 // 使用RGB_565减少内存占用
+                inPreferredConfig = config
             }
 
             val bitmap = context.contentResolver.openInputStream(uri)?.use { inputStream ->
@@ -64,7 +68,19 @@ object ImageUtils {
             }
 
             // 第三步：处理图片旋转（如果需要）
-            bitmap?.let { correctImageOrientation(context, uri, it) }
+            val oriented = bitmap?.let { correctImageOrientation(context, uri, it) }
+
+            // 第四步：精确缩放到目标尺寸（弥补 inSampleSize 只能 2ⁿ 采样的限制）
+            oriented?.let { bmp ->
+                val longSide = maxOf(bmp.width, bmp.height)
+                if (longSide > maxSize) {
+                    val ratio = maxSize.toFloat() / longSide
+                    val sw = (bmp.width * ratio).toInt()
+                    val sh = (bmp.height * ratio).toInt()
+                    Bitmap.createScaledBitmap(bmp, sw, sh, true)
+                        .also { if (it != bmp) bmp.recycle() }
+                } else bmp
+            }
         }.onFailure {
             it.printStackTrace()
         }.getOrNull()
@@ -260,6 +276,50 @@ object ImageUtils {
                 it.recycle()
             }
         }
+    }
+
+    /**
+     * 压缩图片到指定长边尺寸，消耗于调用线程（应在 IO 线程执行）
+     *
+     * JPEG 以 quality 80 重编码以降低体积，
+     * PNG 仅降分辨率（保持透明通道），
+     * 当压缩结果不小于原体积时保留原文件。
+     *
+     * @param context Android 上下文
+     * @param uri 本地 file:// URI，指向 [FilesManager] 管理的文件
+     * @param maxDimension 压缩后最长边的像素值
+     * @return 压缩后的文件字节数，失败或未缩小则返回 null
+     */
+    fun compressImage(context: Context, uri: Uri, maxDimension: Int): Long? {
+        return runCatching {
+            val info = getImageInfo(context, uri) ?: return@runCatching null
+            val mimeType = info.mimeType ?: "image/jpeg"
+            val format = when (mimeType) {
+                "image/png" -> Bitmap.CompressFormat.PNG
+                else -> Bitmap.CompressFormat.JPEG
+            }
+            val quality = if (format == Bitmap.CompressFormat.JPEG) 80 else 100
+            val config = if (format == Bitmap.CompressFormat.PNG)
+                Bitmap.Config.ARGB_8888 else Bitmap.Config.RGB_565
+
+            val bitmap = loadOptimizedBitmap(context, uri, maxDimension, config) ?: return@runCatching null
+            val file = uri.toFile()
+            val originalSize = file.length()
+
+            val compressed = ByteArrayOutputStream().use { output ->
+                bitmap.compress(format, quality, output)
+                output.toByteArray()
+            }
+            bitmap.recycle()
+            if (compressed.size >= originalSize) return@runCatching null
+            val tmp = File(file.parentFile, "${file.name}.tmp")
+            try {
+                tmp.writeBytes(compressed)
+                if (tmp.renameTo(file)) file.length() else null
+            } finally {
+                if (tmp.exists()) tmp.delete()
+            }
+        }.onFailure { it.printStackTrace() }.getOrNull()
     }
 
     /**
