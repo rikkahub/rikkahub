@@ -408,7 +408,7 @@ class ResponseAPI(
                         contentBuffer.clear()
                     }
 
-                    // 输出 function_call + function_call_output
+                    // 同一批并发工具调用需先输出全部 function_call，再输出对应结果。
                     group.tools.forEach { tool ->
                         add(buildJsonObject {
                             put("type", "function_call")
@@ -417,6 +417,8 @@ class ResponseAPI(
                             // 使用 inputAsJson() 归一化，避免流式中断导致的残缺 JSON 被发送
                             put("arguments", tool.inputAsJson().toString())
                         })
+                    }
+                    group.tools.forEach { tool ->
                         add(buildJsonObject {
                             put("type", "function_call_output")
                             put("call_id", tool.toolCallId)

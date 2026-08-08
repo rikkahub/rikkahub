@@ -169,7 +169,7 @@ class ResponseApiRequestMessageTest {
     }
 
     @Test
-    fun `parallel tool calls should produce sequential function_call and output pairs`() {
+    fun `parallel tool calls should emit all calls before their outputs`() {
         // Multiple tools called together
         val assistantMessage = UIMessage(
             role = MessageRole.ASSISTANT,
@@ -200,27 +200,33 @@ class ResponseApiRequestMessageTest {
         assertEquals(3, functionCalls.size)
         assertEquals(3, functionOutputs.size)
 
-        // Verify each function_call is followed by its output (in pairs)
         val callIds = listOf("call_1", "call_2", "call_3")
-        for (callId in callIds) {
-            var callIndex = -1
-            var outputIndex = -1
-            for (i in result.indices) {
-                val item = result[i].jsonObject
-                if (item["type"]?.jsonPrimitive?.content == "function_call" &&
-                    item["call_id"]?.jsonPrimitive?.content == callId) {
-                    callIndex = i
-                }
-                if (item["type"]?.jsonPrimitive?.content == "function_call_output" &&
-                    item["call_id"]?.jsonPrimitive?.content == callId) {
-                    outputIndex = i
-                }
-            }
-            assertTrue("Should find function_call for $callId", callIndex >= 0)
-            assertTrue("Should find function_call_output for $callId", outputIndex >= 0)
-            assertEquals("Output should immediately follow call for $callId",
-                callIndex + 1, outputIndex)
+        assertEquals(
+            callIds,
+            functionCalls.map { it.jsonObject["call_id"]?.jsonPrimitive?.content },
+        )
+        assertEquals(
+            callIds,
+            functionOutputs.map { it.jsonObject["call_id"]?.jsonPrimitive?.content },
+        )
+
+        val toolItems = result.filter {
+            it.jsonObject["type"]?.jsonPrimitive?.content in setOf(
+                "function_call",
+                "function_call_output",
+            )
         }
+        assertEquals(
+            listOf(
+                "function_call",
+                "function_call",
+                "function_call",
+                "function_call_output",
+                "function_call_output",
+                "function_call_output",
+            ),
+            toolItems.map { it.jsonObject["type"]?.jsonPrimitive?.content },
+        )
     }
 
     @Test
