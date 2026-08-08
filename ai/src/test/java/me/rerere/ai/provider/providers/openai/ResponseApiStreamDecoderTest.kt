@@ -6,6 +6,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.ui.OpenAIReasoningMetadata
@@ -17,15 +18,84 @@ import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
+import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.json
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ResponseApiStreamDecoderTest {
     private val api = ResponseAPI(OkHttpClient())
+
+    @Test
+    fun `incomplete response should preserve terminal metadata and usage`() {
+        val decoder = ResponseApiStreamDecoder()
+        val result = decoder.accept(SseEvent(
+            event = "response.incomplete",
+            data = json.encodeToString(buildJsonObject {
+                put("type", "response.incomplete")
+                put("response", buildJsonObject {
+                    put("id", "resp_incomplete")
+                    put("model", "test-model")
+                    put("status", "incomplete")
+                    put("incomplete_details", buildJsonObject {
+                        put("reason", "max_output_tokens")
+                    })
+                    put("usage", buildJsonObject {
+                        put("input_tokens", 10)
+                        put("output_tokens", 20)
+                        put("total_tokens", 30)
+                        put("input_tokens_details", buildJsonObject {
+                            put("cached_tokens", 4)
+                        })
+                    })
+                })
+            }),
+        ))
+
+        assertTrue(result.completed)
+        assertEquals(
+            TokenUsage(promptTokens = 10, completionTokens = 20, cachedTokens = 4, totalTokens = 30),
+            (result.chunks[0] as StreamChunk.Usage).usage,
+        )
+        assertEquals(
+            StreamChunk.Finish(
+                finishReason = "incomplete:max_output_tokens",
+                responseId = "resp_incomplete",
+                model = "test-model",
+            ),
+            result.chunks[1],
+        )
+        assertTrue(decoder.onClosed().isEmpty())
+    }
+
+    @Test
+    fun `failed response should terminate with provider error`() {
+        val decoder = ResponseApiStreamDecoder()
+
+        val exception = assertThrows(HttpException::class.java) {
+            decoder.accept(SseEvent(
+                event = "response.failed",
+                data = json.encodeToString(buildJsonObject {
+                    put("type", "response.failed")
+                    put("response", buildJsonObject {
+                        put("id", "resp_failed")
+                        put("status", "failed")
+                        put("error", buildJsonObject {
+                            put("code", "server_error")
+                            put("message", "Upstream generation failed")
+                        })
+                    })
+                }),
+            ))
+        }
+
+        assertEquals("Upstream generation failed", exception.message)
+        assertTrue(decoder.onClosed().isEmpty())
+    }
 
     @Test
     fun `reasoning item without summary should preserve encrypted content`() {

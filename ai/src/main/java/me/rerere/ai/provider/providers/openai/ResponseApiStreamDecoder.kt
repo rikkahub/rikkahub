@@ -1,5 +1,7 @@
 package me.rerere.ai.provider.providers.openai
 
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -15,6 +17,7 @@ import me.rerere.ai.ui.ServerToolStatus
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.json
+import me.rerere.ai.util.parseErrorDetail
 import me.rerere.common.http.jsonObjectOrNull
 
 internal class ResponseApiStreamDecoder : StreamChunkDecoder {
@@ -25,9 +28,10 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
         if (event.data == "[DONE]") return DecodeResult(state.finish(), completed = true)
 
         val payload = json.parseToJsonElement(event.data).jsonObject
+        val eventType = payload["type"]?.jsonPrimitive?.contentOrNull
         val chunks = parseEvent(payload)
-        val completed = payload["type"]?.jsonPrimitive?.contentOrNull == "response.completed" ||
-            event.event == "response.completed"
+        val completed = eventType == "response.completed" || eventType == "response.incomplete" ||
+            event.event == "response.completed" || event.event == "response.incomplete"
         return DecodeResult(chunks, completed)
     }
 
@@ -166,19 +170,45 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
                     ))
                 }
             }
-            "response.completed" -> {
-                val response = payload["response"]?.jsonObject
-                buildList {
-                    parseUsage(response?.get("usage") as? JsonObject)?.let { add(StreamChunk.Usage(it)) }
-                    addAll(state.finish(
-                        finishReason = response?.get("status")?.jsonPrimitive?.contentOrNull,
-                        responseId = response?.get("id")?.jsonPrimitive?.contentOrNull,
-                        model = response?.get("model")?.jsonPrimitive?.contentOrNull,
-                    ))
-                }
-            }
+            "response.completed", "response.incomplete" -> parseTerminalResponse(payload)
+            "response.failed" -> failWithResponseError(payload)
+            "error" -> failWithError(payload)
             else -> parseServerToolStatusEvent(chunkType, itemId)
         }
+    }
+
+    private fun parseTerminalResponse(payload: JsonObject): List<StreamChunk> {
+        val response = payload["response"]?.jsonObject
+        val status = response?.get("status")?.jsonPrimitive?.contentOrNull
+            ?: payload["type"]?.jsonPrimitive?.contentOrNull?.removePrefix("response.")
+        val incompleteReason = response?.get("incomplete_details")?.jsonObjectOrNull
+            ?.get("reason")?.jsonPrimitive?.contentOrNull
+        val finishReason = if (status == "incomplete" && incompleteReason != null) {
+            "$status:$incompleteReason"
+        } else {
+            status
+        }
+
+        return buildList {
+            parseUsage(response?.get("usage") as? JsonObject)?.let { add(StreamChunk.Usage(it)) }
+            addAll(state.finish(
+                finishReason = finishReason,
+                responseId = response?.get("id")?.jsonPrimitive?.contentOrNull,
+                model = response?.get("model")?.jsonPrimitive?.contentOrNull,
+            ))
+        }
+    }
+
+    private fun failWithResponseError(payload: JsonObject): Nothing {
+        val response = payload["response"]?.jsonObject
+        return failWithError(response?.get("error")?.takeUnless { it is JsonNull }
+            ?: response
+            ?: payload)
+    }
+
+    private fun failWithError(error: JsonElement): Nothing {
+        state.abort()
+        throw error.parseErrorDetail()
     }
 
     private fun parseServerToolStatusEvent(chunkType: String, itemId: String?): List<StreamChunk> {
@@ -217,6 +247,10 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
         private val openServerToolIds = linkedSetOf<String>()
         var finished = false
             private set
+
+        fun abort() {
+            finished = true
+        }
 
         fun startText(id: String) = if (openTextIds.add(id)) listOf(StreamChunk.TextStart(id)) else emptyList()
         fun textDelta(id: String, text: String) = startText(id) + StreamChunk.TextDelta(id, text)
