@@ -42,31 +42,19 @@ interface MessageNodeDAO {
 
     // 使用 @RawQuery 绕过 Room 编译期校验，以便使用 json_each() 虚拟表
     @RawQuery
-    suspend fun getTokenStatsRaw(query: SupportSQLiteQuery): MessageTokenStats
+    suspend fun getMessageCountRaw(query: SupportSQLiteQuery): Int
 
     @RawQuery
     suspend fun getMessageCountPerDayRaw(query: SupportSQLiteQuery): List<MessageDayCount>
 }
 
-data class MessageTokenStats(
-    val totalMessages: Int = 0,
-    val promptTokens: Long = 0,
-    val completionTokens: Long = 0,
-    val cachedTokens: Long = 0,
-)
-
 data class MessageDayCount(val day: String, val count: Int)
 
-// SQLite json_each() 展开 messages JSON 数组，json_extract() 提取 Token 字段并聚合
-private val TOKEN_STATS_SQL = SimpleSQLiteQuery(
-    "SELECT COUNT(*) AS totalMessages, " +
-        "COALESCE(SUM(CAST(json_extract(j.value, '$.usage.promptTokens') AS INTEGER)), 0) AS promptTokens, " +
-        "COALESCE(SUM(CAST(json_extract(j.value, '$.usage.completionTokens') AS INTEGER)), 0) AS completionTokens, " +
-        "COALESCE(SUM(CAST(json_extract(j.value, '$.usage.cachedTokens') AS INTEGER)), 0) AS cachedTokens " +
-        "FROM message_node mn, json_each(mn.messages) j"
+private val MESSAGE_COUNT_SQL = SimpleSQLiteQuery(
+    "SELECT COUNT(*) FROM message_node mn, json_each(mn.messages) j"
 )
 
-suspend fun MessageNodeDAO.getTokenStats(): MessageTokenStats = getTokenStatsRaw(TOKEN_STATS_SQL)
+suspend fun MessageNodeDAO.getMessageCount(): Int = getMessageCountRaw(MESSAGE_COUNT_SQL)
 
 // 按用户消息的 createdAt 字段（LocalDateTime ISO 字符串前10位即日期）统计每日消息数
 suspend fun MessageNodeDAO.getMessageCountPerDay(startDate: String): List<MessageDayCount> =
@@ -81,4 +69,3 @@ suspend fun MessageNodeDAO.getMessageCountPerDay(startDate: String): List<Messag
             arrayOf(startDate)
         )
     )
-
