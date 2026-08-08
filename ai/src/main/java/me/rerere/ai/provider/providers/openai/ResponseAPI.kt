@@ -549,6 +549,7 @@ class ResponseAPI(
                         reasoningId = output["id"]?.jsonPrimitive?.contentOrNull,
                         encryptedContent = output["encrypted_content"]?.jsonPrimitive?.contentOrNull,
                     ).toMetadata()
+                    val reasoningPartStart = parts.size
                     output["summary"]?.jsonArray.orEmpty().map { it.jsonObject }.forEach { part ->
                         val partType = part["type"]?.jsonPrimitive?.content ?: error("part type not found")
                         when (partType) {
@@ -578,6 +579,17 @@ class ResponseAPI(
                                 )
                             )
                         }
+                    }
+                    if (parts.size == reasoningPartStart) {
+                        parts.add(
+                            UIMessagePart.Reasoning(
+                                reasoning = "",
+                                createdAt = Clock.System.now(),
+                                finishedAt = Clock.System.now(),
+                                metadata = reasoningMetadata,
+                                reasoningType = ReasoningType.REASONING_TEXT,
+                            )
+                        )
                     }
                 }
 

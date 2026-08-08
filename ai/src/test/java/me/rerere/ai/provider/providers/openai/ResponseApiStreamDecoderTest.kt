@@ -188,6 +188,34 @@ class ResponseApiStreamDecoderTest {
     }
 
     @Test
+    fun `non streaming response should preserve metadata-only reasoning`() {
+        val result = api.parseResponseOutput(buildJsonObject {
+            put("id", "resp_1")
+            put("model", "test-model")
+            put("status", "completed")
+            put("output", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", "reasoning")
+                    put("id", "rs_test")
+                    put("encrypted_content", "encrypted")
+                    put("summary", buildJsonArray {})
+                    put("content", buildJsonArray {})
+                })
+            })
+        })
+
+        val reasoning = result.message.parts.single() as UIMessagePart.Reasoning
+        assertEquals("", reasoning.reasoning)
+        assertEquals("rs_test", reasoning.metadataAs<OpenAIReasoningMetadata>()?.reasoningId)
+        assertEquals("encrypted", reasoning.metadataAs<OpenAIReasoningMetadata>()?.encryptedContent)
+
+        val reasoningItem = api.buildMessages(listOf(result.message)).single().jsonObject
+        assertEquals("reasoning", reasoningItem["type"]?.jsonPrimitive?.content)
+        assertEquals("rs_test", reasoningItem["id"]?.jsonPrimitive?.content)
+        assertEquals("encrypted", reasoningItem["encrypted_content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun `non streaming response should distinguish raw reasoning and summary`() {
         val result = api.parseResponseOutput(buildJsonObject {
             put("id", "resp_1")
