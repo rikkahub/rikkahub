@@ -45,6 +45,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
+import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
 import me.rerere.ai.util.encodeBase64
@@ -708,18 +709,22 @@ class ChatCompletionsAPI(
                     "text"
                 )?.jsonPrimitiveOrNull?.contentOrNull
             }
+        val reasoningMetadata = jsonObject["reasoning_details"]?.jsonArrayOrNull?.let {
+            OpenRouterReasoningMetadata(reasoningDetails = it).toMetadata()
+        }
         val toolCalls = jsonObject["tool_calls"] as? JsonArray ?: JsonArray(emptyList())
         val images = jsonObject["images"] as? JsonArray ?: JsonArray(emptyList())
 
         return UIMessage(
             role = role,
             parts = buildList {
-                if (!reasoning.isNullOrEmpty()) {
+                if (!reasoning.isNullOrEmpty() || reasoningMetadata != null) {
                     add(
                         UIMessagePart.Reasoning(
-                            reasoning = reasoning,
+                            reasoning = reasoning.orEmpty(),
                             createdAt = Clock.System.now(),
-                            finishedAt = null
+                            finishedAt = null,
+                            metadata = reasoningMetadata,
                         )
                     )
                 }

@@ -1,6 +1,7 @@
 package me.rerere.ai.provider.providers.openai
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -13,6 +14,7 @@ import me.rerere.ai.provider.Modality
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.OpenRouterReasoningMetadata
+import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
 import okhttp3.OkHttpClient
@@ -57,6 +59,15 @@ class ChatCompletionsRequestMessageTest {
             includeOpenRouterReasoningDetails,
             listOf(Modality.TEXT, Modality.IMAGE)
         ) as JsonArray
+    }
+
+    private fun invokeParseMessage(message: JsonObject): UIMessage {
+        val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
+            "parseMessage",
+            JsonObject::class.java,
+        )
+        method.isAccessible = true
+        return method.invoke(api, message) as UIMessage
     }
 
     @Test
@@ -416,6 +427,56 @@ class ChatCompletionsRequestMessageTest {
 
         val assistant = invokeBuildMessages(
             messages,
+            includeOpenRouterReasoningDetails = true,
+        )[1].jsonObject
+
+        assertEquals(reasoningDetails, assistant["reasoning_details"])
+        assertFalse(assistant.containsKey("reasoning_content"))
+    }
+
+    @Test
+    fun `non streaming OpenRouter response should preserve reasoning details for tool continuation`() {
+        val reasoningDetails = buildJsonArray {
+            add(buildJsonObject {
+                put("type", "reasoning.text")
+                put("text", "thinking")
+                put("signature", "signature")
+                put("format", "anthropic-claude-v1")
+                put("index", 0)
+            })
+        }
+        val parsed = invokeParseMessage(buildJsonObject {
+            put("role", "assistant")
+            put("content", "")
+            put("reasoning", "thinking")
+            put("reasoning_details", reasoningDetails)
+            put("tool_calls", buildJsonArray {
+                add(buildJsonObject {
+                    put("id", "call_1")
+                    put("type", "function")
+                    put("function", buildJsonObject {
+                        put("name", "search")
+                        put("arguments", "{}")
+                    })
+                })
+            })
+        })
+
+        val reasoning = parsed.parts.filterIsInstance<UIMessagePart.Reasoning>().single()
+        assertEquals(
+            reasoningDetails,
+            reasoning.metadataAs<OpenRouterReasoningMetadata>()?.reasoningDetails,
+        )
+
+        val executed = parsed.copy(parts = parsed.parts.map { part ->
+            if (part is UIMessagePart.Tool) {
+                part.copy(output = listOf(UIMessagePart.Text("result")))
+            } else {
+                part
+            }
+        })
+        val assistant = invokeBuildMessages(
+            messages = listOf(UIMessage.user("Question"), executed),
             includeOpenRouterReasoningDetails = true,
         )[1].jsonObject
 
