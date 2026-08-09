@@ -159,7 +159,9 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         } else {
             null
         },
-        onClick = if (context.content != null || isPending || images.isNotEmpty()) {
+        // 点击开关只看 "是否已执行", 与输出能否解析为 JSON 解耦:
+        // MCP 等工具的纯文本输出/报错 content 为 null, 但详情页渲染的是原始输出, 仍可查看
+        onClick = if (tool.isExecuted || isPending || images.isNotEmpty()) {
             { showResult = true }
         } else {
             null
