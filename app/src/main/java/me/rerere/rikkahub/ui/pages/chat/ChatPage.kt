@@ -284,6 +284,14 @@ private fun ChatPageContent(
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
 
+    // 全局当前助手与本会话归属不一致时 (如在助手设置里切换助手后返回, 未点新话题),
+    // 自动跳转到当前助手的会话, 与抽屉切换助手后的行为一致; 判定在 VM 内做新鲜读取
+    LaunchedEffect(vm.conversationInitialized, setting.assistantId, conversation.assistantId) {
+        if (!vm.conversationInitialized) return@LaunchedEffect
+        val targetId = vm.resolveAssistantMismatchTarget() ?: return@LaunchedEffect
+        navigateToChatPage(navigator = navController, chatId = targetId)
+    }
+
     val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
         assistant.workspaceId?.let { workspaceId ->
             listOf(

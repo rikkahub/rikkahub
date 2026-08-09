@@ -277,22 +277,35 @@ class ChatService(
 
     // ---- 初始化对话 ----
 
-    suspend fun initializeConversation(conversationId: Uuid) {
-        getOrCreateSession(conversationId) // 确保 session 存在
-        val conversation = conversationRepo.getConversationById(conversationId)
-        if (conversation != null) {
-            updateConversation(conversationId, conversation)
-            settingsStore.updateAssistant(conversation.assistantId)
+    suspend fun initializeConversation(conversationId: Uuid, syncAssistant: Boolean = true) {
+        val session = getOrCreateSession(conversationId)
+        val conversation = if (session.isGenerating) {
+            // 正在生成时内存态比数据库快照新 (流式消息尚未落库), 覆盖会导致
+            // 生成内容永久丢失 (onSuccess 会把被覆盖的状态存回库), 且
+            // checkFilesDelete 会误删流式消息引用的文件; 以内存态为准
+            session.state.value
         } else {
-            // 新建对话, 并添加预设消息
-            val currentSettings = settingsStore.settingsFlowRaw.first()
-            val assistant = currentSettings.getCurrentAssistant()
-            val newConversation = Conversation.ofId(
-                id = conversationId,
-                assistantId = assistant.id,
-                newConversation = true
-            ).updateCurrentMessages(assistant.presetMessages)
-            updateConversation(conversationId, newConversation)
+            val dbConversation = conversationRepo.getConversationById(conversationId)
+            if (dbConversation != null) {
+                updateConversation(conversationId, dbConversation)
+                dbConversation
+            } else {
+                // 新建对话, 并添加预设消息
+                val currentSettings = settingsStore.settingsFlowRaw.first()
+                val assistant = currentSettings.getCurrentAssistant()
+                val newConversation = Conversation.ofId(
+                    id = conversationId,
+                    assistantId = assistant.id,
+                    newConversation = true
+                ).updateCurrentMessages(assistant.presetMessages)
+                updateConversation(conversationId, newConversation)
+                newConversation
+            }
+        }
+        // 重返同一会话 (如从设置页返回导致的重复初始化) 时不同步,
+        // 否则会反向覆盖用户刚在设置里切换的当前助手
+        if (syncAssistant) {
+            settingsStore.updateAssistant(conversation.assistantId)
         }
     }
 

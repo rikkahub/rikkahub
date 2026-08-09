@@ -285,19 +285,9 @@ fun ChatDrawerContent(
             AssistantPicker(
                 settings = settings,
                 onUpdateSettings = {
-                    val updateJob = vm.updateSettings(it)
-                    scope.launch {
-                        updateJob.join()
-                        val id = if (context.readBooleanPreference("create_new_conversation_on_start", true)) {
-                            Uuid.random()
-                        } else {
-                            repo.getConversationsOfAssistant(it.assistantId)
-                                .first()
-                                .firstOrNull()
-                                ?.id ?: Uuid.random()
-                        }
-                        navigateToChatPage(navigator = navController, chatId = id)
-                    }
+                    // 切换助手后的会话跳转由 ChatPage 的助手一致性对账统一处理
+                    // (同时覆盖从助手设置页切换的场景), 此处只需更新设置
+                    vm.updateSettings(it)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 onClickSetting = {
