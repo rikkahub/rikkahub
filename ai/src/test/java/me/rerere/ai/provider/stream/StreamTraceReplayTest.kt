@@ -17,8 +17,8 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import me.rerere.ai.provider.Model
-import me.rerere.ai.provider.providers.ClaudeStreamDecoder
-import me.rerere.ai.provider.providers.GoogleStreamDecoder
+import me.rerere.ai.provider.providers.claude.ClaudeStreamDecoder
+import me.rerere.ai.provider.providers.google.GoogleStreamDecoder
 import me.rerere.ai.provider.providers.openai.ChatCompletionsStreamDecoder
 import me.rerere.ai.provider.providers.openai.ResponseApiStreamDecoder
 import me.rerere.ai.ui.GoogleThoughtMetadata

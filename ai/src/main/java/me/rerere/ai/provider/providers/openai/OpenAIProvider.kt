@@ -1,4 +1,4 @@
-package me.rerere.ai.provider.providers
+package me.rerere.ai.provider.providers.openai
 
 import android.content.Context
 import android.util.Log
@@ -23,8 +23,6 @@ import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.provider.providers.openai.ChatCompletionsAPI
-import me.rerere.ai.provider.providers.openai.ResponseAPI
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage

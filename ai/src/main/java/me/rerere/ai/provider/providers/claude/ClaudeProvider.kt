@@ -1,4 +1,4 @@
-package me.rerere.ai.provider.providers
+package me.rerere.ai.provider.providers.claude
 
 import android.content.Context
 import android.util.Log
@@ -40,6 +40,8 @@ import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.provider.providers.PartGroup
+import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.ui.ImageGenerationItem
 import me.rerere.ai.ui.StreamChunk

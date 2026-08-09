@@ -1,4 +1,4 @@
-package me.rerere.ai.provider.providers
+package me.rerere.ai.provider.providers.google
 
 import android.content.Context
 import android.util.Log
@@ -38,7 +38,9 @@ import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.provider.providers.vertex.ServiceAccountTokenProvider
+import me.rerere.ai.provider.providers.PartGroup
+import me.rerere.ai.provider.providers.google.vertex.ServiceAccountTokenProvider
+import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.GoogleThoughtMetadata

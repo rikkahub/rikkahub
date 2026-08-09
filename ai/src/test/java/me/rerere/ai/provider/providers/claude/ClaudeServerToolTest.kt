@@ -17,10 +17,6 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.provider.providers.ClaudeProvider
-import me.rerere.ai.provider.providers.ClaudeStreamDecoder
-import me.rerere.ai.provider.providers.generateClaudeWithPauseTurn
-import me.rerere.ai.provider.providers.streamClaudeWithPauseTurn
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.ui.ServerToolMetadata
 import me.rerere.ai.ui.ServerToolProtocol

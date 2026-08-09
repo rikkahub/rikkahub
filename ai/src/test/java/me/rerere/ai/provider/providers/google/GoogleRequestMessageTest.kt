@@ -1,4 +1,4 @@
-package me.rerere.ai.provider.providers
+package me.rerere.ai.provider.providers.google
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonArray
