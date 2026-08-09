@@ -232,8 +232,12 @@ class GenerationHandler(
                 toolsToProcess = updatedTools
             } else {
                 // Resuming after user interaction - use the resumable tools directly.
+                // 并行调用中免审批的工具在等待审批时被搁置 (仍为 Auto 且未执行),
+                // 恢复时必须一并执行, 否则该 tool call 永远没有结果, 下轮请求会因缺失 tool 结果报错
                 Log.i(TAG, "generateText: resuming with ${pendingTools.size} resumable tools")
-                toolsToProcess = messages.last().getTools().filter { it.canResumeExecution }
+                toolsToProcess = messages.last().getTools().filter {
+                    it.canResumeExecution || (!it.isExecuted && it.approvalState is ToolApprovalState.Auto)
+                }
             }
 
             // Handle tools (execute approved tools, handle denied tools)
