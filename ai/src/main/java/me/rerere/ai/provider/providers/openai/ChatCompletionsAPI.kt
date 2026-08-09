@@ -752,7 +752,7 @@ class ChatCompletionsAPI(
                     if (type != "image_url") return@forEach
                     val url = imageObject["image_url"]?.jsonObjectOrNull?.get("url")?.jsonPrimitive?.contentOrNull ?: return@forEach
                     require(url.startsWith("data:image")) { "Only data uri is supported" }
-                    add(UIMessagePart.Image(url.substringAfter("data:image/png;base64,")))
+                    add(UIMessagePart.Image(url))
                 }
             },
             annotations = parseAnnotations(

@@ -352,20 +352,9 @@ private fun UIMessage.appendMessage(delta: UIMessage): UIMessage {
                 }
             }
 
-            is UIMessagePart.Image -> {
-                val lastPart = acc.lastOrNull()
-                if (lastPart is UIMessagePart.Image) {
-                    acc.dropLast(1) + lastPart.copy(
-                        url = lastPart.url + deltaPart.url,
-                        metadata = deltaPart.metadata ?: lastPart.metadata,
-                    )
-                } else {
-                    acc + UIMessagePart.Image(
-                        url = "data:image/png;base64,${deltaPart.url}",
-                        metadata = deltaPart.metadata,
-                    )
-                }
-            }
+            // 非流式解析已经产出完整可渲染的 URL(data URI 或 http)，
+            // 这里每张图片都是独立的完整图片，不能拼接 URL 或补 data 前缀。
+            is UIMessagePart.Image -> acc + deltaPart
 
             is UIMessagePart.Reasoning -> {
                 if (deltaPart.reasoning.isEmpty() && deltaPart.metadata == null) {

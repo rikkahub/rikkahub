@@ -7,6 +7,7 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.TextGenerationResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
@@ -93,6 +94,57 @@ class StreamChunkHandlerTest {
 
         val image = messages.last().parts.single() as UIMessagePart.Image
         assertEquals("data:image/png;base64,final", image.url)
+    }
+
+    @Test
+    fun `non streaming result should keep image data url intact`() {
+        val messages = listOf(UIMessage.user("draw an image"))
+        val result = TextGenerationResult(
+            id = "resp-1",
+            model = model.modelId,
+            message = UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Image("data:image/png;base64,first"),
+                    UIMessagePart.Image("data:image/jpeg;base64,second"),
+                ),
+            ),
+        )
+
+        val images = messages.handleTextGenerationResult(result, model)
+            .last().parts.filterIsInstance<UIMessagePart.Image>()
+
+        assertEquals(
+            listOf("data:image/png;base64,first", "data:image/jpeg;base64,second"),
+            images.map { it.url },
+        )
+    }
+
+    @Test
+    fun `non streaming result appended to assistant turn should not merge images`() {
+        val messages = listOf(
+            UIMessage.user("draw an image"),
+            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(UIMessagePart.Text("sure"))),
+        )
+        val result = TextGenerationResult(
+            id = "resp-1",
+            model = model.modelId,
+            message = UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Image("data:image/png;base64,first"),
+                    UIMessagePart.Image("data:image/png;base64,second"),
+                ),
+            ),
+        )
+
+        val images = messages.handleTextGenerationResult(result, model)
+            .last().parts.filterIsInstance<UIMessagePart.Image>()
+
+        assertEquals(
+            listOf("data:image/png;base64,first", "data:image/png;base64,second"),
+            images.map { it.url },
+        )
     }
 
     @Test
