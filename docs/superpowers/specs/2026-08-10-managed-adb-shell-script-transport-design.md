@@ -29,13 +29,16 @@ models the intended command rather than the real managed transport boundary.
 ## Design
 
 Add one private `run_as_script` function to
-`scripts/voice-agent-real-room-lib.sh`. The function owns three behaviors:
+`scripts/voice-agent-real-room-lib.sh`. The function owns four behaviors:
 
-1. Accept a shell script followed by its positional arguments.
-2. POSIX-quote the package, Android user, script, fixed `sh` argument zero, and
+1. Accept an exact transport mode (`shell` or `exec-out`), a shell script, and
+   the script's positional arguments.
+2. Reject every other transport mode before invoking `mdev`.
+3. POSIX-quote the package, Android user, script, fixed `sh` argument zero, and
    every positional argument without evaluating their contents locally.
-3. Pass the resulting complete `run-as ... sh -c ...` command as one argument
-   after `adb shell` through the existing managed `adb_read` boundary.
+4. Pass the resulting complete `run-as ... sh -c ...` command as one argument
+   after the selected ADB transport through the existing managed `adb_read`
+   boundary.
 
 Route every multiline app-private `run-as sh -c` operation in the library
 through this function. The scripts, input streams, output contracts, ownership
@@ -49,21 +52,24 @@ on packages, user ids, paths, hashes, and ownership receipts.
 
 ```text
 helper operation
-  -> run_as_script(script, args...)
+  -> run_as_script(shell|exec-out, script, args...)
   -> POSIX-quoted single command string
-  -> adb_read shell COMMAND
+  -> adb_read TRANSPORT COMMAND
   -> mdev logical phone lane
   -> Android shell
   -> run-as debug package sh -c SCRIPT sh args...
 ```
 
-Standard input remains connected end to end. This is required by fixture
-staging, which streams the already validated PCM snapshot to the script while
-the script itself remains part of the command argument.
+The caller's existing transport semantics remain intact. Standard input stays
+connected end to end for fixture staging, which streams the already validated
+PCM snapshot to the script while the script itself remains part of the command
+argument. Binary capture keeps `exec-out`, avoiding conversion to a PTY-backed
+shell stream.
 
 ## Error Handling
 
 - Quoting failure stops before invoking `mdev`.
+- An unsupported transport mode stops before invoking `mdev`.
 - A managed transport or Android-shell failure retains the caller's existing
   fixed error classification.
 - Script output continues to be parsed by the existing strict contracts.
@@ -83,6 +89,9 @@ The fake managed transport must also assert that the single command preserves:
 - argument zero and all positional arguments;
 - spaces and shell metacharacters as data rather than syntax; and
 - stdin for the fixture-staging path.
+
+The regression must exercise both `shell` and `exec-out` so binary capture does
+not silently move to the text-shell transport.
 
 Verification consists of the focused regression, the complete real-room helper
 test suite, and the exact read-only physical trace-pointer probe through the
