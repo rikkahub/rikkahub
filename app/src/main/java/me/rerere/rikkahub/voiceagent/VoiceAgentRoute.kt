@@ -48,6 +48,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Mic01
+import me.rerere.hugeicons.stroke.Play
 import me.rerere.hugeicons.stroke.Refresh01
 import me.rerere.hugeicons.stroke.StopCircle
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -176,11 +177,7 @@ private fun VoiceAgentScreen(
         }
     }
 
-    LaunchedEffect(startGate) {
-        if (startGate == VoiceAgentStartGate.Ready) {
-            onStart()
-        }
-    }
+    val connectionPresentation = state.connectionPresentation()
 
     VoiceAgentScaffold(
         title = "Voice Agent",
@@ -190,13 +187,15 @@ private fun VoiceAgentScreen(
             VoiceAgentStartGate.NeedsMicrophonePermission -> "Microphone permission required"
             VoiceAgentStartGate.NeedsBluetoothPermission -> "Bluetooth permission required"
             VoiceAgentStartGate.NeedsNotificationPermission -> "Notification permission required"
-            VoiceAgentStartGate.Ready -> state.statusText()
+            VoiceAgentStartGate.Ready -> connectionPresentation.primaryStatus
         },
         error = state.error,
         actions = if (startGate == VoiceAgentStartGate.Ready) {
             {
                 VoiceAgentControls(
                     muted = muted,
+                    connectionAction = connectionPresentation.action,
+                    onStart = onStart,
                     onMuteToggle = { onMuteToggle(muted) },
                     onInterrupt = onInterrupt,
                     onReconnect = onReconnect,
@@ -380,6 +379,8 @@ private fun VoiceAgentScaffold(
 @Composable
 private fun VoiceAgentControls(
     muted: Boolean,
+    connectionAction: VoiceAgentConnectionAction,
+    onStart: () -> Unit,
     onMuteToggle: () -> Unit,
     onInterrupt: () -> Unit,
     onReconnect: () -> Unit,
@@ -409,11 +410,22 @@ private fun VoiceAgentControls(
         modifier = Modifier.fillMaxWidth(),
     ) {
         OutlinedButton(
-            onClick = onReconnect,
+            onClick = when (connectionAction) {
+                VoiceAgentConnectionAction.Start -> onStart
+                VoiceAgentConnectionAction.Reconnect -> onReconnect
+            },
             modifier = Modifier.weight(1f),
         ) {
-            Icon(HugeIcons.Refresh01, contentDescription = null)
-            Text("Reconnect")
+            when (connectionAction) {
+                VoiceAgentConnectionAction.Start -> {
+                    Icon(HugeIcons.Play, contentDescription = null)
+                    Text("Start")
+                }
+                VoiceAgentConnectionAction.Reconnect -> {
+                    Icon(HugeIcons.Refresh01, contentDescription = null)
+                    Text("Reconnect")
+                }
+            }
         }
         Button(
             onClick = onEnd,
@@ -661,6 +673,32 @@ private fun DiagnosticsCard(diagnostics: List<VoiceDiagnosticLine>) {
             }
         }
     }
+}
+
+internal enum class VoiceAgentConnectionAction {
+    Start,
+    Reconnect,
+}
+
+internal data class VoiceAgentConnectionPresentation(
+    val action: VoiceAgentConnectionAction,
+    val primaryStatus: String,
+)
+
+internal fun VoiceAgentUiState.connectionPresentation(): VoiceAgentConnectionPresentation {
+    val action = if (call == VoiceCallStatus.Idle && session == VoiceSessionStatus.Idle) {
+        VoiceAgentConnectionAction.Start
+    } else {
+        VoiceAgentConnectionAction.Reconnect
+    }
+    return VoiceAgentConnectionPresentation(
+        action = action,
+        primaryStatus = if (action == VoiceAgentConnectionAction.Start) {
+            "Ready to start"
+        } else {
+            statusText()
+        },
+    )
 }
 
 private fun VoiceAgentUiState.statusText(): String = when (session) {
