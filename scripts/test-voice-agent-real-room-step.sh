@@ -2890,6 +2890,7 @@ run_inject_tests() {
        "$(command_count start-foreground-service)" == "0" ]] ||
       fail "inject-scope test: injection changed call lifecycle"
     python3 - "$ADB_LOG" "$role" <<'PY' || fail "inject-path test: role/hash path or broadcast extras were wrong"
+import shlex
 import sys
 
 data = open(sys.argv[1], "rb").read()
@@ -2903,7 +2904,14 @@ stream = [command for command in commands if any(b"voice-step-stage-owned-fixtur
 stage = [command for command in commands if any(b"STAGE_CAPTURE_FIXTURE" in value for value in command)]
 trigger = [command for command in commands if any(b"TRIGGER_CAPTURE_FIXTURE" in value for value in command)]
 assert len(stream) == len(stage) == len(trigger) == 1
-assert stream[0][-2] == expected_path
+tail = stream[0][7:]
+assert len(tail) == 2 and tail[0] == b"shell"
+decoded = shlex.split(tail[1].decode(), posix=True)
+assert decoded[0:6] == [
+    "run-as", "me.rerere.rikkahub.debug", "--user", "0", "sh", "-c",
+]
+assert "voice-step-stage-owned-fixture" in decoded[6]
+assert decoded[7] == "sh" and decoded[9].encode() == expected_path
 assert b"exec-in" not in stream[0]
 stream_script = next(value for value in stream[0] if b"voice-step-stage-owned-fixture" in value)
 assert b"voice-step-descriptor-owned-stage" in stream_script
@@ -4699,6 +4707,7 @@ PY
     fail "end-command-count test: exact force-stop, stable quiescence, broker, or restoration count changed"
   python3 - "$ADB_LOG" "$FAKE_STATE" <<'PY' || fail "end-order/receipt test: teardown ordering or schema-v2 ownership receipt changed"
 import json
+import shlex
 import sys
 
 data = open(sys.argv[1], "rb").read()
@@ -4725,12 +4734,19 @@ assert len(brokers) == len(restorations) == 1
 broker_index, broker = brokers[0]
 assert artifact_reads[0] < force_stop < processes[0] < isolated[0] < processes[1] < isolated[1] < broker_index
 assert any(broker_index < index < restorations[0] for index in artifact_reads)
-assert broker[-5:] == [
-    b"files/voice-real-room/" + b"a" * 64,
-    state["fixture_parent_identity"].encode(),
-    state["fixture_directory_identity"].encode(),
-    b"0123456789abcdef0123456789abcdef",
-    str(state["package_uid"]).encode(),
+tail = broker[7:]
+assert len(tail) == 2 and tail[0] == b"shell"
+decoded = shlex.split(tail[1].decode(), posix=True)
+assert decoded[0:6] == [
+    "run-as", "me.rerere.rikkahub.debug", "--user", "0", "sh", "-c",
+]
+assert "voice-step-cleanup-broker" in decoded[6]
+assert decoded[7] == "sh" and decoded[8:] == [
+    "files/voice-real-room/" + "a" * 64,
+    state["fixture_parent_identity"],
+    state["fixture_directory_identity"],
+    "0123456789abcdef0123456789abcdef",
+    str(state["package_uid"]),
 ]
 script = next(value for value in broker if b"voice-step-cleanup-broker" in value)
 assert b"/proc/self/fd/4" in script and b'stat -Lc %h /proc/self/fd/4' in script
