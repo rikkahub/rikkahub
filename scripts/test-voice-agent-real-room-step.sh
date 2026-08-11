@@ -817,10 +817,10 @@ if run_as_tail is not None:
                 cleanup_markers = (
                     "exec 5< .",
                     "exec 4< .",
-                    'stat -Lc %d:%i /proc/self/fd/4',
+                    'stat -Lc %d:%i /proc/$$/fd/4',
                     'stat -c %d:%i "$name"',
                     'rmdir -- "$name"',
-                    'stat -Lc %h /proc/self/fd/4',
+                    'stat -Lc %h /proc/$$/fd/4',
                 )
                 state["missing_cleanup_markers"] = [
                     marker for marker in cleanup_markers if marker not in script
@@ -2650,12 +2650,14 @@ expected_shell_markers = {
     "voice-step-create-owned-directory": 1,
     "voice-step-stage-owned-fixture": 1,
 }
+scripts_by_marker = {}
 for marker, expected_count in expected_shell_markers.items():
     matches = [
         command for command in commands
         if any(marker.encode() in value for value in command)
     ]
     assert len(matches) == expected_count
+    scripts_by_marker[marker] = []
     for match in matches:
         tail = match[7:]
         assert len(tail) == 2 and tail[0] == b"shell"
@@ -2664,6 +2666,16 @@ for marker, expected_count in expected_shell_markers.items():
             "run-as", "me.rerere.rikkahub.debug", "--user", "0", "sh",
         ]
         assert decoded[5] == "-c" and marker in decoded[6] and decoded[7] == "sh"
+        scripts_by_marker[marker].append(decoded[6].encode())
+
+create_script = scripts_by_marker["voice-step-create-owned-directory"][0]
+assert b"/proc/self/fd/" not in create_script
+for descriptor in (3, 4, 5):
+    assert f"/proc/$$/fd/{descriptor}".encode() in create_script
+
+stage_script = scripts_by_marker["voice-step-stage-owned-fixture"][0]
+assert b"/proc/self/fd/" not in stage_script
+assert b"/proc/$$/fd/3" in stage_script
 PY
   pass
 
@@ -2915,7 +2927,8 @@ assert decoded[7] == "sh" and decoded[9].encode() == expected_path
 assert b"exec-in" not in stream[0]
 stream_script = next(value for value in stream[0] if b"voice-step-stage-owned-fixture" in value)
 assert b"voice-step-descriptor-owned-stage" in stream_script
-assert b"/proc/self/fd/3" in stream_script
+assert b"/proc/self/fd/" not in stream_script
+assert b"/proc/$$/fd/3" in stream_script
 assert b"mktemp" not in stream_script and b'cat > "$temporary"' not in stream_script
 assert expected_path in stage[0] and expected_path in trigger[0]
 assert b"fixture-1" in stage[0] and b"fixture-1" in trigger[0]
@@ -4357,6 +4370,10 @@ assert [path.rsplit("/", 1)[-1] for path in decoded[8:]] == [
     "voice-experience-private.ndjson",
     "voice-experience-events.ndjson",
 ]
+bundle_script = decoded[6].encode()
+assert b"/proc/self/fd/" not in bundle_script
+for descriptor in (3, 4, 5):
+    assert f"/proc/$$/fd/{descriptor}".encode() in bundle_script
 automation = open(sys.argv[2], "rb").read()
 private = open(sys.argv[3], "rb").read()
 sanitized = open(sys.argv[4], "rb").read()
@@ -4749,7 +4766,9 @@ assert decoded[7] == "sh" and decoded[8:] == [
     str(state["package_uid"]),
 ]
 script = next(value for value in broker if b"voice-step-cleanup-broker" in value)
-assert b"/proc/self/fd/4" in script and b'stat -Lc %h /proc/self/fd/4' in script
+assert b"/proc/self/fd/" not in script
+assert b"/proc/$$/fd/4" in script
+assert b"stat -Lc %h /proc/$$/fd/4" in script
 assert b'rm -rf -- "$directory"' not in script
 PY
   python3 - "$FAKE_STATE" <<'PY' || fail "end-state test: cleanup/restoration proof was incomplete"

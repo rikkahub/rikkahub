@@ -907,26 +907,26 @@ parent_root=$(readlink -f "$parent") || exit 1
 cd -- "$parent" || exit 1
 parent_inode=$(stat -c %d:%i .) || exit 1
 exec 5< . || exit 1
-[ "$(stat -Lc %d:%i /proc/self/fd/5)" = "$parent_inode" ] || exit 1
+[ "$(stat -Lc %d:%i /proc/$$/fd/5)" = "$parent_inode" ] || exit 1
 created_bound=0
 directory_inode=
 cleanup() {
   [ "$created_bound" = 1 ] || return 0
   exec 3>&-
   [ "$(stat -c %d:%i . 2>/dev/null || :)" = "$directory_inode" ] || return 1
-  [ "$(stat -Lc %d:%i /proc/self/fd/4 2>/dev/null || :)" = "$directory_inode" ] || return 1
+  [ "$(stat -Lc %d:%i /proc/$$/fd/4 2>/dev/null || :)" = "$directory_inode" ] || return 1
   for entry in .[!.]* ..?* *; do
     [ -e "$entry" ] || [ -L "$entry" ] || continue
     rm -rf -- "$entry" || return 1
   done
-  cd /proc/self/fd/5 || return 1
+  cd /proc/$$/fd/5 || return 1
   [ "$(stat -c %d:%i . 2>/dev/null || :)" = "$parent_inode" ] || return 1
-  [ "$(stat -Lc %d:%i /proc/self/fd/5 2>/dev/null || :)" = "$parent_inode" ] || return 1
+  [ "$(stat -Lc %d:%i /proc/$$/fd/5 2>/dev/null || :)" = "$parent_inode" ] || return 1
   [ "$(stat -c %d:%i "$name" 2>/dev/null || :)" = "$directory_inode" ] || return 1
   rmdir -- "$name" || return 1
   [ ! -e "$name" ] && [ ! -L "$name" ] || return 1
-  [ "$(stat -Lc %d:%i /proc/self/fd/4 2>/dev/null || :)" = "$directory_inode" ] && \
-    [ "$(stat -Lc %h /proc/self/fd/4 2>/dev/null || :)" = 0 ] || return 1
+  [ "$(stat -Lc %d:%i /proc/$$/fd/4 2>/dev/null || :)" = "$directory_inode" ] && \
+  [ "$(stat -Lc %h /proc/$$/fd/4 2>/dev/null || :)" = 0 ] || return 1
   exec 4<&-
   exec 5<&-
 }
@@ -937,7 +937,7 @@ directory_inode=$(stat -c %d:%i "$name") || exit 1
 cd -- "$name" || exit 1
 exec 4< . || exit 1
 [ "$(stat -c %d:%i .)" = "$directory_inode" ] && \
-  [ "$(stat -Lc %d:%i /proc/self/fd/4)" = "$directory_inode" ] && \
+  [ "$(stat -Lc %d:%i /proc/$$/fd/4)" = "$directory_inode" ] && \
   [ "$(stat -c %a .)" = 700 ] || exit 1
 for entry in .[!.]* ..?* *; do
   [ -e "$entry" ] || [ -L "$entry" ] || continue
@@ -948,24 +948,24 @@ set -C
 umask 077
 exec 3> .voice-step-owner || exit 1
 set +C
-marker_inode=$(stat -Lc %d:%i /proc/self/fd/3) || exit 1
+marker_inode=$(stat -Lc %d:%i /proc/$$/fd/3) || exit 1
 nonce=$(od -An -N16 -tx1 /dev/urandom | tr -d " \n") || exit 1
 [ "${#nonce}" = 32 ] || exit 1
 case "$nonce" in *[!0-9a-f]*) exit 1 ;; esac
 printf "%s\n%s\n" "$owner" "$nonce" >&3 || exit 1
-[ "$(stat -Lc %a /proc/self/fd/3)" = 600 ] && \
-  [ "$(stat -Lc %h /proc/self/fd/3)" = 1 ] && \
-  [ "$(cat /proc/self/fd/3)" = "$(printf "%s\n%s" "$owner" "$nonce")" ] && \
+[ "$(stat -Lc %a /proc/$$/fd/3)" = 600 ] && \
+  [ "$(stat -Lc %h /proc/$$/fd/3)" = 1 ] && \
+  [ "$(cat /proc/$$/fd/3)" = "$(printf "%s\n%s" "$owner" "$nonce")" ] && \
   [ "$(stat -c %d:%i .voice-step-owner)" = "$marker_inode" ] || exit 1
 exec 3>&-
-parent_mode=$(printf "%o" "0x$(stat -Lc %f /proc/self/fd/5)") || exit 1
-directory_mode=$(printf "%o" "0x$(stat -Lc %f /proc/self/fd/4)") || exit 1
+parent_mode=$(printf "%o" "0x$(stat -Lc %f /proc/$$/fd/5)") || exit 1
+directory_mode=$(printf "%o" "0x$(stat -Lc %f /proc/$$/fd/4)") || exit 1
 parent_identity=$(printf "%s:%s:%s:%s:%s" \
-  "$(stat -Lc %d /proc/self/fd/5)" "$(stat -Lc %i /proc/self/fd/5)" "$parent_mode" \
-  "$(stat -Lc %u /proc/self/fd/5)" "$(stat -Lc %g /proc/self/fd/5)") || exit 1
+  "$(stat -Lc %d /proc/$$/fd/5)" "$(stat -Lc %i /proc/$$/fd/5)" "$parent_mode" \
+  "$(stat -Lc %u /proc/$$/fd/5)" "$(stat -Lc %g /proc/$$/fd/5)") || exit 1
 directory_identity=$(printf "%s:%s:%s:%s:%s" \
-  "$(stat -Lc %d /proc/self/fd/4)" "$(stat -Lc %i /proc/self/fd/4)" "$directory_mode" \
-  "$(stat -Lc %u /proc/self/fd/4)" "$(stat -Lc %g /proc/self/fd/4)") || exit 1
+  "$(stat -Lc %d /proc/$$/fd/4)" "$(stat -Lc %i /proc/$$/fd/4)" "$directory_mode" \
+  "$(stat -Lc %u /proc/$$/fd/4)" "$(stat -Lc %g /proc/$$/fd/4)") || exit 1
 trap - EXIT HUP INT TERM
 exec 4<&-
 exec 5<&-
@@ -1028,7 +1028,7 @@ set -C
 umask 077
 exec 3> "$destination" || exit 1
 set +C
-descriptor=/proc/self/fd/3
+descriptor=/proc/$$/fd/3
 descriptor_inode=$(stat -Lc %d:%i "$descriptor") || exit 1
 cat >&3 || exit 1
 [ -f "$descriptor" ] && [ "$(stat -Lc %a "$descriptor")" = 600 ] && \
@@ -1283,21 +1283,21 @@ identity() {
     "$(stat -Lc %d "$descriptor")" "$(stat -Lc %i "$descriptor")" "$mode" \
     "$(stat -Lc %u "$descriptor")" "$(stat -Lc %g "$descriptor")"
 }
-[ "$(identity /proc/self/fd/5)" = "$expected_parent" ] || exit 1
+[ "$(identity /proc/$$/fd/5)" = "$expected_parent" ] || exit 1
 [ -d "$name" ] && [ ! -L "$name" ] || exit 1
 [ "$(identity "$name")" = "$expected_directory" ] || exit 1
 cd -- "$name" || exit 1
 exec 4< . || exit 1
-[ "$(identity /proc/self/fd/4)" = "$expected_directory" ] || exit 1
-[ "$(stat -Lc %u /proc/self/fd/4)" = "$expected_uid" ] || exit 1
+[ "$(identity /proc/$$/fd/4)" = "$expected_directory" ] || exit 1
+[ "$(stat -Lc %u /proc/$$/fd/4)" = "$expected_uid" ] || exit 1
 [ -f .voice-step-owner ] && [ ! -L .voice-step-owner ] || exit 1
 exec 3< .voice-step-owner || exit 1
-[ "$(stat -Lc %a /proc/self/fd/3)" = 600 ] && \
-  [ "$(stat -Lc %h /proc/self/fd/3)" = 1 ] && \
-  [ "$(stat -Lc %u /proc/self/fd/3)" = "$expected_uid" ] || exit 1
-[ "$(awk "END { print NR }" /proc/self/fd/3)" = 2 ] || exit 1
-owner_hash=$(sed -n "1p" /proc/self/fd/3) || exit 1
-marker_nonce=$(sed -n "2p" /proc/self/fd/3) || exit 1
+[ "$(stat -Lc %a /proc/$$/fd/3)" = 600 ] && \
+  [ "$(stat -Lc %h /proc/$$/fd/3)" = 1 ] && \
+  [ "$(stat -Lc %u /proc/$$/fd/3)" = "$expected_uid" ] || exit 1
+[ "$(awk "END { print NR }" /proc/$$/fd/3)" = 2 ] || exit 1
+owner_hash=$(sed -n "1p" /proc/$$/fd/3) || exit 1
+marker_nonce=$(sed -n "2p" /proc/$$/fd/3) || exit 1
 [ "${#owner_hash}" = 71 ] || exit 1
 case "$owner_hash" in sha256:*) ;; *) exit 1 ;; esac
 [ "$marker_nonce" = "$expected_nonce" ] || exit 1
@@ -1311,12 +1311,12 @@ for entry in .[!.]* ..?* *; do
     [ "$(stat -Lc %u "$entry")" = "$expected_uid" ] || exit 1
   rm -f -- "$entry" || exit 1
 done
-cd /proc/self/fd/5 || exit 1
-[ "$(identity /proc/self/fd/5)" = "$expected_parent" ] || exit 1
+cd /proc/$$/fd/5 || exit 1
+[ "$(identity /proc/$$/fd/5)" = "$expected_parent" ] || exit 1
 [ "$(identity "$name" 2>/dev/null || :)" = "$expected_directory" ] || exit 1
 rmdir -- "$name" || exit 1
 [ ! -e "$name" ] && [ ! -L "$name" ] || exit 1
-[ "$(stat -Lc %h /proc/self/fd/4)" = 0 ] || exit 1
+[ "$(stat -Lc %h /proc/$$/fd/4)" = 0 ] || exit 1
 exec 4<&-
 exec 5<&-
 printf removed
@@ -1540,20 +1540,20 @@ validate_name_metadata "$third_before" || exit 1
 exec 3< "$first"
 exec 4< "$second"
 exec 5< "$third"
-[ "$(descriptor_metadata /proc/self/fd/3)" = "$first_before" ] || exit 1
-[ "$(descriptor_metadata /proc/self/fd/4)" = "$second_before" ] || exit 1
-[ "$(descriptor_metadata /proc/self/fd/5)" = "$third_before" ] || exit 1
-first_size=$(stat -Lc %s /proc/self/fd/3) || exit 1
-second_size=$(stat -Lc %s /proc/self/fd/4) || exit 1
-third_size=$(stat -Lc %s /proc/self/fd/5) || exit 1
+[ "$(descriptor_metadata /proc/$$/fd/3)" = "$first_before" ] || exit 1
+[ "$(descriptor_metadata /proc/$$/fd/4)" = "$second_before" ] || exit 1
+[ "$(descriptor_metadata /proc/$$/fd/5)" = "$third_before" ] || exit 1
+first_size=$(stat -Lc %s /proc/$$/fd/3) || exit 1
+second_size=$(stat -Lc %s /proc/$$/fd/4) || exit 1
+third_size=$(stat -Lc %s /proc/$$/fd/5) || exit 1
 for size in "$first_size" "$second_size" "$third_size"; do
   [ "$size" -ge 1 ] && [ "$size" -le 16777216 ] || exit 1
 done
 printf "%s\n%s\n%s\n" "$first_size" "$second_size" "$third_size"
-cat /proc/self/fd/3 /proc/self/fd/4 /proc/self/fd/5 || exit 1
-[ "$(descriptor_metadata /proc/self/fd/3)" = "$first_before" ] || exit 1
-[ "$(descriptor_metadata /proc/self/fd/4)" = "$second_before" ] || exit 1
-[ "$(descriptor_metadata /proc/self/fd/5)" = "$third_before" ] || exit 1
+cat /proc/$$/fd/3 /proc/$$/fd/4 /proc/$$/fd/5 || exit 1
+[ "$(descriptor_metadata /proc/$$/fd/3)" = "$first_before" ] || exit 1
+[ "$(descriptor_metadata /proc/$$/fd/4)" = "$second_before" ] || exit 1
+[ "$(descriptor_metadata /proc/$$/fd/5)" = "$third_before" ] || exit 1
 [ "$(name_metadata "$first")" = "$first_before" ] || exit 1
 [ "$(name_metadata "$second")" = "$second_before" ] || exit 1
 [ "$(name_metadata "$third")" = "$third_before" ] || exit 1
