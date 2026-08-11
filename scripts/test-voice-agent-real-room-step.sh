@@ -159,6 +159,7 @@ import hashlib
 import json
 import os
 import signal
+import shlex
 import subprocess
 import sys
 import time
@@ -599,6 +600,23 @@ if command == ["get-state"]:
         raise SystemExit(1)
     print("device")
     raise SystemExit(0)
+if (
+    os.environ.get("FAKE_MDEV_REQUIRE_SINGLE_RUN_AS_SCRIPT") == "1"
+    and len(command) > 2
+    and command[0] in {"shell", "exec-out"}
+    and command[1] == "run-as"
+    and "sh" in command[2:]
+    and "-c" in command[2:]
+):
+    raise SystemExit(65)
+
+if len(command) == 2 and command[0] in {"shell", "exec-out"}:
+    try:
+        decoded = shlex.split(command[1], posix=True)
+    except ValueError:
+        raise SystemExit(64)
+    if decoded[:1] == ["run-as"]:
+        command = [command[0], *decoded]
 argv = ["-s", state["serial"], *command]
 maybe_block(argv)
 
@@ -1423,6 +1441,7 @@ PY
   unset FAKE_LN_SIGNAL_DESTINATION FAKE_LN_SIGNAL_TIMING
   unset FAKE_ADB_PREEXISTING_REMOTE_DIR FAKE_ADB_REMOTE_DESTINATION_TYPE
   unset FAKE_ADB_VALIDATED_FALSE FAKE_ADB_SUBSECOND_METADATA_CHANGE
+  unset FAKE_MDEV_REQUIRE_SINGLE_RUN_AS_SCRIPT
   unset FAKE_ADB_PRIVATE_NOISE FAKE_ADB_DEVICE_LOST FAKE_ADB_RETAIN_FIXTURE_DIR
   unset FAKE_ADB_DEVICE_ENUMERATION_STATE FAKE_ADB_SIGNAL_DURING_FORCE_STOP
   unset FAKE_ADB_STATUS_EVENT_COUNT_DRIFT FAKE_ADB_STATUS_NETWORK_DRIFT
@@ -2544,6 +2563,7 @@ PY
 
 run_start_tests() {
   reset_fake
+  export FAKE_MDEV_REQUIRE_SINGLE_RUN_AS_SCRIPT=1
   local fixture="$TMP_DIR/start-fixture.pcm"
   local state="$TMP_DIR/start-state.json"
   make_fixture "$fixture"
@@ -2617,6 +2637,33 @@ assert len(arm) == 1
 assert b"expected_size" in arm[0] and b"8" in arm[0]
 assert b"expected_sha256" in arm[0]
 assert b"sha256:66840dda154e8a113c31dd0ad32f7f3a366a80e8136979d8f5a101d3d29d6f72" in arm[0]
+PY
+  python3 - "$ADB_LOG" <<'PY' || fail "start-script-transport test: app-private scripts were not one managed shell argument"
+import shlex
+import sys
+
+data = open(sys.argv[1], "rb").read()
+commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
+expected_shell_markers = {
+    "voice-step-protected-root": 1,
+    "voice-step-trace-probe": 2,
+    "voice-step-create-owned-directory": 1,
+    "voice-step-stage-owned-fixture": 1,
+}
+for marker, expected_count in expected_shell_markers.items():
+    matches = [
+        command for command in commands
+        if any(marker.encode() in value for value in command)
+    ]
+    assert len(matches) == expected_count
+    for match in matches:
+        tail = match[7:]
+        assert len(tail) == 2 and tail[0] == b"shell"
+        decoded = shlex.split(tail[1].decode(), posix=True)
+        assert decoded[0:5] == [
+            "run-as", "me.rerere.rikkahub.debug", "--user", "0", "sh",
+        ]
+        assert decoded[5] == "-c" and marker in decoded[6] and decoded[7] == "sh"
 PY
   pass
 
@@ -4267,6 +4314,7 @@ run_capture_tests() {
   mkdir "$output_dir"
 
   reset_fake
+  export FAKE_MDEV_REQUIRE_SINGLE_RUN_AS_SCRIPT=1
   finalize_fake_run false
   write_valid_state "$state"
   write_finalization "$finalization"
@@ -4281,14 +4329,26 @@ run_capture_tests() {
   done
   if ! python3 - "$ADB_LOG" "$automation" "$private" "$sanitized" <<'PY'
 import json
+import shlex
 import sys
 
 data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
 bundles = [command for command in commands if any(b"voice-step-capture-bundle" in value for value in command)]
 assert len(bundles) == 1
-for name in (b"automation-events.jsonl", b"voice-experience-private.ndjson", b"voice-experience-events.ndjson"):
-    assert any(value.endswith(name) for value in bundles[0])
+tail = bundles[0][7:]
+assert len(tail) == 2 and tail[0] == b"exec-out"
+decoded = shlex.split(tail[1].decode(), posix=True)
+assert decoded[0:6] == [
+    "run-as", "me.rerere.rikkahub.debug", "--user", "0", "sh", "-c",
+]
+assert "voice-step-capture-bundle" in decoded[6]
+assert decoded[7] == "sh"
+assert [path.rsplit("/", 1)[-1] for path in decoded[8:]] == [
+    "automation-events.jsonl",
+    "voice-experience-private.ndjson",
+    "voice-experience-events.ndjson",
+]
 automation = open(sys.argv[2], "rb").read()
 private = open(sys.argv[3], "rb").read()
 sanitized = open(sys.argv[4], "rb").read()
