@@ -2676,6 +2676,10 @@ for descriptor in (3, 4, 5):
 stage_script = scripts_by_marker["voice-step-stage-owned-fixture"][0]
 assert b"/proc/self/fd/" not in stage_script
 assert b"/proc/$$/fd/3" in stage_script
+assert b"$'\\n'" not in stage_script
+assert b'newline=$(printf "\\nx") || exit 1' in stage_script
+assert b'newline=${newline%x}' in stage_script
+assert b'"$owner$newline"[0-9a-f]' in stage_script
 PY
   pass
 

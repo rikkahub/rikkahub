@@ -1010,7 +1010,9 @@ marker=$directory/.voice-step-owner
 [ -f "$marker" ] && [ ! -L "$marker" ] && \
   [ "$(stat -c %a "$marker")" = 600 ] && [ "$(stat -c %h "$marker")" = 1 ] || exit 1
 marker_payload=$(cat "$marker") || exit 1
-case "$marker_payload" in "$owner"$'\n'[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;; *) exit 1 ;; esac
+newline=$(printf "\nx") || exit 1
+newline=${newline%x}
+case "$marker_payload" in "$owner$newline"[0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;; *) exit 1 ;; esac
 case "$destination" in "$directory"/*.pcm) ;; *) exit 1 ;; esac
 [ ! -e "$destination" ] && [ ! -L "$destination" ] || exit 1
 descriptor_inode=
