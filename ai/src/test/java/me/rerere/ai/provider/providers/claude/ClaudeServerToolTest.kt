@@ -259,7 +259,13 @@ class ClaudeServerToolTest {
             TextGenerationResult(
                 id = "msg_1",
                 model = "claude-test",
-                message = provider.parseMessage(buildJsonArray { add(serverToolUse()) }),
+                message = provider.parseMessage(buildJsonArray {
+                    add(buildJsonObject {
+                        put("type", "text")
+                        put("text", "searching")
+                    })
+                    add(serverToolUse())
+                }),
                 finishReason = "pause_turn",
                 usage = TokenUsage(promptTokens = 10, completionTokens = 2, totalTokens = 12),
             ),
@@ -285,17 +291,30 @@ class ClaudeServerToolTest {
 
         assertEquals(2, requests.size)
         assertEquals(listOf(MessageRole.USER, MessageRole.ASSISTANT), requests[1].map { it.role })
-        val replayedTool = requests[1].last().parts.single() as UIMessagePart.ServerTool
+        val replayedTool = requests[1].last().parts.filterIsInstance<UIMessagePart.ServerTool>().single()
         assertEquals(ServerToolStatus.IN_PROGRESS, replayedTool.status)
         assertEquals(
             "server_tool_use",
             replayedTool.metadataAs<ServerToolMetadata>()?.call?.get("type")?.jsonPrimitive?.content,
         )
         assertEquals("end_turn", result.finishReason)
-        assertEquals("done", result.message.parts.filterIsInstance<UIMessagePart.Text>().single().text)
+        assertEquals("done", result.message.parts.filterIsInstance<UIMessagePart.Text>().last().text)
         assertEquals(ServerToolStatus.COMPLETED, result.message.parts
             .filterIsInstance<UIMessagePart.ServerTool>().single().status)
         assertEquals(TokenUsage(15, 5, 0, 20), result.usage)
+
+        val finalToolMetadata = result.message.parts
+            .filterIsInstance<UIMessagePart.ServerTool>()
+            .single()
+            .metadataAs<ServerToolMetadata>()
+        assertEquals(1, finalToolMetadata?.callIndex)
+        assertEquals(2, finalToolMetadata?.resultIndex)
+        val replayedContent = buildMessages(listOf(UIMessage.user("search"), result.message))
+            .last().jsonObject["content"]?.jsonArray
+        assertEquals(
+            listOf("text", "server_tool_use", "web_search_tool_result", "text"),
+            replayedContent?.map { it.jsonObject["type"]?.jsonPrimitive?.content },
+        )
     }
 
     @Test
@@ -306,6 +325,9 @@ class ClaudeServerToolTest {
         val requests = mutableListOf<List<UIMessage>>()
         val passes = listOf(
             flowOf(
+                StreamChunk.TextStart("intro"),
+                StreamChunk.TextDelta("intro", "searching"),
+                StreamChunk.TextEnd("intro"),
                 StreamChunk.ServerToolStart(
                     id = "srvtoolu_1",
                     toolName = "web_search",
@@ -313,6 +335,7 @@ class ClaudeServerToolTest {
                     metadata = ServerToolMetadata(
                         protocol = ServerToolProtocol.ANTHROPIC_MESSAGES,
                         call = call,
+                        callIndex = 1,
                     ).toMetadata(),
                 ),
                 StreamChunk.ServerToolInputEnd("srvtoolu_1"),
@@ -327,6 +350,7 @@ class ClaudeServerToolTest {
                     metadata = ServerToolMetadata(
                         protocol = ServerToolProtocol.ANTHROPIC_MESSAGES,
                         result = result,
+                        resultIndex = 0,
                     ).toMetadata(),
                 ),
                 StreamChunk.TextStart("text_1"),
@@ -358,9 +382,21 @@ class ClaudeServerToolTest {
             handler.handle(messages, chunk)
         }
         val assistant = outputMessages.last()
-        assertEquals("done", assistant.parts.filterIsInstance<UIMessagePart.Text>().single().text)
+        assertEquals("done", assistant.parts.filterIsInstance<UIMessagePart.Text>().last().text)
         assertEquals(ServerToolStatus.COMPLETED, assistant.parts
             .filterIsInstance<UIMessagePart.ServerTool>().single().status)
+        val finalToolMetadata = assistant.parts
+            .filterIsInstance<UIMessagePart.ServerTool>()
+            .single()
+            .metadataAs<ServerToolMetadata>()
+        assertEquals(1, finalToolMetadata?.callIndex)
+        assertEquals(2, finalToolMetadata?.resultIndex)
+        val replayedContent = buildMessages(listOf(UIMessage.user("search"), assistant))
+            .last().jsonObject["content"]?.jsonArray
+        assertEquals(
+            listOf("text", "server_tool_use", "web_search_tool_result", "text"),
+            replayedContent?.map { it.jsonObject["type"]?.jsonPrimitive?.content },
+        )
     }
 
     private fun buildRequest(

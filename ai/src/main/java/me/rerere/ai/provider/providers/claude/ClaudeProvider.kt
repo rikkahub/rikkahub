@@ -20,6 +20,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -91,9 +92,16 @@ internal suspend fun generateClaudeWithPauseTurn(
     var requestMessages = messages
     var combinedMessage = UIMessage(role = MessageRole.ASSISTANT, parts = emptyList())
     var combinedUsage: TokenUsage? = null
+    var nextServerToolBlockIndex = 0
 
     repeat(maxContinuations + 1) { continuationCount ->
-        val result = request(requestMessages)
+        val rawResult = request(requestMessages)
+        val result = rawResult.copy(
+            message = rawResult.message.rebaseClaudeServerToolIndexes(nextServerToolBlockIndex),
+        )
+        result.message.maxClaudeServerToolIndex()?.let { maxIndex ->
+            nextServerToolBlockIndex = maxOf(nextServerToolBlockIndex, maxIndex + 1)
+        }
         combinedMessage = listOf(combinedMessage)
             .handleTextGenerationResult(result, model)
             .last()
@@ -123,14 +131,20 @@ internal fun streamClaudeWithPauseTurn(
 
     var requestMessages = messages
     var completedUsage: TokenUsage? = null
+    var nextServerToolBlockIndex = 0
 
     repeat(maxContinuations + 1) { continuationCount ->
         val handler = StreamChunkHandler(model)
         var responseMessages = requestMessages
         var passUsage: TokenUsage? = null
         var finish: StreamChunk.Finish? = null
+        val responseIndexOffset = nextServerToolBlockIndex
 
-        request(requestMessages).collect { chunk ->
+        request(requestMessages).collect { rawChunk ->
+            val chunk = rawChunk.rebaseClaudeServerToolIndexes(responseIndexOffset)
+            chunk.maxClaudeServerToolIndex()?.let { maxIndex ->
+                nextServerToolBlockIndex = maxOf(nextServerToolBlockIndex, maxIndex + 1)
+            }
             responseMessages = handler.handle(responseMessages, chunk)
             when (chunk) {
                 is StreamChunk.Usage -> {
@@ -159,6 +173,60 @@ internal fun streamClaudeWithPauseTurn(
         requestMessages = responseMessages
     }
 }
+
+/**
+ * Claude content block index 只在单次响应内有效。pause_turn 会把多次响应合并为一个逻辑
+ * assistant turn，因此在合并前将后续响应的 server tool index 偏移到同一序号空间。
+ */
+private fun UIMessage.rebaseClaudeServerToolIndexes(offset: Int): UIMessage = copy(
+    parts = parts.map { part ->
+        if (part !is UIMessagePart.ServerTool) return@map part
+        part.copy(metadata = part.metadata.rebaseClaudeServerToolIndexes(offset))
+    },
+)
+
+private fun StreamChunk.rebaseClaudeServerToolIndexes(offset: Int): StreamChunk = when (this) {
+    is StreamChunk.ServerToolStart -> copy(metadata = metadata.rebaseClaudeServerToolIndexes(offset))
+    is StreamChunk.ServerToolEnd -> copy(metadata = metadata.rebaseClaudeServerToolIndexes(offset))
+    else -> this
+}
+
+private fun JsonObject?.rebaseClaudeServerToolIndexes(offset: Int): JsonObject? {
+    if (this == null) return null
+    val metadata = runCatching {
+        json.decodeFromJsonElement<ServerToolMetadata>(this)
+    }.getOrNull()?.takeIf { it.protocol == ServerToolProtocol.ANTHROPIC_MESSAGES }
+        ?: return this
+    if (metadata.callIndex == null && metadata.resultIndex == null) return this
+    return JsonObject(this + metadata.rebaseIndexes(offset).toMetadata())
+}
+
+private fun ServerToolMetadata.rebaseIndexes(offset: Int): ServerToolMetadata = copy(
+    callIndex = callIndex?.plus(offset),
+    resultIndex = resultIndex?.plus(offset),
+)
+
+private fun UIMessage.maxClaudeServerToolIndex(): Int? = parts
+    .filterIsInstance<UIMessagePart.ServerTool>()
+    .mapNotNull { part ->
+        part.metadataAs<ServerToolMetadata>()
+            ?.takeIf { it.protocol == ServerToolProtocol.ANTHROPIC_MESSAGES }
+            ?.maxIndex()
+    }
+    .maxOrNull()
+
+private fun StreamChunk.maxClaudeServerToolIndex(): Int? {
+    val metadata = when (this) {
+        is StreamChunk.ServerToolStart -> metadata
+        is StreamChunk.ServerToolEnd -> metadata
+        else -> null
+    } ?: return null
+    return runCatching {
+        json.decodeFromJsonElement<ServerToolMetadata>(metadata)
+    }.getOrNull()?.takeIf { it.protocol == ServerToolProtocol.ANTHROPIC_MESSAGES }?.maxIndex()
+}
+
+private fun ServerToolMetadata.maxIndex(): Int? = listOfNotNull(callIndex, resultIndex).maxOrNull()
 
 private fun TokenUsage?.sum(other: TokenUsage?): TokenUsage? {
     if (this == null) return other
