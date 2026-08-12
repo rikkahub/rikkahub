@@ -525,6 +525,18 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val MUSE_SPARK = defineModel {
+        tokens("muse", "spark")
+        visionInput()
+        toolReasoningAbility()
+    }
+
+    private val MUSE_GLIMMER = defineModel {
+        tokens("muse", "glimmer")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     val QWEN_MT = defineModel {
         tokens("qwen", "mt")
     }
@@ -614,6 +626,8 @@ object ModelRegistry {
         XIAOMI_MIMO_V3_PRO,
         HY3,
         LONGCAT_2,
+        MUSE_SPARK,
+        MUSE_GLIMMER,
         QWEN_MT
     )
 

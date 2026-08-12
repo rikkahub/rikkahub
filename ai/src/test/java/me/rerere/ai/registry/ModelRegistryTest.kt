@@ -101,6 +101,18 @@ class ModelRegistryTest {
     }
 
     @Test
+    fun testMuseSparkAndGlimmer() {
+        val visionInput = listOf(Modality.TEXT, Modality.IMAGE)
+        val toolReasoning = listOf(ModelAbility.TOOL, ModelAbility.REASONING)
+        assertEquals(visionInput, ModelRegistry.MODEL_INPUT_MODALITIES.getData("muse-spark"))
+        assertEquals(visionInput, ModelRegistry.MODEL_INPUT_MODALITIES.getData("muse-spark-1.2"))
+        assertEquals(visionInput, ModelRegistry.MODEL_INPUT_MODALITIES.getData("muse-glimmer"))
+        assertEquals(visionInput, ModelRegistry.MODEL_INPUT_MODALITIES.getData("muse-glimmer-30b"))
+        assertEquals(toolReasoning, ModelRegistry.MODEL_ABILITIES.getData("muse-spark"))
+        assertEquals(toolReasoning, ModelRegistry.MODEL_ABILITIES.getData("muse-glimmer-30b"))
+    }
+
+    @Test
     fun testDeepseekV4() {
         val reasonerAbilities = ModelRegistry.MODEL_ABILITIES.getData("deepseek-reasoner")
         assertEquals(
