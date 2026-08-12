@@ -145,6 +145,14 @@ invocation writes only to its caller-selected record.
 - The broad external orchestration label, such as `fixture-start`, remains
   unchanged; the diagnostic record supplies the actionable substage.
 
+At exit, the helper first snapshots the original diagnostic error and managed
+child state, then disables managed-status capture before rollback and package
+restoration. It derives the cleanup result after local temporary cleanup,
+applies signal and cleanup-status rules without replacing an existing operation
+failure, and publishes the record last. A failed publication is ignored after
+an original nonzero result; only after an otherwise successful operation does
+it set the final failure category to `diagnostic-publication-failed`.
+
 ## Testing
 
 Extend `scripts/test-voice-agent-real-room-step.sh` using its existing fake

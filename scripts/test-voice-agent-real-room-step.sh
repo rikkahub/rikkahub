@@ -582,13 +582,13 @@ if argv[:7] != expected_prefix or len(argv) == 7:
     raise SystemExit(64)
 command = argv[7:]
 argv = [*argv, " ".join(command)]
-exit_match = os.environ.get("FAKE_ADB_EXIT_MATCH")
-if exit_match and any(exit_match in value for value in argv):
-    raise SystemExit(int(os.environ.get("FAKE_ADB_EXIT_STATUS", "73")))
 chmod_match = os.environ.get("FAKE_ADB_CHMOD_MATCH")
 chmod_path = os.environ.get("FAKE_ADB_CHMOD_PATH")
 if chmod_match and chmod_path and any(chmod_match in value for value in argv):
     os.chmod(chmod_path, 0o500)
+exit_match = os.environ.get("FAKE_ADB_EXIT_MATCH")
+if exit_match and any(exit_match in value for value in argv):
+    raise SystemExit(int(os.environ.get("FAKE_ADB_EXIT_STATUS", "73")))
 if command == ["get-state"]:
     if (
         os.environ.get("FAKE_ADB_DEVICE_LOST") == "1"
@@ -1832,8 +1832,8 @@ PY
 }
 
 assert_traced_start_failure() {
-  local fixture="$1" state="$2" diagnostic="$3" stage="$4" category="$5" child="$6"
-  shift 6
+  local fixture="$1" state="$2" diagnostic="$3" stage="$4" category="$5" child="$6" cleanup="$7"
+  shift 7
   local run_hash="sha256:$(printf 'a%.0s' {1..64})"
   local -a extra=()
   while (( $# > 0 )); do
@@ -1860,7 +1860,7 @@ assert_traced_start_failure() {
     [[ "$(<"$state")" == raced ]] ||
       fail "tracing-failure test: $stage published state"
   fi
-  assert_diagnostic_record "$diagnostic" "$stage" failure "$category" "$child" complete ||
+  assert_diagnostic_record "$diagnostic" "$stage" failure "$category" "$child" "$cleanup" ||
     fail "tracing-failure test: $stage record contract mismatch"
   [[ "$(tail -n 1 "$STDERR_FILE")" == "voice-step.diagnostic=stage:$stage,category:$category" ]] ||
     fail "tracing-failure test: $stage diagnostic summary mismatch"
@@ -3020,41 +3020,42 @@ run_tracing_tests() {
 
   reset_fake
   assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
-    option-validation invalid-run-hash none --run-hash invalid
+    option-validation invalid-run-hash none complete --run-hash invalid
   pass
 
   reset_fake
   export VOICE_STEP_ADB_TIMEOUT_SECONDS=0
   assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
-    runtime-validation invalid-timeout-configuration none
+    runtime-validation invalid-timeout-configuration none complete
   unset VOICE_STEP_ADB_TIMEOUT_SECONDS
   pass
 
   reset_fake
   chmod 644 "$fixture"
   assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
-    fixture-snapshot invalid-fixture none
+    fixture-snapshot invalid-fixture none complete
   chmod 600 "$fixture"
   pass
 
-  local exit_match stage category
-  while IFS=':' read -r exit_match stage category; do
+  local exit_match stage category cleanup
+  while IFS=':' read -r exit_match stage category cleanup; do
     reset_fake
     export FAKE_ADB_EXIT_MATCH="$exit_match"
     export FAKE_ADB_EXIT_STATUS=73
-    assert_traced_start_failure "$fixture" "$state" "$diagnostic" "$stage" "$category" 73
+    assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
+      "$stage" "$category" 73 "$cleanup"
     pass
   done <<'EOF'
-get-state:device-readiness:device-not-ready
-get-current-user:package-identity:android-user-readback-failed
-dumpsys package:package-contract:package-readback-failed
-.STATUS:status-read:unexpected-status-response
-voice-step-trace-probe:trace-read:trace-readback-failed
-voice-step-create-owned-directory:fixture-directory:fixture-staging-failed
-voice-step-stage-owned-fixture:fixture-stage:fixture-staging-failed
-.PREPARE:automation-prepare:adb-command-failed
-ARM_CAPTURE_FIXTURE:fixture-arm:adb-command-failed
-start-foreground-service:service-start:call-start-failed
+get-state:device-readiness:device-not-ready:complete
+get-current-user:package-identity:android-user-readback-failed:complete
+dumpsys package:package-contract:package-readback-failed:complete
+.STATUS:status-read:unexpected-status-response:complete
+voice-step-trace-probe:trace-read:trace-readback-failed:complete
+voice-step-create-owned-directory:fixture-directory:fixture-staging-failed:complete
+voice-step-stage-owned-fixture:fixture-stage:fixture-staging-failed:complete
+.PREPARE:automation-prepare:adb-command-failed:complete
+ARM_CAPTURE_FIXTURE:fixture-arm:adb-command-failed:complete
+start-foreground-service:service-start:call-start-failed:failed
 EOF
 
   reset_fake
@@ -3062,25 +3063,65 @@ EOF
   export FAKE_ADB_EXIT_STATUS=73
   export FAKE_ADB_FAIL_END=1
   assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
-    service-start call-start-failed 73
+    service-start call-start-failed 73 failed
+  pass
+
+  reset_fake
+  export FAKE_ADB_EXIT_MATCH=ARM_CAPTURE_FIXTURE
+  export FAKE_ADB_EXIT_STATUS=73
+  export FAKE_ADB_FAIL_CLEANUP_BROKER=1
+  assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
+    fixture-arm adb-command-failed 73 failed
+  if compgen -G "$HELPER_TEMP_ROOT"'/voice-real-room-step.*/.voice-step-diagnostic.*' >/dev/null; then
+    fail "tracing-cleanup-precedence test: diagnostic temporary residue remained"
+  fi
+  assert_private_output_absent
+  pass
+
+  reset_fake
+  local failure_publication_parent="$TMP_DIR/tracing-failure-publication-parent"
+  local failure_publication_diagnostic="$failure_publication_parent/diagnostic.txt"
+  mkdir "$failure_publication_parent"
+  chmod 700 "$failure_publication_parent"
+  export FAKE_ADB_EXIT_MATCH=ARM_CAPTURE_FIXTURE
+  export FAKE_ADB_EXIT_STATUS=73
+  export FAKE_ADB_CHMOD_MATCH=ARM_CAPTURE_FIXTURE
+  export FAKE_ADB_CHMOD_PATH="$failure_publication_parent"
+  run_helper start --state "$state" --diagnostic-record "$failure_publication_diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$fixture"
+  chmod 700 "$failure_publication_parent"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$failure_publication_diagnostic" ]] ||
+    fail "tracing-failure-publication test: failed publication changed the destination"
+  [[ "$(tail -n 1 "$STDERR_FILE")" == \
+     'voice-step.diagnostic=stage:fixture-arm,category:adb-command-failed' ]] ||
+    fail "tracing-failure-publication test: original failure summary was replaced"
+  if compgen -G "$failure_publication_parent"'/.voice-step-diagnostic.*' >/dev/null; then
+    fail "tracing-failure-publication test: diagnostic temporary residue remained"
+  fi
+  if compgen -G "$HELPER_TEMP_ROOT"'/voice-real-room-step.*/.voice-step-diagnostic.*' >/dev/null; then
+    fail "tracing-failure-publication test: diagnostic temporary residue remained"
+  fi
+  assert_private_output_absent "$failure_publication_parent"
   pass
 
   reset_fake
   export FAKE_ADB_START_DOES_NOT_ACTIVATE=1
   assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
-    call-activation call-activation-timed-out 1
+    call-activation call-activation-timed-out 1 complete
   pass
 
   reset_fake
   export FAKE_ADB_START_RETAINS_TRACE=1
   assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
-    trace-activation trace-activation-timed-out none
+    trace-activation trace-activation-timed-out none complete
   pass
 
   reset_fake
   export FAKE_LN_RACE_DESTINATION="$state"
   assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
-    state-publication state-publication-failed none
+    state-publication state-publication-failed none complete
   pass
 
   local lock_fixture="$TMP_DIR/tracing-lock-fixture.pcm"
@@ -3111,7 +3152,7 @@ EOF
     fail "tracing-host-lock test: lock owner did not enter controlled boundary"
   fi
   assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
-    host-lock host-operation-already-active none
+    host-lock host-operation-already-active none complete
   : > "$lock_release"
   set +e
   wait "$lock_pid"
@@ -3135,6 +3176,8 @@ EOF
   chmod 700 "$publication_parent"
   [[ "$RUN_STATUS" -ne 0 && ! -e "$publication_diagnostic" ]] ||
     fail "tracing-publication test: failed diagnostic publication was accepted"
+  [[ "$(grep -Fxc 'voice-step.error=diagnostic publication failed' "$STDERR_FILE")" == 1 ]] ||
+    fail "tracing-publication test: publication failure error summary mismatch"
   [[ "$(tail -n 1 "$STDERR_FILE")" == \
      'voice-step.diagnostic=stage:complete,category:diagnostic-publication-failed' ]] ||
     fail "tracing-publication test: publication failure diagnostic summary mismatch"
@@ -3142,6 +3185,12 @@ EOF
     'voice-step.diagnostic=stage:complete,category:diagnostic-publication-failed' \
     "$STDERR_FILE")" == 1 ]] ||
     fail "tracing-publication test: publication failure emitted multiple summaries"
+  if compgen -G "$publication_parent"'/.voice-step-diagnostic.*' >/dev/null; then
+    fail "tracing-publication test: diagnostic temporary residue remained"
+  fi
+  if compgen -G "$HELPER_TEMP_ROOT"'/voice-real-room-step.*/.voice-step-diagnostic.*' >/dev/null; then
+    fail "tracing-publication test: diagnostic temporary residue remained"
+  fi
   assert_private_output_absent
   pass
 }

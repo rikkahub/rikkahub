@@ -145,6 +145,7 @@ raw_start_cleanup() {
 on_exit() {
   local status=$?
   local cleanup_status=0
+  local cleanup=complete
   trap defer_exit_cleanup_signal HUP INT TERM
   trap - EXIT
   set +e
@@ -159,26 +160,36 @@ on_exit() {
     restore_force_stopped_package || cleanup_status=1
   fi
   cleanup_local_temps || cleanup_status=1
+  if (( cleanup_status != 0 )); then
+    cleanup=failed
+  fi
   if (( EXIT_CLEANUP_SIGNAL == 1 && status == 0 )); then
     status=1
   fi
   if (( status == 0 && cleanup_status != 0 )); then
     status=1
+    diagnostic_note_error 'cleanup failed'
     if (( ERROR_REPORTED == 0 )); then
       printf 'voice-step.error=cleanup failed\n' >&2
+      ERROR_REPORTED=1
     fi
-  elif (( status != 0 && ERROR_REPORTED == 0 )); then
+  fi
+  if (( status != 0 )) && [[ "$DIAGNOSTIC_ERROR_CATEGORY" == none ]]; then
+    diagnostic_note_error 'operation failed'
+  fi
+  if (( status != 0 && ERROR_REPORTED == 0 )); then
     printf 'voice-step.error=operation failed\n' >&2
+    ERROR_REPORTED=1
   fi
   if (( status == 0 && DIAGNOSTIC_ENABLED == 1 )); then
-    if ! diagnostic_publish success complete; then
+    if ! diagnostic_publish success "$cleanup"; then
       status=1
       diagnostic_note_error 'diagnostic publication failed'
       ERROR_REPORTED=1
       printf 'voice-step.error=diagnostic publication failed\n' >&2
     fi
   elif (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
-    diagnostic_publish failure complete || true
+    diagnostic_publish failure "$cleanup" || true
   fi
   if (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
     printf 'voice-step.diagnostic=stage:%s,category:%s\n' \
