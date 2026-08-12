@@ -10,6 +10,7 @@ LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
 REAL_TIMEOUT="$(command -v timeout)"
 REAL_LN="$(command -v ln)"
 REAL_RMDIR="$(command -v rmdir)"
+REAL_RM="$(command -v rm)"
 REAL_STAT="$(command -v stat)"
 CURRENT_UID="$(id -u)"
 MDEV_OWNER='OWNER_SECRET_123'
@@ -152,6 +153,19 @@ executable = os.environ["REAL_RMDIR"]
 os.execv(executable, [executable, *sys.argv[1:]])
 PY
 chmod 700 "$BIN_DIR/rmdir"
+
+cat > "$BIN_DIR/rm" <<'PY'
+#!/usr/bin/env python3
+import os
+import signal
+import sys
+
+match = os.environ.get("FAKE_RM_SIGNAL_MATCH")
+if match and any(match in argument for argument in sys.argv[1:]):
+    os.kill(os.getppid(), signal.SIGTERM)
+os.execv(os.environ["REAL_RM"], [os.environ["REAL_RM"], *sys.argv[1:]])
+PY
+chmod 700 "$BIN_DIR/rm"
 
 cat > "$BIN_DIR/mdev" <<'PY'
 #!/usr/bin/env python3
@@ -568,6 +582,16 @@ def artifact_content(path, state):
         return encoded
     return None
 
+
+closed_diagnostic_parent = os.environ.get("FAKE_ASSERT_CLOSED_DIAGNOSTIC_PARENT")
+if closed_diagnostic_parent:
+    for descriptor in os.listdir("/proc/self/fd"):
+        try:
+            resolved = os.readlink(f"/proc/self/fd/{descriptor}")
+        except FileNotFoundError:
+            continue
+        if resolved == closed_diagnostic_parent:
+            raise SystemExit(96)
 
 argv = sys.argv[1:]
 record(os.environ["FAKE_ADB_LOG"], argv)
@@ -1379,7 +1403,7 @@ export FAKE_ADB_LOG="$ADB_LOG"
 export FAKE_TIMEOUT_LOG="$TIMEOUT_LOG"
 export FAKE_LN_LOG="$LN_LOG"
 export FAKE_ADB_STATE="$FAKE_STATE"
-export REAL_TIMEOUT REAL_LN REAL_RMDIR REAL_STAT
+export REAL_TIMEOUT REAL_LN REAL_RMDIR REAL_RM REAL_STAT
 export FAKE_MDEV_OWNER="$MDEV_OWNER"
 export FAKE_REMOTE_APP_DATA_ROOT="$REMOTE_APP_DATA_ROOT"
 export FAKE_RMDIR_BOUNDARY_FILE="$RMDIR_BOUNDARY_FILE"
@@ -1481,9 +1505,11 @@ PY
   unset FAKE_ADB_EXIT_MATCH FAKE_ADB_EXIT_STATUS
   unset FAKE_ADB_START_DOES_NOT_ACTIVATE FAKE_ADB_START_RETAINS_TRACE
   unset FAKE_ADB_CHMOD_MATCH FAKE_ADB_CHMOD_PATH
-  unset VOICE_STEP_DIAGNOSTIC_TEST_ACTION VOICE_STEP_DIAGNOSTIC_TEST_DESTINATION
-  unset VOICE_STEP_DIAGNOSTIC_TEST_PARENT VOICE_STEP_DIAGNOSTIC_TEST_PINNED_PARENT
-  unset VOICE_STEP_DIAGNOSTIC_TEST_REPLACEMENT_PARENT VOICE_STEP_DIAGNOSTIC_TEST_MARKER
+  unset FAKE_ASSERT_CLOSED_DIAGNOSTIC_PARENT FAKE_RM_SIGNAL_MATCH
+  unset VOICE_STEP_DIAGNOSTIC_TMPFILE_MARKER VOICE_STEP_DIAGNOSTIC_LINK_MARKER
+  unset VOICE_STEP_DIAGNOSTIC_UNLINK_MARKER VOICE_STEP_DIAGNOSTIC_DESTINATION
+  unset VOICE_STEP_DIAGNOSTIC_PARENT VOICE_STEP_DIAGNOSTIC_PINNED_PARENT
+  unset VOICE_STEP_DIAGNOSTIC_REPLACEMENT_PARENT VOICE_STEP_DIAGNOSTIC_PARENT_MARKER
 }
 
 make_fixture() {
@@ -1498,122 +1524,102 @@ make_second_fixture() {
   chmod 600 "$destination"
 }
 
-make_diagnostic_link_failure_site() {
+make_diagnostic_tmpfile_failure_site() {
   local site="$1" marker="$2"
   mkdir "$site"
   chmod 700 "$site"
   cat > "$site/sitecustomize.py" <<'PY'
 import os
 
-marker = os.environ["VOICE_STEP_DIAGNOSTIC_LINK_MARKER"]
-real_link = os.link
+marker = os.environ["VOICE_STEP_DIAGNOSTIC_TMPFILE_MARKER"]
+real_open = os.open
 
-def controlled_link(source, destination, *args, **kwargs):
-    if os.path.basename(source).startswith(".voice-step-diagnostic."):
-        source_dir_fd = kwargs.get("src_dir_fd")
-        os.stat(source, dir_fd=source_dir_fd)
+
+def controlled_open(path, flags, *args, **kwargs):
+    if flags & os.O_TMPFILE:
         with open(marker, "w", encoding="ascii") as handle:
-            handle.write("temporary-created\n")
+            handle.write("tmpfile-attempted\n")
         raise OSError
-    return real_link(source, destination, *args, **kwargs)
+    return real_open(path, flags, *args, **kwargs)
 
-os.link = controlled_link
+
+os.open = controlled_open
 PY
 }
 
-make_diagnostic_publication_race_site() {
+make_diagnostic_link_race_site() {
+  local site="$1" marker="$2" unlink_marker="$3"
+  mkdir "$site"
+  chmod 700 "$site"
+  cat > "$site/sitecustomize.py" <<'PY'
+import os
+
+marker = os.environ["VOICE_STEP_DIAGNOSTIC_LINK_MARKER"]
+unlink_marker = os.environ["VOICE_STEP_DIAGNOSTIC_UNLINK_MARKER"]
+real_link = os.link
+real_open = os.open
+real_unlink = os.unlink
+
+
+def controlled_link(source, target, *args, **kwargs):
+    if os.fsdecode(source).startswith("/proc/self/fd/"):
+        descriptor = real_open(
+            target,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
+            0o600,
+            dir_fd=kwargs["dst_dir_fd"],
+        )
+        os.write(descriptor, b"raced")
+        os.close(descriptor)
+        with open(marker, "w", encoding="ascii") as handle:
+            handle.write("link-raced\n")
+    return real_link(source, target, *args, **kwargs)
+
+
+def controlled_unlink(path, *args, **kwargs):
+    destination = os.environ["VOICE_STEP_DIAGNOSTIC_DESTINATION"]
+    if os.fsdecode(path) in {destination, os.path.basename(destination)}:
+        with open(unlink_marker, "w", encoding="ascii") as handle:
+            handle.write("unlink-attempted\n")
+    return real_unlink(path, *args, **kwargs)
+
+
+os.link = controlled_link
+os.unlink = controlled_unlink
+PY
+}
+
+make_diagnostic_parent_race_site() {
   local site="$1"
   mkdir "$site"
   chmod 700 "$site"
   cat > "$site/sitecustomize.py" <<'PY'
 import os
-import signal
-import sys
 
-action = os.environ["VOICE_STEP_DIAGNOSTIC_TEST_ACTION"]
-destination = os.environ["VOICE_STEP_DIAGNOSTIC_TEST_DESTINATION"]
-parent = os.environ.get("VOICE_STEP_DIAGNOSTIC_TEST_PARENT")
-pinned_parent = os.environ.get("VOICE_STEP_DIAGNOSTIC_TEST_PINNED_PARENT")
-replacement_parent = os.environ.get("VOICE_STEP_DIAGNOSTIC_TEST_REPLACEMENT_PARENT")
-marker = os.environ.get("VOICE_STEP_DIAGNOSTIC_TEST_MARKER")
-real_link = os.link
-real_lstat = os.lstat
+parent = os.environ["VOICE_STEP_DIAGNOSTIC_PARENT"]
+pinned_parent = os.environ["VOICE_STEP_DIAGNOSTIC_PINNED_PARENT"]
+replacement_parent = os.environ["VOICE_STEP_DIAGNOSTIC_REPLACEMENT_PARENT"]
+marker = os.environ["VOICE_STEP_DIAGNOSTIC_PARENT_MARKER"]
 real_open = os.open
-real_unlink = os.unlink
-parent_replaced = False
-
-
-def is_diagnostic_temporary(path):
-    return os.path.basename(os.fsdecode(path)).startswith(".voice-step-diagnostic.")
-
-
-def mark(value):
-    if marker:
-        with open(marker, "w", encoding="ascii") as handle:
-            handle.write(value + "\n")
-
-
-def replace_parent():
-    global parent_replaced
-    if parent_replaced:
-        return
-    parent_replaced = True
-    os.rename(parent, pinned_parent)
-    os.symlink(replacement_parent, parent, target_is_directory=True)
-    mark("parent-replaced")
+replaced = False
 
 
 def controlled_open(path, flags, *args, **kwargs):
-    if action == "replace-parent" and os.fsdecode(path) == parent and not parent_replaced:
-        replace_parent()
+    global replaced
+    if (
+        not replaced
+        and os.fsdecode(path) == parent
+        and flags & os.O_DIRECTORY
+    ):
+        replaced = True
+        os.rename(parent, pinned_parent)
+        os.symlink(replacement_parent, parent, target_is_directory=True)
+        with open(marker, "w", encoding="ascii") as handle:
+            handle.write("parent-replaced\n")
     return real_open(path, flags, *args, **kwargs)
 
 
-def controlled_lstat(path, *args, **kwargs):
-    metadata = real_lstat(path, *args, **kwargs)
-    if (
-        action == "replace-parent"
-        and len(sys.argv) > 2
-        and os.fsdecode(path) == parent
-        and not parent_replaced
-    ):
-        replace_parent()
-    return metadata
-
-
-def controlled_link(source, target, *args, **kwargs):
-    result = real_link(source, target, *args, **kwargs)
-    if not is_diagnostic_temporary(source):
-        return result
-    if action == "post-link-mode":
-        source_dir_fd = kwargs.get("src_dir_fd")
-        if source_dir_fd is None:
-            os.chmod(source, 0o640)
-        else:
-            os.chmod(source, 0o640, dir_fd=source_dir_fd)
-        mark("post-link-mode")
-    elif action == "signal-after-link":
-        mark("signal-after-link")
-        os.kill(os.getppid(), signal.SIGTERM)
-    return result
-
-
-def controlled_unlink(path, *args, **kwargs):
-    result = real_unlink(path, *args, **kwargs)
-    if action == "final-mode" and is_diagnostic_temporary(path):
-        directory_fd = kwargs.get("dir_fd")
-        if directory_fd is None:
-            os.chmod(destination, 0o640)
-        else:
-            os.chmod(os.path.basename(destination), 0o640, dir_fd=directory_fd)
-        mark("final-mode")
-    return result
-
-
 os.open = controlled_open
-os.lstat = controlled_lstat
-os.link = controlled_link
-os.unlink = controlled_unlink
 PY
 }
 
@@ -1932,14 +1938,14 @@ assert_private_output_absent() {
 }
 
 assert_diagnostic_record() {
-  local path="$1" stage="$2" outcome="$3" category="$4" child="$5" cleanup="$6"
-  python3 - "$path" "$stage" "$outcome" "$category" "$child" "$cleanup" <<'PY'
+  local path="$1" stage="$2" category="$3" child="$4" cleanup="$5"
+  python3 - "$path" "$stage" "$category" "$child" "$cleanup" <<'PY'
 import os, stat, sys
-path, stage, outcome, category, child, cleanup = sys.argv[1:]
+path, stage, category, child, cleanup = sys.argv[1:]
 raw = open(path, "rb").read()
 assert raw == (
     "version=1\noperation=start\n"
-    f"stage={stage}\noutcome={outcome}\nerror_category={category}\n"
+    f"stage={stage}\noutcome=failure\nerror_category={category}\n"
     f"child_exit_status={child}\ncleanup={cleanup}\n"
 ).encode()
 metadata = os.lstat(path)
@@ -1982,7 +1988,7 @@ assert_traced_start_failure() {
     [[ "$(<"$state")" == raced ]] ||
       fail "tracing-failure test: $stage published state"
   fi
-  assert_diagnostic_record "$diagnostic" "$stage" failure "$category" "$child" "$cleanup" ||
+  assert_diagnostic_record "$diagnostic" "$stage" "$category" "$child" "$cleanup" ||
     fail "tracing-failure test: $stage record contract mismatch"
   [[ "$(tail -n 1 "$STDERR_FILE")" == "voice-step.diagnostic=stage:$stage,category:$category" ]] ||
     fail "tracing-failure test: $stage diagnostic summary mismatch"
@@ -3092,12 +3098,8 @@ run_tracing_tests() {
     --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
     --comparison-hash "$hash_b" --fixture "$fixture"
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=start\nvoice-step.call=active'
-  assert_diagnostic_record "$diagnostic" complete success none none complete ||
-    fail "tracing-success test: diagnostic record contract mismatch"
-  if compgen -G "$HELPER_TEMP_ROOT"'/voice-real-room-step.*/.voice-step-diagnostic.*' >/dev/null; then
-    fail "tracing-success test: diagnostic temporary residue remained"
-  fi
-  pass
+  [[ ! -e "$diagnostic" ]] ||
+    fail "tracing-success test: successful start published a diagnostic record"
 
   reset_fake
   printf 'preserve' > "$diagnostic"
@@ -3207,18 +3209,18 @@ EOF
   local failure_publication_marker="$TMP_DIR/tracing-failure-publication-marker"
   mkdir "$failure_publication_parent"
   chmod 700 "$failure_publication_parent"
-  make_diagnostic_link_failure_site "$failure_publication_site" "$failure_publication_marker"
+  make_diagnostic_tmpfile_failure_site "$failure_publication_site" "$failure_publication_marker"
   export FAKE_ADB_EXIT_MATCH=ARM_CAPTURE_FIXTURE
   export FAKE_ADB_EXIT_STATUS=73
   PYTHONPATH="$failure_publication_site" \
-    VOICE_STEP_DIAGNOSTIC_LINK_MARKER="$failure_publication_marker" \
+    VOICE_STEP_DIAGNOSTIC_TMPFILE_MARKER="$failure_publication_marker" \
     run_helper start --state "$state" --diagnostic-record "$failure_publication_diagnostic" \
     --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
     --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
     --comparison-hash "$hash_b" --fixture "$fixture"
   [[ -f "$failure_publication_marker" &&
-     "$(<"$failure_publication_marker")" == temporary-created ]] ||
-    fail "tracing-failure-publication test: diagnostic temporary was not created"
+     "$(<"$failure_publication_marker")" == tmpfile-attempted ]] ||
+    fail "tracing-failure-publication test: anonymous publication was not attempted"
   [[ "$RUN_STATUS" -ne 0 && ! -e "$failure_publication_diagnostic" ]] ||
     fail "tracing-failure-publication test: failed publication changed the destination"
   [[ "$(tail -n 1 "$STDERR_FILE")" == \
@@ -3234,12 +3236,8 @@ EOF
        'voice-step.diagnostic=stage:fixture-arm,category:diagnostic-publication-failed' \
        "$STDERR_FILE")" == 0 ]] ||
     fail "tracing-failure-publication test: publication failure changed sanitized terminal output ($(tr '\n' ' ' < "$STDERR_FILE"))"
-  if compgen -G "$failure_publication_parent"'/.voice-step-diagnostic.*' >/dev/null; then
-    fail "tracing-failure-publication test: diagnostic temporary residue remained"
-  fi
-  if compgen -G "$HELPER_TEMP_ROOT"'/voice-real-room-step.*/.voice-step-diagnostic.*' >/dev/null; then
-    fail "tracing-failure-publication test: diagnostic temporary residue remained"
-  fi
+  [[ -z "$(find "$failure_publication_parent" -mindepth 1 -maxdepth 1 -print -quit)" ]] ||
+    fail "tracing-failure-publication test: named diagnostic residue remained"
   assert_private_output_absent "$failure_publication_parent"
   pass
 
@@ -3300,78 +3298,40 @@ EOF
   pass
 
   reset_fake
-  local publication_parent="$TMP_DIR/tracing-publication-parent"
-  local publication_diagnostic="$publication_parent/diagnostic.txt"
-  local publication_site="$TMP_DIR/tracing-publication-site"
-  local publication_marker="$TMP_DIR/tracing-publication-marker"
-  mkdir "$publication_parent"
-  chmod 700 "$publication_parent"
-  make_diagnostic_link_failure_site "$publication_site" "$publication_marker"
-  PYTHONPATH="$publication_site" \
-    VOICE_STEP_DIAGNOSTIC_LINK_MARKER="$publication_marker" \
-    run_helper start --state "$state" --diagnostic-record "$publication_diagnostic" \
+  local link_race_parent="$TMP_DIR/tracing-link-race-parent"
+  local link_race_diagnostic="$link_race_parent/diagnostic.txt"
+  local link_race_site="$TMP_DIR/tracing-link-race-site"
+  local link_race_marker="$TMP_DIR/tracing-link-race-marker"
+  local link_race_unlink_marker="$TMP_DIR/tracing-link-race-unlink-marker"
+  mkdir "$link_race_parent"
+  chmod 700 "$link_race_parent"
+  make_diagnostic_link_race_site "$link_race_site" "$link_race_marker" \
+    "$link_race_unlink_marker"
+  export FAKE_ADB_EXIT_MATCH=ARM_CAPTURE_FIXTURE
+  export FAKE_ADB_EXIT_STATUS=73
+  PYTHONPATH="$link_race_site" \
+    VOICE_STEP_DIAGNOSTIC_LINK_MARKER="$link_race_marker" \
+    VOICE_STEP_DIAGNOSTIC_UNLINK_MARKER="$link_race_unlink_marker" \
+    VOICE_STEP_DIAGNOSTIC_DESTINATION="$link_race_diagnostic" \
+    run_helper start --state "$state" --diagnostic-record "$link_race_diagnostic" \
     --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
     --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
     --comparison-hash "$hash_b" --fixture "$fixture"
-  [[ -f "$publication_marker" &&
-     "$(<"$publication_marker")" == temporary-created ]] ||
-    fail "tracing-publication test: diagnostic temporary was not created"
-  [[ "$RUN_STATUS" -ne 0 && ! -e "$publication_diagnostic" ]] ||
-    fail "tracing-publication test: failed diagnostic publication was accepted"
-  [[ "$(grep -Fxc 'voice-step.error=diagnostic publication failed' "$STDERR_FILE")" == 1 ]] ||
-    fail "tracing-publication test: publication failure error summary mismatch"
-  [[ "$(tail -n 1 "$STDERR_FILE")" == \
-     'voice-step.diagnostic=stage:complete,category:diagnostic-publication-failed' ]] ||
-    fail "tracing-publication test: publication failure diagnostic summary mismatch"
-  [[ "$(grep -Fxc \
-    'voice-step.diagnostic=stage:complete,category:diagnostic-publication-failed' \
-    "$STDERR_FILE")" == 1 ]] ||
-    fail "tracing-publication test: publication failure emitted multiple summaries"
-  if compgen -G "$publication_parent"'/.voice-step-diagnostic.*' >/dev/null; then
-    fail "tracing-publication test: diagnostic temporary residue remained"
-  fi
-  if compgen -G "$HELPER_TEMP_ROOT"'/voice-real-room-step.*/.voice-step-diagnostic.*' >/dev/null; then
-    fail "tracing-publication test: diagnostic temporary residue remained"
-  fi
-  assert_private_output_absent
+  [[ -f "$link_race_marker" && "$(<"$link_race_marker")" == link-raced ]] ||
+    fail "tracing-link-race test: deterministic destination race did not run"
+  [[ "$RUN_STATUS" -ne 0 && "$(<"$link_race_diagnostic")" == raced ]] ||
+    fail "tracing-link-race test: raced destination changed"
+  [[ ! -e "$link_race_unlink_marker" ]] ||
+    fail "tracing-link-race test: publisher attempted to unlink the destination"
+  [[ "$(grep -Ec '^voice-step.error=' "$STDERR_FILE")" == 1 &&
+     "$(grep -Fxc \
+       'voice-step.diagnostic=stage:fixture-arm,category:adb-command-failed' \
+       "$STDERR_FILE")" == 1 &&
+     "$(tail -n 1 "$STDERR_FILE")" == \
+       'voice-step.diagnostic=stage:fixture-arm,category:adb-command-failed' ]] ||
+    fail "tracing-link-race test: original failure summaries changed"
+  assert_private_output_absent "$link_race_parent"
   pass
-
-  local verification_action verification_parent verification_diagnostic
-  local verification_site verification_marker
-  for verification_action in post-link-mode final-mode; do
-    reset_fake
-    rm -f -- "$state"
-    verification_parent="$TMP_DIR/tracing-$verification_action-parent"
-    verification_diagnostic="$verification_parent/diagnostic.txt"
-    verification_site="$TMP_DIR/tracing-$verification_action-site"
-    verification_marker="$TMP_DIR/tracing-$verification_action-marker"
-    mkdir "$verification_parent"
-    chmod 700 "$verification_parent"
-    make_diagnostic_publication_race_site "$verification_site"
-    PYTHONPATH="$verification_site" \
-      VOICE_STEP_DIAGNOSTIC_TEST_ACTION="$verification_action" \
-      VOICE_STEP_DIAGNOSTIC_TEST_DESTINATION="$verification_diagnostic" \
-      VOICE_STEP_DIAGNOSTIC_TEST_MARKER="$verification_marker" \
-      run_helper start --state "$state" --diagnostic-record "$verification_diagnostic" \
-      --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
-      --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
-      --comparison-hash "$hash_b" --fixture "$fixture"
-    [[ -f "$verification_marker" &&
-       "$(<"$verification_marker")" == "$verification_action" ]] ||
-      fail "tracing-$verification_action test: deterministic mutation did not run"
-    [[ "$RUN_STATUS" -ne 0 && ! -e "$verification_diagnostic" ]] ||
-      fail "tracing-$verification_action test: owned failed publication remained"
-    if compgen -G "$verification_parent"'/.voice-step-diagnostic.*' >/dev/null; then
-      fail "tracing-$verification_action test: diagnostic temporary residue remained"
-    fi
-    [[ "$(grep -Fxc 'voice-step.error=diagnostic publication failed' "$STDERR_FILE")" == 1 &&
-       "$(grep -Fxc \
-         'voice-step.diagnostic=stage:complete,category:diagnostic-publication-failed' \
-         "$STDERR_FILE")" == 1 ]] ||
-      fail "tracing-$verification_action test: publication failure summaries mismatch ($(tr '\n' ' ' < "$STDERR_FILE"))"
-    assert_private_output_absent "$verification_parent"
-    pass
-  done
 
   reset_fake
   rm -f -- "$state"
@@ -3383,66 +3343,118 @@ EOF
   local parent_race_marker="$TMP_DIR/tracing-parent-race-marker"
   mkdir "$parent_race_parent" "$parent_race_replacement"
   chmod 700 "$parent_race_parent" "$parent_race_replacement"
-  printf 'outside-preserved\n' > "$parent_race_replacement/sentinel"
-  chmod 600 "$parent_race_replacement/sentinel"
-  make_diagnostic_publication_race_site "$parent_race_site"
+  printf 'pinned-preserved\n' > "$parent_race_parent/sentinel"
+  printf 'replacement-preserved\n' > "$parent_race_replacement/sentinel"
+  chmod 600 "$parent_race_parent/sentinel" "$parent_race_replacement/sentinel"
+  make_diagnostic_parent_race_site "$parent_race_site"
+  export FAKE_ADB_EXIT_MATCH=ARM_CAPTURE_FIXTURE
+  export FAKE_ADB_EXIT_STATUS=73
   PYTHONPATH="$parent_race_site" \
-    VOICE_STEP_DIAGNOSTIC_TEST_ACTION=replace-parent \
-    VOICE_STEP_DIAGNOSTIC_TEST_DESTINATION="$parent_race_diagnostic" \
-    VOICE_STEP_DIAGNOSTIC_TEST_PARENT="$parent_race_parent" \
-    VOICE_STEP_DIAGNOSTIC_TEST_PINNED_PARENT="$parent_race_pinned" \
-    VOICE_STEP_DIAGNOSTIC_TEST_REPLACEMENT_PARENT="$parent_race_replacement" \
-    VOICE_STEP_DIAGNOSTIC_TEST_MARKER="$parent_race_marker" \
+    VOICE_STEP_DIAGNOSTIC_PARENT="$parent_race_parent" \
+    VOICE_STEP_DIAGNOSTIC_PINNED_PARENT="$parent_race_pinned" \
+    VOICE_STEP_DIAGNOSTIC_REPLACEMENT_PARENT="$parent_race_replacement" \
+    VOICE_STEP_DIAGNOSTIC_PARENT_MARKER="$parent_race_marker" \
     run_helper start --state "$state" --diagnostic-record "$parent_race_diagnostic" \
     --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
     --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
     --comparison-hash "$hash_b" --fixture "$fixture"
   [[ -f "$parent_race_marker" && "$(<"$parent_race_marker")" == parent-replaced ]] ||
     fail "tracing-parent-race test: deterministic parent replacement did not run"
-  [[ "$RUN_STATUS" -ne 0 && ! -e "$parent_race_replacement/diagnostic.txt" &&
-     "$(<"$parent_race_replacement/sentinel")" == outside-preserved ]] ||
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$parent_race_pinned/diagnostic.txt" &&
+     ! -e "$parent_race_replacement/diagnostic.txt" &&
+     "$(<"$parent_race_pinned/sentinel")" == pinned-preserved &&
+     "$(<"$parent_race_replacement/sentinel")" == replacement-preserved ]] ||
     fail "tracing-parent-race test: publication followed or deleted through replacement"
-  if compgen -G "$parent_race_replacement"'/.voice-step-diagnostic.*' >/dev/null ||
-     compgen -G "$parent_race_pinned"'/.voice-step-diagnostic.*' >/dev/null; then
-    fail "tracing-parent-race test: diagnostic residue remained"
-  fi
+  [[ "$(grep -Ec '^voice-step.error=' "$STDERR_FILE")" == 1 &&
+     "$(grep -Fxc \
+       'voice-step.diagnostic=stage:fixture-arm,category:adb-command-failed' \
+       "$STDERR_FILE")" == 1 ]] ||
+    fail "tracing-parent-race test: original failure summaries changed"
   assert_private_output_absent "$parent_race_parent" "$parent_race_pinned" \
     "$parent_race_replacement"
   pass
 
   reset_fake
   rm -f -- "$state"
-  local signal_parent="$TMP_DIR/tracing-publication-signal-parent"
-  local signal_diagnostic="$signal_parent/diagnostic.txt"
-  local signal_site="$TMP_DIR/tracing-publication-signal-site"
-  local signal_marker="$TMP_DIR/tracing-publication-signal-marker"
-  mkdir "$signal_parent"
-  chmod 700 "$signal_parent"
-  make_diagnostic_publication_race_site "$signal_site"
-  PYTHONPATH="$signal_site" \
-    VOICE_STEP_DIAGNOSTIC_TEST_ACTION=signal-after-link \
-    VOICE_STEP_DIAGNOSTIC_TEST_DESTINATION="$signal_diagnostic" \
-    VOICE_STEP_DIAGNOSTIC_TEST_MARKER="$signal_marker" \
-    run_helper start --state "$state" --diagnostic-record "$signal_diagnostic" \
+  rm -f -- "$diagnostic"
+  local success_fault_site="$TMP_DIR/tracing-success-fault-site"
+  local success_fault_marker="$TMP_DIR/tracing-success-fault-marker"
+  make_diagnostic_tmpfile_failure_site "$success_fault_site" "$success_fault_marker"
+  PYTHONPATH="$success_fault_site" \
+    VOICE_STEP_DIAGNOSTIC_TMPFILE_MARKER="$success_fault_marker" \
+    run_helper start --state "$state" --diagnostic-record "$diagnostic" \
     --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
     --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
     --comparison-hash "$hash_b" --fixture "$fixture"
-  [[ -f "$signal_marker" && "$(<"$signal_marker")" == signal-after-link ]] ||
-    fail "tracing-publication-signal test: deterministic signal did not run"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=start\nvoice-step.call=active'
+  [[ ! -e "$success_fault_marker" && ! -e "$diagnostic" ]] ||
+    fail "tracing-success-fault test: successful start invoked the publisher"
+
+  reset_fake
+  rm -f -- "$state" "$diagnostic"
+  export FAKE_ASSERT_CLOSED_DIAGNOSTIC_PARENT="$TMP_DIR"
+  run_helper start --state "$state" --diagnostic-record "$diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$fixture"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=start\nvoice-step.call=active'
+  [[ ! -e "$diagnostic" ]] ||
+    fail "tracing-closed-parent test: successful start published a diagnostic record"
+
+  reset_fake
+  rm -f -- "$state" "$diagnostic"
+  export FAKE_RM_SIGNAL_MATCH=diagnostic-managed-status
+  run_helper start --state "$state" --diagnostic-record "$diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$fixture"
   [[ "$RUN_STATUS" -ne 0 ]] ||
-    fail "tracing-publication-signal test: deferred signal exited successfully"
-  assert_diagnostic_record "$signal_diagnostic" complete failure interrupted none complete ||
-    fail "tracing-publication-signal test: interrupted failure record mismatch"
+    fail "tracing-final-signal test: deferred signal exited successfully"
+  assert_diagnostic_record "$diagnostic" complete interrupted none complete ||
+    fail "tracing-final-signal test: interrupted failure record mismatch"
   [[ "$(grep -Fxc 'voice-step.error=interrupted' "$STDERR_FILE")" == 1 &&
      "$(grep -Fxc \
        'voice-step.diagnostic=stage:complete,category:interrupted' "$STDERR_FILE")" == 1 &&
      "$(tail -n 1 "$STDERR_FILE")" == \
        'voice-step.diagnostic=stage:complete,category:interrupted' ]] ||
-    fail "tracing-publication-signal test: interrupted summaries mismatch"
-  if compgen -G "$signal_parent"'/.voice-step-diagnostic.*' >/dev/null; then
-    fail "tracing-publication-signal test: diagnostic temporary residue remained"
-  fi
-  assert_private_output_absent "$signal_parent"
+    fail "tracing-final-signal test: interrupted summaries mismatch"
+  [[ -f "$state" ]] ||
+    fail "tracing-final-signal test: committed state was rolled back"
+  python3 - "$FAKE_STATE" <<'PY' || fail "tracing-final-signal test: committed device state was rolled back"
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    state = json.load(handle)
+assert state["automation_state"] == "active"
+assert state["call_active"] is True
+PY
+  assert_private_output_absent
+  pass
+
+  python3 - "$ROOT_DIR/scripts/voice-agent-real-room-diagnostic-publisher.py" \
+    "$ROOT_DIR/scripts/voice-agent-real-room-diagnostics.sh" "$HELPER" <<'PY' || fail "tracing-source-invariants test: failure-only source contract changed"
+import sys
+publisher, diagnostics, step = (
+    open(path, encoding="utf-8").read() for path in sys.argv[1:]
+)
+assert "O_TMPFILE" in publisher
+assert 'f"/proc/self/fd/{unnamed_fd}"' in publisher
+assert "follow_symlinks=True" in publisher
+assert "os._exit(0)" in publisher
+assert publisher.index("os.link(") < publisher.index("os._exit(0)")
+for forbidden in (
+    ".voice-step-diagnostic.",
+    "os.unlink(",
+    "diagnostic_publish success",
+    "diagnostic_remove_owned_destination",
+    "diagnostic_take_published_identity",
+    "DIAGNOSTIC_PARENT_FD",
+    "DIAGNOSTIC_IDENTITY_READ_FD",
+    "DIAGNOSTIC_IDENTITY_WRITE_FD",
+    "DIAGNOSTIC_PUBLISHED_IDENTITY",
+    "diagnostic-publication-failed",
+):
+    assert forbidden not in diagnostics + step + publisher
+PY
   pass
 }
 

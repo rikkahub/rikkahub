@@ -7,6 +7,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACT_HELPERS="$ROOT_DIR/scripts/voice-agent-e2e-artifacts.sh"
 REAL_ROOM_LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
 REAL_ROOM_DIAGNOSTICS="$ROOT_DIR/scripts/voice-agent-real-room-diagnostics.sh"
+REAL_ROOM_DIAGNOSTIC_PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-diagnostic-publisher.py"
 REAL_ROOM_CONTRACT="$ROOT_DIR/scripts/voice-agent-real-room-contract.py"
 PACKAGE_EXPECTED='me.rerere.rikkahub.debug'
 CONTROL_RECEIVER='me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver'
@@ -71,10 +72,6 @@ DIAGNOSTIC_CAPTURE_MANAGED_EXIT=0
 DIAGNOSTIC_ERROR_FILE=''
 DIAGNOSTIC_MANAGED_STATUS_FILE=''
 DIAGNOSTIC_PARENT_IDENTITY=''
-DIAGNOSTIC_PARENT_FD=''
-DIAGNOSTIC_IDENTITY_READ_FD=''
-DIAGNOSTIC_IDENTITY_WRITE_FD=''
-DIAGNOSTIC_PUBLISHED_IDENTITY=''
 declare -a OWNED_TEMP_FILES=()
 declare -A PARSED=()
 
@@ -152,16 +149,14 @@ on_exit() {
   local cleanup_status=0
   local cleanup=complete
   local diagnostic_error_observed=0
-  local diagnostic_publication_status=0
-  local published_identity=''
   trap defer_exit_cleanup_signal HUP INT TERM
   trap - EXIT
   set +e
   if (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
     diagnostic_snapshot_private_state || true
     [[ "$DIAGNOSTIC_ERROR_CATEGORY" == none ]] || diagnostic_error_observed=1
-    DIAGNOSTIC_CAPTURE_MANAGED_EXIT=0
   fi
+  DIAGNOSTIC_CAPTURE_MANAGED_EXIT=0
   if (( status != 0 && START_CLEANUP_NEEDED == 1 )); then
     raw_start_cleanup || cleanup_status=1
   fi
@@ -195,39 +190,19 @@ on_exit() {
     fi
     ERROR_REPORTED=1
   fi
-  if (( status == 0 && DIAGNOSTIC_ENABLED == 1 )); then
-    if diagnostic_publish success "$cleanup"; then
-      diagnostic_take_published_identity || diagnostic_publication_status=1
-      published_identity="$DIAGNOSTIC_PUBLISHED_IDENTITY"
-    else
-      diagnostic_publication_status=1
-    fi
+  if (( status == 0 )); then
+    trap - HUP INT TERM
     if (( EXIT_CLEANUP_SIGNAL == 1 )); then
       status=1
       diagnostic_note_error 'interrupted'
-      if [[ -n "$published_identity" ]]; then
-        if diagnostic_remove_owned_destination "$published_identity"; then
-          diagnostic_publish failure "$cleanup" || true
-        fi
-      fi
       if (( ERROR_REPORTED == 0 )); then
         printf 'voice-step.error=interrupted\n' >&2
         ERROR_REPORTED=1
       fi
-    elif (( diagnostic_publication_status != 0 )); then
-      status=1
-      diagnostic_note_error 'diagnostic publication failed'
-      ERROR_REPORTED=1
-      printf 'voice-step.error=diagnostic publication failed\n' >&2
     fi
-  elif (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
-    diagnostic_publish failure "$cleanup" || true
-  fi
-  if (( status != 0 && ERROR_REPORTED == 0 && diagnostic_error_observed == 0 )); then
-    printf 'voice-step.error=operation failed\n' >&2
-    ERROR_REPORTED=1
   fi
   if (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
+    diagnostic_publish_failure "$cleanup" || true
     printf 'voice-step.diagnostic=stage:%s,category:%s\n' \
       "$DIAGNOSTIC_STAGE" "$DIAGNOSTIC_ERROR_CATEGORY" >&2
   fi
