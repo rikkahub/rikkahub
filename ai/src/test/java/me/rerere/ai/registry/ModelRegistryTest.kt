@@ -46,6 +46,16 @@ class ModelRegistryTest {
         assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-sonnet-4-20250929"))
         assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-4-sonnet"))
         assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-3.5-sonnet"))
+        assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-sonnet-5"))
+        assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-opus-5"))
+        assertEquals(
+            listOf(Modality.TEXT, Modality.IMAGE),
+            ModelRegistry.MODEL_INPUT_MODALITIES.getData("claude-sonnet-5")
+        )
+        assertEquals(
+            listOf(ModelAbility.TOOL, ModelAbility.REASONING),
+            ModelRegistry.MODEL_ABILITIES.getData("claude-opus-5")
+        )
     }
 
     @Test
