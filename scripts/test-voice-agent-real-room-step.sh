@@ -7,6 +7,7 @@ set +x
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HELPER="$ROOT_DIR/scripts/voice-agent-real-room-step.sh"
 LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
+DIAGNOSTICS="$ROOT_DIR/scripts/voice-agent-real-room-diagnostics.sh"
 REAL_TIMEOUT="$(command -v timeout)"
 REAL_LN="$(command -v ln)"
 REAL_RMDIR="$(command -v rmdir)"
@@ -1517,6 +1518,7 @@ PY
   unset VOICE_STEP_DIAGNOSTIC_UNLINK_MARKER VOICE_STEP_DIAGNOSTIC_DESTINATION
   unset VOICE_STEP_DIAGNOSTIC_PARENT VOICE_STEP_DIAGNOSTIC_PINNED_PARENT
   unset VOICE_STEP_DIAGNOSTIC_REPLACEMENT_PARENT VOICE_STEP_DIAGNOSTIC_PARENT_MARKER
+  unset VOICE_STEP_TEST_STATE_PARENT VOICE_STEP_TEST_DIAGNOSTIC_PARENT
 }
 
 make_fixture() {
@@ -1627,6 +1629,28 @@ def controlled_open(path, flags, *args, **kwargs):
 
 
 os.open = controlled_open
+PY
+}
+
+make_destination_parent_identity_alias_site() {
+  local site="$1"
+  mkdir "$site"
+  chmod 700 "$site"
+  cat > "$site/sitecustomize.py" <<'PY'
+import os
+
+state_parent = os.environ["VOICE_STEP_TEST_STATE_PARENT"]
+diagnostic_parent = os.environ["VOICE_STEP_TEST_DIAGNOSTIC_PARENT"]
+real_lstat = os.lstat
+
+
+def aliased_lstat(path, *args, **kwargs):
+    if os.fsdecode(path) == state_parent:
+        return real_lstat(diagnostic_parent)
+    return real_lstat(path, *args, **kwargs)
+
+
+os.lstat = aliased_lstat
 PY
 }
 
@@ -1964,6 +1988,31 @@ for secret in (b"DEVICE_SECRET_123", b"OWNER_SECRET_123", b"CONVERSATION_SECRET_
                b"ADB_STDERR_SECRET"):
     assert secret not in raw
 PY
+}
+
+assert_stage_transition_signal_boundary() {
+  local managed_status="$TMP_DIR/stage-transition-managed-status"
+  local observed="$TMP_DIR/stage-transition-observed"
+  printf '1' > "$managed_status"
+  (
+    source "$DIAGNOSTICS"
+    DIAGNOSTIC_STAGE='fixture-arm'
+    DIAGNOSTIC_CHILD_EXIT_STATUS='1'
+    DIAGNOSTIC_MANAGED_STATUS_FILE="$managed_status"
+    trap 'printf "%s:%s\n" "$DIAGNOSTIC_STAGE" "$(<"$DIAGNOSTIC_MANAGED_STATUS_FILE")" > "$observed"; exit 0' TERM
+    stage_transition_debug_signal() {
+      if [[ "$BASH_COMMAND" == ': > "$DIAGNOSTIC_MANAGED_STATUS_FILE"' ]]; then
+        trap - DEBUG
+        kill -TERM "$BASHPID"
+      fi
+    }
+    set -T
+    trap stage_transition_debug_signal DEBUG
+    diagnostic_set_stage trace-read
+    exit 1
+  ) || fail "tracing-stage-transition-signal test: boundary injection failed"
+  [[ "$(<"$observed")" == fixture-arm:1 ]] ||
+    fail "tracing-stage-transition-signal test: stale status attached to a new stage"
 }
 
 assert_traced_start_failure() {
@@ -3147,6 +3196,31 @@ run_tracing_tests() {
   [[ "$RUN_STATUS" -ne 0 && ! -e "$alias" && ! -s "$MDEV_LOG" ]] ||
     fail "tracing-alias test: validation created output or reached managed transport"
   assert_private_output_absent
+  pass
+
+  reset_fake
+  local state_alias_parent="$TMP_DIR/tracing-state-alias-parent"
+  local diagnostic_alias_parent="$TMP_DIR/tracing-diagnostic-alias-parent"
+  local aliased_state="$state_alias_parent/shared-output"
+  local aliased_diagnostic="$diagnostic_alias_parent/shared-output"
+  local destination_alias_site="$TMP_DIR/tracing-destination-alias-site"
+  mkdir "$state_alias_parent" "$diagnostic_alias_parent"
+  chmod 700 "$state_alias_parent" "$diagnostic_alias_parent"
+  make_destination_parent_identity_alias_site "$destination_alias_site"
+  PYTHONPATH="$destination_alias_site" \
+    VOICE_STEP_TEST_STATE_PARENT="$state_alias_parent" \
+    VOICE_STEP_TEST_DIAGNOSTIC_PARENT="$diagnostic_alias_parent" \
+    run_helper start --state "$aliased_state" --diagnostic-record "$aliased_diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$fixture"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$aliased_state" &&
+     ! -e "$aliased_diagnostic" && ! -s "$MDEV_LOG" ]] ||
+    fail "tracing-namespace-alias test: aliased destinations reached managed transport or publication"
+  assert_private_output_absent "$state_alias_parent" "$diagnostic_alias_parent"
+  pass
+
+  assert_stage_transition_signal_boundary
   pass
 
   reset_fake

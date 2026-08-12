@@ -36,6 +36,56 @@ PY
   DIAGNOSTIC_PARENT_IDENTITY="$parent_identity"
 }
 
+validate_distinct_diagnostic_state_destination() {
+  local state_destination="$1"
+  local diagnostic_destination="$2"
+  [[ "${DIAGNOSTIC_PARENT_IDENTITY:-}" =~ ^[0-9]+:[0-9]+$ ]] || return 1
+  python3 - "$state_destination" "$diagnostic_destination" \
+    "$DIAGNOSTIC_PARENT_IDENTITY" 2>/dev/null <<'PY'
+import os
+import stat
+import sys
+
+state_destination, diagnostic_destination, diagnostic_identity = sys.argv[1:]
+if (
+    not state_destination
+    or not os.path.isabs(state_destination)
+    or os.path.normpath(state_destination) != state_destination
+):
+    raise SystemExit(1)
+state_parent = os.path.dirname(state_destination)
+state_name = os.path.basename(state_destination)
+if (
+    not state_name
+    or state_name in {".", ".."}
+    or os.path.realpath(state_parent) != state_parent
+):
+    raise SystemExit(1)
+metadata = os.lstat(state_parent)
+if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+    raise SystemExit(1)
+try:
+    os.lstat(state_destination)
+except FileNotFoundError:
+    pass
+else:
+    raise SystemExit(1)
+diagnostic_device, diagnostic_inode = (
+    int(value) for value in diagnostic_identity.split(":", 1)
+)
+if (
+    metadata.st_dev,
+    metadata.st_ino,
+    state_name,
+) == (
+    diagnostic_device,
+    diagnostic_inode,
+    os.path.basename(diagnostic_destination),
+):
+    raise SystemExit(1)
+PY
+}
+
 diagnostic_initialize() {
   local operation="$1"
   local destination="$2"
@@ -63,10 +113,10 @@ diagnostic_initialize() {
 diagnostic_set_stage() {
   local stage="$1"
   diagnostic_token_is_valid "$stage" || return 1
-  DIAGNOSTIC_STAGE="$stage"
-  DIAGNOSTIC_CHILD_EXIT_STATUS='none'
   [[ -z "${DIAGNOSTIC_MANAGED_STATUS_FILE:-}" ]] ||
     : > "$DIAGNOSTIC_MANAGED_STATUS_FILE"
+  DIAGNOSTIC_CHILD_EXIT_STATUS='none'
+  DIAGNOSTIC_STAGE="$stage"
 }
 
 diagnostic_error_category() {

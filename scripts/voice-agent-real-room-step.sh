@@ -1032,7 +1032,8 @@ case "$operation" in
       [[ -n "${PARSED[--diagnostic-record]}" ]] || die 'invalid diagnostic destination'
       validate_private_diagnostic_destination "${PARSED[--diagnostic-record]}" ||
         die 'invalid diagnostic destination'
-      [[ "${PARSED[--diagnostic-record]}" != "${PARSED[--state]}" ]] ||
+      validate_distinct_diagnostic_state_destination "${PARSED[--state]}" \
+        "${PARSED[--diagnostic-record]}" ||
         die 'diagnostic destination must differ from state'
       diagnostic_initialize start "${PARSED[--diagnostic-record]}" ||
         die 'diagnostic initialization failed'

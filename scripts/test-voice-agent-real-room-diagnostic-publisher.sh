@@ -104,6 +104,43 @@ assert_silent
 assert_no_named_temporary "$parent"
 pass
 
+parent="$TMP_DIR/short-write-parent"
+destination="$parent/record"
+site="$TMP_DIR/short-write-site"
+marker="$TMP_DIR/short-write-marker"
+mkdir "$parent" "$site"
+chmod 700 "$parent" "$site"
+cat > "$site/sitecustomize.py" <<'PY'
+import os
+
+marker = os.environ["PUBLISHER_SHORT_WRITE_MARKER"]
+real_write = os.write
+shortened = False
+
+
+def short_write(descriptor, payload):
+    global shortened
+    if not shortened and len(payload) > 1:
+        shortened = True
+        with open(marker, "w", encoding="ascii") as handle:
+            handle.write("short-write-injected\n")
+        return real_write(descriptor, payload[:7])
+    return real_write(descriptor, payload)
+
+
+os.write = short_write
+PY
+PUBLISHER_SHORT_WRITE_MARKER="$marker" PYTHONPATH="$site" \
+  run_publisher "$destination" "$(parent_identity "$parent")" \
+  start fixture-arm adb-command-failed 73 failed
+[[ "$RUN_STATUS" -eq 0 && -f "$marker" &&
+   "$(<"$marker")" == short-write-injected ]] ||
+  fail "publisher test: positive short write was not handled"
+assert_silent
+assert_failure_record "$destination" fixture-arm adb-command-failed 73 failed
+assert_no_named_temporary "$parent"
+pass
+
 parent="$TMP_DIR/tmpfile-parent"
 destination="$parent/record"
 site="$TMP_DIR/tmpfile-site"
