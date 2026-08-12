@@ -6,6 +6,7 @@ set +x
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACT_HELPERS="$ROOT_DIR/scripts/voice-agent-e2e-artifacts.sh"
 REAL_ROOM_LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
+REAL_ROOM_DIAGNOSTICS="$ROOT_DIR/scripts/voice-agent-real-room-diagnostics.sh"
 REAL_ROOM_CONTRACT="$ROOT_DIR/scripts/voice-agent-real-room-contract.py"
 PACKAGE_EXPECTED='me.rerere.rikkahub.debug'
 CONTROL_RECEIVER='me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver'
@@ -26,6 +27,7 @@ FIXTURE_CHUNK_DELAY_MS='100'
 # Only the path joiner is consumed. This preserves the existing artifact helper
 # contract without changing its behavior.
 source "$ARTIFACT_HELPERS"
+source "$REAL_ROOM_DIAGNOSTICS"
 source "$REAL_ROOM_LIBRARY"
 
 MDEV="${MDEV:-mdev}"
@@ -59,6 +61,14 @@ HOST_LOCK_FD=''
 HOST_LOCK_ROOT_FD=''
 PACKAGE_FORCE_STOP_OWNED=0
 EXIT_CLEANUP_SIGNAL=0
+DIAGNOSTIC_ENABLED=0
+DIAGNOSTIC_OPERATION=''
+DIAGNOSTIC_DESTINATION=''
+DIAGNOSTIC_STAGE=''
+DIAGNOSTIC_ERROR_CATEGORY='none'
+DIAGNOSTIC_CHILD_EXIT_STATUS='none'
+DIAGNOSTIC_ERROR_FILE=''
+DIAGNOSTIC_MANAGED_STATUS_FILE=''
 declare -a OWNED_TEMP_FILES=()
 declare -A PARSED=()
 
@@ -154,6 +164,9 @@ on_exit() {
     fi
   elif (( status != 0 && ERROR_REPORTED == 0 )); then
     printf 'voice-step.error=operation failed\n' >&2
+  fi
+  if (( status == 0 && DIAGNOSTIC_ENABLED == 1 )); then
+    diagnostic_publish success complete || status=1
   fi
   exit "$status"
 }
@@ -898,6 +911,7 @@ run_start() {
   START_CALL_ATTEMPTED=0
   START_PREPARE_ATTEMPTED=0
   START_FIXTURE_DIR_CREATED=0
+  diagnostic_set_stage complete || die 'diagnostic state failed'
   cleanup_local_temps || die 'cleanup failed'
   printf '%s\n' \
     'voice-step.status=ok' \
@@ -959,8 +973,17 @@ case "$operation" in
     run_preflight
     ;;
   start)
-    parse_options '--state --mdev-owner --package --conversation-id --run-hash --comparison-hash --fixture' "$@"
+    parse_options '--state --diagnostic-record --mdev-owner --package --conversation-id --run-hash --comparison-hash --fixture' "$@"
     require_options --mdev-owner --state --package --conversation-id --run-hash --comparison-hash --fixture
+    if [[ -n "${PARSED[--diagnostic-record]+present}" ]]; then
+      [[ -n "${PARSED[--diagnostic-record]}" ]] || die 'invalid diagnostic destination'
+      validate_private_diagnostic_destination "${PARSED[--diagnostic-record]}" ||
+        die 'invalid diagnostic destination'
+      [[ "${PARSED[--diagnostic-record]}" != "${PARSED[--state]}" ]] ||
+        die 'diagnostic destination must differ from state'
+      diagnostic_initialize start "${PARSED[--diagnostic-record]}" ||
+        die 'diagnostic initialization failed'
+    fi
     MDEV_OWNER="${PARSED[--mdev-owner]}"
     PACKAGE="${PARSED[--package]}"
     CONVERSATION_ID="${PARSED[--conversation-id]}"

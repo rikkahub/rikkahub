@@ -1796,6 +1796,28 @@ assert_private_output_absent() {
   done
 }
 
+assert_diagnostic_record() {
+  local path="$1" stage="$2" outcome="$3" category="$4" child="$5" cleanup="$6"
+  python3 - "$path" "$stage" "$outcome" "$category" "$child" "$cleanup" <<'PY'
+import os, stat, sys
+path, stage, outcome, category, child, cleanup = sys.argv[1:]
+raw = open(path, "rb").read()
+assert raw == (
+    "version=1\noperation=start\n"
+    f"stage={stage}\noutcome={outcome}\nerror_category={category}\n"
+    f"child_exit_status={child}\ncleanup={cleanup}\n"
+).encode()
+metadata = os.lstat(path)
+assert stat.S_ISREG(metadata.st_mode)
+assert stat.S_IMODE(metadata.st_mode) == 0o600
+assert metadata.st_nlink == 1
+for secret in (b"DEVICE_SECRET_123", b"OWNER_SECRET_123", b"CONVERSATION_SECRET_123",
+               b"fixture-1", b"trace-new", b"sha256:", b"ADB_STDOUT_SECRET",
+               b"ADB_STDERR_SECRET"):
+    assert secret not in raw
+PY
+}
+
 assert_exact_output() {
   local expected="$1"
   if [[ "$RUN_STATUS" -ne 0 ]]; then
@@ -2882,6 +2904,69 @@ PY
   assert_service_action_pinned 'me.rerere.rikkahub.voiceagent.action.END_BOUND' 10
   [[ "$(exact_command_count -s DEVICE_SECRET_123 shell am broadcast --user 10 --include-stopped-packages -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver -a me.rerere.rikkahub.voiceagent.automation.STATUS)" == 1 ]] ||
     fail "pinned-user rollback test: package restoration changed Android user"
+  pass
+}
+
+run_tracing_tests() {
+  local fixture="$TMP_DIR/tracing-fixture.pcm"
+  local state="$TMP_DIR/tracing-state.json"
+  local diagnostic="$TMP_DIR/tracing-diagnostic.txt"
+  local hash_a="sha256:$(printf 'a%.0s' {1..64})"
+  local hash_b="sha256:$(printf 'b%.0s' {1..64})"
+  make_fixture "$fixture"
+
+  reset_fake
+  run_helper start --state "$state" --diagnostic-record "$diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$fixture"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=start\nvoice-step.call=active'
+  assert_diagnostic_record "$diagnostic" complete success none none complete ||
+    fail "tracing-success test: diagnostic record contract mismatch"
+  if compgen -G "$HELPER_TEMP_ROOT"'/voice-real-room-step.*/.voice-step-diagnostic.*' >/dev/null; then
+    fail "tracing-success test: diagnostic temporary residue remained"
+  fi
+  pass
+
+  reset_fake
+  printf 'preserve' > "$diagnostic"
+  chmod 600 "$diagnostic"
+  local existing_inode existing_bytes
+  existing_inode="$(stat -c '%d:%i' "$diagnostic")"
+  existing_bytes="$(<"$diagnostic")"
+  run_helper start --state "$state" --diagnostic-record "$diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$fixture"
+  [[ "$RUN_STATUS" -ne 0 && "$(stat -c '%d:%i' "$diagnostic")" == "$existing_inode" &&
+     "$(<"$diagnostic")" == "$existing_bytes" ]] ||
+    fail "tracing-existing-destination test: destination changed"
+  assert_private_output_absent
+  pass
+
+  reset_fake
+  local insecure_parent="$TMP_DIR/insecure-diagnostic-parent"
+  local insecure_diagnostic="$insecure_parent/diagnostic.txt"
+  mkdir "$insecure_parent"
+  chmod 755 "$insecure_parent"
+  run_helper start --state "$state" --diagnostic-record "$insecure_diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$fixture"
+  [[ "$RUN_STATUS" -ne 0 && ! -s "$MDEV_LOG" ]] ||
+    fail "tracing-insecure-parent test: validation reached managed transport"
+  assert_private_output_absent
+  pass
+
+  reset_fake
+  local alias="$TMP_DIR/tracing-alias.json"
+  run_helper start --state "$alias" --diagnostic-record "$alias" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$fixture"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$alias" && ! -s "$MDEV_LOG" ]] ||
+    fail "tracing-alias test: validation created output or reached managed transport"
+  assert_private_output_absent
   pass
 }
 
@@ -4958,7 +5043,7 @@ if [[ "$#" -eq 0 ]]; then
 fi
 for requested in "${SELECTED_OPERATIONS[@]}"; do
   case "$requested" in
-    preflight|start|inject|interrupt|status|finalize|finalization|capture|end|cleanup|fixture-bounds|checkpoints) ;;
+    preflight|start|inject|interrupt|status|finalize|finalization|capture|end|cleanup|fixture-bounds|checkpoints|tracing) ;;
     *) fail "test filter must name a real-room operation" ;;
   esac
 done
@@ -4972,6 +5057,7 @@ if [[ "$SELECT_ALL" -eq 1 ]]; then
 fi
 selected preflight && run_preflight_tests
 selected start && run_start_tests
+selected tracing && run_tracing_tests
 if selected inject; then
   run_inject_tests
   run_host_lock_test
