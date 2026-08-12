@@ -61,8 +61,41 @@ diagnostic_set_stage() {
     : > "$DIAGNOSTIC_MANAGED_STATUS_FILE"
 }
 
+diagnostic_error_category() {
+  case "$1" in
+    'invalid run hash') printf invalid-run-hash ;;
+    'invalid timeout configuration') printf invalid-timeout-configuration ;;
+    'host operation lock unavailable') printf host-operation-lock-unavailable ;;
+    'host operation already active') printf host-operation-already-active ;;
+    'invalid fixture') printf invalid-fixture ;;
+    'device is not ready') printf device-not-ready ;;
+    'Android user readback failed') printf android-user-readback-failed ;;
+    'package readback failed') printf package-readback-failed ;;
+    'package contract mismatch') printf package-contract-mismatch ;;
+    'unexpected status response') printf unexpected-status-response ;;
+    'automation is not ready') printf automation-not-ready ;;
+    'trace readback failed') printf trace-readback-failed ;;
+    'fixture ownership failed') printf fixture-ownership-failed ;;
+    'fixture staging failed') printf fixture-staging-failed ;;
+    'fixture staging verification failed') printf fixture-staging-verification-failed ;;
+    'receiver rejected request') printf receiver-rejected-request ;;
+    'ADB command failed') printf adb-command-failed ;;
+    'unexpected receiver response') printf unexpected-receiver-response ;;
+    'call start failed') printf call-start-failed ;;
+    'ambiguous call readback') printf ambiguous-call-readback ;;
+    'call activation timed out') printf call-activation-timed-out ;;
+    'trace activation timed out') printf trace-activation-timed-out ;;
+    'state publication failed') printf state-publication-failed ;;
+    'cleanup failed') printf cleanup-failed ;;
+    'interrupted') printf interrupted ;;
+    'diagnostic publication failed') printf diagnostic-publication-failed ;;
+    *) printf operation-failed ;;
+  esac
+}
+
 diagnostic_note_error() {
-  local category="$1"
+  local category
+  category="$(diagnostic_error_category "$1")"
   diagnostic_token_is_valid "$category" || category='operation-failed'
   DIAGNOSTIC_ERROR_CATEGORY="$category"
   [[ -z "${DIAGNOSTIC_ERROR_FILE:-}" ]] ||
@@ -83,6 +116,7 @@ diagnostic_snapshot_private_state() {
   category="$(<"$DIAGNOSTIC_ERROR_FILE")" || return 1
   child="$(<"$DIAGNOSTIC_MANAGED_STATUS_FILE")" || return 1
   diagnostic_token_is_valid "$category" || return 1
+  [[ -z "$child" ]] && child=none
   [[ "$child" == none || "$child" =~ ^([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$ ]] || return 1
   DIAGNOSTIC_ERROR_CATEGORY="$category"
   DIAGNOSTIC_CHILD_EXIT_STATUS="$child"

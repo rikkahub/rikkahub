@@ -13,6 +13,9 @@ die() {
         ! "$message" =~ ^checkpoint\ [a-z][a-z0-9_]{0,63}\ not\ proven$ ]]; then
     message='checkpoint evidence not proven'
   fi
+  if declare -F diagnostic_note_error >/dev/null; then
+    diagnostic_note_error "$message"
+  fi
   printf 'voice-step.error=%s\n' "$message" >&2
   exit 1
 }
@@ -20,8 +23,15 @@ die() {
 FIXTURE_MAX_BYTES=16777216
 
 run_mdev_adb() {
-  timeout --signal=TERM --kill-after=2s "${VOICE_STEP_ADB_TIMEOUT_SECONDS:-10}s" \
-    "$MDEV" android adb --device phone --owner "$MDEV_OWNER" -- "$@" 2>/dev/null
+  local status
+  if timeout --signal=TERM --kill-after=2s "${VOICE_STEP_ADB_TIMEOUT_SECONDS:-10}s" \
+      "$MDEV" android adb --device phone --owner "$MDEV_OWNER" -- "$@" 2>/dev/null; then
+    return 0
+  else
+    status=$?
+  fi
+  diagnostic_note_managed_exit "$status" || true
+  return "$status"
 }
 
 adb_read() {
@@ -1058,6 +1068,7 @@ stage_snapshot() {
   local fixture_hash="$5"
   REMOTE_OWNER_HASH="$(compute_remote_owner_hash)"
   create_owned_remote_directory "$remote_directory" "$REMOTE_OWNER_HASH"
+  diagnostic_set_stage fixture-stage || die 'diagnostic state failed'
   stage_owned_snapshot "$remote_directory" "$remote_path" "$REMOTE_OWNER_HASH" \
     "$fixture_snapshot" "$fixture_size" "$fixture_hash"
 }

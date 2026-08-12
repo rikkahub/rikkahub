@@ -147,6 +147,9 @@ on_exit() {
   trap defer_exit_cleanup_signal HUP INT TERM
   trap - EXIT
   set +e
+  if (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
+    diagnostic_snapshot_private_state || true
+  fi
   if (( status != 0 && START_CLEANUP_NEEDED == 1 )); then
     raw_start_cleanup || cleanup_status=1
   fi
@@ -167,6 +170,10 @@ on_exit() {
   fi
   if (( status == 0 && DIAGNOSTIC_ENABLED == 1 )); then
     diagnostic_publish success complete || status=1
+  elif (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
+    diagnostic_publish failure complete || true
+    printf 'voice-step.diagnostic=stage:%s,category:%s\n' \
+      "$DIAGNOSTIC_STAGE" "$DIAGNOSTIC_ERROR_CATEGORY" >&2
   fi
   exit "$status"
 }
@@ -788,7 +795,7 @@ PY
       set -e
       case "$check_status" in
         0) return 0 ;;
-        1) ;;
+        1) diagnostic_note_managed_exit "$check_status" || true ;;
         *) die 'ambiguous call readback' ;;
       esac
     fi
@@ -853,26 +860,36 @@ run_start() {
   local fixture_size
   local fixture_hash
   local remote_fixture_path
+  diagnostic_set_stage runtime-validation || die 'diagnostic state failed'
   validate_runtime
+  diagnostic_set_stage host-lock || die 'diagnostic state failed'
   acquire_host_operation_lock
+  diagnostic_set_stage fixture-snapshot || die 'diagnostic state failed'
   snapshot_fixture "$fixture_path" fixture_snapshot fixture_size fixture_hash
   REMOTE_FIXTURE_DIR="files/voice-real-room/${RUN_HASH#sha256:}"
   remote_fixture_path="$REMOTE_FIXTURE_DIR/request-${fixture_hash#sha256:}.pcm"
+  diagnostic_set_stage device-readiness || die 'diagnostic state failed'
   ensure_device_and_package
+  diagnostic_set_stage package-identity || die 'diagnostic state failed'
   resolve_package_identity
+  diagnostic_set_stage package-contract || die 'diagnostic state failed'
   verify_package_contract
+  diagnostic_set_stage status-read || die 'diagnostic state failed'
   status_snapshot="$(read_status)"
   mapfile -t status <<< "$status_snapshot"
   [[ "${status[0]}" == idle || "${status[0]}" == finalized ]] ||
     die 'automation is not ready'
+  diagnostic_set_stage trace-read || die 'diagnostic state failed'
   read_trace_pointer
   old_trace_present="$TRACE_POINTER_PRESENT"
   old_trace_value="$TRACE_POINTER_VALUE"
 
   START_CLEANUP_NEEDED=1
+  diagnostic_set_stage fixture-directory || die 'diagnostic state failed'
   stage_snapshot "$REMOTE_FIXTURE_DIR" "$remote_fixture_path" \
     "$fixture_snapshot" "$fixture_size" "$fixture_hash"
   START_PREPARE_ATTEMPTED=1
+  diagnostic_set_stage automation-prepare || die 'diagnostic state failed'
   reply="$(broadcast_read "$CONTROL_RECEIVER" "$CONTROL_ACTION_PREFIX.PREPARE" \
     --es run_hash "$RUN_HASH" \
     --es comparison_hash "$COMPARISON_HASH" \
@@ -880,6 +897,7 @@ run_start() {
     --es lifecycle foreground)"
   [[ "$reply" == $'status=ok\naction=prepare' ]] || die 'unexpected receiver response'
 
+  diagnostic_set_stage fixture-arm || die 'diagnostic state failed'
   reply="$(broadcast_read "$FIXTURE_RECEIVER" "$FIXTURE_ARM_ACTION" \
     --es initial_path "$remote_fixture_path" \
     --el expected_size "$fixture_size" \
@@ -894,6 +912,7 @@ run_start() {
   validate_identifier "$FIXTURE_TOKEN" 'fixture token'
 
   START_CALL_ATTEMPTED=1
+  diagnostic_set_stage service-start || die 'diagnostic state failed'
   adb_read shell am start-foreground-service \
     --user "$ANDROID_USER_ID" \
     -n "$PACKAGE/$SERVICE_CLASS" \
@@ -904,8 +923,11 @@ run_start() {
     --es run_hash "$RUN_HASH" \
     --es comparison_hash "$COMPARISON_HASH" \
     </dev/null >/dev/null 2>&1 || die 'call start failed'
+  diagnostic_set_stage call-activation || die 'diagnostic state failed'
   wait_for_call_active
+  diagnostic_set_stage trace-activation || die 'diagnostic state failed'
   wait_for_new_trace "$old_trace_present" "$old_trace_value"
+  diagnostic_set_stage state-publication || die 'diagnostic state failed'
   publish_state "$state_path"
   START_CLEANUP_NEEDED=0
   START_CALL_ATTEMPTED=0
@@ -989,6 +1011,7 @@ case "$operation" in
     CONVERSATION_ID="${PARSED[--conversation-id]}"
     RUN_HASH="${PARSED[--run-hash]}"
     COMPARISON_HASH="${PARSED[--comparison-hash]}"
+    diagnostic_set_stage option-validation || die 'diagnostic state failed'
     prepare_mdev_owner
     validate_package "$PACKAGE"
     validate_identifier "$CONVERSATION_ID" 'conversation id'

@@ -581,6 +581,10 @@ expected_prefix = [
 if argv[:7] != expected_prefix or len(argv) == 7:
     raise SystemExit(64)
 command = argv[7:]
+argv = [*argv, " ".join(command)]
+exit_match = os.environ.get("FAKE_ADB_EXIT_MATCH")
+if exit_match and any(exit_match in value for value in argv):
+    raise SystemExit(int(os.environ.get("FAKE_ADB_EXIT_STATUS", "73")))
 if command == ["get-state"]:
     if (
         os.environ.get("FAKE_ADB_DEVICE_LOST") == "1"
@@ -1173,9 +1177,11 @@ if command[:5] == [
     if action.endswith(".END_BOUND") and os.environ.get("FAKE_ADB_FAIL_END") == "1":
         raise SystemExit(1)
     if action.endswith(".START"):
-        state["call_active"] = True
-        state["call_active_recorded"] = True
-        state["trace_id"] = "trace-new"
+        if os.environ.get("FAKE_ADB_START_DOES_NOT_ACTIVATE") != "1":
+            state["call_active"] = True
+            state["call_active_recorded"] = True
+        if os.environ.get("FAKE_ADB_START_RETAINS_TRACE") != "1":
+            state["trace_id"] = "trace-new"
         state["conversation_id"] = values.get("conversationId", state["conversation_id"])
     elif action.endswith(".END_BOUND"):
         matches = (
@@ -1468,6 +1474,8 @@ PY
   unset FAKE_ADB_DEVICE_LOST_AFTER_FINALIZE FAKE_ADB_ROUTE_LOST_AFTER_FINALIZE
   unset FAKE_ADB_MALFORMED_AFTER_FINALIZE
   unset FAKE_ADB_PREOPEN_REPLACE_CAPTURE_SOURCE
+  unset FAKE_ADB_EXIT_MATCH FAKE_ADB_EXIT_STATUS
+  unset FAKE_ADB_START_DOES_NOT_ACTIVATE FAKE_ADB_START_RETAINS_TRACE
 }
 
 make_fixture() {
@@ -1816,6 +1824,42 @@ for secret in (b"DEVICE_SECRET_123", b"OWNER_SECRET_123", b"CONVERSATION_SECRET_
                b"ADB_STDERR_SECRET"):
     assert secret not in raw
 PY
+}
+
+assert_traced_start_failure() {
+  local fixture="$1" state="$2" diagnostic="$3" stage="$4" category="$5" child="$6"
+  shift 6
+  local run_hash="sha256:$(printf 'a%.0s' {1..64})"
+  local -a extra=()
+  while (( $# > 0 )); do
+    case "$1" in
+      --run-hash)
+        (( $# >= 2 )) || fail "tracing-failure test: missing run-hash value"
+        run_hash="$2"
+        shift 2
+        ;;
+      *)
+        extra+=("$1")
+        shift
+        ;;
+    esac
+  done
+  rm -f -- "$state" "$diagnostic"
+  run_helper start --state "$state" --diagnostic-record "$diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$run_hash" \
+    --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture" \
+    "${extra[@]}"
+  [[ "$RUN_STATUS" -ne 0 ]] || fail "tracing-failure test: $stage failure succeeded"
+  if [[ -e "$state" ]]; then
+    [[ "$(<"$state")" == raced ]] ||
+      fail "tracing-failure test: $stage published state"
+  fi
+  assert_diagnostic_record "$diagnostic" "$stage" failure "$category" "$child" complete ||
+    fail "tracing-failure test: $stage record contract mismatch"
+  [[ "$(tail -n 1 "$STDERR_FILE")" == "voice-step.diagnostic=stage:$stage,category:$category" ]] ||
+    fail "tracing-failure test: $stage diagnostic summary mismatch"
+  assert_private_output_absent
 }
 
 assert_exact_output() {
@@ -2967,6 +3011,101 @@ run_tracing_tests() {
   [[ "$RUN_STATUS" -ne 0 && ! -e "$alias" && ! -s "$MDEV_LOG" ]] ||
     fail "tracing-alias test: validation created output or reached managed transport"
   assert_private_output_absent
+  pass
+
+  reset_fake
+  assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
+    option-validation invalid-run-hash none --run-hash invalid
+  pass
+
+  reset_fake
+  export VOICE_STEP_ADB_TIMEOUT_SECONDS=0
+  assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
+    runtime-validation invalid-timeout-configuration none
+  unset VOICE_STEP_ADB_TIMEOUT_SECONDS
+  pass
+
+  reset_fake
+  chmod 644 "$fixture"
+  assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
+    fixture-snapshot invalid-fixture none
+  chmod 600 "$fixture"
+  pass
+
+  local exit_match stage category
+  while IFS=':' read -r exit_match stage category; do
+    reset_fake
+    export FAKE_ADB_EXIT_MATCH="$exit_match"
+    export FAKE_ADB_EXIT_STATUS=73
+    assert_traced_start_failure "$fixture" "$state" "$diagnostic" "$stage" "$category" 73
+    pass
+  done <<'EOF'
+get-state:device-readiness:device-not-ready
+get-current-user:package-identity:android-user-readback-failed
+dumpsys package:package-contract:package-readback-failed
+.STATUS:status-read:unexpected-status-response
+voice-step-trace-probe:trace-read:trace-readback-failed
+voice-step-create-owned-directory:fixture-directory:fixture-staging-failed
+voice-step-stage-owned-fixture:fixture-stage:fixture-staging-failed
+.PREPARE:automation-prepare:adb-command-failed
+ARM_CAPTURE_FIXTURE:fixture-arm:adb-command-failed
+start-foreground-service:service-start:call-start-failed
+EOF
+
+  reset_fake
+  export FAKE_ADB_START_DOES_NOT_ACTIVATE=1
+  assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
+    call-activation call-activation-timed-out 1
+  pass
+
+  reset_fake
+  export FAKE_ADB_START_RETAINS_TRACE=1
+  assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
+    trace-activation trace-activation-timed-out none
+  pass
+
+  reset_fake
+  export FAKE_LN_RACE_DESTINATION="$state"
+  assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
+    state-publication state-publication-failed none
+  pass
+
+  local lock_fixture="$TMP_DIR/tracing-lock-fixture.pcm"
+  local lock_state="$TMP_DIR/tracing-lock-state.json"
+  local lock_diagnostic="$TMP_DIR/tracing-lock-diagnostic.txt"
+  local lock_ready="$TMP_DIR/tracing-lock-ready"
+  local lock_release="$TMP_DIR/tracing-lock-release"
+  local lock_stdout="$TMP_DIR/tracing-lock-owner.stdout"
+  local lock_stderr="$TMP_DIR/tracing-lock-owner.stderr"
+  local lock_tmp="$TMP_DIR/tracing-lock-tmp"
+  local lock_pid lock_status
+  reset_fake
+  make_second_fixture "$lock_fixture"
+  mkdir "$lock_tmp"
+  chmod 700 "$lock_tmp"
+  export FAKE_ADB_BLOCK_MATCH=voice-step-stage-owned-fixture
+  export FAKE_ADB_BLOCK_READY="$lock_ready"
+  export FAKE_ADB_BLOCK_RELEASE="$lock_release"
+  TMPDIR="$lock_tmp" "$HELPER" start --state "$lock_state" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$lock_fixture" \
+    >"$lock_stdout" 2>"$lock_stderr" &
+  lock_pid=$!
+  if ! wait_for_path "$lock_ready"; then
+    kill -TERM "$lock_pid" 2>/dev/null || true
+    wait "$lock_pid" 2>/dev/null || true
+    fail "tracing-host-lock test: lock owner did not enter controlled boundary"
+  fi
+  assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
+    host-lock host-operation-already-active none
+  : > "$lock_release"
+  set +e
+  wait "$lock_pid"
+  lock_status=$?
+  set -e
+  [[ "$lock_status" -eq 0 ]] || fail "tracing-host-lock test: lock owner did not complete"
+  unset FAKE_ADB_BLOCK_MATCH FAKE_ADB_BLOCK_READY FAKE_ADB_BLOCK_RELEASE
   pass
 }
 
