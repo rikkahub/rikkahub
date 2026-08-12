@@ -14,7 +14,7 @@ fun computeAIIconByName(name: String): String? {
         PATTERN_CLAUDE.containsMatchIn(lowerName) -> "claude-color.svg"
         PATTERN_ANTHROPIC.containsMatchIn(lowerName) -> "anthropic.svg"
         PATTERN_DEEPSEEK.containsMatchIn(lowerName) -> "deepseek-color.svg"
-        PATTERN_GROK.containsMatchIn(lowerName) -> "grok.svg"
+        PATTERN_GROK.containsMatchIn(lowerName) -> "xai.svg"
         PATTERN_QWEN.containsMatchIn(lowerName) -> "qwen-color.svg"
         PATTERN_DOUBAO.containsMatchIn(lowerName) -> "doubao-color.svg"
         PATTERN_OPENROUTER.containsMatchIn(lowerName) -> "openrouter.svg"
