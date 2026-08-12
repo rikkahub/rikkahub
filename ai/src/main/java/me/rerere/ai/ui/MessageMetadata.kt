@@ -4,11 +4,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.util.json
 
 /**
@@ -73,24 +71,6 @@ data class ServerToolMetadata(
     @SerialName("server_tool_result_index")
     val resultIndex: Int? = null,
 ) : PartMetadata
-
-/**
- * 获取服务端工具的 wire protocol。旧数据没有 protocol 字段时，从原始块 type 推断。
- */
-internal fun ServerToolMetadata.resolvedProtocol(): ServerToolProtocol? {
-    protocol?.let { return it }
-    val callType = call?.get("type")?.jsonPrimitive?.contentOrNull
-    val resultType = result?.get("type")?.jsonPrimitive?.contentOrNull
-    return when {
-        callType == "server_tool_use" ||
-            (callType != null && callType != "tool_use" && callType.endsWith("_tool_use")) ||
-            (resultType != null && resultType != "tool_result" && resultType.endsWith("_tool_result")) ->
-            ServerToolProtocol.ANTHROPIC_MESSAGES
-
-        callType?.endsWith("_call") == true -> ServerToolProtocol.OPENAI_RESPONSES
-        else -> null
-    }
-}
 
 /**
  * OpenRouter Chat Completions 的结构化 reasoning_details，工具调用续轮时需要原样回传。

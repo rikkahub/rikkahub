@@ -426,7 +426,10 @@ class ResponseApiRequestMessageTest {
                     toolCallId = "ws_1",
                     toolName = "web_search",
                     status = ServerToolStatus.COMPLETED,
-                    metadata = ServerToolMetadata(call = rawItem).toMetadata(),
+                    metadata = ServerToolMetadata(
+                        protocol = ServerToolProtocol.OPENAI_RESPONSES,
+                        call = rawItem,
+                    ).toMetadata(),
                 )),
             ),
         )

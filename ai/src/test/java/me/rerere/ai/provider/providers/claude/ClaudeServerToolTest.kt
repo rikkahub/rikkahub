@@ -128,7 +128,11 @@ class ClaudeServerToolTest {
                 input = buildJsonObject { put("query", "Kotlin") },
                 output = result["content"],
                 status = ServerToolStatus.COMPLETED,
-                metadata = ServerToolMetadata(call = call, result = result).let {
+                metadata = ServerToolMetadata(
+                    protocol = ServerToolProtocol.ANTHROPIC_MESSAGES,
+                    call = call,
+                    result = result,
+                ).let {
                     json.encodeToJsonElement(ServerToolMetadata.serializer(), it).jsonObject
                 },
             )),

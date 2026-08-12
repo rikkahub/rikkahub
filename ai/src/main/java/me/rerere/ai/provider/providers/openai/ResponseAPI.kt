@@ -44,7 +44,6 @@ import me.rerere.ai.ui.ServerToolStatus
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
-import me.rerere.ai.ui.resolvedProtocol
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
@@ -466,7 +465,7 @@ class ResponseAPI(
 
     private fun JsonArrayBuilder.addServerToolItem(tool: UIMessagePart.ServerTool) {
         val metadata = tool.metadataAs<ServerToolMetadata>()
-        val protocol = metadata?.resolvedProtocol()
+        val protocol = metadata?.protocol
         if (protocol != null && protocol != ServerToolProtocol.OPENAI_RESPONSES) return
 
         val rawCall = metadata?.call.takeIf { protocol == ServerToolProtocol.OPENAI_RESPONSES }

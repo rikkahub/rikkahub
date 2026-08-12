@@ -54,7 +54,6 @@ import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.handleTextGenerationResult
 import me.rerere.ai.ui.metadataAs
-import me.rerere.ai.ui.resolvedProtocol
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
@@ -631,7 +630,7 @@ class ClaudeProvider(private val client: OkHttpClient, context: Context? = null)
 
     private fun UIMessagePart.ServerTool.serverToolContentBlocks(): List<JsonObject> {
         val metadata = metadataAs<ServerToolMetadata>()
-        val protocol = metadata?.resolvedProtocol()
+        val protocol = metadata?.protocol
         if (protocol != null && protocol != ServerToolProtocol.ANTHROPIC_MESSAGES) return emptyList()
 
         return buildList {
