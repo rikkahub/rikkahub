@@ -1495,6 +1495,28 @@ make_second_fixture() {
   chmod 600 "$destination"
 }
 
+make_diagnostic_link_failure_site() {
+  local site="$1" marker="$2"
+  mkdir "$site"
+  chmod 700 "$site"
+  cat > "$site/sitecustomize.py" <<'PY'
+import os
+
+marker = os.environ["VOICE_STEP_DIAGNOSTIC_LINK_MARKER"]
+real_link = os.link
+
+def controlled_link(source, destination, *args, **kwargs):
+    if os.path.basename(source).startswith(".voice-step-diagnostic."):
+        os.stat(source)
+        with open(marker, "w", encoding="ascii") as handle:
+            handle.write("temporary-created\n")
+        raise OSError
+    return real_link(source, destination, *args, **kwargs)
+
+os.link = controlled_link
+PY
+}
+
 write_raw_broadcast_fixture() {
   local destination="$1"
   local fixture_kind="$2"
@@ -3081,22 +3103,37 @@ EOF
   reset_fake
   local failure_publication_parent="$TMP_DIR/tracing-failure-publication-parent"
   local failure_publication_diagnostic="$failure_publication_parent/diagnostic.txt"
+  local failure_publication_site="$TMP_DIR/tracing-failure-publication-site"
+  local failure_publication_marker="$TMP_DIR/tracing-failure-publication-marker"
   mkdir "$failure_publication_parent"
   chmod 700 "$failure_publication_parent"
+  make_diagnostic_link_failure_site "$failure_publication_site" "$failure_publication_marker"
   export FAKE_ADB_EXIT_MATCH=ARM_CAPTURE_FIXTURE
   export FAKE_ADB_EXIT_STATUS=73
-  export FAKE_ADB_CHMOD_MATCH=ARM_CAPTURE_FIXTURE
-  export FAKE_ADB_CHMOD_PATH="$failure_publication_parent"
-  run_helper start --state "$state" --diagnostic-record "$failure_publication_diagnostic" \
+  PYTHONPATH="$failure_publication_site" \
+    VOICE_STEP_DIAGNOSTIC_LINK_MARKER="$failure_publication_marker" \
+    run_helper start --state "$state" --diagnostic-record "$failure_publication_diagnostic" \
     --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
     --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
     --comparison-hash "$hash_b" --fixture "$fixture"
-  chmod 700 "$failure_publication_parent"
+  [[ -f "$failure_publication_marker" &&
+     "$(<"$failure_publication_marker")" == temporary-created ]] ||
+    fail "tracing-failure-publication test: diagnostic temporary was not created"
   [[ "$RUN_STATUS" -ne 0 && ! -e "$failure_publication_diagnostic" ]] ||
     fail "tracing-failure-publication test: failed publication changed the destination"
   [[ "$(tail -n 1 "$STDERR_FILE")" == \
      'voice-step.diagnostic=stage:fixture-arm,category:adb-command-failed' ]] ||
     fail "tracing-failure-publication test: original failure summary was replaced"
+  [[ "$(grep -Fxc \
+    'voice-step.diagnostic=stage:fixture-arm,category:adb-command-failed' \
+    "$STDERR_FILE")" == 1 ]] ||
+    fail "tracing-failure-publication test: original failure emitted multiple summaries"
+  [[ "$(grep -Ec '^voice-step.error=' "$STDERR_FILE")" == 1 &&
+     "$(grep -Fxc 'voice-step.error=diagnostic publication failed' "$STDERR_FILE")" == 0 &&
+     "$(grep -Fxc \
+       'voice-step.diagnostic=stage:fixture-arm,category:diagnostic-publication-failed' \
+       "$STDERR_FILE")" == 0 ]] ||
+    fail "tracing-failure-publication test: publication failure changed terminal output"
   if compgen -G "$failure_publication_parent"'/.voice-step-diagnostic.*' >/dev/null; then
     fail "tracing-failure-publication test: diagnostic temporary residue remained"
   fi
@@ -3165,15 +3202,20 @@ EOF
   reset_fake
   local publication_parent="$TMP_DIR/tracing-publication-parent"
   local publication_diagnostic="$publication_parent/diagnostic.txt"
+  local publication_site="$TMP_DIR/tracing-publication-site"
+  local publication_marker="$TMP_DIR/tracing-publication-marker"
   mkdir "$publication_parent"
   chmod 700 "$publication_parent"
-  export FAKE_ADB_CHMOD_MATCH=start-foreground-service
-  export FAKE_ADB_CHMOD_PATH="$publication_parent"
-  run_helper start --state "$state" --diagnostic-record "$publication_diagnostic" \
+  make_diagnostic_link_failure_site "$publication_site" "$publication_marker"
+  PYTHONPATH="$publication_site" \
+    VOICE_STEP_DIAGNOSTIC_LINK_MARKER="$publication_marker" \
+    run_helper start --state "$state" --diagnostic-record "$publication_diagnostic" \
     --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
     --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
     --comparison-hash "$hash_b" --fixture "$fixture"
-  chmod 700 "$publication_parent"
+  [[ -f "$publication_marker" &&
+     "$(<"$publication_marker")" == temporary-created ]] ||
+    fail "tracing-publication test: diagnostic temporary was not created"
   [[ "$RUN_STATUS" -ne 0 && ! -e "$publication_diagnostic" ]] ||
     fail "tracing-publication test: failed diagnostic publication was accepted"
   [[ "$(grep -Fxc 'voice-step.error=diagnostic publication failed' "$STDERR_FILE")" == 1 ]] ||
