@@ -2,9 +2,10 @@
 
 ## Goal
 
-Make every failed real-room helper `start` invocation identify its last
-completed boundary without exposing device identifiers, managed-owner values,
-hashes, conversation data, fixture contents, commands, or raw stderr.
+Make every failed real-room helper `start` invocation identify its current
+boundary—the last stage it entered—without exposing device identifiers,
+managed-owner values, hashes, conversation data, fixture contents, commands,
+or raw stderr.
 
 The immediate acceptance case is a failed `start`: instead of retaining only
 the broad `fixture-start` orchestration result, the helper must publish a fixed
@@ -46,15 +47,14 @@ boundary. `start` uses these stages:
 
 ```text
 option-validation
-fixture-snapshot
 runtime-validation
 host-lock
+fixture-snapshot
 device-readiness
 package-identity
 package-contract
 status-read
 trace-read
-fixture-owner
 fixture-directory
 fixture-stage
 automation-prepare
@@ -83,8 +83,9 @@ records the final outcome and cleanup result after cleanup has run.
 
 Tracing is opt-in through a new `--diagnostic-record` option accepted by
 `start`. The destination must satisfy the helper's existing absent-destination
-and secure-parent checks. The helper creates it atomically with mode `0600` and
-publishes it only at exit.
+checks plus an owner-only (`0700`) parent-directory check, and it must be
+distinct from the state destination. The helper creates it atomically with mode
+`0600` and publishes it only at exit.
 
 The record is a strict line-oriented format containing only these keys:
 
@@ -149,7 +150,8 @@ invocation writes only to its caller-selected record.
 Extend `scripts/test-voice-agent-real-room-step.sh` using its existing fake
 managed-device failure injection. Tests must execute the real helper and prove:
 
-- an injected failure at each `start` boundary records the expected stage;
+- an injected failure at each failure-capable `start` boundary records the
+  expected stage, while a successful run records `complete`;
 - a managed-ADB child exit status is recorded without command text or private
   values;
 - cleanup completion or failure is recorded after rollback;
