@@ -1481,6 +1481,9 @@ PY
   unset FAKE_ADB_EXIT_MATCH FAKE_ADB_EXIT_STATUS
   unset FAKE_ADB_START_DOES_NOT_ACTIVATE FAKE_ADB_START_RETAINS_TRACE
   unset FAKE_ADB_CHMOD_MATCH FAKE_ADB_CHMOD_PATH
+  unset VOICE_STEP_DIAGNOSTIC_TEST_ACTION VOICE_STEP_DIAGNOSTIC_TEST_DESTINATION
+  unset VOICE_STEP_DIAGNOSTIC_TEST_PARENT VOICE_STEP_DIAGNOSTIC_TEST_PINNED_PARENT
+  unset VOICE_STEP_DIAGNOSTIC_TEST_REPLACEMENT_PARENT VOICE_STEP_DIAGNOSTIC_TEST_MARKER
 }
 
 make_fixture() {
@@ -1507,13 +1510,110 @@ real_link = os.link
 
 def controlled_link(source, destination, *args, **kwargs):
     if os.path.basename(source).startswith(".voice-step-diagnostic."):
-        os.stat(source)
+        source_dir_fd = kwargs.get("src_dir_fd")
+        os.stat(source, dir_fd=source_dir_fd)
         with open(marker, "w", encoding="ascii") as handle:
             handle.write("temporary-created\n")
         raise OSError
     return real_link(source, destination, *args, **kwargs)
 
 os.link = controlled_link
+PY
+}
+
+make_diagnostic_publication_race_site() {
+  local site="$1"
+  mkdir "$site"
+  chmod 700 "$site"
+  cat > "$site/sitecustomize.py" <<'PY'
+import os
+import signal
+import sys
+
+action = os.environ["VOICE_STEP_DIAGNOSTIC_TEST_ACTION"]
+destination = os.environ["VOICE_STEP_DIAGNOSTIC_TEST_DESTINATION"]
+parent = os.environ.get("VOICE_STEP_DIAGNOSTIC_TEST_PARENT")
+pinned_parent = os.environ.get("VOICE_STEP_DIAGNOSTIC_TEST_PINNED_PARENT")
+replacement_parent = os.environ.get("VOICE_STEP_DIAGNOSTIC_TEST_REPLACEMENT_PARENT")
+marker = os.environ.get("VOICE_STEP_DIAGNOSTIC_TEST_MARKER")
+real_link = os.link
+real_lstat = os.lstat
+real_open = os.open
+real_unlink = os.unlink
+parent_replaced = False
+
+
+def is_diagnostic_temporary(path):
+    return os.path.basename(os.fsdecode(path)).startswith(".voice-step-diagnostic.")
+
+
+def mark(value):
+    if marker:
+        with open(marker, "w", encoding="ascii") as handle:
+            handle.write(value + "\n")
+
+
+def replace_parent():
+    global parent_replaced
+    if parent_replaced:
+        return
+    parent_replaced = True
+    os.rename(parent, pinned_parent)
+    os.symlink(replacement_parent, parent, target_is_directory=True)
+    mark("parent-replaced")
+
+
+def controlled_open(path, flags, *args, **kwargs):
+    if action == "replace-parent" and os.fsdecode(path) == parent and not parent_replaced:
+        replace_parent()
+    return real_open(path, flags, *args, **kwargs)
+
+
+def controlled_lstat(path, *args, **kwargs):
+    metadata = real_lstat(path, *args, **kwargs)
+    if (
+        action == "replace-parent"
+        and len(sys.argv) > 2
+        and os.fsdecode(path) == parent
+        and not parent_replaced
+    ):
+        replace_parent()
+    return metadata
+
+
+def controlled_link(source, target, *args, **kwargs):
+    result = real_link(source, target, *args, **kwargs)
+    if not is_diagnostic_temporary(source):
+        return result
+    if action == "post-link-mode":
+        source_dir_fd = kwargs.get("src_dir_fd")
+        if source_dir_fd is None:
+            os.chmod(source, 0o640)
+        else:
+            os.chmod(source, 0o640, dir_fd=source_dir_fd)
+        mark("post-link-mode")
+    elif action == "signal-after-link":
+        mark("signal-after-link")
+        os.kill(os.getppid(), signal.SIGTERM)
+    return result
+
+
+def controlled_unlink(path, *args, **kwargs):
+    result = real_unlink(path, *args, **kwargs)
+    if action == "final-mode" and is_diagnostic_temporary(path):
+        directory_fd = kwargs.get("dir_fd")
+        if directory_fd is None:
+            os.chmod(destination, 0o640)
+        else:
+            os.chmod(os.path.basename(destination), 0o640, dir_fd=directory_fd)
+        mark("final-mode")
+    return result
+
+
+os.open = controlled_open
+os.lstat = controlled_lstat
+os.link = controlled_link
+os.unlink = controlled_unlink
 PY
 }
 
@@ -3133,7 +3233,7 @@ EOF
      "$(grep -Fxc \
        'voice-step.diagnostic=stage:fixture-arm,category:diagnostic-publication-failed' \
        "$STDERR_FILE")" == 0 ]] ||
-    fail "tracing-failure-publication test: publication failure changed terminal output"
+    fail "tracing-failure-publication test: publication failure changed sanitized terminal output ($(tr '\n' ' ' < "$STDERR_FILE"))"
   if compgen -G "$failure_publication_parent"'/.voice-step-diagnostic.*' >/dev/null; then
     fail "tracing-failure-publication test: diagnostic temporary residue remained"
   fi
@@ -3234,6 +3334,115 @@ EOF
     fail "tracing-publication test: diagnostic temporary residue remained"
   fi
   assert_private_output_absent
+  pass
+
+  local verification_action verification_parent verification_diagnostic
+  local verification_site verification_marker
+  for verification_action in post-link-mode final-mode; do
+    reset_fake
+    rm -f -- "$state"
+    verification_parent="$TMP_DIR/tracing-$verification_action-parent"
+    verification_diagnostic="$verification_parent/diagnostic.txt"
+    verification_site="$TMP_DIR/tracing-$verification_action-site"
+    verification_marker="$TMP_DIR/tracing-$verification_action-marker"
+    mkdir "$verification_parent"
+    chmod 700 "$verification_parent"
+    make_diagnostic_publication_race_site "$verification_site"
+    PYTHONPATH="$verification_site" \
+      VOICE_STEP_DIAGNOSTIC_TEST_ACTION="$verification_action" \
+      VOICE_STEP_DIAGNOSTIC_TEST_DESTINATION="$verification_diagnostic" \
+      VOICE_STEP_DIAGNOSTIC_TEST_MARKER="$verification_marker" \
+      run_helper start --state "$state" --diagnostic-record "$verification_diagnostic" \
+      --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+      --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+      --comparison-hash "$hash_b" --fixture "$fixture"
+    [[ -f "$verification_marker" &&
+       "$(<"$verification_marker")" == "$verification_action" ]] ||
+      fail "tracing-$verification_action test: deterministic mutation did not run"
+    [[ "$RUN_STATUS" -ne 0 && ! -e "$verification_diagnostic" ]] ||
+      fail "tracing-$verification_action test: owned failed publication remained"
+    if compgen -G "$verification_parent"'/.voice-step-diagnostic.*' >/dev/null; then
+      fail "tracing-$verification_action test: diagnostic temporary residue remained"
+    fi
+    [[ "$(grep -Fxc 'voice-step.error=diagnostic publication failed' "$STDERR_FILE")" == 1 &&
+       "$(grep -Fxc \
+         'voice-step.diagnostic=stage:complete,category:diagnostic-publication-failed' \
+         "$STDERR_FILE")" == 1 ]] ||
+      fail "tracing-$verification_action test: publication failure summaries mismatch ($(tr '\n' ' ' < "$STDERR_FILE"))"
+    assert_private_output_absent "$verification_parent"
+    pass
+  done
+
+  reset_fake
+  rm -f -- "$state"
+  local parent_race_parent="$TMP_DIR/tracing-parent-race-parent"
+  local parent_race_pinned="$TMP_DIR/tracing-parent-race-pinned"
+  local parent_race_replacement="$TMP_DIR/tracing-parent-race-replacement"
+  local parent_race_diagnostic="$parent_race_parent/diagnostic.txt"
+  local parent_race_site="$TMP_DIR/tracing-parent-race-site"
+  local parent_race_marker="$TMP_DIR/tracing-parent-race-marker"
+  mkdir "$parent_race_parent" "$parent_race_replacement"
+  chmod 700 "$parent_race_parent" "$parent_race_replacement"
+  printf 'outside-preserved\n' > "$parent_race_replacement/sentinel"
+  chmod 600 "$parent_race_replacement/sentinel"
+  make_diagnostic_publication_race_site "$parent_race_site"
+  PYTHONPATH="$parent_race_site" \
+    VOICE_STEP_DIAGNOSTIC_TEST_ACTION=replace-parent \
+    VOICE_STEP_DIAGNOSTIC_TEST_DESTINATION="$parent_race_diagnostic" \
+    VOICE_STEP_DIAGNOSTIC_TEST_PARENT="$parent_race_parent" \
+    VOICE_STEP_DIAGNOSTIC_TEST_PINNED_PARENT="$parent_race_pinned" \
+    VOICE_STEP_DIAGNOSTIC_TEST_REPLACEMENT_PARENT="$parent_race_replacement" \
+    VOICE_STEP_DIAGNOSTIC_TEST_MARKER="$parent_race_marker" \
+    run_helper start --state "$state" --diagnostic-record "$parent_race_diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$fixture"
+  [[ -f "$parent_race_marker" && "$(<"$parent_race_marker")" == parent-replaced ]] ||
+    fail "tracing-parent-race test: deterministic parent replacement did not run"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$parent_race_replacement/diagnostic.txt" &&
+     "$(<"$parent_race_replacement/sentinel")" == outside-preserved ]] ||
+    fail "tracing-parent-race test: publication followed or deleted through replacement"
+  if compgen -G "$parent_race_replacement"'/.voice-step-diagnostic.*' >/dev/null ||
+     compgen -G "$parent_race_pinned"'/.voice-step-diagnostic.*' >/dev/null; then
+    fail "tracing-parent-race test: diagnostic residue remained"
+  fi
+  assert_private_output_absent "$parent_race_parent" "$parent_race_pinned" \
+    "$parent_race_replacement"
+  pass
+
+  reset_fake
+  rm -f -- "$state"
+  local signal_parent="$TMP_DIR/tracing-publication-signal-parent"
+  local signal_diagnostic="$signal_parent/diagnostic.txt"
+  local signal_site="$TMP_DIR/tracing-publication-signal-site"
+  local signal_marker="$TMP_DIR/tracing-publication-signal-marker"
+  mkdir "$signal_parent"
+  chmod 700 "$signal_parent"
+  make_diagnostic_publication_race_site "$signal_site"
+  PYTHONPATH="$signal_site" \
+    VOICE_STEP_DIAGNOSTIC_TEST_ACTION=signal-after-link \
+    VOICE_STEP_DIAGNOSTIC_TEST_DESTINATION="$signal_diagnostic" \
+    VOICE_STEP_DIAGNOSTIC_TEST_MARKER="$signal_marker" \
+    run_helper start --state "$state" --diagnostic-record "$signal_diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$fixture"
+  [[ -f "$signal_marker" && "$(<"$signal_marker")" == signal-after-link ]] ||
+    fail "tracing-publication-signal test: deterministic signal did not run"
+  [[ "$RUN_STATUS" -ne 0 ]] ||
+    fail "tracing-publication-signal test: deferred signal exited successfully"
+  assert_diagnostic_record "$signal_diagnostic" complete failure interrupted none complete ||
+    fail "tracing-publication-signal test: interrupted failure record mismatch"
+  [[ "$(grep -Fxc 'voice-step.error=interrupted' "$STDERR_FILE")" == 1 &&
+     "$(grep -Fxc \
+       'voice-step.diagnostic=stage:complete,category:interrupted' "$STDERR_FILE")" == 1 &&
+     "$(tail -n 1 "$STDERR_FILE")" == \
+       'voice-step.diagnostic=stage:complete,category:interrupted' ]] ||
+    fail "tracing-publication-signal test: interrupted summaries mismatch"
+  if compgen -G "$signal_parent"'/.voice-step-diagnostic.*' >/dev/null; then
+    fail "tracing-publication-signal test: diagnostic temporary residue remained"
+  fi
+  assert_private_output_absent "$signal_parent"
   pass
 }
 

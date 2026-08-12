@@ -70,6 +70,11 @@ DIAGNOSTIC_CHILD_EXIT_STATUS='none'
 DIAGNOSTIC_CAPTURE_MANAGED_EXIT=0
 DIAGNOSTIC_ERROR_FILE=''
 DIAGNOSTIC_MANAGED_STATUS_FILE=''
+DIAGNOSTIC_PARENT_IDENTITY=''
+DIAGNOSTIC_PARENT_FD=''
+DIAGNOSTIC_IDENTITY_READ_FD=''
+DIAGNOSTIC_IDENTITY_WRITE_FD=''
+DIAGNOSTIC_PUBLISHED_IDENTITY=''
 declare -a OWNED_TEMP_FILES=()
 declare -A PARSED=()
 
@@ -146,11 +151,15 @@ on_exit() {
   local status=$?
   local cleanup_status=0
   local cleanup=complete
+  local diagnostic_error_observed=0
+  local diagnostic_publication_status=0
+  local published_identity=''
   trap defer_exit_cleanup_signal HUP INT TERM
   trap - EXIT
   set +e
   if (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
     diagnostic_snapshot_private_state || true
+    [[ "$DIAGNOSTIC_ERROR_CATEGORY" == none ]] || diagnostic_error_observed=1
     DIAGNOSTIC_CAPTURE_MANAGED_EXIT=0
   fi
   if (( status != 0 && START_CLEANUP_NEEDED == 1 )); then
@@ -165,6 +174,7 @@ on_exit() {
   fi
   if (( EXIT_CLEANUP_SIGNAL == 1 && status == 0 )); then
     status=1
+    diagnostic_note_error 'interrupted'
   fi
   if (( status == 0 && cleanup_status != 0 )); then
     status=1
@@ -177,12 +187,34 @@ on_exit() {
   if (( status != 0 )) && [[ "$DIAGNOSTIC_ERROR_CATEGORY" == none ]]; then
     diagnostic_note_error 'operation failed'
   fi
-  if (( status != 0 && ERROR_REPORTED == 0 )); then
-    printf 'voice-step.error=operation failed\n' >&2
+  if (( status != 0 && ERROR_REPORTED == 0 && diagnostic_error_observed == 0 )); then
+    if [[ "$DIAGNOSTIC_ERROR_CATEGORY" == interrupted ]]; then
+      printf 'voice-step.error=interrupted\n' >&2
+    else
+      printf 'voice-step.error=operation failed\n' >&2
+    fi
     ERROR_REPORTED=1
   fi
   if (( status == 0 && DIAGNOSTIC_ENABLED == 1 )); then
-    if ! diagnostic_publish success "$cleanup"; then
+    if diagnostic_publish success "$cleanup"; then
+      diagnostic_take_published_identity || diagnostic_publication_status=1
+      published_identity="$DIAGNOSTIC_PUBLISHED_IDENTITY"
+    else
+      diagnostic_publication_status=1
+    fi
+    if (( EXIT_CLEANUP_SIGNAL == 1 )); then
+      status=1
+      diagnostic_note_error 'interrupted'
+      if [[ -n "$published_identity" ]]; then
+        if diagnostic_remove_owned_destination "$published_identity"; then
+          diagnostic_publish failure "$cleanup" || true
+        fi
+      fi
+      if (( ERROR_REPORTED == 0 )); then
+        printf 'voice-step.error=interrupted\n' >&2
+        ERROR_REPORTED=1
+      fi
+    elif (( diagnostic_publication_status != 0 )); then
       status=1
       diagnostic_note_error 'diagnostic publication failed'
       ERROR_REPORTED=1
@@ -190,6 +222,10 @@ on_exit() {
     fi
   elif (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
     diagnostic_publish failure "$cleanup" || true
+  fi
+  if (( status != 0 && ERROR_REPORTED == 0 && diagnostic_error_observed == 0 )); then
+    printf 'voice-step.error=operation failed\n' >&2
+    ERROR_REPORTED=1
   fi
   if (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
     printf 'voice-step.diagnostic=stage:%s,category:%s\n' \

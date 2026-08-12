@@ -87,6 +87,14 @@ checks plus an owner-only (`0700`) parent-directory check, and it must be
 distinct from the state destination. The helper creates it atomically with mode
 `0600` and publishes it only at exit.
 
+Destination validation captures the real parent's device and inode and retains
+an identity-verified descriptor for the invocation. Publication also opens the
+canonical parent path with `O_DIRECTORY|O_NOFOLLOW` and requires it to resolve
+to that captured identity. Temporary creation, hard linking, verification, and
+cleanup then use only relative names against the pinned descriptor. A failed
+post-link verification removes the destination only while it still has the
+publisher-owned inode; a replacement is never removed.
+
 The record is a strict line-oriented format containing only these keys:
 
 ```text
@@ -152,6 +160,13 @@ applies signal and cleanup-status rules without replacing an existing operation
 failure, and publishes the record last. A failed publication is ignored after
 an original nonzero result; only after an otherwise successful operation does
 it set the final failure category to `diagnostic-publication-failed`.
+
+Because shell signal traps can be deferred while the publication subprocess is
+active, the exit path reconciles the deferred signal state again immediately
+after publication. It tracks the published inode through a private unlinked
+channel, removes a just-published success record only when that inode is still
+owned, and publishes an `interrupted` failure record before emitting the single
+sanitized terminal summary.
 
 ## Testing
 
