@@ -39,7 +39,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
-import me.rerere.ai.registry.ModelRegistry
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.AiSearch02
@@ -49,6 +49,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.ToggleSurface
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -158,9 +159,10 @@ private fun SearchPicker(
 ) {
     val navBackStack = LocalNavController.current
 
-    // 模型是否支持内置搜索
-    val supportsBuiltInSearch = model != null &&
-        (ModelRegistry.GEMINI_SERIES.match(model.modelId) || model.modelId.contains("gpt-"))
+    val provider = model?.findProvider(settings.providers)
+    // Google 和使用 Responses API 的 OpenAI Provider 支持内置搜索
+    val supportsBuiltInSearch = provider is ProviderSetting.Google ||
+        provider is ProviderSetting.OpenAI && provider.useResponseApi
     // 模型是否已开启内置搜索（可能是不支持的模型残留的孤儿状态）
     val hasBuiltInSearchEnabled = model?.tools?.contains(BuiltInTools.Search) == true
 
