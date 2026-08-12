@@ -361,7 +361,12 @@ class ChatCompletionsAPI(
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
                         })
                         if (level.isEnabled && level != ReasoningLevel.AUTO) {
-                            put("reasoning_effort", level.effort)
+                            val effort = when (level) {
+                                ReasoningLevel.MEDIUM -> "high"
+                                ReasoningLevel.XHIGH -> "max"
+                                else -> level.effort
+                            }
+                            put("reasoning_effort", effort)
                         }
                     }
 
