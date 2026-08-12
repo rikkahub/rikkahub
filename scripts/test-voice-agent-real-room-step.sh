@@ -498,7 +498,13 @@ def automation_event(state, sequence, name, *, observed_transport=None, succeede
 
 def automation_events(state):
     rows = [automation_event(state, 1, "run_prepared")]
-    if state.get("call_active_recorded"):
+    call_active_visible_after = int(
+        os.environ.get("FAKE_ADB_CALL_ACTIVE_VISIBLE_AFTER", "0")
+    )
+    if (
+        state.get("call_active_recorded")
+        and state.get("automation_artifact_reads", 0) >= call_active_visible_after
+    ):
         rows.append(
             automation_event(
                 state,
@@ -1504,6 +1510,7 @@ PY
   unset FAKE_ADB_PREOPEN_REPLACE_CAPTURE_SOURCE
   unset FAKE_ADB_EXIT_MATCH FAKE_ADB_EXIT_STATUS
   unset FAKE_ADB_START_DOES_NOT_ACTIVATE FAKE_ADB_START_RETAINS_TRACE
+  unset FAKE_ADB_CALL_ACTIVE_VISIBLE_AFTER
   unset FAKE_ADB_CHMOD_MATCH FAKE_ADB_CHMOD_PATH
   unset FAKE_ASSERT_CLOSED_DIAGNOSTIC_PARENT FAKE_RM_SIGNAL_MATCH
   unset VOICE_STEP_DIAGNOSTIC_TMPFILE_MARKER VOICE_STEP_DIAGNOSTIC_LINK_MARKER
@@ -3403,6 +3410,7 @@ EOF
 
   reset_fake
   rm -f -- "$state" "$diagnostic"
+  export FAKE_ADB_CALL_ACTIVE_VISIBLE_AFTER=2
   export FAKE_RM_SIGNAL_MATCH=diagnostic-managed-status
   run_helper start --state "$state" --diagnostic-record "$diagnostic" \
     --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
@@ -3410,6 +3418,10 @@ EOF
     --comparison-hash "$hash_b" --fixture "$fixture"
   [[ "$RUN_STATUS" -ne 0 ]] ||
     fail "tracing-final-signal test: deferred signal exited successfully"
+  local final_signal_child
+  final_signal_child="$(sed -n 's/^child_exit_status=//p' "$diagnostic")"
+  [[ "$final_signal_child" == none ]] ||
+    fail "tracing-final-signal test: stale child status $final_signal_child survived a successful stage transition"
   assert_diagnostic_record "$diagnostic" complete interrupted none complete ||
     fail "tracing-final-signal test: interrupted failure record mismatch"
   [[ "$(grep -Fxc 'voice-step.error=interrupted' "$STDERR_FILE")" == 1 &&

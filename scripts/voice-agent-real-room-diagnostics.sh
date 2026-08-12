@@ -64,6 +64,7 @@ diagnostic_set_stage() {
   local stage="$1"
   diagnostic_token_is_valid "$stage" || return 1
   DIAGNOSTIC_STAGE="$stage"
+  DIAGNOSTIC_CHILD_EXIT_STATUS='none'
   [[ -z "${DIAGNOSTIC_MANAGED_STATUS_FILE:-}" ]] ||
     : > "$DIAGNOSTIC_MANAGED_STATUS_FILE"
 }
