@@ -1,0 +1,45 @@
+{
+    "role": "ASSISTANT",
+    "parts": [
+        {
+            "type": "reasoning",
+            "text": "**Searching for stable versions**\n\nI need to gather the latest stable version dates from official sources. It seems I should search independently for each one, ensuring I'm careful that the information is current for 2025. I think it makes sense to utilize multiple queries and perform these searches in parallel. This way, I can collect all the relevant information without missing anything important! Let's get started on that.",
+            "metadata": {
+                "reasoning_id": "rs_02fbae0574ab2cdc016a7460c54578819a93133a54fa9c0f6d",
+                "encrypted_content": "gAAAAABqdGDHShW25xpqcruwS1FhTceBXeeqORS0dHQfu7BYXb8YOyDTwpf341invNJ7BGGPeyXqMDbhkaFy44WC9unzHkoY_Gaso-bKXJdVYes0EmuLA4BWgy_LKTpj0rC1HT7RIJRpNcvsQLBHF0he7bzgC_Js_WsW2RkCP1yiSgyfdB6JDI9uINUjVAnO846WFFETHXm1kB3sM8HPM_KI0E9Y5VTjldjuxtJVWn9oTfYQ_cC_6x5PEtf1BaYlYFIEdZ8INhnOJDwgIEMQMwfCXAqNXpkqzaVHdJvziXSszh1JEwGbaMn9jWQa5M-dRmdzgQ9BtyFHGfFIipPqRO9jOQe9tPsoegiGiX4GbiFVNlCc3huZXJzFZgI3_Av6kk2nP1P_q2ai1rtaKPxnU2AGfCrHS-VCFKnSTMcj6E5VQG_x-kXkHc1VSlSm-qbuF8EH9P0RrcnwHmIPMKEWVA9hA_8V_OgxVNYS_fo2NCchgbXe1bu62uQkEJXDehj01jKAlTUyI81f07BexX-VN6KNHawJXQY3Sl8Mmaf7UobeZa_rt5JCJQ4WV8GH0QuvvtEw-tvVYlDdsKh5pnsLYVFyekEpH29a49TSTP_nPEK-42uJtG7hi5irRp15xR9tlmIW3pAcwb-UuuITfUz6gUR2ZK1ru89DQMWuJzjAJEEDHQT-bZZoQzl6kHSqXVymRO34xpUKceBu9OaXACgaoHJ0QmTs02VGLx2_hr4ArkIng_46sfMLnjmrcesTLIvPVxiDdNAg6SxK0iOIjWN98_lbwbHMw0WVbxU24PA7C4FEkJ-Io8pZByX4H5C2BsF38LRdBauXIPrzehWyoY97USdRIc5GrYg1bXmnjSe_3cbCbWiwk-iD-wjXyppXnpiPHyNcJXAd-8fkE1peCIPwaWbS0GixBGNthPfzL9c3iJ8mwswIanwjtwsgr6deyYj_JiNMUM8QGUBiOlIHfNrnxTfZ58idJp8jWuSF-DDDyl7v9NtLZrqXWWHs9Mpmji8JsOUnVm44yjUE8yw-jgL79dfHJTrHZ57kL628p7uOhbr4pOSOmL2isBJ34XsNK2c9n-07gz-VnfoiJAtpEi_Thskns-jJSr1Mh0wEMWbnuwKnmJ5xq-YfNAgsMed78PM2zW_H5bh710sH55LqYelcSZTxoq2qK46BhU324JMpY67ZBB7EZGY4HlZI6yGl7zZH6Qpw_41oJqtGg2DpYivAfZvJzoMPIZ1ArQ=="
+            }
+        },
+        {
+            "type": "tool",
+            "id": "call_awjcmFzYr75gWazGGDpa8fC0",
+            "name": "search_web",
+            "input": {
+                "query": "site:kotlinlang.org latest stable Kotlin release official 2026 2.2 2.3"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "call_g0IAe9DY5HxgrmFWZ7XoaUki",
+            "name": "search_web",
+            "input": {
+                "query": "site:ktor.io latest stable Ktor release official 2026"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "call_hRaiXjFOXeEFCdjO3TmQI7te",
+            "name": "search_web",
+            "input": {
+                "query": "site:jetbrains.com compose multiplatform latest stable release official 2026 OR site:kotlinlang.org Compose Multiplatform 1.9 1.10"
+            }
+        }
+    ],
+    "annotations": [],
+    "usage": {
+        "promptTokens": 83,
+        "completionTokens": 174,
+        "cachedTokens": 0,
+        "totalTokens": 257
+    },
+    "finished": true
+}

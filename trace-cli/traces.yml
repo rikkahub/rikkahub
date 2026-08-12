@@ -1,0 +1,287 @@
+version: 1
+
+defaults:
+  # 相对于本 YAML 文件解析。
+  outputRoot: ../ai/src/test/resources/stream-traces/generated
+  timeoutMs: 120000
+
+traces:
+  # DeepSeek：OpenAI Chat Completions 协议。
+  - name: deepseek-chat-tool
+    provider: openai-chat
+    baseUrl: https://api.deepseek.com
+    endpoint: /chat/completions
+    apiKeyEnv: DEEPSEEK_API_KEY
+    model: deepseek-v4-flash
+    body:
+      messages:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      tools:
+        - type: function
+          function:
+            name: search_web
+            description: Search the web for current information and return relevant sources.
+            parameters:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: A focused search query for one topic.
+              required: [query]
+              additionalProperties: false
+  # DeepSeek：OpenAI Responses 兼容协议。
+  # 如果实际网关路径不同，只需修改 baseUrl 或 endpoint。
+  - name: deepseek-responses-tool
+    provider: openai-responses
+    baseUrl: https://api.deepseek.com
+    endpoint: /responses
+    apiKeyEnv: DEEPSEEK_API_KEY
+    model: deepseek-v4-flash
+    body:
+      store: false
+      input:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      reasoning:
+        summary: auto
+        effort: high
+      include:
+        - reasoning.encrypted_content
+      tools:
+        - type: function
+          name: search_web
+          description: Search the web for current information and return relevant sources.
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: A focused search query for one topic.
+            required: [query]
+            additionalProperties: false
+  # DeepSeek：OpenAI Responses 兼容协议，由服务端执行网页搜索。
+  - name: deepseek-responses-server-tool
+    provider: openai-responses
+    baseUrl: https://api.deepseek.com
+    endpoint: /responses
+    apiKeyEnv: DEEPSEEK_API_KEY
+    model: deepseek-v4-flash
+    body:
+      store: false
+      input:
+        - role: user
+          content: "Use web search to find the latest stable Kotlin release. Return its version, release date, and official source URL."
+      reasoning:
+        summary: auto
+        effort: high
+      include:
+        - reasoning.encrypted_content
+        - web_search_call.action.sources
+      tools:
+        - type: web_search
+  # DeepSeek：Anthropic Messages 兼容协议，同时调用客户端与服务端工具。
+  - name: deepseek-anthropic-tool
+    provider: claude
+    baseUrl: https://api.deepseek.com/anthropic
+    endpoint: /messages
+    apiKeyEnv: DEEPSEEK_API_KEY
+    model: deepseek-v4-flash
+    body:
+      max_tokens: 4096
+      messages:
+        - role: user
+          content: >-
+            You must call both available tools in the first tool-use step, without waiting for one
+            before calling the other. Use the client-side list_memories tool to retrieve saved user
+            preferences about Kotlin, and independently use the server-side web_search tool to find
+            the latest stable Kotlin release. Do not use one tool for both tasks. After both results
+            are available, recommend whether the user should upgrade, citing the release date and
+            official source URL.
+      tool_choice:
+        type: auto
+        disable_parallel_tool_use: false
+      tools:
+        - name: list_memories
+          description: List saved user memories relevant to a topic.
+          input_schema:
+            type: object
+            properties:
+              topic:
+                type: string
+                description: Topic used to filter saved memories.
+            required: [topic]
+            additionalProperties: false
+        - type: web_search_20250305
+          name: web_search
+          max_uses: 3
+  # OpenRouter：OpenAI Chat Completions 兼容协议。
+  - name: openrouter-completions-tool
+    provider: openai-chat
+    baseUrl: https://openrouter.ai/api/v1
+    endpoint: /chat/completions
+    apiKeyEnv: OPENROUTER_API_KEY
+    model: anthropic/claude-sonnet-5
+    body:
+      reasoning:
+        effort: high
+      messages:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      tools:
+        - type: function
+          function:
+            name: search_web
+            description: Search the web for current information and return relevant sources.
+            parameters:
+              type: object
+              properties:
+                query:
+                  type: string
+                  description: A focused search query for one topic.
+              required: [query]
+              additionalProperties: false
+  # OpenRouter：OpenAI Responses 兼容协议。
+  - name: openrouter-gpt-responses-tool
+    provider: openai-responses
+    baseUrl: https://openrouter.ai/api/v1
+    endpoint: /responses
+    apiKeyEnv: OPENROUTER_API_KEY
+    model: openai/gpt-5.6-terra
+    body:
+      store: false
+      input:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      reasoning:
+        summary: auto
+        effort: high
+      include:
+        - reasoning.encrypted_content
+      tools:
+        - type: function
+          name: search_web
+          description: Search the web for current information and return relevant sources.
+          strict: true
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: A focused search query for one topic.
+            required: [query]
+            additionalProperties: false
+  # OpenRouter：Anthropic Messages 兼容协议。
+  - name: openrouter-claude-tool
+    provider: claude
+    baseUrl: https://openrouter.ai/api/v1
+    endpoint: /messages
+    apiKeyEnv: OPENROUTER_API_KEY
+    auth:
+      header: Authorization
+      scheme: Bearer
+    model: anthropic/claude-sonnet-5
+    body:
+      max_tokens: 4096
+      thinking:
+        type: adaptive
+        display: summarized
+      output_config:
+        effort: high
+      messages:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      tools:
+        - name: search_web
+          description: Search the web for current information and return relevant sources.
+          strict: true
+          input_schema:
+            type: object
+            properties:
+              query:
+                type: string
+                description: A focused search query for one topic.
+            required: [query]
+            additionalProperties: false
+  # OpenAI 官方：Responses API。
+  - name: openai-responses-tool
+    provider: openai-responses
+    baseUrl: https://api.openai.com/v1
+    endpoint: /responses
+    apiKeyEnv: OPENAI_API_KEY
+    model: gpt-5.6-sol
+    body:
+      store: false
+      input:
+        - role: user
+          content: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      reasoning:
+        summary: auto
+        effort: high
+      include:
+        - reasoning.encrypted_content
+      tools:
+        - type: function
+          name: search_web
+          description: Search the web for current information and return relevant sources.
+          strict: true
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: A focused search query for one topic.
+            required: [query]
+            additionalProperties: false
+  # Gemini 官方：Generate Content SSE 协议。
+  - name: gemini-tool
+    provider: google
+    apiKeyEnv: GEMINI_API_KEY
+    model: gemini-3.1-pro-preview
+    body:
+      generationConfig:
+        thinkingConfig:
+          includeThoughts: true
+          thinkingLevel: high
+      contents:
+        - role: user
+          parts:
+            - text: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      tools:
+        - functionDeclarations:
+            - name: search_web
+              description: Search the web for current information and return relevant sources.
+              parameters:
+                type: object
+                properties:
+                  query:
+                    type: string
+                    description: A focused search query for one topic.
+                required: [query]
+      safetySettings:
+        - category: HARM_CATEGORY_HARASSMENT
+          threshold: OFF
+        - category: HARM_CATEGORY_HATE_SPEECH
+          threshold: OFF
+        - category: HARM_CATEGORY_SEXUALLY_EXPLICIT
+          threshold: OFF
+        - category: HARM_CATEGORY_DANGEROUS_CONTENT
+          threshold: OFF
+        - category: HARM_CATEGORY_CIVIC_INTEGRITY
+          threshold: OFF
+  # Gemini 官方：原生图像生成 SSE 协议。
+  - name: gemini-image
+    provider: google
+    baseUrl: https://generativelanguage.googleapis.com/v1
+    apiKeyEnv: GEMINI_API_KEY
+    model: gemini-3.1-flash-image
+    body:
+      generationConfig:
+        responseModalities: [TEXT, IMAGE]
+        thinkingConfig:
+          includeThoughts: true
+          thinkingLevel: high
+      contents:
+        - role: user
+          parts:
+            - text: "Create a picture of a nano banana dish in a fancy restaurant with a Gemini theme"

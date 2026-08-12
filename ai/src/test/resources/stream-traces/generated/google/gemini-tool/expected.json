@@ -1,0 +1,46 @@
+{
+    "role": "ASSISTANT",
+    "parts": [
+        {
+            "type": "reasoning",
+            "text": "**Defining the Technologies**\n\nOkay, I'm starting by establishing a firm grasp of the goal: researching Kotlin, Ktor, and Compose Multiplatform separately. I need to gather details on their latest stable releases, including release dates and official source URLs.\n\n\n"
+        },
+        {
+            "type": "tool",
+            "id": "google-trace:tool-1",
+            "name": "search_web",
+            "input": {
+                "query": "\"Kotlin\" latest stable release version date 2024"
+            },
+            "metadata": {
+                "thoughtSignature": "EqYKCqMKARFNMg86GZjqeNkJJvRP5ppBHKb4a2XqlXS7NWXgWoMGlvlHaDmLR6q2hD6sFL2d7cS2+Z09lW9dylHHBzgNk3S2BiW2zIjU/uHdBMwOE5Cpauf0F+bUKVmaJ3WZgXeNOfLXmL6ahwU1idbzDV2gj5qpYP0VmC5mcPm1xztMlmqQ5HGN/nObakfsRxTG/xkZbDoe0uFptu4MVvyxI1GJLuheXj2ksLJ1ekNhHC7HTLQzsIcx4c7vBMKrZPQcky87C064MaM0G3z9s9a8PgIkSk5Ullx98ftReRbfOIM9pRH/1S1QM7LrkS0m/Ru89v8a+JIF/kXpZoMAH7jcu5+PqSZQdNpC36lHWwSk++nF5hvAv4jlkuMJoxVjE/zIXNR8r52OMm5rAo2GQQi+J5VKqIuGKG1jgqkmp82GLPSWo3njCQUSwW6mCgK7m0AMorXjchcjUYWfuub5G6djz7fe3d3THT9wiGGW34PS9Zy9j8/wChMJ82/p56c71vyhlAzRGTq8nv8dCcXHtkGlG83QJQF8/2qxh8IStp+kfcfY8vXyGk81KtIv5GNW+zM/wJsmhy8pKt3b8eQS5dt/SvtWsA3y8eYfOuSwlNfJBxjjBgxKzLV4gADijsI3L4K8b6WJlYdIMkPNxwZ9C4p1eBXbxI+yESCoQZF3yNlGZxn7edt3KjWFTgEnxUYQ55XrqRA9OhIp6YSoPEaE6ZAKjpiA5gqI9uNRXRUTIjFuhOCtaw6JGsMQeFmqTxqrPSMMy19q37wUuNUk1xBTUgH/J1O5KwYMf4rfrGz19nDwMNirvckLlYepTon/T54vKvIwwuh8vi4lp/z4UYGqnV4UyIjI8eyfgIiCBtBF3itEs2ZR21qPy3MO8jbBDFW1/FEAKKoSiu/q9tzKXqBulxWSZ61/dwejCY1c304E08vOCKdAf9N2dEpaMoxtwgRuCG9h9IVGW1Dfev0vp3wYKPbu1kH2KlA3B4VpCM81EYZlcKB+qoRYpqtMYCjhFSB8SBvOlNkqIKwrQe9jlhKr1li5oyB0+UOCWJfIsTM2xVutrdTP/5egNY5OROcbVSYbOJC+qGGdNSDcj6D9UyxFnoMkg8l4C3Puh9KlY1NSRepmg0FVBCAkGOUt1xSg/LuZ+kA0OK2g//ZIzxMUJ6lL1S6TXYQ7Ys/lq0R7vGVzuvh2gzRzguLvqy/KyLDd5XNu81IxXFwEv+rFACPGVEm2lT/j87a9CHiEOZWmwSFYypgyqIQjjQ1umFTysig+M0953Gz8GbclUP6+bDbIj7uMaNoylvBNyP+ONh0HjX6DR9ncejzI5Hl7rdp70OkXVEenPXN53tKvoJYaWVoBXFLlA1P6ZcIDRCoeg6BHHnuOpBZtVtfPK4YLU+VjfjwQOK2Q5CdrIH7Lp9IeCSJeZ03+LHN2sR77SDZ/hnhX28gxIeHR646LYiVVRk7YTSdNXNmOW9CXOqgt5I05hVXK4y3Y5vqzXY69fuzwLIlNT06PXChfjRmucJci4/LJ+lTdu3OJUX8t1jR2iU/sktlhoJjoL7YN92GgN8E9vZcvPviqI4wV7Ypycp3k8Xd0JBFNUOW4vL/eL0hEk8l8dPpBN8x0HpK6IRSY5RcXZMqvb7kJW3Vzxk8+sN+3uKq/9d3tYRI4HBOUvhc362yyLHghm7M3DjndBQYy8qVfrOAmQsz2/0S6oxRWI1wn8+P/rdcScktwAO6KQtWi81LThwQCXJAoI5S4B3Ym/eA70Q=="
+            }
+        },
+        {
+            "type": "tool",
+            "id": "google-trace:tool-2",
+            "name": "search_web",
+            "input": {
+                "query": "\"Ktor\" latest stable release version date 2024"
+            },
+            "metadata": {}
+        },
+        {
+            "type": "tool",
+            "id": "google-trace:tool-3",
+            "name": "search_web",
+            "input": {
+                "query": "\"Compose Multiplatform\" latest stable release version date 2024"
+            },
+            "metadata": {}
+        }
+    ],
+    "annotations": [],
+    "usage": {
+        "promptTokens": 88,
+        "completionTokens": 342,
+        "cachedTokens": 0,
+        "totalTokens": 430
+    },
+    "finished": true
+}

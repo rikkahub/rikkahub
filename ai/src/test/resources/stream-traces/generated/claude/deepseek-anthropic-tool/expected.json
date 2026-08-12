@@ -1,0 +1,47 @@
+{
+    "role": "ASSISTANT",
+    "parts": [
+        {
+            "type": "reasoning",
+            "text": "The user wants me to call both tools in the first tool-use step, without waiting for one before calling the other. Let me do that.\n\n1. list_memories with topic \"Kotlin\" to get user preferences.\n2. web_search for latest stable Kotlin release.\n\nLet me make both calls in parallel.",
+            "metadata": {
+                "signature": "3e407712-42b8-482e-a3a9-6b1d7e5578fd"
+            }
+        },
+        {
+            "type": "text",
+            "text": "I'll call both tools simultaneously to retrieve your Kotlin preferences and search for the latest stable release."
+        },
+        {
+            "type": "tool",
+            "id": "call_00_XhNVYXv4E4uRl8RNzknO0591",
+            "name": "list_memories",
+            "input": {
+                "topic": "Kotlin"
+            }
+        },
+        {
+            "type": "server_tool",
+            "id": "call_01_fOlFybIgj4x2biukT0SK8909",
+            "name": "web_search",
+            "status": "COMPLETED",
+            "input": {
+                "query": "latest stable Kotlin release version 2025"
+            },
+            "resultCount": 10,
+            "resultTypes": [
+                "web_search_result"
+            ],
+            "callType": "server_tool_use",
+            "resultType": "web_search_tool_result"
+        }
+    ],
+    "annotations": [],
+    "usage": {
+        "promptTokens": 494,
+        "completionTokens": 171,
+        "cachedTokens": 256,
+        "totalTokens": 665
+    },
+    "finished": true
+}

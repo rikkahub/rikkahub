@@ -1,0 +1,56 @@
+{
+    "role": "ASSISTANT",
+    "parts": [
+        {
+            "type": "reasoning",
+            "text": "I need to gather the latest information on Kotlin, Ktor, and Compose Multiplatform—their current stable versions, when they were released, and where to find the official documentation.",
+            "metadata": {
+                "openrouter_reasoning_details": [
+                    {
+                        "type": "reasoning.text",
+                        "text": "I need to gather the latest information on Kotlin, Ktor, and Compose Multiplatform—their current stable versions, when they were released, and where to find the official documentation.",
+                        "format": "anthropic-claude-v1",
+                        "index": 0,
+                        "signature": "EqcDCokBCBAYAipABRoE8pZUpC6Op2A1EkPl6sRitGRrh3QVWlBU/137i65T1/9eam6fDLSBiNfzEwxaggr2EdxvT8fe0UtH6wiI1zIPY2xhdWRlLXNvbm5ldC01OABCCHRoaW5raW5nWiQ0YzBmMDQ2Zi0yNWZkLTQ1ZmItYmZiMy1hMDhhOGUyNDljYTcSDPt9cRm1aCHzlBfnGBoMcdUBzxbJDfQHe/86IjAWbTEevaeIfC4Yxpe3dhLSgonsmM1XEpE747C+MGbzo9wqaMalSvzQ+v9+rEun4hMqygGz6Iwm6Bpx7/9dcdScxe9aLOB9swDWSDCqCNHtXKftPmUbr4LdvAe/ePCF3dtLTrRzpgoeHWzz0cS79a5pAtjGgzhNhbH2UWm734jP3ExYo+zYNIoxFnHdVLLqyU+GIt3jgghy9080ZtY+xtoioNQfZnBbe1ecsppvngM1x7+/oddHL1KymHd8YHYSv9Irgwx4RJJ62genRMokI2c23OVA3iNdMmnEjQ2UpLy7oHCNuDwJKANP8xFRWtaCGx8KrjNrShJstI5oVV1rGAE="
+                    }
+                ]
+            }
+        },
+        {
+            "type": "text",
+            "text": "I'll research each of these three technologies independently to find their latest stable releases, dates, and official sources."
+        },
+        {
+            "type": "tool",
+            "id": "toolu_01NrSSsKD73i2waMHmYzbZvt",
+            "name": "search_web",
+            "input": {
+                "query": "Kotlin latest stable release version 2024"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "toolu_016oNC79yuZ9PAPsYJbPijGu",
+            "name": "search_web",
+            "input": {
+                "query": "Ktor latest stable release version"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "toolu_01Am2QVNe6EtqL3HQaxDJBcX",
+            "name": "search_web",
+            "input": {
+                "query": "Compose Multiplatform latest stable release version"
+            }
+        }
+    ],
+    "annotations": [],
+    "usage": {
+        "promptTokens": 509,
+        "completionTokens": 263,
+        "cachedTokens": 0,
+        "totalTokens": 772
+    },
+    "finished": true
+}

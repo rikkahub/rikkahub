@@ -1,0 +1,44 @@
+{
+    "role": "ASSISTANT",
+    "parts": [
+        {
+            "type": "reasoning",
+            "text": "I need to look up the latest stable versions of Kotlin, Ktor, and Compose Multiplatform along with their release dates and official sources.",
+            "metadata": {
+                "signature": "ErYDCokBCBAYAipAqPMfLSvrLWxx8HHnRLC9MiPEUp1DM+r1Tvtf5kKhznlSKZ6rb4MXQLXUbvoUzSjlM2+7E/OjKbEVU3ua4cRGUzIPY2xhdWRlLXNvbm5ldC01OABCCHRoaW5raW5nWiQ0YzBmMDQ2Zi0yNWZkLTQ1ZmItYmZiMy1hMDhhOGUyNDljYTcSDKNkPpG2PVjzR+9w2hoMzCLRFSUJh00gdycDIjDJZIT4wfJJKCjsY0bxY64FkPIs5BgBa6apeXOLQuFgCf1mNf6K/EBLfezK73OyX38q2QFhe00q7XyDYDHcHms5vDxBPvdl6d2I6/Dq3RIt76KfI2Fi3F6dHhwuX0Y6TfFT6SqxyruBM/bG77HZ3iej+6YQ7rbnHen0ifd3JdzQTXXlaFIlchVlnrivfU1WTSPjPviwdn5h+s+k0b8A9+vYw+7sYFDWb22iVLzW3m8cYhWMuiAltjqgnvYg2EwiZyQLrNmbOyK3kB7les21vNx94+inGk9WjJpicBorkNHRRLgAcs4JjF6Z0wylpqBsWd9GmxKAMcEhBD1vcUMx7ZZ7ScRZqXoQODut6mIhGAE="
+            }
+        },
+        {
+            "type": "tool",
+            "id": "toolu_01CJUAvZkHLJzJQECVJicdhD",
+            "name": "search_web",
+            "input": {
+                "query": "Kotlin latest stable release version release date"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "toolu_01Xff9EjQMJETzkiAwhJrufJ",
+            "name": "search_web",
+            "input": {
+                "query": "Ktor latest stable release version release date"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "toolu_013JDFJqJ9ETaTtNrPTpMfFZ",
+            "name": "search_web",
+            "input": {
+                "query": "Compose Multiplatform latest stable release version release date"
+            }
+        }
+    ],
+    "annotations": [],
+    "usage": {
+        "promptTokens": 509,
+        "completionTokens": 242,
+        "cachedTokens": 0,
+        "totalTokens": 751
+    },
+    "finished": true
+}

@@ -1,0 +1,48 @@
+{
+    "role": "ASSISTANT",
+    "parts": [
+        {
+            "type": "reasoning",
+            "text": "The user wants me to research Kotlin, Ktor, and Compose Multiplatform independently, and compare their latest stable releases including release dates and official source URLs. Let me search for each of these.\n\nLet me do searches for all three in parallel.",
+            "metadata": {
+                "reasoning_id": "e88be50f-4f79-49c8-94ad-85ffa0a21644"
+            }
+        },
+        {
+            "type": "text",
+            "text": "I'll research all three technologies in parallel to gather the latest information on their stable releases."
+        },
+        {
+            "type": "tool",
+            "id": "call_00_HUtplm1bU3j0OvLTY5E29179",
+            "name": "search_web",
+            "input": {
+                "query": "Kotlin latest stable release version 2025"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "call_01_uo1ZadWuI477eUsJA3ii6573",
+            "name": "search_web",
+            "input": {
+                "query": "Ktor latest stable release version 2025"
+            }
+        },
+        {
+            "type": "tool",
+            "id": "call_02_nBnCByKxntqmUcekIQcL3965",
+            "name": "search_web",
+            "input": {
+                "query": "Compose Multiplatform latest stable release version 2025"
+            }
+        }
+    ],
+    "annotations": [],
+    "usage": {
+        "promptTokens": 401,
+        "completionTokens": 202,
+        "cachedTokens": 384,
+        "totalTokens": 603
+    },
+    "finished": true
+}
