@@ -67,6 +67,7 @@ DIAGNOSTIC_DESTINATION=''
 DIAGNOSTIC_STAGE=''
 DIAGNOSTIC_ERROR_CATEGORY='none'
 DIAGNOSTIC_CHILD_EXIT_STATUS='none'
+DIAGNOSTIC_CAPTURE_MANAGED_EXIT=0
 DIAGNOSTIC_ERROR_FILE=''
 DIAGNOSTIC_MANAGED_STATUS_FILE=''
 declare -a OWNED_TEMP_FILES=()
@@ -149,6 +150,7 @@ on_exit() {
   set +e
   if (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
     diagnostic_snapshot_private_state || true
+    DIAGNOSTIC_CAPTURE_MANAGED_EXIT=0
   fi
   if (( status != 0 && START_CLEANUP_NEEDED == 1 )); then
     raw_start_cleanup || cleanup_status=1
@@ -169,9 +171,16 @@ on_exit() {
     printf 'voice-step.error=operation failed\n' >&2
   fi
   if (( status == 0 && DIAGNOSTIC_ENABLED == 1 )); then
-    diagnostic_publish success complete || status=1
+    if ! diagnostic_publish success complete; then
+      status=1
+      diagnostic_note_error 'diagnostic publication failed'
+      ERROR_REPORTED=1
+      printf 'voice-step.error=diagnostic publication failed\n' >&2
+    fi
   elif (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
     diagnostic_publish failure complete || true
+  fi
+  if (( status != 0 && DIAGNOSTIC_ENABLED == 1 )); then
     printf 'voice-step.diagnostic=stage:%s,category:%s\n' \
       "$DIAGNOSTIC_STAGE" "$DIAGNOSTIC_ERROR_CATEGORY" >&2
   fi

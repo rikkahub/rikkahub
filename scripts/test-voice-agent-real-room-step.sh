@@ -585,6 +585,10 @@ argv = [*argv, " ".join(command)]
 exit_match = os.environ.get("FAKE_ADB_EXIT_MATCH")
 if exit_match and any(exit_match in value for value in argv):
     raise SystemExit(int(os.environ.get("FAKE_ADB_EXIT_STATUS", "73")))
+chmod_match = os.environ.get("FAKE_ADB_CHMOD_MATCH")
+chmod_path = os.environ.get("FAKE_ADB_CHMOD_PATH")
+if chmod_match and chmod_path and any(chmod_match in value for value in argv):
+    os.chmod(chmod_path, 0o500)
 if command == ["get-state"]:
     if (
         os.environ.get("FAKE_ADB_DEVICE_LOST") == "1"
@@ -1476,6 +1480,7 @@ PY
   unset FAKE_ADB_PREOPEN_REPLACE_CAPTURE_SOURCE
   unset FAKE_ADB_EXIT_MATCH FAKE_ADB_EXIT_STATUS
   unset FAKE_ADB_START_DOES_NOT_ACTIVATE FAKE_ADB_START_RETAINS_TRACE
+  unset FAKE_ADB_CHMOD_MATCH FAKE_ADB_CHMOD_PATH
 }
 
 make_fixture() {
@@ -3053,6 +3058,14 @@ start-foreground-service:service-start:call-start-failed
 EOF
 
   reset_fake
+  export FAKE_ADB_EXIT_MATCH=action.START
+  export FAKE_ADB_EXIT_STATUS=73
+  export FAKE_ADB_FAIL_END=1
+  assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
+    service-start call-start-failed 73
+  pass
+
+  reset_fake
   export FAKE_ADB_START_DOES_NOT_ACTIVATE=1
   assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
     call-activation call-activation-timed-out 1
@@ -3106,6 +3119,30 @@ EOF
   set -e
   [[ "$lock_status" -eq 0 ]] || fail "tracing-host-lock test: lock owner did not complete"
   unset FAKE_ADB_BLOCK_MATCH FAKE_ADB_BLOCK_READY FAKE_ADB_BLOCK_RELEASE
+  pass
+
+  reset_fake
+  local publication_parent="$TMP_DIR/tracing-publication-parent"
+  local publication_diagnostic="$publication_parent/diagnostic.txt"
+  mkdir "$publication_parent"
+  chmod 700 "$publication_parent"
+  export FAKE_ADB_CHMOD_MATCH=start-foreground-service
+  export FAKE_ADB_CHMOD_PATH="$publication_parent"
+  run_helper start --state "$state" --diagnostic-record "$publication_diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$fixture"
+  chmod 700 "$publication_parent"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$publication_diagnostic" ]] ||
+    fail "tracing-publication test: failed diagnostic publication was accepted"
+  [[ "$(tail -n 1 "$STDERR_FILE")" == \
+     'voice-step.diagnostic=stage:complete,category:diagnostic-publication-failed' ]] ||
+    fail "tracing-publication test: publication failure diagnostic summary mismatch"
+  [[ "$(grep -Fxc \
+    'voice-step.diagnostic=stage:complete,category:diagnostic-publication-failed' \
+    "$STDERR_FILE")" == 1 ]] ||
+    fail "tracing-publication test: publication failure emitted multiple summaries"
+  assert_private_output_absent
   pass
 }
 

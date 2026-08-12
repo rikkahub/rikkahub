@@ -51,6 +51,7 @@ diagnostic_initialize() {
   DIAGNOSTIC_STAGE='option-validation'
   DIAGNOSTIC_ERROR_CATEGORY='none'
   DIAGNOSTIC_CHILD_EXIT_STATUS='none'
+  DIAGNOSTIC_CAPTURE_MANAGED_EXIT=1
 }
 
 diagnostic_set_stage() {
@@ -104,6 +105,7 @@ diagnostic_note_error() {
 
 diagnostic_note_managed_exit() {
   local status="$1"
+  [[ "${DIAGNOSTIC_CAPTURE_MANAGED_EXIT:-0}" == 1 ]] || return 0
   [[ "$status" =~ ^([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$ ]] || return 1
   DIAGNOSTIC_CHILD_EXIT_STATUS="$status"
   [[ -z "${DIAGNOSTIC_MANAGED_STATUS_FILE:-}" ]] ||
