@@ -94,7 +94,7 @@ raw_start_cleanup() {
   local quiescence_status
   local broker_status
   if (( START_CALL_ATTEMPTED == 1 )); then
-    adb_read shell am start-foreground-service \
+    adb_am_action_uri start-foreground-service \
       --user "$ANDROID_USER_ID" \
       -n "$PACKAGE/$SERVICE_CLASS" \
       -a "$CALL_END_BOUND_ACTION" \
@@ -106,7 +106,7 @@ raw_start_cleanup() {
     START_CALL_ATTEMPTED=0
   fi
   if (( START_PREPARE_ATTEMPTED == 1 )); then
-    adb_read shell am broadcast --user "$ANDROID_USER_ID" \
+    adb_am_action_uri broadcast --user "$ANDROID_USER_ID" \
       -n "$PACKAGE/$CONTROL_RECEIVER" \
       -a "$CONTROL_ACTION_PREFIX.FINALIZE_BOUND" \
       --es run_hash "$RUN_HASH" \
@@ -381,7 +381,7 @@ run_finalize() {
   local device_access
   local -a status=()
   validate_runtime
-  adb_read shell am start-foreground-service \
+  adb_am_action_uri start-foreground-service \
     --user "$ANDROID_USER_ID" \
     -n "$PACKAGE/$SERVICE_CLASS" \
     -a "$CALL_END_BOUND_ACTION" \
@@ -957,7 +957,7 @@ run_start() {
 
   START_CALL_ATTEMPTED=1
   diagnostic_set_stage service-start || die 'diagnostic state failed'
-  adb_read shell am start-foreground-service \
+  adb_am_action_uri start-foreground-service \
     --user "$ANDROID_USER_ID" \
     -n "$PACKAGE/$SERVICE_CLASS" \
     -a "$CALL_START_ACTION" \

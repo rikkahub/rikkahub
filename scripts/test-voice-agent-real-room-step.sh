@@ -638,6 +638,11 @@ expected_prefix = [
 if argv[:7] != expected_prefix or len(argv) == 7:
     raise SystemExit(64)
 command = argv[7:]
+if (
+    os.environ.get("FAKE_MDEV_REJECT_ACTION_FLAG") == "1"
+    and "-a" in command
+):
+    raise SystemExit(64)
 argv = [*argv, " ".join(command)]
 chmod_match = os.environ.get("FAKE_ADB_CHMOD_MATCH")
 chmod_path = os.environ.get("FAKE_ADB_CHMOD_PATH")
@@ -680,7 +685,10 @@ if len(command) == 2 and command[0] in {"shell", "exec-out"}:
         decoded = shlex.split(command[1], posix=True)
     except ValueError:
         raise SystemExit(64)
-    if decoded[:1] == ["run-as"]:
+    if decoded[:1] == ["run-as"] or tuple(decoded[:2]) in {
+        ("am", "broadcast"),
+        ("am", "start-foreground-service"),
+    }:
         command = [command[0], *decoded]
 argv = ["-s", state["serial"], *command]
 maybe_block(argv)
@@ -1082,8 +1090,22 @@ if run_as_tail is not None:
         save_state(state)
         raise SystemExit(0)
 
+def intent_action(arguments):
+    if "-a" in arguments:
+        return arguments[arguments.index("-a") + 1]
+    prefix = "intent:#Intent;action="
+    matches = [
+        value[len(prefix):-len(";end")]
+        for value in arguments
+        if value.startswith(prefix) and value.endswith(";end")
+    ]
+    if len(matches) != 1:
+        raise SystemExit(64)
+    return matches[0]
+
+
 if command[:4] == ["shell", "am", "broadcast", "--user"]:
-    action = command[command.index("-a") + 1]
+    action = intent_action(command)
     values = extras(command)
     raw_broadcast_path = os.environ.get("FAKE_ADB_RAW_BROADCAST_FILE")
     raw_broadcast_action = os.environ.get("FAKE_ADB_RAW_BROADCAST_ACTION")
@@ -1096,12 +1118,15 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
     if action.endswith(".STATUS"):
         restoring = "--include-stopped-packages" in command
         if restoring:
-            expected = [
+            expected_prefix = [
                 "shell", "am", "broadcast", "--user", str(state["android_user_id"]),
                 "--include-stopped-packages", "-n", f"{EXPECTED_PACKAGE}/{CONTROL}",
-                "-a", f"me.rerere.rikkahub.voiceagent.automation.STATUS",
             ]
-            if command != expected:
+            expected_intent = (
+                "intent:#Intent;action="
+                "me.rerere.rikkahub.voiceagent.automation.STATUS;end"
+            )
+            if command != [*expected_prefix, expected_intent]:
                 raise SystemExit(1)
             if os.environ.get("FAKE_ADB_FAIL_RESTORATION") == "1":
                 raise SystemExit(1)
@@ -1249,7 +1274,7 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
 if command[:5] == [
     "shell", "am", "start-foreground-service", "--user", str(state["android_user_id"]),
 ]:
-    action = command[command.index("-a") + 1]
+    action = intent_action(command)
     values = extras(command)
     if action.endswith(".END_BOUND") and os.environ.get("FAKE_ADB_FAIL_END") == "1":
         raise SystemExit(1)
@@ -1700,6 +1725,7 @@ PY
   unset FAKE_ADB_ISOLATED_PROCESS FAKE_ADB_UNSTABLE_QUIESCENCE
   unset FAKE_ADB_FAIL_FORCE_STOP FAKE_ADB_FAIL_CLEANUP_BROKER
   unset FAKE_ADB_MALFORMED_BROADCAST FAKE_ADB_SIGNAL_ON_TRACE
+  unset FAKE_MDEV_REJECT_ACTION_FLAG
   unset FAKE_ADB_CREATE_DESTINATION_ON_TRACE FAKE_ADB_STAGE_REJECT
   unset FAKE_ADB_TRIGGER_REJECT FAKE_ADB_SERVICE_STAYS_ACTIVE
   unset FAKE_ADB_ARTIFACT_CHANGES FAKE_ADB_MISSING_ARTIFACT FAKE_ADB_BAD_SANITIZED
@@ -2787,12 +2813,28 @@ PY
 exact_argument_count() {
   local needle="$1"
   python3 - "$ADB_LOG" "$needle" <<'PY'
+import shlex
 import sys
 
 data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
 needle = sys.argv[2].encode()
-print(sum(needle in command for command in commands))
+intent = b"intent:#Intent;action=" + needle + b";end"
+count = 0
+for command in commands:
+    values = list(command)
+    if b"shell" in command:
+        shell = command.index(b"shell")
+        if len(command) == shell + 2:
+            try:
+                values.extend(
+                    value.encode()
+                    for value in shlex.split(command[shell + 1].decode(), posix=True)
+                )
+            except (UnicodeDecodeError, ValueError):
+                pass
+    count += needle in values or intent in values
+print(count)
 PY
 }
 
@@ -2813,17 +2855,47 @@ print(sum(command == expected for command in commands))
 PY
 }
 
-assert_bound_action_extras() {
-  local action="$1"
-  python3 - "$ADB_LOG" "$action" <<'PY' || fail "bound-action test: action or exact binding extras mismatch"
+exact_remote_shell_command_count() {
+  python3 - "$ADB_LOG" "$@" <<'PY'
+import shlex
 import sys
 
 data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
+prefix = [b"android", b"adb", b"--device", b"phone", b"--owner", b"OWNER_SECRET_123", b"--"]
+expected = [value.encode() for value in sys.argv[2:]]
+matches = 0
+for command in commands:
+    if command[:len(prefix)] == prefix:
+        command = [b"-s", b"DEVICE_SECRET_123", *command[len(prefix):]]
+    if len(command) == 4 and command[:3] == [b"-s", b"DEVICE_SECRET_123", b"shell"]:
+        try:
+            remote = [value.encode() for value in shlex.split(command[3].decode(), posix=True)]
+        except (UnicodeDecodeError, ValueError):
+            continue
+        command = [*command[:3], *remote]
+    matches += command == expected
+print(matches)
+PY
+}
+
+assert_bound_action_extras() {
+  local action="$1"
+  python3 - "$ADB_LOG" "$action" <<'PY' || fail "bound-action test: action or exact binding extras mismatch"
+import sys
+import shlex
+
+data = open(sys.argv[1], "rb").read()
+commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
 action = sys.argv[2].encode()
-matches = [command for command in commands if action in command]
+matches = [command for command in commands if any(action in value for value in command)]
 assert len(matches) == 1
 command = matches[0]
+shell = command.index(b"shell")
+assert len(command) == shell + 2
+command = [value.encode() for value in shlex.split(command[shell + 1].decode(), posix=True)]
+assert b"-a" not in command
+assert command[-1] == b"intent:#Intent;action=" + action + b";end"
 expected = {
     b"conversationId": b"CONVERSATION_SECRET_123",
     b"transport": b"livekit_experimental",
@@ -2843,15 +2915,20 @@ assert_service_action_pinned() {
   local expected_user="${2:-0}"
   python3 - "$ADB_LOG" "$action" "$expected_user" <<'PY' || fail "pinned-user test: bound service action was not pinned"
 import sys
+import shlex
 
 data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
 action = sys.argv[2].encode()
 expected_user = sys.argv[3].encode()
-matches = [command for command in commands if action in command]
+matches = [command for command in commands if any(action in value for value in command)]
 assert len(matches) == 1
 shell = matches[0].index(b"shell")
-assert matches[0][shell:shell + 5] == [b"shell", b"am", b"start-foreground-service", b"--user", expected_user]
+assert len(matches[0]) == shell + 2
+remote = [value.encode() for value in shlex.split(matches[0][shell + 1].decode(), posix=True)]
+assert remote[:4] == [b"am", b"start-foreground-service", b"--user", expected_user]
+assert b"-a" not in remote
+assert remote[-1] == b"intent:#Intent;action=" + action + b";end"
 PY
 }
 
@@ -2912,9 +2989,9 @@ mutation_actions = {
 }
 for command in commands:
     if (
-        any(token in mutation_tokens for token in command)
-        or any(action in command for action in mutation_actions)
-        or b'cat > "$1"' in command
+        any(token in value for token in mutation_tokens for value in command)
+        or any(action in value for action in mutation_actions for value in command)
+        or any(b'cat > "$1"' in value for value in command)
     ):
         raise SystemExit(1)
 PY
@@ -3443,6 +3520,14 @@ PY
   fi
   pass
 
+  reset_fake
+  export FAKE_MDEV_REJECT_ACTION_FLAG=1
+  run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
+  [[ "$RUN_STATUS" -eq 0 ]] ||
+    fail "managed-action test: standalone action flag escaped the remote shell command"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=preflight\nvoice-step.device=ready\nvoice-step.package=ready\nvoice-step.automation=ready\nvoice-step.protected_path=ready'
+  pass
+
   local service_mode
   for service_mode in unresolved ambiguous malformed; do
     reset_fake
@@ -3572,15 +3657,19 @@ assert state["fixture_directory_identity"].split(":")[3] == str(state["package_u
 assert state["fixture_ownership_nonce"] == "0123456789abcdef0123456789abcdef"
 PY
   python3 - "$ADB_LOG" <<'PY' || fail "start-integrity test: ARM omitted immutable fixture metadata"
+import shlex
 import sys
 
 data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
 arm = [command for command in commands if any(b"ARM_CAPTURE_FIXTURE" in value for value in command)]
 assert len(arm) == 1
-assert b"expected_size" in arm[0] and b"8" in arm[0]
-assert b"expected_sha256" in arm[0]
-assert b"sha256:66840dda154e8a113c31dd0ad32f7f3a366a80e8136979d8f5a101d3d29d6f72" in arm[0]
+shell = arm[0].index(b"shell")
+assert len(arm[0]) == shell + 2
+arm = [value.encode() for value in shlex.split(arm[0][shell + 1].decode(), posix=True)]
+assert b"expected_size" in arm and b"8" in arm
+assert b"expected_sha256" in arm
+assert b"sha256:66840dda154e8a113c31dd0ad32f7f3a366a80e8136979d8f5a101d3d29d6f72" in arm
 PY
   python3 - "$ADB_LOG" <<'PY' || fail "start-script-transport test: app-private scripts were not one managed shell argument"
 import shlex
@@ -3895,7 +3984,7 @@ PY
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
   [[ "$RUN_STATUS" -ne 0 ]] || fail "pinned-user rollback test: raced start succeeded"
   assert_service_action_pinned 'me.rerere.rikkahub.voiceagent.action.END_BOUND' 10
-  [[ "$(exact_command_count -s DEVICE_SECRET_123 shell am broadcast --user 10 --include-stopped-packages -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver -a me.rerere.rikkahub.voiceagent.automation.STATUS)" == 1 ]] ||
+  [[ "$(exact_remote_shell_command_count -s DEVICE_SECRET_123 shell am broadcast --user 10 --include-stopped-packages -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver 'intent:#Intent;action=me.rerere.rikkahub.voiceagent.automation.STATUS;end')" == 1 ]] ||
     fail "pinned-user rollback test: package restoration changed Android user"
   pass
 }
@@ -4543,6 +4632,13 @@ stream = [command for command in commands if any(b"voice-step-stage-owned-fixtur
 stage = [command for command in commands if any(b"STAGE_CAPTURE_FIXTURE" in value for value in command)]
 trigger = [command for command in commands if any(b"TRIGGER_CAPTURE_FIXTURE" in value for value in command)]
 assert len(stream) == len(stage) == len(trigger) == 1
+def decode_remote(command):
+    shell = command.index(b"shell")
+    assert len(command) == shell + 2
+    return [value.encode() for value in shlex.split(command[shell + 1].decode(), posix=True)]
+
+stage = decode_remote(stage[0])
+trigger = decode_remote(trigger[0])
 tail = stream[0][7:]
 assert len(tail) == 2 and tail[0] == b"shell"
 decoded = shlex.split(tail[1].decode(), posix=True)
@@ -4557,13 +4653,13 @@ assert b"voice-step-descriptor-owned-stage" in stream_script
 assert b"/proc/self/fd/" not in stream_script
 assert b"/proc/$$/fd/3" in stream_script
 assert b"mktemp" not in stream_script and b'cat > "$temporary"' not in stream_script
-assert expected_path in stage[0] and expected_path in trigger[0]
-assert b"fixture-1" in stage[0] and b"fixture-1" in trigger[0]
-assert b"chunk_bytes" in stage[0] and b"3200" in stage[0]
-assert b"chunk_delay_ms" in stage[0] and b"100" in stage[0]
-assert b"expected_size" in stage[0] and b"8" in stage[0]
-assert b"expected_sha256" in stage[0]
-assert b"sha256:66840dda154e8a113c31dd0ad32f7f3a366a80e8136979d8f5a101d3d29d6f72" in stage[0]
+assert expected_path in stage and expected_path in trigger
+assert b"fixture-1" in stage and b"fixture-1" in trigger
+assert b"chunk_bytes" in stage and b"3200" in stage
+assert b"chunk_delay_ms" in stage and b"100" in stage
+assert b"expected_size" in stage and b"8" in stage
+assert b"expected_sha256" in stage
+assert b"sha256:66840dda154e8a113c31dd0ad32f7f3a366a80e8136979d8f5a101d3d29d6f72" in stage
 PY
     pass
   done
@@ -4582,6 +4678,7 @@ PY
      "$(command_count TRIGGER_CAPTURE_FIXTURE)" == "2" ]] ||
     fail "inject-repeat test: repeated distinct requests were retried or skipped"
   python3 - "$ADB_LOG" <<'PY' || fail "inject-repeat test: distinct request hashes aliased"
+import shlex
 import sys
 
 data = open(sys.argv[1], "rb").read()
@@ -4589,7 +4686,10 @@ commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
 paths = []
 for command in commands:
     if any(b"STAGE_CAPTURE_FIXTURE" in value for value in command):
-        paths.extend(value for value in command if value.startswith(b"files/voice-real-room/"))
+        shell = command.index(b"shell")
+        assert len(command) == shell + 2
+        remote = [value.encode() for value in shlex.split(command[shell + 1].decode(), posix=True)]
+        paths.extend(value for value in remote if value.startswith(b"files/voice-real-room/"))
 assert paths == [
     b"files/voice-real-room/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/request-66840dda154e8a113c31dd0ad32f7f3a366a80e8136979d8f5a101d3d29d6f72.pcm",
     b"files/voice-real-room/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/request-74aeae04b0a57b8f19bb67f2b742072ee0b8f9ce5efd298f0134a16791c73607.pcm",
@@ -4814,15 +4914,19 @@ run_interrupt_tests() {
      "$(command_count TRIGGER_CAPTURE_FIXTURE)" == "1" ]] ||
     fail "interrupt-retry test: atomic interrupt step retried a mutation"
   python3 - "$ADB_LOG" <<'PY' || fail "interrupt-mark test: boundary/run hash extras were wrong"
+import shlex
 import sys
 
 data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
-marks = [command for command in commands if any(value.endswith(b".MARK") for value in command)]
+marks = [command for command in commands if any(b"me.rerere.rikkahub.voiceagent.automation.MARK" in value for value in command)]
 assert len(marks) == 1
-assert b"boundary" in marks[0] and b"interrupt_started" in marks[0]
-assert b"run_hash" in marks[0]
-assert b"sha256:" + b"a" * 64 in marks[0]
+shell = marks[0].index(b"shell")
+assert len(marks[0]) == shell + 2
+mark = [value.encode() for value in shlex.split(marks[0][shell + 1].decode(), posix=True)]
+assert b"boundary" in mark and b"interrupt_started" in mark
+assert b"run_hash" in mark
+assert b"sha256:" + b"a" * 64 in mark
 PY
   pass
 
@@ -5627,12 +5731,13 @@ PY
   assert_bound_action_extras 'me.rerere.rikkahub.voiceagent.action.END_BOUND'
   assert_service_action_pinned 'me.rerere.rikkahub.voiceagent.action.END_BOUND'
   python3 - "$ADB_LOG" <<'PY' || fail "finalize-binding/order test: exact binding or active-run STATUS exclusion failed"
+import shlex
 import sys
 data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
-end = next(index for index, command in enumerate(commands) if b"me.rerere.rikkahub.voiceagent.action.END_BOUND" in command)
-finalize = next(index for index, command in enumerate(commands) if b"me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND" in command)
-statuses = [index for index, command in enumerate(commands) if any(value.endswith(b".STATUS") for value in command)]
+end = next(index for index, command in enumerate(commands) if any(b"me.rerere.rikkahub.voiceagent.action.END_BOUND" in value for value in command))
+finalize = next(index for index, command in enumerate(commands) if any(b"me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND" in value for value in command))
+statuses = [index for index, command in enumerate(commands) if any(b"me.rerere.rikkahub.voiceagent.automation.STATUS" in value for value in command)]
 artifact_reads = [
     index for index, command in enumerate(commands)
     if b"exec-out" in command and b"cat" in command and
@@ -5643,6 +5748,9 @@ assert len([index for index in artifact_reads if end < index < finalize]) >= 2
 assert statuses and all(index > finalize for index in statuses)
 assert any(index > statuses[-1] for index in artifact_reads)
 command = commands[finalize]
+shell = command.index(b"shell")
+assert len(command) == shell + 2
+command = [value.encode() for value in shlex.split(command[shell + 1].decode(), posix=True)]
 for key, value in {
     b"run_hash": b"sha256:" + b"a" * 64,
     b"comparison_hash": b"sha256:" + b"b" * 64,
@@ -6347,7 +6455,7 @@ PY
      "$(exact_command_count -s DEVICE_SECRET_123 exec-out ps -A -n -o UID,PID,PPID,STAT,NAME)" == 2 &&
      "$(exact_command_count -s DEVICE_SECRET_123 shell cmd activity get-isolated-pids "$CURRENT_UID")" == 2 &&
      "$(command_count voice-step-cleanup-broker)" == 1 &&
-     "$(exact_command_count -s DEVICE_SECRET_123 shell am broadcast --user 0 --include-stopped-packages -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver -a me.rerere.rikkahub.voiceagent.automation.STATUS)" == 1 ]] ||
+     "$(exact_remote_shell_command_count -s DEVICE_SECRET_123 shell am broadcast --user 0 --include-stopped-packages -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver 'intent:#Intent;action=me.rerere.rikkahub.voiceagent.automation.STATUS;end')" == 1 ]] ||
     fail "end-command-count test: exact force-stop, stable quiescence, broker, or restoration count changed"
   python3 - "$ADB_LOG" "$FAKE_STATE" <<'PY' || fail "end-order/receipt test: teardown ordering or schema-v2 ownership receipt changed"
 import json
@@ -6366,7 +6474,7 @@ brokers = [
 ]
 restorations = [
     i for i, command in enumerate(commands)
-    if b"--include-stopped-packages" in command
+    if any(b"--include-stopped-packages" in value for value in command)
 ]
 artifact_reads = [
     i for i, command in enumerate(commands)

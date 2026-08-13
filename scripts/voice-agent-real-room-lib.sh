@@ -46,6 +46,41 @@ quote_remote_shell_argument() {
   printf "'%s'" "${value//\'/\'\\\'\'}"
 }
 
+adb_am_action_uri() {
+  local subcommand="$1"
+  shift
+  local action=''
+  local action_count=0
+  local argument
+  local command
+  local quoted
+  local -a arguments=()
+  case "$subcommand" in
+    broadcast|start-foreground-service) ;;
+    *) return 4 ;;
+  esac
+  while (( $# > 0 )); do
+    if [[ "$1" == -a ]]; then
+      (( $# >= 2 )) || return 4
+      action="$2"
+      action_count=$((action_count + 1))
+      shift 2
+    else
+      arguments+=("$1")
+      shift
+    fi
+  done
+  (( action_count == 1 )) || return 4
+  [[ "$action" =~ ^[A-Za-z][A-Za-z0-9_.]*$ ]] || return 4
+
+  command="am $subcommand"
+  for argument in "${arguments[@]}" "intent:#Intent;action=${action};end"; do
+    quoted="$(quote_remote_shell_argument "$argument")"
+    command+=" $quoted"
+  done
+  adb_read shell "$command"
+}
+
 run_as_script() {
   local transport="$1"
   local script="$2"
@@ -1049,7 +1084,7 @@ ordered_broadcast_read() {
   local output_path="${ORDERED_BROADCAST_OUTPUT:-}"
   [[ -n "$output_path" ]] || return 4
   : > "$output_path" 2>/dev/null || return 4
-  if ! adb_read shell am broadcast "$@" >"$output_path" 2>/dev/null; then
+  if ! adb_am_action_uri broadcast "$@" >"$output_path" 2>/dev/null; then
     return 4
   fi
   parse_ordered_broadcast_output "$output_path"
