@@ -1,4 +1,7 @@
-# Keep source locations so obfuscated release stack traces can be retraced.
+# Release builds may shrink and optimize code, but must not rename symbols.
+-dontobfuscate
+
+# Keep source locations so release stack traces retain useful line information.
 -keepattributes SourceFile,LineNumberTable
 
 # Ktor references JVM-only management APIs from its debug detector.
