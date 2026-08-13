@@ -8,6 +8,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HELPER="$ROOT_DIR/scripts/voice-agent-real-room-step.sh"
 LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
 DIAGNOSTICS="$ROOT_DIR/scripts/voice-agent-real-room-diagnostics.sh"
+STATE_PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-state-publisher.py"
 REAL_TIMEOUT="$(command -v timeout)"
 REAL_LN="$(command -v ln)"
 REAL_RMDIR="$(command -v rmdir)"
@@ -35,6 +36,7 @@ REMOTE_APP_DATA_ROOT="$TMP_DIR/remote-app-data"
 RMDIR_BOUNDARY_FILE="$TMP_DIR/rmdir-boundary"
 TEST_COUNT=0
 ACTOR_PID=''
+LAST_STATE_DESTINATION=''
 declare -a LAST_PRIVATE_PATHS=()
 
 cleanup() {
@@ -1518,6 +1520,10 @@ PY
   unset VOICE_STEP_STATE_DIAGNOSTIC_PARENT VOICE_STEP_STATE_PARENT_MARKER
   unset VOICE_STEP_STATE_LINK_DESTINATION VOICE_STEP_STATE_LINK_MODE
   unset VOICE_STEP_STATE_LINK_MARKER
+  unset VOICE_STEP_VALIDATION_PARENT VOICE_STEP_VALIDATION_DESTINATION
+  unset VOICE_STEP_VALIDATION_PINNED_PARENT
+  unset VOICE_STEP_VALIDATION_REPLACEMENT_MARKER
+  unset VOICE_STEP_STATE_SHORT_WRITE_MARKER RUN_HELPER_NEW_SESSION
   unset VOICE_STEP_DIAGNOSTIC_TMPFILE_MARKER VOICE_STEP_DIAGNOSTIC_LINK_MARKER
   unset VOICE_STEP_DIAGNOSTIC_UNLINK_MARKER VOICE_STEP_DIAGNOSTIC_DESTINATION
   unset VOICE_STEP_DIAGNOSTIC_PARENT VOICE_STEP_DIAGNOSTIC_PINNED_PARENT
@@ -1663,12 +1669,40 @@ os.lstat = aliased_lstat
 PY
 }
 
+make_validation_parent_replacement_site() {
+  local site="$1"
+  mkdir "$site"
+  chmod 700 "$site"
+  cat > "$site/sitecustomize.py" <<'PY'
+import os
+from pathlib import Path
+
+parent = os.environ["VOICE_STEP_VALIDATION_PARENT"]
+destination = os.environ["VOICE_STEP_VALIDATION_DESTINATION"]
+pinned_parent = os.environ["VOICE_STEP_VALIDATION_PINNED_PARENT"]
+marker = os.environ["VOICE_STEP_VALIDATION_REPLACEMENT_MARKER"]
+real_lstat = os.lstat
+
+
+def controlled_lstat(path, *args, **kwargs):
+    if os.fsdecode(path) == destination and not os.path.exists(marker):
+        os.rename(parent, pinned_parent)
+        os.mkdir(parent, 0o700)
+        Path(marker).write_text("validation-parent-replaced\n", encoding="ascii")
+    return real_lstat(path, *args, **kwargs)
+
+
+os.lstat = controlled_lstat
+PY
+}
+
 make_state_publication_parent_race_site() {
   local site="$1"
   mkdir "$site"
   chmod 700 "$site"
   cat > "$site/sitecustomize.py" <<'PY'
 import os
+import sys
 from pathlib import Path
 
 parent = os.environ["VOICE_STEP_STATE_PARENT"]
@@ -1683,6 +1717,8 @@ def controlled_open(path, flags, *args, **kwargs):
     global replaced
     if (
         not replaced
+        and os.path.basename(sys.argv[0])
+        == "voice-agent-real-room-state-publisher.py"
         and os.fsdecode(path) == parent
         and flags & os.O_DIRECTORY
     ):
@@ -1694,6 +1730,38 @@ def controlled_open(path, flags, *args, **kwargs):
 
 
 os.open = controlled_open
+PY
+}
+
+make_state_publication_short_write_site() {
+  local site="$1"
+  mkdir "$site"
+  chmod 700 "$site"
+  cat > "$site/sitecustomize.py" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+marker = os.environ["VOICE_STEP_STATE_SHORT_WRITE_MARKER"]
+real_write = os.write
+injected = False
+
+
+def short_write(descriptor, payload):
+    global injected
+    if (
+        not injected
+        and os.path.basename(sys.argv[0])
+        == "voice-agent-real-room-state-publisher.py"
+        and len(payload) > 7
+    ):
+        injected = True
+        Path(marker).write_text("short-write-injected\n", encoding="ascii")
+        return real_write(descriptor, payload[:7])
+    return real_write(descriptor, payload)
+
+
+os.write = short_write
 PY
 }
 
@@ -1733,6 +1801,14 @@ def controlled_link(source, target, *args, **kwargs):
         elif mode == "signal-after":
             result = real_link(source, target, *args, **kwargs)
             os.kill(os.getppid(), signal.SIGTERM)
+            return result
+        elif mode == "signal-child-after":
+            result = real_link(source, target, *args, **kwargs)
+            os.kill(os.getpid(), signal.SIGTERM)
+            return result
+        elif mode == "signal-group-after":
+            result = real_link(source, target, *args, **kwargs)
+            os.killpg(os.getpgrp(), signal.SIGTERM)
             return result
     return real_link(source, target, *args, **kwargs)
 
@@ -2016,14 +2092,22 @@ PY
 run_helper() {
   local argument
   local has_owner=0
+  local index
   local -a invocation=("$@")
   LAST_OPERATION="${1:-unknown}"
+  LAST_STATE_DESTINATION=''
   for argument in "$@"; do
     [[ "$argument" == --mdev-owner ]] && has_owner=1
   done
   if [[ "${RUN_HELPER_SKIP_OWNER:-0}" != 1 && "$has_owner" -eq 0 && "${1:-}" =~ ^(preflight|start|inject|interrupt|status|finalize|capture|end)$ ]]; then
     invocation=("$1" --mdev-owner "$MDEV_OWNER" "${@:2}")
   fi
+  for (( index = 0; index + 1 < ${#invocation[@]}; index++ )); do
+    if [[ "${invocation[index]}" == --state ]]; then
+      LAST_STATE_DESTINATION="${invocation[index + 1]}"
+      break
+    fi
+  done
   LAST_PRIVATE_PATHS=("$TMP_DIR" "$FAKE_STATE" "$STDOUT_FILE" "$STDERR_FILE" "$HELPER_TEMP_ROOT")
   for argument in "${invocation[@]}"; do
     [[ "$argument" == /* ]] && LAST_PRIVATE_PATHS+=("$argument")
@@ -2031,7 +2115,13 @@ run_helper() {
   : > "$STDOUT_FILE"
   : > "$STDERR_FILE"
   set +e
-  TMPDIR="$HELPER_TEMP_ROOT" "$HELPER" "${invocation[@]}" >"$STDOUT_FILE" 2>"$STDERR_FILE"
+  if [[ "${RUN_HELPER_NEW_SESSION:-0}" == 1 ]]; then
+    TMPDIR="$HELPER_TEMP_ROOT" setsid "$HELPER" "${invocation[@]}" \
+      >"$STDOUT_FILE" 2>"$STDERR_FILE"
+  else
+    TMPDIR="$HELPER_TEMP_ROOT" "$HELPER" "${invocation[@]}" \
+      >"$STDOUT_FILE" 2>"$STDERR_FILE"
+  fi
   RUN_STATUS=$?
   set -e
 }
@@ -2146,15 +2236,50 @@ assert_exact_output() {
     fi
     fail "success-output test: operation failed"
   fi
-  if [[ "$(<"$STDOUT_FILE")" != "$expected" ]]; then
+  if ! printf '%s\n' "$expected" | cmp -s - "$STDOUT_FILE"; then
     if [[ "$(<"$STDOUT_FILE")" =~ ^voice-step\.[A-Za-z_]+=[A-Za-z_]+([[:space:]]+voice-step\.[A-Za-z_]+=[A-Za-z_]+)*$ ]]; then
       fail "success-output test: stdout was not the fixed contract ($(tr '\n' ' ' < "$STDOUT_FILE"))"
     fi
     fail "success-output test: stdout was not the fixed contract"
   fi
   [[ ! -s "$STDERR_FILE" ]] || fail "success-output test: successful operation wrote stderr"
+  if [[ "$LAST_OPERATION" == start ]]; then
+    assert_committed_state "$LAST_STATE_DESTINATION"
+  fi
   assert_private_output_absent
   pass
+}
+
+assert_committed_state() {
+  local path="$1"
+  python3 - "$path" <<'PY' || fail "state-publication test: committed state contract mismatch"
+import json
+import os
+import stat
+import sys
+
+path = sys.argv[1]
+raw = open(path, "rb").read()
+metadata = os.lstat(path)
+assert stat.S_ISREG(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode)
+assert stat.S_IMODE(metadata.st_mode) == 0o600
+assert metadata.st_nlink == 1
+assert raw.endswith(b"\n") and raw.count(b"\n") == 1
+payload = json.loads(raw)
+assert set(payload) == {
+    "schemaVersion", "mdevOwnerHash", "package", "androidUserId",
+    "packageUid", "conversationId", "runHash", "comparisonHash",
+    "fixtureToken", "fixtureParentIdentity", "fixtureDirectoryIdentity",
+    "fixtureOwnershipNonce", "traceId", "transport",
+}
+assert payload["schemaVersion"] == 3
+assert payload["transport"] == "livekit_experimental"
+assert (json.dumps(payload, separators=(",", ":")) + "\n").encode() == raw
+assert not any(
+    name.startswith(".voice-step-state.")
+    for name in os.listdir(os.path.dirname(path))
+)
+PY
 }
 
 assert_exact_checkpoint_failure() {
@@ -3199,6 +3324,65 @@ PY
   pass
 
   reset_fake
+  local child_signal_state="$TMP_DIR/child-signal-after-link-state.json"
+  local child_signal_site="$TMP_DIR/child-signal-after-link-site"
+  local child_signal_marker="$TMP_DIR/child-signal-after-link-marker"
+  make_state_publication_link_site "$child_signal_site"
+  PYTHONPATH="$child_signal_site" \
+    VOICE_STEP_STATE_LINK_DESTINATION="$child_signal_state" \
+    VOICE_STEP_STATE_LINK_MODE=signal-child-after \
+    VOICE_STEP_STATE_LINK_MARKER="$child_signal_marker" \
+    run_helper start --state "$child_signal_state" --mdev-owner OWNER_SECRET_123 \
+    --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
+    --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
+    --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
+  [[ -f "$child_signal_marker" &&
+     "$(<"$child_signal_marker")" == signal-child-after ]] ||
+    fail "start-commit test: child-only post-link signal was not injected"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=start\nvoice-step.call=active'
+  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "0" &&
+     "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "0" ]] ||
+    fail "start-commit test: child-only post-link signal rolled back committed resources"
+  python3 - "$FAKE_STATE" <<'PY' || fail "start-commit test: child-only signal discarded live state"
+import json, sys
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["automation_state"] == "active"
+assert state["call_active"] is True
+PY
+
+  reset_fake
+  local group_signal_state="$TMP_DIR/group-signal-after-link-state.json"
+  local group_signal_site="$TMP_DIR/group-signal-after-link-site"
+  local group_signal_marker="$TMP_DIR/group-signal-after-link-marker"
+  make_state_publication_link_site "$group_signal_site"
+  PYTHONPATH="$group_signal_site" \
+    VOICE_STEP_STATE_LINK_DESTINATION="$group_signal_state" \
+    VOICE_STEP_STATE_LINK_MODE=signal-group-after \
+    VOICE_STEP_STATE_LINK_MARKER="$group_signal_marker" \
+    RUN_HELPER_NEW_SESSION=1 \
+    run_helper start --state "$group_signal_state" --mdev-owner OWNER_SECRET_123 \
+    --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
+    --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
+    --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
+  [[ -f "$group_signal_marker" &&
+     "$(<"$group_signal_marker")" == signal-group-after ]] ||
+    fail "start-commit test: process-group post-link signal was not injected"
+  [[ "$RUN_STATUS" -ne 0 && -f "$group_signal_state" ]] ||
+    fail "start-commit test: process-group post-link signal lost committed state"
+  assert_committed_state "$group_signal_state"
+  [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "0" &&
+     "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "0" ]] ||
+    fail "start-commit test: process-group post-link signal rolled back committed resources"
+  python3 - "$FAKE_STATE" <<'PY' || fail "start-commit test: process-group signal discarded live state"
+import json, sys
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["automation_state"] == "active"
+assert state["call_active"] is True
+PY
+  assert_private_output_absent
+  pass
+
+  reset_fake
   local pinned_state="$TMP_DIR/pinned-user-start-state.json"
   python3 - "$FAKE_STATE" <<'PY'
 import json, os, sys
@@ -3236,6 +3420,32 @@ PY
   assert_service_action_pinned 'me.rerere.rikkahub.voiceagent.action.END_BOUND' 10
   [[ "$(exact_command_count -s DEVICE_SECRET_123 shell am broadcast --user 10 --include-stopped-packages -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver -a me.rerere.rikkahub.voiceagent.automation.STATUS)" == 1 ]] ||
     fail "pinned-user rollback test: package restoration changed Android user"
+  pass
+}
+
+run_state_publisher_tests() {
+  local parent="$TMP_DIR/state-publisher-short-write-parent"
+  local destination="$parent/state.json"
+  local site="$TMP_DIR/state-publisher-short-write-site"
+  local marker="$TMP_DIR/state-publisher-short-write-marker"
+  local identity
+  mkdir "$parent"
+  chmod 700 "$parent"
+  identity="$(stat -c '%d:%i' "$parent")"
+  make_state_publication_short_write_site "$site"
+  set +e
+  PYTHONPATH="$site" VOICE_STEP_STATE_SHORT_WRITE_MARKER="$marker" \
+    python3 "$STATE_PUBLISHER" "$destination" "$identity" none none \
+    "sha256:$(printf 'c%.0s' {1..64})" me.rerere.rikkahub.debug 0 1000 \
+    conversation-1 "sha256:$(printf 'a%.0s' {1..64})" \
+    "sha256:$(printf 'b%.0s' {1..64})" fixture-1 "$identity" "$identity" \
+    nonce-1 trace-1 </dev/null >/dev/null 2>&1
+  local status=$?
+  set -e
+  [[ "$status" -eq 0 && -f "$marker" &&
+     "$(<"$marker")" == short-write-injected ]] ||
+    fail "state-publisher short-write test: positive short write was not completed"
+  assert_committed_state "$destination"
   pass
 }
 
@@ -3295,6 +3505,46 @@ run_tracing_tests() {
   [[ "$RUN_STATUS" -ne 0 && ! -e "$alias" && ! -s "$MDEV_LOG" ]] ||
     fail "tracing-alias test: validation created output or reached managed transport"
   assert_private_output_absent
+  pass
+
+  reset_fake
+  local lexical_parent="$TMP_DIR/tracing-lexical-alias-parent"
+  local lexical_pinned_parent="$TMP_DIR/tracing-lexical-alias-pinned-parent"
+  local lexical_destination="$lexical_parent/shared-output"
+  local lexical_site="$TMP_DIR/tracing-lexical-alias-site"
+  local lexical_marker="$TMP_DIR/tracing-lexical-alias-marker"
+  mkdir "$lexical_parent"
+  chmod 700 "$lexical_parent"
+  make_validation_parent_replacement_site "$lexical_site"
+  PYTHONPATH="$lexical_site" \
+    VOICE_STEP_VALIDATION_PARENT="$lexical_parent" \
+    VOICE_STEP_VALIDATION_DESTINATION="$lexical_destination" \
+    VOICE_STEP_VALIDATION_PINNED_PARENT="$lexical_pinned_parent" \
+    VOICE_STEP_VALIDATION_REPLACEMENT_MARKER="$lexical_marker" \
+    run_helper start --state "$lexical_destination" \
+    --diagnostic-record "$lexical_destination" --mdev-owner OWNER_SECRET_123 \
+    --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
+    --run-hash "$hash_a" --comparison-hash "$hash_b" --fixture "$fixture"
+  [[ -f "$lexical_marker" &&
+     "$(<"$lexical_marker")" == validation-parent-replaced ]] ||
+    fail "tracing-lexical-alias test: validation parent replacement did not run"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$lexical_destination" && ! -s "$MDEV_LOG" ]] ||
+    fail "tracing-lexical-alias test: equal path reached managed mutation or publication"
+  assert_private_output_absent "$lexical_parent" "$lexical_pinned_parent"
+  pass
+
+  reset_fake
+  local unreadable_parent="$TMP_DIR/tracing-unreadable-state-parent"
+  local unreadable_state="$unreadable_parent/state.json"
+  mkdir "$unreadable_parent"
+  chmod 300 "$unreadable_parent"
+  run_helper start --state "$unreadable_state" --mdev-owner OWNER_SECRET_123 \
+    --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
+    --run-hash "$hash_a" --comparison-hash "$hash_b" --fixture "$fixture"
+  chmod 700 "$unreadable_parent"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$unreadable_state" && ! -s "$MDEV_LOG" ]] ||
+    fail "tracing-unreadable-state-parent test: unsupported parent reached managed mutation"
+  assert_private_output_absent "$unreadable_parent"
   pass
 
   reset_fake
@@ -3666,16 +3916,29 @@ PY
   pass
 
   python3 - "$ROOT_DIR/scripts/voice-agent-real-room-diagnostic-publisher.py" \
-    "$ROOT_DIR/scripts/voice-agent-real-room-diagnostics.sh" "$HELPER" <<'PY' || fail "tracing-source-invariants test: failure-only source contract changed"
+    "$STATE_PUBLISHER" "$ROOT_DIR/scripts/voice-agent-real-room-diagnostics.sh" \
+    "$HELPER" <<'PY' || fail "tracing-source-invariants test: publication source contract changed"
+import ast
 import sys
-publisher, diagnostics, step = (
+diagnostic_publisher, state_publisher, diagnostics, step = (
     open(path, encoding="utf-8").read() for path in sys.argv[1:]
 )
-assert "O_TMPFILE" in publisher
-assert 'f"/proc/self/fd/{unnamed_fd}"' in publisher
-assert "follow_symlinks=True" in publisher
-assert "os._exit(0)" in publisher
-assert publisher.index("os.link(") < publisher.index("os._exit(0)")
+for publisher in (diagnostic_publisher, state_publisher):
+    assert "O_TMPFILE" in publisher
+    assert 'f"/proc/self/fd/{unnamed_fd}"' in publisher
+    assert "follow_symlinks=True" in publisher
+    assert "os._exit(0)" in publisher
+    assert publisher.index("os.link(") < publisher.index("os._exit(0)")
+state_tree = ast.parse(state_publisher)
+publish = next(
+    node for node in state_tree.body
+    if isinstance(node, ast.FunctionDef) and node.name == "publish"
+)
+assert isinstance(publish.body[-2], ast.Expr)
+assert ast.unparse(publish.body[-2]).startswith("os.link(")
+assert ast.unparse(publish.body[-1]) == "os._exit(0)"
+for forbidden in (".voice-step-state.", "os.unlink(", "tempfile", "mkstemp"):
+    assert forbidden not in state_publisher
 for forbidden in (
     ".voice-step-diagnostic.",
     "os.unlink(",
@@ -3688,7 +3951,7 @@ for forbidden in (
     "DIAGNOSTIC_PUBLISHED_IDENTITY",
     "diagnostic-publication-failed",
 ):
-    assert forbidden not in diagnostics + step + publisher
+    assert forbidden not in diagnostics + step + diagnostic_publisher
 PY
   pass
 }
@@ -5766,7 +6029,7 @@ if [[ "$#" -eq 0 ]]; then
 fi
 for requested in "${SELECTED_OPERATIONS[@]}"; do
   case "$requested" in
-    preflight|start|inject|interrupt|status|finalize|finalization|capture|end|cleanup|fixture-bounds|checkpoints|tracing) ;;
+    preflight|start|inject|interrupt|status|finalize|finalization|capture|end|cleanup|fixture-bounds|checkpoints|tracing|state-publisher) ;;
     *) fail "test filter must name a real-room operation" ;;
   esac
 done
@@ -5780,6 +6043,7 @@ if [[ "$SELECT_ALL" -eq 1 ]]; then
 fi
 selected preflight && run_preflight_tests
 selected start && run_start_tests
+selected state-publisher && run_state_publisher_tests
 selected tracing && run_tracing_tests
 if selected inject; then
   run_inject_tests

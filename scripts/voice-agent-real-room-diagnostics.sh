@@ -39,6 +39,7 @@ PY
 validate_distinct_diagnostic_state_destination() {
   local state_destination="$1"
   local diagnostic_destination="$2"
+  [[ "$state_destination" != "$diagnostic_destination" ]] || return 1
   [[ "${STATE_PARENT_IDENTITY:-}" =~ ^[0-9]+:[0-9]+$ ]] || return 1
   [[ "${DIAGNOSTIC_PARENT_IDENTITY:-}" =~ ^[0-9]+:[0-9]+$ ]] || return 1
   [[ "$STATE_PARENT_IDENTITY:${state_destination##*/}" != \

@@ -4,6 +4,7 @@
 import json
 import os
 import re
+import signal
 import stat
 import sys
 
@@ -123,6 +124,8 @@ def publish(arguments: list[str]) -> None:
         or read_all(unnamed_fd) != encoded
     ):
         raise OSError
+    for handled_signal in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+        signal.signal(handled_signal, signal.SIG_IGN)
     os.link(
         f"/proc/self/fd/{unnamed_fd}",
         name,

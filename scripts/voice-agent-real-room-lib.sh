@@ -333,8 +333,20 @@ parent = os.path.dirname(path)
 name = os.path.basename(path)
 if not name or name in {".", ".."} or os.path.realpath(parent) != parent:
     raise SystemExit(1)
-metadata = os.lstat(parent)
-if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+path_metadata = os.lstat(parent)
+if not stat.S_ISDIR(path_metadata.st_mode) or stat.S_ISLNK(path_metadata.st_mode):
+    raise SystemExit(1)
+descriptor = os.open(
+    parent,
+    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+)
+metadata = os.fstat(descriptor)
+os.close(descriptor)
+if (
+    not stat.S_ISDIR(metadata.st_mode)
+    or (metadata.st_dev, metadata.st_ino)
+    != (path_metadata.st_dev, path_metadata.st_ino)
+):
     raise SystemExit(1)
 try:
     os.lstat(path)
