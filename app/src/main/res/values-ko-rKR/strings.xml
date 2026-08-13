@@ -1280,5 +1280,11 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_context_message_limit_count">컨텍스트 메시지 한도: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">무제한 컨텍스트 메시지</string>
   <string name="assistant_page_context_message_limit_warning">컨텍스트 제한 시 컨텍스트가 정리될 때마다 프롬프트 캐시가 무효화됩니다. 제한이 클수록 정리 빈도가 낮아지며, 무제한일 경우 정리되지 않아 캐시가 완전히 보존됩니다.</string>
+  <string name="search_picker_local_title">로컬 검색</string>
+  <string name="search_picker_local_description">다양한 타사 검색 제공업체에 연결합니다.</string>
+  <string name="search_picker_model_title">모델 내장 검색</string>
+  <string name="search_picker_model_description">모델 제공자에 내장된 클라우드 검색</string>
+  <string name="search_picker_select_provider">검색 제공자 선택</string>
+  <string name="search_picker_turn_off">검색 끄기</string>
 </resources>
 

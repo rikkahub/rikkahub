@@ -121,7 +121,7 @@ fun ChatInput(
     settings: Settings,
     hazeState: HazeState,
     enableSearch: Boolean,
-    onToggleSearch: (Boolean) -> Unit,
+    onUpdateSearchMode: (SearchMode) -> Unit,
     modifier: Modifier = Modifier,
     completionProviders: List<ChatCompletionProvider> = emptyList(),
     onUpdateChatModel: (Model) -> Unit,
@@ -270,8 +270,9 @@ fun ChatInput(
                             SearchPickerButton(
                                 enableSearch = enableSearch,
                                 settings = settings,
-                                onToggleSearch = { enabled ->
-                                    onToggleSearch(enabled)
+                                onUpdateSearchMode = { mode ->
+                                    onUpdateSearchMode(mode)
+                                    val enabled = mode != SearchMode.OFF
                                     toaster.show(
                                         message = if (enabled) enableSearchMsg else disableSearchMsg,
                                         duration = 1.seconds,

@@ -598,6 +598,12 @@
   <string name="search_page_title">Search Messages</string>
   <string name="search_page_untitled">Untitled</string>
   <string name="search_picker_title">Search Settings</string>
+  <string name="search_picker_local_title">Local Search</string>
+  <string name="search_picker_local_description">Connect to various third-party search providers</string>
+  <string name="search_picker_model_title">Model Search</string>
+  <string name="search_picker_model_description">Cloud search built into the model provider</string>
+  <string name="search_picker_select_provider">Select search provider</string>
+  <string name="search_picker_turn_off">Turn off search</string>
   <string name="select_and_copy">Select and Copy</string>
   <string name="send">Send</string>
   <string name="setting_asr_configure_api_key">API Key</string>

@@ -1280,5 +1280,11 @@
   <string name="assistant_page_context_message_limit_count">Лимит сообщений контекста: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">Неограниченные сообщения контекста</string>
   <string name="assistant_page_context_message_limit_warning">Ограничение контекста аннулирует кэш промпта каждый раз, когда контекст усекается. Больший лимит усекает реже; безлимитный не усекает никогда и сохраняет кэш полностью нетронутым.</string>
+  <string name="search_picker_local_title">Локальный поиск</string>
+  <string name="search_picker_local_description">Подключение к различным сторонним поисковым провайдерам</string>
+  <string name="search_picker_model_title">Поиск через модель</string>
+  <string name="search_picker_model_description">Облачный поиск, встроенный в провайдера моделей</string>
+  <string name="search_picker_select_provider">Выберите провайдера поиска</string>
+  <string name="search_picker_turn_off">Отключить поиск</string>
 </resources>
 

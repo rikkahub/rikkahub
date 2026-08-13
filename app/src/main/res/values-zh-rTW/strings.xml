@@ -1278,5 +1278,11 @@
   <string name="assistant_page_context_message_limit_count">上下文訊息限制：%d</string>
   <string name="assistant_page_context_message_limit_unlimited">無限上下文訊息</string>
   <string name="assistant_page_context_message_limit_warning">限制上下文會在每次上下文被裁減時使提示詞快取失效。較大的限制裁減頻率較低；無限則永不裁減並保持快取完整。</string>
+  <string name="search_picker_local_title">本機搜尋</string>
+  <string name="search_picker_local_description">連線至各種第三方搜尋提供者</string>
+  <string name="search_picker_model_title">模型搜尋</string>
+  <string name="search_picker_model_description">模型提供者內建的雲端搜尋</string>
+  <string name="search_picker_select_provider">選擇搜尋提供者</string>
+  <string name="search_picker_turn_off">關閉搜尋</string>
 </resources>
 

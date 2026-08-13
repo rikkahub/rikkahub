@@ -1280,5 +1280,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_context_message_limit_count">コンテキストメッセージ制限: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">コンテキストメッセージ無制限</string>
   <string name="assistant_page_context_message_limit_warning">コンテキストの制限は、コンテキストが切り詰められるたびにプロンプトキャッシュを無効化します。制限が大きいほど切り詰めの頻度が減り、無制限なら切り詰めが発生せず、キャッシュは完全に保持されます。</string>
+  <string name="search_picker_local_title">ローカル検索</string>
+  <string name="search_picker_local_description">各種サードパーティの検索プロバイダーに接続します</string>
+  <string name="search_picker_model_title">モデル内蔵検索</string>
+  <string name="search_picker_model_description">モデルプロバイダー内蔵のクラウド検索</string>
+  <string name="search_picker_select_provider">検索プロバイダを選択</string>
+  <string name="search_picker_turn_off">検索をオフにする</string>
 </resources>
 
