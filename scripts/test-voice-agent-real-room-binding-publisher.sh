@@ -154,6 +154,9 @@ def injected_link(source, target, *args, **kwargs):
             record("link-eexist")
             raise
         raise AssertionError("raced link unexpectedly succeeded")
+    if action == "at-link-signal":
+        record("signal-before-real-link")
+        os.kill(os.getpid(), getattr(signal, "SIG" + os.environ["PUBLISHER_SIGNAL"]))
     result = real_link(source, target, *args, **kwargs)
     if action in {"post-signal", "stdout-error"}:
         record("linked")
@@ -164,7 +167,7 @@ def injected_link(source, target, *args, **kwargs):
 
 def injected_signal(signum, handler):
     if (
-        action == "pre-signal"
+        action == "before-ignore-signal"
         and handler == signal.SIG_IGN
         and signum == getattr(signal, "SIG" + os.environ["PUBLISHER_SIGNAL"])
     ):
@@ -173,7 +176,7 @@ def injected_signal(signum, handler):
 
 
 def cleanup_hook(path, *args, **kwargs):
-    if action in {"post-signal", "stdout-error"} and marker is not None and os.path.exists(marker):
+    if action in {"at-link-signal", "post-signal", "stdout-error"} and marker is not None and os.path.exists(marker):
         record("cleanup")
     raise AssertionError("cleanup after link")
 
@@ -443,11 +446,30 @@ for signal_name in HUP INT TERM; do
   mkdir "$parent" "$site"
   chmod 700 "$parent" "$site"
   write_sitecustomize "$site"
-  PUBLISHER_SIGNAL="$signal_name" PUBLISHER_INJECTION=pre-signal PYTHONPATH="$site" \
+  PUBLISHER_SIGNAL="$signal_name" PUBLISHER_INJECTION=before-ignore-signal PYTHONPATH="$site" \
     run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
-  [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: $signal_name before link was accepted"
+  [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: $signal_name before cancellation boundary was accepted"
   assert_failure_output
-  [[ ! -e "$destination" ]] || fail "publisher: $signal_name before link published a destination"
+  [[ ! -e "$destination" ]] || fail "publisher: $signal_name before cancellation boundary published a destination"
+done
+pass
+
+for signal_name in HUP INT TERM; do
+  parent="$TMP_DIR/at-link-$signal_name-parent"
+  destination="$parent/record"
+  site="$TMP_DIR/at-link-$signal_name-site"
+  marker="$TMP_DIR/at-link-$signal_name-marker"
+  mkdir "$parent" "$site"
+  chmod 700 "$parent" "$site"
+  write_sitecustomize "$site"
+  PUBLISHER_SIGNAL="$signal_name" PUBLISHER_MARKER="$marker" \
+    PUBLISHER_INJECTION=at-link-signal PYTHONPATH="$site" \
+    run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
+  [[ "$RUN_STATUS" -eq 0 ]] || fail "publisher: $signal_name after cancellation boundary changed success"
+  assert_success_stdout
+  assert_record "$destination"
+  [[ "$(<"$marker")" == signal-before-real-link ]] ||
+    fail "publisher: $signal_name was not injected immediately before real link"
 done
 pass
 

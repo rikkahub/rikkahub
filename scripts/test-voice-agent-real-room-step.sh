@@ -1935,6 +1935,9 @@ def controlled_link(source, target, *args, **kwargs):
         descriptor = real_open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=kwargs["dst_dir_fd"])
         real_write(descriptor, b"raced")
         real_close(descriptor)
+    if action == "at-link-signal":
+        record("signal-before-real-link")
+        os.kill(os.getpid(), getattr(signal, "SIG" + os.environ["VOICE_STEP_BINDING_PUBLISHER_SIGNAL"]))
     result = real_link(source, target, *args, **kwargs)
     if action in {"post-signal", "stdout-error"}:
         record("linked")
@@ -1946,7 +1949,7 @@ def controlled_link(source, target, *args, **kwargs):
 def controlled_signal(signum, handler):
     if (
         is_publisher
-        and action == "pre-signal"
+        and action == "before-ignore-signal"
         and handler == signal.SIG_IGN
         and signum == getattr(signal, "SIG" + os.environ["VOICE_STEP_BINDING_PUBLISHER_SIGNAL"])
     ):
@@ -6542,6 +6545,25 @@ run_binding_helper() {
     "$@"
 }
 
+run_relative_binding_helper() {
+  local helper_path="$1"
+  local destination="$2"
+  LAST_OPERATION=resolve-binding
+  : >"$STDOUT_FILE"
+  : >"$STDERR_FILE"
+  set +e
+  (
+    cd "$ROOT_DIR"
+    TMPDIR="$HELPER_TEMP_ROOT" "$helper_path" resolve-binding \
+      --mdev-owner "$MDEV_OWNER" --package me.rerere.rikkahub.debug \
+      --binding-output "$destination" \
+      --created-after-epoch-ms "$BINDING_WINDOW_START" \
+      --created-before-epoch-ms "$BINDING_WINDOW_END"
+  ) >"$STDOUT_FILE" 2>"$STDERR_FILE"
+  RUN_STATUS=$?
+  set -e
+}
+
 assert_binding_failure() {
   local destination="$1"
   local label="$2"
@@ -6598,6 +6620,18 @@ run_resolve_binding_tests() {
   local output_parent destination site marker replacement started
   local main="$REMOTE_APP_DATA_ROOT/databases/rikka_hub"
   local wal="$REMOTE_APP_DATA_ROOT/databases/rikka_hub-wal"
+
+  local helper_path
+  for helper_path in scripts/voice-agent-real-room-step.sh ./scripts/voice-agent-real-room-step.sh; do
+    reset_fake
+    make_default_binding_snapshot main
+    output_parent="$TMP_DIR/binding-relative-${helper_path//\//_}"
+    mkdir "$output_parent"
+    chmod 700 "$output_parent"
+    destination="$output_parent/binding"
+    run_relative_binding_helper "$helper_path" "$destination"
+    assert_binding_success "$destination"
+  done
 
   reset_fake
   site="$TMP_DIR/binding-hostile-old-operation-site"
@@ -7001,10 +7035,29 @@ PY
     chmod 700 "$output_parent"
     destination="$output_parent/binding"
     make_binding_publisher_site "$site"
-    VOICE_STEP_BINDING_PUBLISHER_INJECTION=pre-signal \
+    VOICE_STEP_BINDING_PUBLISHER_INJECTION=before-ignore-signal \
       VOICE_STEP_BINDING_PUBLISHER_SIGNAL="$signal_name" PYTHONPATH="$site" \
       run_binding_helper "$destination"
-    assert_binding_failure "$destination" "publisher pre-link $signal_name"
+    assert_binding_failure "$destination" "publisher pre-cancellation $signal_name"
+  done
+
+  for signal_name in HUP INT TERM; do
+    reset_fake
+    make_default_binding_snapshot main
+    output_parent="$TMP_DIR/binding-at-link-signal-$signal_name"
+    site="$TMP_DIR/binding-at-link-signal-$signal_name-site"
+    marker="$TMP_DIR/binding-at-link-signal-$signal_name-marker"
+    mkdir "$output_parent"
+    chmod 700 "$output_parent"
+    destination="$output_parent/binding"
+    make_binding_publisher_site "$site"
+    VOICE_STEP_BINDING_PUBLISHER_INJECTION=at-link-signal \
+      VOICE_STEP_BINDING_PUBLISHER_SIGNAL="$signal_name" \
+      VOICE_STEP_BINDING_PUBLISHER_MARKER="$marker" PYTHONPATH="$site" \
+      run_binding_helper "$destination"
+    assert_binding_success "$destination"
+    [[ "$(<"$marker")" == signal-before-real-link ]] ||
+      fail "resolve-binding $signal_name did not reach the post-cancellation pre-link hook"
   done
 
   reset_fake

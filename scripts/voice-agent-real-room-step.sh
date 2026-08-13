@@ -7,6 +7,7 @@ set +x
 unset RESOLVE_BINDING_ERROR_MODE VALIDATE_RUNTIME_SKIP_BROADCAST selected
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REAL_ROOM_HELPER="$ROOT_DIR/scripts/voice-agent-real-room-step.sh"
 ARTIFACT_HELPERS="$ROOT_DIR/scripts/voice-agent-e2e-artifacts.sh"
 REAL_ROOM_LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
 REAL_ROOM_DIAGNOSTICS="$ROOT_DIR/scripts/voice-agent-real-room-diagnostics.sh"
@@ -1089,7 +1090,7 @@ operation="${1:-}"
 if [[ "$operation" == resolve-binding ]]; then
   if [[ "${VOICE_STEP_RESOLVE_SIGNAL_MASKED:-}" != 1 ]]; then
     unset VOICE_STEP_RESOLVE_SIGNAL_MASKED
-    exec python3 "$REAL_ROOM_SIGNAL_MASK_LAUNCHER" "$0" "$@"
+    exec python3 "$REAL_ROOM_SIGNAL_MASK_LAUNCHER" "$REAL_ROOM_HELPER" "$@"
   fi
   unset VOICE_STEP_RESOLVE_SIGNAL_MASKED
   python3 - <<'PY' >/dev/null 2>&1 || {

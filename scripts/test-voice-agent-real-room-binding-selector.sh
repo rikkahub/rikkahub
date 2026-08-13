@@ -143,6 +143,23 @@ run_selector "$update_main" - "$WINDOW_START" "$WINDOW_END"
 assert_selected "$INTENDED" "older row with later update"
 pass
 
+for topology in main-only main-wal; do
+  duplicate_older_parent="$TMP_DIR/duplicate-older-$topology"
+  mkdir "$duplicate_older_parent"
+  chmod 700 "$duplicate_older_parent"
+  duplicate_older_main="$duplicate_older_parent/rikka_hub"
+  make_snapshot "$topology" "$duplicate_older_main" \
+    "[[\"$OLDER\", 1776070860000, 1776070860001], [\"$BOUNDARY_START\", 1776070860000, 1776070860002], [\"$INTENDED\", 1776070920000, 1776070920001]]"
+  if [[ "$topology" == main-wal ]]; then
+    duplicate_older_wal="$duplicate_older_main-wal"
+  else
+    duplicate_older_wal=-
+  fi
+  run_selector "$duplicate_older_main" "$duplicate_older_wal" "$WINDOW_START" "$WINDOW_END"
+  assert_selected "$INTENDED" "$topology duplicate older timestamps with unique newest"
+  pass
+done
+
 run_selector "$main_path" - 1776072600001 1776074400001
 assert_silent_failure "empty window"
 pass

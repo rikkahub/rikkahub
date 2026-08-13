@@ -52,8 +52,11 @@ does not derive or widen them.
 
 Failure is nonzero, emits only the helper's fixed error surface, and leaves the
 destination absent. The operation is read-only on the device. Once the
-destination is committed, later signal or standard-output failure cannot
-change the successful exit status.
+publisher successfully installs `SIG_IGN` for HUP/INT/TERM immediately before
+the final link, cancellation is irrevocable: a signal delivered after that
+boundary is ignored even if the descriptor-relative link has not run yet.
+The link remains the final fallible filesystem commit. Once it succeeds,
+standard-output failure cannot change the successful exit status.
 
 ## Data Flow
 
@@ -100,9 +103,13 @@ change the successful exit status.
    the exact UUID payload into a mode-`0600` anonymous `O_TMPFILE` inode,
    fsyncs and byte-verifies it, installs its fixed-error pre-link handlers,
    unblocks the inherited HUP/INT/TERM mask so pending signals fail closed,
-   then ignores those signals immediately before atomically linking the inode
-   descriptor-relative through `/proc/self/fd`. That link is the final
-   fallible commit. After a successful link, fixed success output is
+   then successfully installs `SIG_IGN` for all three immediately before
+   atomically linking the inode descriptor-relative through `/proc/self/fd`.
+   Successful installation of the final ignore disposition is the cancellation
+   boundary: handled or pending signals delivered before it fail generically;
+   signals delivered after it are ignored and publication continues. The link
+   is still the final fallible filesystem commit. After a successful link,
+   fixed success output is
    best-effort only and cannot change exit `0`; the publisher immediately
    calls `os._exit(0)`. No shell cleanup or trap runs afterward.
 
@@ -131,6 +138,11 @@ unique, it refuses to choose.
 - Treat the publisher's descriptor-relative link as the commit boundary. No
   unlink, cleanup, trap, signal handling, or outcome-affecting reporting
   follows it.
+- Treat successful installation of `SIG_IGN` for HUP/INT/TERM immediately
+  before the link as the earlier cancellation boundary. Signals before that
+  boundary follow the generic failure path; signals after it are ignored and
+  cannot cancel publication. Do not describe this as a wall-clock guarantee
+  that every signal before the link fails.
 - Block HUP/INT/TERM before any private resolver work and keep them blocked
   across the Bash-to-publisher exec. The publisher alone installs the pre-link
   failure handlers and unblocks them; no default-disposition handoff window is
@@ -148,9 +160,11 @@ Because the publisher replaces Bash with `exec`, every publisher failure before
 the link emits only `voice-step.error=operation failed` on stderr, best-effort,
 then exits nonzero. It never emits exception details or dynamic values.
 
-After the anonymous inode is linked, the operation is committed success.
-Handled signals are already ignored, cleanup is already complete, fixed output
-is best-effort, and the publisher exits `0` without returning to Bash.
+After the cancellation boundary, handled signals are ignored and cannot alter
+the outcome; the still-fallible link can independently fail through the generic
+failure path. After the anonymous inode is linked, the operation is committed
+success. Cleanup is already complete, fixed output is best-effort, and the
+publisher exits `0` without returning to Bash.
 
 ## Tests
 
@@ -163,6 +177,8 @@ Extend the host fake-`mdev` harness before implementation to prove:
   published;
 - an older conversation whose `update_at` is later than the intended row does
   not win selection;
+- duplicate older `create_at` timestamps do not create a false tie when a
+  later timestamp has one unique row, for both main-only and main+WAL;
 - absent candidates, out-of-window candidates, equal maximum `create_at`
   timestamps, invalid windows, and windows longer than 30 minutes fail closed;
 - a missing main database, a WAL without its main database, malformed or
@@ -176,10 +192,14 @@ Extend the host fake-`mdev` harness before implementation to prove:
   nonzero, and leaves the destination absent;
 - publisher `O_TMPFILE`, short-write, parent-replacement, and destination-link
   races fail before commit without overwrite or residue;
-- a handled signal before link fails with no destination, while a handled
-  signal or output fault after link cannot retract the destination or change
-  committed exit `0`;
+- a handled or pending signal delivered before successful installation of the
+  final ignore disposition fails with no destination; a signal injected by the
+  `os.link` wrapper immediately before the real link is ignored after that
+  cancellation boundary; and a signal or output fault after link cannot
+  retract the destination or change committed exit `0`;
 - the existing helper operations and complete host suite remain unchanged.
+- repository-relative `scripts/...` and `./scripts/...` helper invocations
+  normalize the self path before entering the absolute-path-only launcher.
 
 After the focused regression passes, run publisher syntax checks, focused
 helper tests, the complete host-only helper suite, diff/privacy checks, and an

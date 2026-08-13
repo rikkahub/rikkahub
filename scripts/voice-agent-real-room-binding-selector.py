@@ -107,6 +107,7 @@ def select(arguments: list[str]) -> str:
         )
         selected = None
         selected_time = None
+        selected_time_count = 0
         for identifier, created_at in rows:
             canonical = canonical_uuid(identifier)
             if isinstance(created_at, bool) or not isinstance(created_at, int):
@@ -114,9 +115,10 @@ def select(arguments: list[str]) -> str:
             if selected_time is None or created_at > selected_time:
                 selected = canonical
                 selected_time = created_at
+                selected_time_count = 1
             elif created_at == selected_time:
-                raise ValueError
-        if selected is None:
+                selected_time_count += 1
+        if selected is None or selected_time_count != 1:
             raise ValueError
         return selected
     finally:

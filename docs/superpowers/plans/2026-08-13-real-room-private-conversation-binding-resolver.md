@@ -23,6 +23,7 @@
 - The binding destination must initially be absent beneath a canonical owner-controlled mode-`0700` directory; success creates a mode-`0600`, one-link regular file containing exactly one lowercase canonical UUID plus `\n`.
 - All database, WAL, host SHM, Base64, and temporary artifacts must be closed and removed before publication; cleanup failure is terminal while the destination is absent.
 - Publication uses a mode-`0600` anonymous `O_TMPFILE`; the descriptor-relative link through `/proc/self/fd` is the final fallible commit.
+- Successful installation of `SIG_IGN` for HUP/INT/TERM immediately before the link is the cancellation boundary: handled or pending signals delivered before it fail generically, while signals delivered after it are ignored and cannot cancel publication. This is distinct from the later filesystem commit boundary.
 - After a successful link, HUP/INT/TERM and output failure cannot change exit `0`; no cleanup, unlink, shell trap, or outcome-affecting operation follows the commit.
 - Success stdout is best-effort and, when writable, is exactly `voice-step.status=ok\nvoice-step.operation=resolve-binding\nvoice-step.binding=resolved\n`; it never contains the UUID.
 - Every pre-commit failure is nonzero, uses only the existing fixed sanitized helper error surface, leaves the destination absent, and never retries or invokes a call.
@@ -78,6 +79,7 @@ main-only: older=11111111-1111-4111-8111-111111111111 at 1776070860000,
            intended=22222222-2222-4222-8222-222222222222 at 1776070920000
 main+WAL: same expected selection
 older-later-update: older update_at=1776072500000 and intended update_at=1776070920000; intended still wins
+duplicate older timestamps then unique newest: two rows share 1776070860000 and one row has 1776070920000; the unique newest wins in both main-only and main+WAL snapshots
 empty window: nonzero and no output
 tied maximum: two canonical UUIDs at 1776070920000; nonzero and no output
 malformed in-window UUID: uppercase or non-UUID; nonzero and no output
@@ -182,12 +184,13 @@ short write: inject an os.write wrapper that writes a prefix once; publisher's w
 short write then error before link: nonzero and destination absent
 destination race at os.link: raced file remains unchanged; publisher nonzero
 parent replacement before link: replacement parent receives no file; publisher nonzero
-HUP, INT, and TERM immediately before link: nonzero and destination absent
+HUP, INT, and TERM before successful installation of the final ignore disposition: nonzero and destination absent
+HUP, INT, and TERM injected by the os.link wrapper immediately before the real link: ignored after the cancellation boundary; exact destination and exit 0
 HUP, INT, and TERM immediately after successful link: destination remains exact and exit 0
 stdout EPIPE/write error after link: destination remains exact and exit 0
 ```
 
-The injection wrapper must hook the publisher's single `os.link` call without adding a named temporary file. For post-link signal/output cases, assert no `unlink`, `remove`, or cleanup hook runs after the link marker.
+The injection wrapper must hook the publisher's single `os.link` call without adding a named temporary file. It must inject the cancellation-boundary signal immediately before calling the real link, proving honestly that a wall-clock pre-link signal after `SIG_IGN` is ignored. Preserve separate pre-ignore and pending-signal tests that fail generically. For post-cancellation and post-link signal/output cases, assert no `unlink`, `remove`, or cleanup hook runs after their marker.
 
 - [ ] **Step 2: Run publisher tests to verify they fail**
 
@@ -228,7 +231,7 @@ if os.read(fd, len(payload) + 1) != payload:
 metadata = os.fstat(fd)
 ```
 
-Require a regular inode, mode `0600`, `st_nlink == 0`, and exact size. Revalidate the parent and absent destination through the pinned fd. Immediately before link, ignore `SIGHUP`, `SIGINT`, and `SIGTERM`, then make this the last outcome-affecting operation:
+Require a regular inode, mode `0600`, `st_nlink == 0`, and exact size. Revalidate the parent and absent destination through the pinned fd. Immediately before link, successfully install `SIG_IGN` for `SIGHUP`, `SIGINT`, and `SIGTERM`. This is the cancellation boundary: earlier handled or pending signals fail generically; later signals are ignored and cannot cancel publication. Then make the descriptor-relative link the final fallible filesystem commit and the last outcome-affecting operation:
 
 ```python
 os.link(
@@ -245,7 +248,7 @@ After that call returns, catch and ignore every exception from `write_all(1, SUC
 
 Run: `python3 -m py_compile scripts/voice-agent-real-room-binding-publisher.py && bash scripts/test-voice-agent-real-room-binding-publisher.sh`
 
-Expected: PASS, including committed success under every post-link signal and stdout fault.
+Expected: PASS, including generic failure for signals delivered before the cancellation boundary, ignored signals injected immediately before the real link after that boundary, and committed success under every post-link signal and stdout fault.
 
 - [ ] **Step 5: Commit the publisher**
 
@@ -275,6 +278,9 @@ helper through `os.execve`. The helper re-execs through it only for
 `resolve-binding` and only before validation or private work. The publisher
 installs its pre-link failure handlers, calls `signal.pthread_sigmask` to
 unblock exactly those signals, and only then proceeds toward its final link.
+Successful installation of the final `SIG_IGN` dispositions is the cancellation
+boundary; the later descriptor-relative link remains the final fallible
+filesystem commit.
 
 - [ ] **Step 1: Add failing end-to-end fake-managed-device tests**
 
@@ -291,9 +297,11 @@ run_helper resolve-binding \
 
 The helper test must cover both stable main-only and main+WAL fixtures while the fake call service is inactive. On success assert exact fixed stdout, no UUID in output/logs, exact private payload, regular mode `0600`, and one link. Assert the command log contains reads only for `rikka_hub` and optional `rikka_hub-wal`, and contains no `rikka_hub-shm` string.
 
+Invoke the helper through both `scripts/voice-agent-real-room-step.sh` and `./scripts/voice-agent-real-room-step.sh` from the repository root and require normal resolver success. The helper must derive and pass its normalized absolute self path to the absolute-path-only signal launcher; these regressions reuse ordinary small main-only fixtures and must not duplicate the 64 MiB matrix.
+
 Add failure matrices for invalid/missing arguments; insecure/pre-existing/symlink destinations; no candidate, tied maximum, malformed UUID/timestamp, older row with later `update_at`; missing main, WAL-only, component symlink/nonregular; every individual and aggregate size bound; host decoded size/digest mismatch; pre/post topology delta; pre/post content delta; malformed Base64; and selector failure. Each failure must be nonzero, match the existing fixed `voice-step.error=operation failed` surface, leave the destination absent, and leave no resolver artifact in the private temp root.
 
-Instrument cleanup ordering with `resolver-cleanup-complete` and publisher-link markers. Inject removal failure and assert cleanup failure precedes and prevents publisher invocation. At the link boundary, reuse the existing state-publication sitecustomize race helpers for O_TMPFILE failure, short write, parent replacement, destination race, pre-link signals, post-link signals, and stdout failure. Assert post-link cases retain exit `0` and the exact file.
+Instrument cleanup ordering with `resolver-cleanup-complete` and publisher-link markers. Inject removal failure and assert cleanup failure precedes and prevents publisher invocation. At the publication boundary, reuse the existing state-publication sitecustomize race helpers for O_TMPFILE failure, short write, parent replacement, destination race, pre-ignore and pending signals, signals injected immediately before the real link after the cancellation boundary, post-link signals, and stdout failure. Assert post-cancellation signal cases proceed to an exact file and exit `0`, and preserve generic failure before the cancellation boundary.
 
 - [ ] **Step 2: Run the focused helper test to verify it fails**
 
