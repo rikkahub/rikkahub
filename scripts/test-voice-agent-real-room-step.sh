@@ -9,6 +9,8 @@ HELPER="$ROOT_DIR/scripts/voice-agent-real-room-step.sh"
 LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
 DIAGNOSTICS="$ROOT_DIR/scripts/voice-agent-real-room-diagnostics.sh"
 STATE_PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-state-publisher.py"
+SELECTOR="$ROOT_DIR/scripts/voice-agent-real-room-binding-selector.py"
+PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-binding-publisher.py"
 REAL_TIMEOUT="$(command -v timeout)"
 REAL_LN="$(command -v ln)"
 REAL_RMDIR="$(command -v rmdir)"
@@ -34,6 +36,7 @@ mkdir "$HELPER_TEMP_ROOT"
 chmod 700 "$HELPER_TEMP_ROOT"
 REMOTE_APP_DATA_ROOT="$TMP_DIR/remote-app-data"
 RMDIR_BOUNDARY_FILE="$TMP_DIR/rmdir-boundary"
+RESOLVER_ORDER_LOG="$TMP_DIR/resolver-order.log"
 TEST_COUNT=0
 ACTOR_PID=''
 LAST_STATE_DESTINATION=''
@@ -130,6 +133,7 @@ chmod 700 "$BIN_DIR/ln"
 cat > "$BIN_DIR/rmdir" <<'PY'
 #!/usr/bin/env python3
 import os
+import subprocess
 import time
 import sys
 from pathlib import Path
@@ -153,7 +157,16 @@ if os.environ.get("FAKE_BROKER_RMDIR_MODE") == "1":
         raise SystemExit(1)
 
 executable = os.environ["REAL_RMDIR"]
-os.execv(executable, [executable, *sys.argv[1:]])
+completed = subprocess.run([executable, *sys.argv[1:]], check=False)
+if completed.returncode == 0:
+    resolver_root = os.environ.get("FAKE_RESOLVER_TEMP_ROOT")
+    order_log = os.environ.get("VOICE_STEP_RESOLVER_ORDER_LOG")
+    if resolver_root and order_log and any(
+        os.path.dirname(argument) == resolver_root for argument in sys.argv[1:]
+    ):
+        with open(order_log, "a", encoding="ascii") as handle:
+            handle.write("resolver-cleanup-complete\n")
+raise SystemExit(completed.returncode)
 PY
 chmod 700 "$BIN_DIR/rmdir"
 
@@ -162,10 +175,17 @@ cat > "$BIN_DIR/rm" <<'PY'
 import os
 import signal
 import sys
+from pathlib import Path
 
 match = os.environ.get("FAKE_RM_SIGNAL_MATCH")
 if match and any(match in argument for argument in sys.argv[1:]):
     os.kill(os.getppid(), signal.SIGTERM)
+failure_match = os.environ.get("FAKE_BINDING_CLEANUP_FAIL_ONCE")
+if failure_match and any(failure_match in argument for argument in sys.argv[1:]):
+    marker = Path(os.environ["FAKE_RESOLVER_CLEANUP_FAILURE_MARKER"])
+    if not marker.exists():
+        marker.write_text("failed-once\n", encoding="ascii")
+        raise SystemExit(1)
 os.execv(os.environ["REAL_RM"], [os.environ["REAL_RM"], *sys.argv[1:]])
 PY
 chmod 700 "$BIN_DIR/rm"
@@ -173,6 +193,7 @@ chmod 700 "$BIN_DIR/rm"
 cat > "$BIN_DIR/mdev" <<'PY'
 #!/usr/bin/env python3
 import hashlib
+import base64
 import json
 import os
 import signal
@@ -1254,6 +1275,105 @@ elif command[:3] == ["exec-out", "run-as", EXPECTED_PACKAGE]:
 if (
     exec_out_run_as_tail is not None
     and exec_out_run_as_tail[:2] == ["sh", "-c"]
+    and "voice-step-binding-snapshot-v1" in exec_out_run_as_tail[2]
+):
+    if state.get("call_active"):
+        raise SystemExit(1)
+    if exec_out_run_as_tail[-2:] != ["databases/rikka_hub", "databases/rikka_hub-wal"]:
+        raise SystemExit(1)
+    main = remote_host_path(exec_out_run_as_tail[-2])
+    wal = remote_host_path(exec_out_run_as_tail[-1])
+
+    def inject(action):
+        if not action:
+            return
+        target = wal if action.endswith("-wal") else main
+        if action.startswith("remove-"):
+            target.unlink(missing_ok=True)
+        elif action.startswith("mutate-"):
+            with target.open("ab") as handle:
+                handle.write(b"X")
+        elif action.startswith("add-"):
+            target.write_bytes(b"W" * 32)
+            target.chmod(0o600)
+        elif action.startswith("symlink-"):
+            target.unlink(missing_ok=True)
+            target.symlink_to(main if target == wal else wal)
+        elif action.startswith("directory-"):
+            target.unlink(missing_ok=True)
+            target.mkdir(mode=0o700)
+        else:
+            raise SystemExit(2)
+
+    def component(path):
+        metadata = path.lstat()
+        if path.is_symlink() or not path.is_file():
+            raise OSError
+        minimum = 512 if path == main else 32
+        if metadata.st_size < minimum or metadata.st_size > 67_108_864:
+            raise OSError
+        payload = path.read_bytes()
+        return len(payload), hashlib.sha256(payload).hexdigest(), payload
+
+    def snapshot():
+        main_value = component(main)
+        if wal.is_symlink():
+            raise OSError
+        wal_value = component(wal) if wal.exists() else None
+        if wal_value is not None and main_value[0] + wal_value[0] > 134_217_728:
+            raise OSError
+        return main_value, wal_value
+
+    def metadata(tag, values):
+        main_value, wal_value = values
+        topology = "main-wal" if wal_value is not None else "main"
+        lines = [
+            f"BINDING-{tag}-BEGIN",
+            f"topology={topology}",
+            f"main-size={main_value[0]}",
+            f"main-sha256={main_value[1]}",
+        ]
+        if wal_value is not None:
+            lines.extend((f"wal-size={wal_value[0]}", f"wal-sha256={wal_value[1]}"))
+        lines.append(f"BINDING-{tag}-END")
+        return "\n".join(lines).encode() + b"\n"
+
+    try:
+        inject(os.environ.get("FAKE_BINDING_BEFORE_METADATA"))
+        before = snapshot()
+        main_payload = before[0][2]
+        wal_payload = before[1][2] if before[1] is not None else None
+        transfer_corruption = os.environ.get("FAKE_BINDING_TRANSFER_CORRUPTION")
+        if transfer_corruption == "main-size":
+            main_payload += b"X"
+        elif transfer_corruption == "main-digest" and main_payload:
+            main_payload = bytes([main_payload[0] ^ 1]) + main_payload[1:]
+        elif transfer_corruption == "wal-size" and wal_payload is not None:
+            wal_payload += b"X"
+        elif transfer_corruption == "wal-digest" and wal_payload:
+            wal_payload = bytes([wal_payload[0] ^ 1]) + wal_payload[1:]
+        inject(os.environ.get("FAKE_BINDING_AFTER_ENCODED_TRANSFER"))
+        inject(os.environ.get("FAKE_BINDING_BEFORE_POST_METADATA"))
+        after = snapshot()
+    except (FileNotFoundError, OSError):
+        raise SystemExit(1)
+    output = bytearray(metadata("PRE", before))
+    output.extend(b"BINDING-MAIN-BASE64-BEGIN\n")
+    if transfer_corruption == "malformed-base64":
+        output.extend(b"!not-base64!\n")
+    else:
+        output.extend(base64.encodebytes(main_payload))
+    output.extend(b"BINDING-MAIN-BASE64-END\n")
+    if wal_payload is not None:
+        output.extend(b"BINDING-WAL-BASE64-BEGIN\n")
+        output.extend(base64.encodebytes(wal_payload))
+        output.extend(b"BINDING-WAL-BASE64-END\n")
+    output.extend(metadata("POST", after))
+    sys.stdout.buffer.write(output)
+    raise SystemExit(0)
+if (
+    exec_out_run_as_tail is not None
+    and exec_out_run_as_tail[:2] == ["sh", "-c"]
     and "voice-step-capture-bundle" in exec_out_run_as_tail[2]
 ):
     remote_paths = exec_out_run_as_tail[-3:]
@@ -1416,6 +1536,8 @@ export REAL_TIMEOUT REAL_LN REAL_RMDIR REAL_RM REAL_STAT
 export FAKE_MDEV_OWNER="$MDEV_OWNER"
 export FAKE_REMOTE_APP_DATA_ROOT="$REMOTE_APP_DATA_ROOT"
 export FAKE_RMDIR_BOUNDARY_FILE="$RMDIR_BOUNDARY_FILE"
+export FAKE_RESOLVER_TEMP_ROOT="$HELPER_TEMP_ROOT"
+export FAKE_RESOLVER_CLEANUP_FAILURE_MARKER="$TMP_DIR/resolver-cleanup-failure"
 export VOICE_STEP_ADB_TIMEOUT_SECONDS=10
 export VOICE_STEP_WAIT_TIMEOUT_SECONDS=2
 export VOICE_STEP_MAX_WAIT_ATTEMPTS=2
@@ -1425,10 +1547,14 @@ reset_fake() {
   : > "$ADB_LOG"
   : > "$TIMEOUT_LOG"
   : > "$LN_LOG"
+  : > "$RESOLVER_ORDER_LOG"
+  rm -f -- "$TMP_DIR/resolver-cleanup-failure"
   rm -rf -- "$REMOTE_APP_DATA_ROOT"
-  mkdir -p "$REMOTE_APP_DATA_ROOT/files/voice-real-room"
+  mkdir -p "$REMOTE_APP_DATA_ROOT/files/voice-real-room" \
+    "$REMOTE_APP_DATA_ROOT/databases"
   chmod 700 "$REMOTE_APP_DATA_ROOT" "$REMOTE_APP_DATA_ROOT/files" \
-    "$REMOTE_APP_DATA_ROOT/files/voice-real-room"
+    "$REMOTE_APP_DATA_ROOT/files/voice-real-room" \
+    "$REMOTE_APP_DATA_ROOT/databases"
   rm -f -- "$RMDIR_BOUNDARY_FILE"
   python3 - "$FAKE_STATE" "$CURRENT_UID" <<'PY'
 import json
@@ -1529,6 +1655,14 @@ PY
   unset VOICE_STEP_DIAGNOSTIC_PARENT VOICE_STEP_DIAGNOSTIC_PINNED_PARENT
   unset VOICE_STEP_DIAGNOSTIC_REPLACEMENT_PARENT VOICE_STEP_DIAGNOSTIC_PARENT_MARKER
   unset VOICE_STEP_TEST_STATE_PARENT VOICE_STEP_TEST_DIAGNOSTIC_PARENT
+  unset FAKE_BINDING_BEFORE_METADATA FAKE_BINDING_AFTER_ENCODED_TRANSFER
+  unset FAKE_BINDING_BEFORE_POST_METADATA FAKE_BINDING_TRANSFER_CORRUPTION
+  unset FAKE_BINDING_SELECTOR_FAILURE FAKE_BINDING_SELECTOR_LEAVE_SHM
+  unset FAKE_BINDING_CLEANUP_FAIL_ONCE
+  unset VOICE_STEP_BINDING_PUBLISHER_INJECTION VOICE_STEP_BINDING_PUBLISHER_MARKER
+  unset VOICE_STEP_BINDING_PUBLISHER_SIGNAL VOICE_STEP_BINDING_PUBLISHER_PARENT
+  unset VOICE_STEP_BINDING_PUBLISHER_REPLACEMENT_PARENT
+  unset VOICE_STEP_BINDING_PUBLISHER_STARTED VOICE_STEP_RESOLVER_ORDER_LOG
 }
 
 make_fixture() {
@@ -1541,6 +1675,190 @@ make_second_fixture() {
   local destination="$1"
   printf '\011\012\013\014\015\016\017\020' > "$destination"
   chmod 600 "$destination"
+}
+
+BINDING_WINDOW_START=1776070800000
+BINDING_WINDOW_END=1776072600000
+BINDING_OLDER=11111111-1111-4111-8111-111111111111
+BINDING_INTENDED=22222222-2222-4222-8222-222222222222
+
+make_binding_snapshot() {
+  local topology="$1"
+  local rows_json="$2"
+  local schema_kind="${3:-integer}"
+  python3 - "$REMOTE_APP_DATA_ROOT" "$topology" "$rows_json" "$schema_kind" <<'PY'
+import json
+import os
+import shutil
+import sqlite3
+import sys
+from pathlib import Path
+
+root, topology, rows_json, schema_kind = sys.argv[1:]
+root_path = Path(root)
+databases = root_path / "databases"
+for candidate in databases.iterdir():
+    if candidate.is_dir() and not candidate.is_symlink():
+        shutil.rmtree(candidate)
+    else:
+        candidate.unlink()
+source = root_path / "binding-source.db"
+for candidate in (source, Path(str(source) + "-wal"), Path(str(source) + "-shm")):
+    candidate.unlink(missing_ok=True)
+connection = sqlite3.connect(source)
+connection.execute("PRAGMA journal_mode=WAL")
+connection.execute("PRAGMA wal_autocheckpoint=0")
+create_type = "INTEGER NOT NULL" if schema_kind == "integer" else "TEXT"
+connection.execute(
+    "CREATE TABLE ConversationEntity ("
+    "id TEXT NOT NULL PRIMARY KEY, "
+    f"create_at {create_type}, "
+    "update_at INTEGER NOT NULL)"
+)
+connection.executemany(
+    "INSERT INTO ConversationEntity(id, create_at, update_at) VALUES (?, ?, ?)",
+    json.loads(rows_json),
+)
+connection.commit()
+main = databases / "rikka_hub"
+wal = databases / "rikka_hub-wal"
+if topology == "main":
+    connection.close()
+    assert not Path(str(source) + "-wal").exists()
+    shutil.copyfile(source, main)
+elif topology == "main-wal":
+    source_wal = Path(str(source) + "-wal")
+    assert source_wal.is_file()
+    shutil.copyfile(source, main)
+    shutil.copyfile(source_wal, wal)
+    connection.close()
+else:
+    connection.close()
+    raise ValueError(topology)
+for candidate in (source, Path(str(source) + "-wal"), Path(str(source) + "-shm")):
+    candidate.unlink(missing_ok=True)
+main.chmod(0o600)
+if wal.exists():
+    wal.chmod(0o600)
+PY
+}
+
+make_default_binding_snapshot() {
+  local topology="$1"
+  make_binding_snapshot "$topology" \
+    "[[\"$BINDING_OLDER\",1776070860000,1776072500000],[\"$BINDING_INTENDED\",1776070920000,1776070920001]]"
+}
+
+make_binding_publisher_site() {
+  local site="$1"
+  mkdir "$site"
+  chmod 700 "$site"
+  cat > "$site/sitecustomize.py" <<'PY'
+import os
+import signal
+import sys
+from pathlib import Path
+
+is_publisher = os.path.basename(sys.argv[0]) == "voice-agent-real-room-binding-publisher.py"
+is_selector = os.path.basename(sys.argv[0]) == "voice-agent-real-room-binding-selector.py"
+action = os.environ.get("VOICE_STEP_BINDING_PUBLISHER_INJECTION")
+marker = os.environ.get("VOICE_STEP_BINDING_PUBLISHER_MARKER")
+real_open = os.open
+real_write = os.write
+real_fstat = os.fstat
+real_link = os.link
+real_signal = signal.signal
+real_close = os.close
+shortened = False
+replaced = False
+
+if is_selector and os.environ.get("FAKE_BINDING_SELECTOR_FAILURE") == "1":
+    if os.environ.get("FAKE_BINDING_SELECTOR_LEAVE_SHM") == "1" and len(sys.argv) > 1:
+        Path(sys.argv[1] + "-shm").write_bytes(b"private selector sidecar")
+    os._exit(91)
+if is_publisher:
+    started = os.environ.get("VOICE_STEP_BINDING_PUBLISHER_STARTED")
+    if started:
+        Path(started).write_text("publisher-started\n", encoding="ascii")
+
+
+def record(value):
+    if marker:
+        Path(marker).write_text(value + "\n", encoding="ascii")
+
+
+def controlled_open(path, flags, *args, **kwargs):
+    if (
+        is_publisher
+        and action == "tmpfile"
+        and os.fsdecode(path) == "."
+        and (flags & os.O_TMPFILE) == os.O_TMPFILE
+        and "dir_fd" in kwargs
+    ):
+        record("tmpfile")
+        raise OSError
+    return real_open(path, flags, *args, **kwargs)
+
+
+def controlled_write(descriptor, payload):
+    global shortened
+    if is_publisher and action == "short-write" and not shortened and descriptor != 2 and len(payload) > 1:
+        shortened = True
+        return real_write(descriptor, payload[:7])
+    if is_publisher and action == "stdout-error" and descriptor == 1 and marker and os.path.exists(marker):
+        raise OSError
+    return real_write(descriptor, payload)
+
+
+def controlled_fstat(descriptor):
+    global replaced
+    metadata = real_fstat(descriptor)
+    parent = os.environ.get("VOICE_STEP_BINDING_PUBLISHER_PARENT")
+    if is_publisher and action == "replace-parent" and not replaced and parent and os.path.exists(parent):
+        current = os.stat(parent)
+        if (metadata.st_dev, metadata.st_ino) == (current.st_dev, current.st_ino):
+            replaced = True
+            os.rename(parent, parent + ".pinned")
+            os.symlink(os.environ["VOICE_STEP_BINDING_PUBLISHER_REPLACEMENT_PARENT"], parent, target_is_directory=True)
+    return metadata
+
+
+def controlled_link(source, target, *args, **kwargs):
+    if not is_publisher or not os.fsdecode(source).startswith("/proc/self/fd/"):
+        return real_link(source, target, *args, **kwargs)
+    order_log = os.environ.get("VOICE_STEP_RESOLVER_ORDER_LOG")
+    if order_log:
+        with open(order_log, "a", encoding="ascii") as handle:
+            handle.write("publisher-link\n")
+    if action == "link-race":
+        descriptor = real_open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=kwargs["dst_dir_fd"])
+        real_write(descriptor, b"raced")
+        real_close(descriptor)
+    result = real_link(source, target, *args, **kwargs)
+    if action in {"post-signal", "stdout-error"}:
+        record("linked")
+    if action == "post-signal":
+        os.kill(os.getpid(), getattr(signal, "SIG" + os.environ["VOICE_STEP_BINDING_PUBLISHER_SIGNAL"]))
+    return result
+
+
+def controlled_signal(signum, handler):
+    if (
+        is_publisher
+        and action == "pre-signal"
+        and handler == signal.SIG_IGN
+        and signum == getattr(signal, "SIG" + os.environ["VOICE_STEP_BINDING_PUBLISHER_SIGNAL"])
+    ):
+        os.kill(os.getpid(), signum)
+    return real_signal(signum, handler)
+
+
+os.open = controlled_open
+os.write = controlled_write
+os.fstat = controlled_fstat
+os.link = controlled_link
+signal.signal = controlled_signal
+PY
 }
 
 make_diagnostic_tmpfile_failure_site() {
@@ -2099,7 +2417,7 @@ run_helper() {
   for argument in "$@"; do
     [[ "$argument" == --mdev-owner ]] && has_owner=1
   done
-  if [[ "${RUN_HELPER_SKIP_OWNER:-0}" != 1 && "$has_owner" -eq 0 && "${1:-}" =~ ^(preflight|start|inject|interrupt|status|finalize|capture|end)$ ]]; then
+  if [[ "${RUN_HELPER_SKIP_OWNER:-0}" != 1 && "$has_owner" -eq 0 && "${1:-}" =~ ^(preflight|start|inject|interrupt|status|finalize|capture|end|resolve-binding)$ ]]; then
     invocation=("$1" --mdev-owner "$MDEV_OWNER" "${@:2}")
   fi
   for (( index = 0; index + 1 < ${#invocation[@]}; index++ )); do
@@ -6097,6 +6415,408 @@ PY
   done
 }
 
+run_binding_helper() {
+  local destination="$1"
+  shift
+  run_helper resolve-binding \
+    --package me.rerere.rikkahub.debug \
+    --binding-output "$destination" \
+    --created-after-epoch-ms "$BINDING_WINDOW_START" \
+    --created-before-epoch-ms "$BINDING_WINDOW_END" \
+    "$@"
+}
+
+assert_binding_failure() {
+  local destination="$1"
+  local label="$2"
+  [[ "$RUN_STATUS" -ne 0 ]] || fail "resolve-binding $label: invalid operation succeeded"
+  [[ ! -s "$STDOUT_FILE" ]] || fail "resolve-binding $label: failure wrote stdout"
+  [[ "$(<"$STDERR_FILE")" == 'voice-step.error=operation failed' ]] ||
+    fail "resolve-binding $label: failure surface differed"
+  [[ ! -e "$destination" && ! -L "$destination" ]] ||
+    fail "resolve-binding $label: failure published destination"
+  python3 - "$HELPER_TEMP_ROOT" <<'PY' || fail "resolve-binding failure left private local artifacts"
+import os
+import sys
+assert os.listdir(sys.argv[1]) == []
+PY
+  assert_private_output_absent "$destination"
+  pass
+}
+
+assert_binding_record() {
+  local destination="$1"
+  python3 - "$destination" "$BINDING_INTENDED" <<'PY' || fail "resolve-binding record contract mismatch"
+import os
+import stat
+import sys
+
+path, expected = sys.argv[1:]
+metadata = os.lstat(path)
+assert stat.S_ISREG(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode)
+assert stat.S_IMODE(metadata.st_mode) == 0o600
+assert metadata.st_nlink == 1
+assert open(path, "rb").read() == (expected + "\n").encode("ascii")
+PY
+}
+
+assert_binding_success() {
+  local destination="$1"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=resolve-binding\nvoice-step.binding=resolved'
+  assert_binding_record "$destination"
+  python3 - "$HELPER_TEMP_ROOT" <<'PY' || fail "resolve-binding success left private local artifacts"
+import os
+import sys
+assert os.listdir(sys.argv[1]) == []
+PY
+  if LC_ALL=C grep -aF -- "$BINDING_INTENDED" "$ADB_LOG" "$STDOUT_FILE" "$STDERR_FILE" >/dev/null; then
+    fail "resolve-binding success disclosed UUID in output or managed command log"
+  fi
+  [[ "$(command_count rikka_hub)" == 1 ]] ||
+    fail "resolve-binding did not use one managed snapshot command"
+  [[ "$(command_count rikka_hub-shm)" == 0 ]] ||
+    fail "resolve-binding attempted to read device SHM"
+}
+
+run_resolve_binding_tests() {
+  local output_parent destination site marker replacement started
+  local main="$REMOTE_APP_DATA_ROOT/databases/rikka_hub"
+  local wal="$REMOTE_APP_DATA_ROOT/databases/rikka_hub-wal"
+
+  for topology in main main-wal; do
+    reset_fake
+    make_default_binding_snapshot "$topology"
+    output_parent="$TMP_DIR/binding-success-$topology"
+    mkdir "$output_parent"
+    chmod 700 "$output_parent"
+    destination="$output_parent/binding"
+    site="$TMP_DIR/binding-success-$topology-site"
+    make_binding_publisher_site "$site"
+    VOICE_STEP_RESOLVER_ORDER_LOG="$RESOLVER_ORDER_LOG" PYTHONPATH="$site" \
+      run_binding_helper "$destination"
+    assert_binding_success "$destination"
+    [[ "$(<"$RESOLVER_ORDER_LOG")" == $'resolver-cleanup-complete\npublisher-link' ]] ||
+      fail "resolve-binding $topology: cleanup did not precede publication"
+  done
+
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-leading-zero-window"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  destination="$output_parent/binding"
+  run_helper resolve-binding --package me.rerere.rikkahub.debug \
+    --binding-output "$destination" \
+    --created-after-epoch-ms "0$BINDING_WINDOW_START" \
+    --created-before-epoch-ms "0$BINDING_WINDOW_END"
+  assert_binding_success "$destination"
+
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-invalid-arguments"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  destination="$output_parent/binding"
+  run_helper resolve-binding --package me.rerere.rikkahub.debug \
+    --binding-output "$destination" --created-after-epoch-ms "$BINDING_WINDOW_START"
+  assert_binding_failure "$destination" "missing option"
+  reset_fake
+  make_default_binding_snapshot main
+  run_binding_helper "$destination" --created-after-epoch-ms "$BINDING_WINDOW_START"
+  assert_binding_failure "$destination" "duplicate option"
+  reset_fake
+  make_default_binding_snapshot main
+  run_binding_helper "$destination" --unknown value
+  assert_binding_failure "$destination" "unknown option"
+  reset_fake
+  make_default_binding_snapshot main
+  run_helper resolve-binding --mdev-owner 'invalid owner' \
+    --package me.rerere.rikkahub.debug --binding-output "$destination" \
+    --created-after-epoch-ms "$BINDING_WINDOW_START" \
+    --created-before-epoch-ms "$BINDING_WINDOW_END"
+  assert_binding_failure "$destination" "invalid managed owner"
+  reset_fake
+  make_default_binding_snapshot main
+  run_helper resolve-binding --package me.rerere.rikkahub \
+    --binding-output "$destination" \
+    --created-after-epoch-ms "$BINDING_WINDOW_START" \
+    --created-before-epoch-ms "$BINDING_WINDOW_END"
+  assert_binding_failure "$destination" "invalid package"
+
+  local -a invalid_windows=(
+    -1 "$BINDING_WINDOW_END"
+    +1776070800000 "$BINDING_WINDOW_END"
+    1776070800000x "$BINDING_WINDOW_END"
+    "$BINDING_WINDOW_START" "$BINDING_WINDOW_START"
+    "$BINDING_WINDOW_END" "$BINDING_WINDOW_START"
+    "$BINDING_WINDOW_START" 1776072600001
+    9223372036854775808 9223372036854775809
+  )
+  local index
+  for ((index = 0; index < ${#invalid_windows[@]}; index += 2)); do
+    reset_fake
+    make_default_binding_snapshot main
+    output_parent="$TMP_DIR/binding-window-$index"
+    mkdir "$output_parent"
+    chmod 700 "$output_parent"
+    destination="$output_parent/binding"
+    run_helper resolve-binding --package me.rerere.rikkahub.debug \
+      --binding-output "$destination" \
+      --created-after-epoch-ms "${invalid_windows[index]}" \
+      --created-before-epoch-ms "${invalid_windows[index + 1]}"
+    assert_binding_failure "$destination" "invalid creation window $index"
+  done
+
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-insecure-parent"
+  mkdir "$output_parent"
+  chmod 755 "$output_parent"
+  destination="$output_parent/binding"
+  run_binding_helper "$destination"
+  assert_binding_failure "$destination" "insecure parent"
+  chmod 700 "$output_parent"
+
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-nonnormal-parent"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  destination="$output_parent/binding"
+  run_binding_helper "$output_parent/./binding"
+  assert_binding_failure "$destination" "nonnormal destination"
+
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-symlink-destination-parent"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  destination="$output_parent/binding"
+  ln -s sentinel "$destination"
+  run_binding_helper "$destination"
+  [[ "$RUN_STATUS" -ne 0 && "$(readlink "$destination")" == sentinel ]] ||
+    fail "resolve-binding symlink destination was changed"
+  [[ ! -s "$STDOUT_FILE" && "$(<"$STDERR_FILE")" == 'voice-step.error=operation failed' ]] ||
+    fail "resolve-binding symlink destination failure surface differed"
+  pass
+
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-existing-parent"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  destination="$output_parent/binding"
+  printf raced >"$destination"
+  run_binding_helper "$destination"
+  [[ "$RUN_STATUS" -ne 0 && "$(<"$destination")" == raced ]] ||
+    fail "resolve-binding existing destination was changed"
+  [[ ! -s "$STDOUT_FILE" && "$(<"$STDERR_FILE")" == 'voice-step.error=operation failed' ]] ||
+    fail "resolve-binding existing destination failure surface differed"
+  pass
+
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-real-parent"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  local linked_parent="$TMP_DIR/binding-linked-parent"
+  ln -s "$output_parent" "$linked_parent"
+  destination="$linked_parent/binding"
+  run_binding_helper "$destination"
+  assert_binding_failure "$destination" "symlink parent"
+
+  local rows label schema
+  for label in no-candidate tied malformed-uuid malformed-timestamp; do
+    reset_fake
+    schema=integer
+    case "$label" in
+      no-candidate) rows="[[\"$BINDING_INTENDED\",1776072700000,1776072700000]]" ;;
+      tied) rows="[[\"$BINDING_OLDER\",1776070920000,1776070920000],[\"$BINDING_INTENDED\",1776070920000,1776070920001]]" ;;
+      malformed-uuid) rows='[["NOT-A-UUID",1776070920000,1776070920000]]' ;;
+      malformed-timestamp) rows="[[\"$BINDING_INTENDED\",\"1776070920000\",1776070920000]]"; schema=text ;;
+    esac
+    make_binding_snapshot main "$rows" "$schema"
+    output_parent="$TMP_DIR/binding-selector-$label"
+    mkdir "$output_parent"
+    chmod 700 "$output_parent"
+    destination="$output_parent/binding"
+    run_binding_helper "$destination"
+    assert_binding_failure "$destination" "$label"
+  done
+
+  for label in missing-main wal-only symlink-main directory-main symlink-wal directory-wal; do
+    reset_fake
+    make_default_binding_snapshot main-wal
+    case "$label" in
+      missing-main) rm -- "$main" "$wal" ;;
+      wal-only) rm -- "$main" ;;
+      symlink-main) rm -- "$main"; ln -s "$wal" "$main" ;;
+      directory-main) rm -- "$main"; mkdir "$main" ;;
+      symlink-wal) rm -- "$wal"; ln -s "$main" "$wal" ;;
+      directory-wal) rm -- "$wal"; mkdir "$wal" ;;
+    esac
+    output_parent="$TMP_DIR/binding-component-$label"
+    mkdir "$output_parent"
+    chmod 700 "$output_parent"
+    destination="$output_parent/binding"
+    run_binding_helper "$destination"
+    assert_binding_failure "$destination" "$label"
+  done
+
+  for label in main-below main-above wal-below wal-above; do
+    reset_fake
+    make_default_binding_snapshot main-wal
+    case "$label" in
+      main-below) truncate -s 511 "$main" ;;
+      main-above) truncate -s 67108865 "$main" ;;
+      wal-below) truncate -s 31 "$wal" ;;
+      wal-above) truncate -s 67108865 "$wal" ;;
+    esac
+    output_parent="$TMP_DIR/binding-size-$label"
+    mkdir "$output_parent"
+    chmod 700 "$output_parent"
+    destination="$output_parent/binding"
+    run_binding_helper "$destination"
+    assert_binding_failure "$destination" "$label"
+  done
+
+  for label in main-size main-digest wal-size wal-digest malformed-base64; do
+    reset_fake
+    make_default_binding_snapshot main-wal
+    output_parent="$TMP_DIR/binding-transfer-$label"
+    mkdir "$output_parent"
+    chmod 700 "$output_parent"
+    destination="$output_parent/binding"
+    FAKE_BINDING_TRANSFER_CORRUPTION="$label" run_binding_helper "$destination"
+    assert_binding_failure "$destination" "$label"
+  done
+
+  local phase action
+  for phase in AFTER_ENCODED_TRANSFER BEFORE_POST_METADATA; do
+    for action in mutate-main remove-wal add-wal; do
+      reset_fake
+      make_default_binding_snapshot main-wal
+      [[ "$action" == add-wal ]] && make_default_binding_snapshot main
+      output_parent="$TMP_DIR/binding-race-$phase-$action"
+      mkdir "$output_parent"
+      chmod 700 "$output_parent"
+      destination="$output_parent/binding"
+      if [[ "$phase" == AFTER_ENCODED_TRANSFER ]]; then
+        FAKE_BINDING_AFTER_ENCODED_TRANSFER="$action" run_binding_helper "$destination"
+      else
+        FAKE_BINDING_BEFORE_POST_METADATA="$action" run_binding_helper "$destination"
+      fi
+      assert_binding_failure "$destination" "$phase $action"
+    done
+  done
+
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-selector-injected"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  destination="$output_parent/binding"
+  site="$TMP_DIR/binding-selector-injected-site"
+  make_binding_publisher_site "$site"
+  FAKE_BINDING_SELECTOR_FAILURE=1 FAKE_BINDING_SELECTOR_LEAVE_SHM=1 \
+    PYTHONPATH="$site" run_binding_helper "$destination"
+  assert_binding_failure "$destination" "selector failure"
+
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-cleanup-failure"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  destination="$output_parent/binding"
+  site="$TMP_DIR/binding-cleanup-failure-site"
+  started="$TMP_DIR/binding-cleanup-publisher-started"
+  make_binding_publisher_site "$site"
+  FAKE_BINDING_CLEANUP_FAIL_ONCE=binding-main \
+    VOICE_STEP_BINDING_PUBLISHER_STARTED="$started" PYTHONPATH="$site" \
+    run_binding_helper "$destination"
+  assert_binding_failure "$destination" "cleanup failure"
+  [[ ! -e "$started" ]] || fail "resolve-binding cleanup failure invoked publisher"
+
+  for action in tmpfile replace-parent link-race; do
+    reset_fake
+    make_default_binding_snapshot main
+    output_parent="$TMP_DIR/binding-publisher-$action"
+    replacement="$TMP_DIR/binding-publisher-$action-replacement"
+    site="$TMP_DIR/binding-publisher-$action-site"
+    mkdir "$output_parent" "$replacement"
+    chmod 700 "$output_parent" "$replacement"
+    destination="$output_parent/binding"
+    make_binding_publisher_site "$site"
+    VOICE_STEP_BINDING_PUBLISHER_INJECTION="$action" \
+      VOICE_STEP_BINDING_PUBLISHER_MARKER="$TMP_DIR/binding-publisher-$action-marker" \
+      VOICE_STEP_BINDING_PUBLISHER_PARENT="$output_parent" \
+      VOICE_STEP_BINDING_PUBLISHER_REPLACEMENT_PARENT="$replacement" \
+      PYTHONPATH="$site" run_binding_helper "$destination"
+    if [[ "$action" == link-race ]]; then
+      [[ "$RUN_STATUS" -ne 0 && "$(<"$destination")" == raced ]] ||
+        fail "resolve-binding publisher link race changed raced destination"
+      [[ ! -s "$STDOUT_FILE" && "$(<"$STDERR_FILE")" == 'voice-step.error=operation failed' ]] ||
+        fail "resolve-binding publisher link race failure surface differed"
+      pass
+    else
+      assert_binding_failure "$destination" "publisher $action"
+    fi
+  done
+
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-publisher-short-write"
+  site="$TMP_DIR/binding-publisher-short-write-site"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  destination="$output_parent/binding"
+  make_binding_publisher_site "$site"
+  VOICE_STEP_BINDING_PUBLISHER_INJECTION=short-write PYTHONPATH="$site" \
+    run_binding_helper "$destination"
+  assert_binding_success "$destination"
+
+  local signal_name
+  for signal_name in HUP INT TERM; do
+    reset_fake
+    make_default_binding_snapshot main
+    output_parent="$TMP_DIR/binding-pre-signal-$signal_name"
+    site="$TMP_DIR/binding-pre-signal-$signal_name-site"
+    mkdir "$output_parent"
+    chmod 700 "$output_parent"
+    destination="$output_parent/binding"
+    make_binding_publisher_site "$site"
+    VOICE_STEP_BINDING_PUBLISHER_INJECTION=pre-signal \
+      VOICE_STEP_BINDING_PUBLISHER_SIGNAL="$signal_name" PYTHONPATH="$site" \
+      run_binding_helper "$destination"
+    assert_binding_failure "$destination" "publisher pre-link $signal_name"
+  done
+
+  for action in post-signal stdout-error; do
+    reset_fake
+    make_default_binding_snapshot main
+    output_parent="$TMP_DIR/binding-publisher-$action-success"
+    site="$TMP_DIR/binding-publisher-$action-success-site"
+    marker="$TMP_DIR/binding-publisher-$action-success-marker"
+    mkdir "$output_parent"
+    chmod 700 "$output_parent"
+    destination="$output_parent/binding"
+    make_binding_publisher_site "$site"
+    VOICE_STEP_BINDING_PUBLISHER_INJECTION="$action" \
+      VOICE_STEP_BINDING_PUBLISHER_SIGNAL=TERM \
+      VOICE_STEP_BINDING_PUBLISHER_MARKER="$marker" PYTHONPATH="$site" \
+      run_binding_helper "$destination"
+    [[ "$RUN_STATUS" -eq 0 ]] || fail "resolve-binding $action did not retain committed success"
+    assert_binding_record "$destination"
+    [[ "$(<"$marker")" == linked ]] || fail "resolve-binding $action missed link boundary"
+    [[ ! -s "$STDERR_FILE" ]] || fail "resolve-binding $action wrote stderr after commit"
+    if [[ "$action" == post-signal ]]; then
+      [[ "$(<"$STDOUT_FILE")" == $'voice-step.status=ok\nvoice-step.operation=resolve-binding\nvoice-step.binding=resolved' ]] ||
+        fail "resolve-binding post-link signal changed success output"
+    fi
+    pass
+  done
+}
+
 SELECT_ALL=0
 SELECTED_OPERATIONS=("$@")
 if [[ "$#" -eq 0 ]]; then
@@ -6104,7 +6824,7 @@ if [[ "$#" -eq 0 ]]; then
 fi
 for requested in "${SELECTED_OPERATIONS[@]}"; do
   case "$requested" in
-    preflight|start|inject|interrupt|status|finalize|finalization|capture|end|cleanup|fixture-bounds|checkpoints|tracing|state-publisher) ;;
+    preflight|start|inject|interrupt|status|finalize|finalization|capture|end|cleanup|fixture-bounds|checkpoints|tracing|state-publisher|resolve-binding) ;;
     *) fail "test filter must name a real-room operation" ;;
   esac
 done
@@ -6132,6 +6852,7 @@ if selected finalize || selected finalization; then
   run_finalize_tests
 fi
 selected capture && run_capture_tests
+selected resolve-binding && run_resolve_binding_tests
 if selected end || selected cleanup; then
   run_end_tests
 fi

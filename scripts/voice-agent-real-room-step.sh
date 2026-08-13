@@ -9,6 +9,8 @@ REAL_ROOM_LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
 REAL_ROOM_DIAGNOSTICS="$ROOT_DIR/scripts/voice-agent-real-room-diagnostics.sh"
 REAL_ROOM_DIAGNOSTIC_PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-diagnostic-publisher.py"
 REAL_ROOM_STATE_PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-state-publisher.py"
+REAL_ROOM_BINDING_SELECTOR="$ROOT_DIR/scripts/voice-agent-real-room-binding-selector.py"
+REAL_ROOM_BINDING_PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-binding-publisher.py"
 REAL_ROOM_CONTRACT="$ROOT_DIR/scripts/voice-agent-real-room-contract.py"
 PACKAGE_EXPECTED='me.rerere.rikkahub.debug'
 CONTROL_RECEIVER='me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver'
@@ -52,6 +54,10 @@ LOCAL_TEMP_DIR=''
 ORDERED_BROADCAST_OUTPUT=''
 STATE_PUBLICATION_TEMP=''
 STATE_PARENT_IDENTITY=''
+BINDING_PARENT_IDENTITY=''
+BINDING_SNAPSHOT_MAIN=''
+BINDING_SNAPSHOT_WAL=''
+BINDING_SNAPSHOT_TOPOLOGY=''
 ERROR_REPORTED=0
 START_CLEANUP_NEEDED=0
 START_PREPARE_ATTEMPTED=0
@@ -1013,11 +1019,83 @@ run_with_decoded_state() {
   esac
 }
 
+run_resolve_binding() {
+  local destination="$1"
+  local created_after="$2"
+  local created_before="$3"
+  local original_parent_identity
+  local selected=''
+  local wal_argument
+  local sqlite_shm
+  VALIDATE_RUNTIME_SKIP_BROADCAST=1 validate_runtime
+  prepare_mdev_owner
+  validate_package "$PACKAGE"
+  acquire_host_operation_lock
+  ensure_device_and_package
+  resolve_package_identity
+  verify_package_contract
+  validate_creation_window "$created_after" "$created_before" || die 'operation failed'
+  validate_private_binding_destination "$destination" || die 'operation failed'
+  original_parent_identity="$BINDING_PARENT_IDENTITY"
+  ensure_local_temp_dir
+  capture_private_binding_snapshot "$PACKAGE" "$created_after" "$created_before" ||
+    die 'operation failed'
+  sqlite_shm="$BINDING_SNAPSHOT_MAIN-shm"
+  register_temp_file "$sqlite_shm"
+  if [[ "$BINDING_SNAPSHOT_TOPOLOGY" == main-wal ]]; then
+    wal_argument="$BINDING_SNAPSHOT_WAL"
+  elif [[ "$BINDING_SNAPSHOT_TOPOLOGY" == main ]]; then
+    wal_argument=-
+  else
+    die 'operation failed'
+  fi
+  if selected="$(python3 "$REAL_ROOM_BINDING_SELECTOR" \
+      "$BINDING_SNAPSHOT_MAIN" "$wal_argument" \
+      "$created_after" "$created_before" 2>/dev/null && printf '\036')"; then
+    :
+  else
+    selected=''
+    die 'operation failed'
+  fi
+  [[ "$selected" == *$'\n\036' ]] || {
+    selected=''
+    die 'operation failed'
+  }
+  selected="${selected%$'\n\036'}"
+  [[ "$selected" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || {
+    selected=''
+    die 'operation failed'
+  }
+  cleanup_private_binding_snapshot || die 'operation failed'
+  validate_private_binding_destination "$destination" || die 'operation failed'
+  [[ "$BINDING_PARENT_IDENTITY" == "$original_parent_identity" ]] || die 'operation failed'
+  BINDING_PARENT_IDENTITY="$original_parent_identity"
+  [[ "${#OWNED_TEMP_FILES[@]}" -eq 0 ]] || die 'operation failed'
+  [[ -z "$LOCAL_TEMP_DIR" ]] || die 'operation failed'
+  LOCAL_TEMP_DIR=''
+  trap - EXIT HUP INT TERM
+  exec python3 "$REAL_ROOM_BINDING_PUBLISHER" \
+    "$destination" "$BINDING_PARENT_IDENTITY" "$selected" </dev/null
+}
+
 operation="${1:-}"
 [[ -n "$operation" ]] || die 'usage: voice-agent-real-room-step.sh OPERATION [options]'
+if [[ "$operation" == resolve-binding ]]; then
+  RESOLVE_BINDING_ERROR_MODE=1
+fi
 shift
 
 case "$operation" in
+  resolve-binding)
+    parse_options '--mdev-owner --package --binding-output --created-after-epoch-ms --created-before-epoch-ms' "$@"
+    require_options --mdev-owner --package --binding-output \
+      --created-after-epoch-ms --created-before-epoch-ms
+    MDEV_OWNER="${PARSED[--mdev-owner]}"
+    PACKAGE="${PARSED[--package]}"
+    run_resolve_binding "${PARSED[--binding-output]}" \
+      "${PARSED[--created-after-epoch-ms]}" \
+      "${PARSED[--created-before-epoch-ms]}"
+    ;;
   preflight)
     parse_options '--mdev-owner --package' "$@"
     require_options --mdev-owner --package

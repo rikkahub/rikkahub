@@ -9,6 +9,9 @@
 die() {
   ERROR_REPORTED=1
   local message="$1"
+  if [[ "${RESOLVE_BINDING_ERROR_MODE:-0}" == 1 ]]; then
+    message='operation failed'
+  fi
   if [[ "${CHECKPOINT_ERROR_MODE:-0}" == 1 &&
         ! "$message" =~ ^checkpoint\ [a-z][a-z0-9_]{0,63}\ not\ proven$ ]]; then
     message='checkpoint evidence not proven'
@@ -139,7 +142,9 @@ validate_runtime() {
   require_command cmp
   require_command flock
   require_command mkdir
-  ensure_ordered_broadcast_output
+  if [[ "${VALIDATE_RUNTIME_SKIP_BROADCAST:-0}" != 1 ]]; then
+    ensure_ordered_broadcast_output
+  fi
 }
 
 prepare_mdev_owner() {
@@ -359,6 +364,349 @@ PY
   )" || return 1
   [[ "$parent_identity" =~ ^[0-9]+:[0-9]+$ ]] || return 1
   STATE_PARENT_IDENTITY="$parent_identity"
+}
+
+validate_creation_window() {
+  python3 - "$1" "$2" 2>/dev/null <<'PY'
+import sys
+
+if len(sys.argv) != 3:
+    raise SystemExit(1)
+values = sys.argv[1:]
+if any(not value.isascii() or not value.isdecimal() for value in values):
+    raise SystemExit(1)
+created_after, created_before = (int(value, 10) for value in values)
+if created_before <= created_after or created_before - created_after > 1_800_000:
+    raise SystemExit(1)
+PY
+}
+
+validate_private_binding_destination() {
+  local parent_identity
+  parent_identity="$(python3 - "$1" 2>/dev/null <<'PY'
+import os
+import stat
+import sys
+
+path = sys.argv[1]
+if not path or not os.path.isabs(path) or os.path.normpath(path) != path:
+    raise SystemExit(1)
+parent = os.path.dirname(path)
+name = os.path.basename(path)
+if not name or name in {".", ".."} or os.path.realpath(parent) != parent:
+    raise SystemExit(1)
+path_metadata = os.lstat(parent)
+if (
+    stat.S_ISLNK(path_metadata.st_mode)
+    or not stat.S_ISDIR(path_metadata.st_mode)
+    or stat.S_IMODE(path_metadata.st_mode) != 0o700
+    or path_metadata.st_uid != os.geteuid()
+):
+    raise SystemExit(1)
+descriptor = os.open(
+    parent,
+    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+)
+try:
+    metadata = os.fstat(descriptor)
+finally:
+    os.close(descriptor)
+if (
+    not stat.S_ISDIR(metadata.st_mode)
+    or stat.S_IMODE(metadata.st_mode) != 0o700
+    or metadata.st_uid != os.geteuid()
+    or (metadata.st_dev, metadata.st_ino) !=
+       (path_metadata.st_dev, path_metadata.st_ino)
+):
+    raise SystemExit(1)
+try:
+    os.lstat(path)
+except FileNotFoundError:
+    pass
+else:
+    raise SystemExit(1)
+print(f"{metadata.st_dev}:{metadata.st_ino}")
+PY
+)" || return 1
+  [[ "$parent_identity" =~ ^[0-9]+:[0-9]+$ ]] || return 1
+  BINDING_PARENT_IDENTITY="$parent_identity"
+}
+
+capture_private_binding_snapshot() {
+  local expected_package="$1"
+  local created_after="$2"
+  local created_before="$3"
+  local transfer
+  local main_snapshot
+  local wal_snapshot
+  [[ "$expected_package" == "$PACKAGE_EXPECTED" && "$PACKAGE" == "$PACKAGE_EXPECTED" ]] ||
+    return 1
+  validate_creation_window "$created_after" "$created_before" || return 1
+  ensure_local_temp_dir
+  transfer="$(mktemp "$LOCAL_TEMP_DIR/binding-transfer.XXXXXX" 2>/dev/null)" || return 1
+  chmod 600 -- "$transfer" 2>/dev/null || return 1
+  register_temp_file "$transfer"
+  main_snapshot="$(mktemp "$LOCAL_TEMP_DIR/binding-main.XXXXXX" 2>/dev/null)" || return 1
+  chmod 600 -- "$main_snapshot" 2>/dev/null || return 1
+  register_temp_file "$main_snapshot"
+  wal_snapshot="$main_snapshot-wal"
+  python3 - "$wal_snapshot" 2>/dev/null <<'PY' || return 1
+import os
+import sys
+
+descriptor = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600)
+os.close(descriptor)
+PY
+  register_temp_file "$wal_snapshot"
+
+  if ! (ulimit -f 360000 2>/dev/null || exit 1
+    run_as_script exec-out '
+set -eu
+: voice-step-binding-snapshot-v1
+main=$1
+wal=$2
+for descriptor_path in /proc/self/fd/*; do
+  fd=${descriptor_path##*/}
+  case "$fd" in
+    0|1|2) ;;
+    *[!0-9]*|"") exit 1 ;;
+    *) eval "exec ${fd}>&-" ;;
+  esac
+done
+component_metadata() {
+  name=$1
+  minimum=$2
+  [ ! -L "$name" ] && [ -f "$name" ] || return 1
+  size=$(LC_ALL=C stat -Lc "%s" "$name") || return 1
+  case "$size" in *[!0-9]*|"") return 1 ;; esac
+  [ "$size" -ge "$minimum" ] && [ "$size" -le 67108864 ] || return 1
+  digest=$(LC_ALL=C sha256sum "$name") || return 1
+  set -- $digest
+  [ "$#" -eq 2 ] || return 1
+  printf "%s\n%s\n" "$size" "$1"
+}
+emit_metadata() {
+  tag=$1
+  main_metadata=$(component_metadata "$main" 512) || return 1
+  main_size=$(printf "%s\n" "$main_metadata" | LC_ALL=C sed -n "1p") || return 1
+  main_digest=$(printf "%s\n" "$main_metadata" | LC_ALL=C sed -n "2p") || return 1
+  if [ -L "$wal" ]; then
+    return 1
+  elif [ -e "$wal" ]; then
+    wal_metadata=$(component_metadata "$wal" 32) || return 1
+    wal_size=$(printf "%s\n" "$wal_metadata" | LC_ALL=C sed -n "1p") || return 1
+    wal_digest=$(printf "%s\n" "$wal_metadata" | LC_ALL=C sed -n "2p") || return 1
+    [ $((main_size + wal_size)) -le 134217728 ] || return 1
+    topology=main-wal
+  else
+    topology=main
+    wal_size=
+    wal_digest=
+  fi
+  printf "BINDING-%s-BEGIN\n" "$tag"
+  printf "topology=%s\nmain-size=%s\nmain-sha256=%s\n" \
+    "$topology" "$main_size" "$main_digest"
+  if [ "$topology" = main-wal ]; then
+    printf "wal-size=%s\nwal-sha256=%s\n" "$wal_size" "$wal_digest"
+  fi
+  printf "BINDING-%s-END\n" "$tag"
+}
+emit_metadata PRE || exit 1
+printf "BINDING-MAIN-BASE64-BEGIN\n"
+LC_ALL=C base64 "$main" || exit 1
+printf "BINDING-MAIN-BASE64-END\n"
+if [ "$topology" = main-wal ]; then
+  printf "BINDING-WAL-BASE64-BEGIN\n"
+  LC_ALL=C base64 "$wal" || exit 1
+  printf "BINDING-WAL-BASE64-END\n"
+  fi
+emit_metadata POST || exit 1
+' databases/rikka_hub databases/rikka_hub-wal) >"$transfer" 2>/dev/null; then
+    return 1
+  fi
+
+  python3 - "$transfer" "$main_snapshot" "$wal_snapshot" 2>/dev/null <<'PY' || return 1
+import base64
+import binascii
+import hashlib
+import os
+import re
+import stat
+import sys
+
+transfer, main_path, wal_path = sys.argv[1:]
+DIGEST = re.compile(rb"[0-9a-f]{64}")
+
+
+def validate_private_file(path, *, empty=False):
+    metadata = os.lstat(path)
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISREG(metadata.st_mode)
+        or stat.S_IMODE(metadata.st_mode) != 0o600
+        or metadata.st_nlink != 1
+        or (empty and metadata.st_size != 0)
+    ):
+        raise ValueError
+
+
+validate_private_file(transfer)
+if os.lstat(transfer).st_size > 183_000_000:
+    raise ValueError
+validate_private_file(main_path, empty=True)
+validate_private_file(wal_path, empty=True)
+
+
+def line(handle):
+    value = handle.readline()
+    if not value or not value.endswith(b"\n") or value.endswith(b"\r\n"):
+        raise ValueError
+    return value[:-1]
+
+
+def metadata(handle, tag):
+    if line(handle) != b"BINDING-" + tag + b"-BEGIN":
+        raise ValueError
+    topology_line = line(handle)
+    if topology_line not in {b"topology=main", b"topology=main-wal"}:
+        raise ValueError
+    topology = topology_line.removeprefix(b"topology=").decode("ascii")
+    expected_keys = [b"main-size", b"main-sha256"]
+    if topology == "main-wal":
+        expected_keys += [b"wal-size", b"wal-sha256"]
+    result = {"topology": topology}
+    for key in expected_keys:
+        value = line(handle)
+        prefix = key + b"="
+        if not value.startswith(prefix):
+            raise ValueError
+        raw = value[len(prefix):]
+        if key.endswith(b"-size"):
+            if not raw.isascii() or not raw.isdigit():
+                raise ValueError
+            result[key.decode()] = int(raw, 10)
+        else:
+            if DIGEST.fullmatch(raw) is None:
+                raise ValueError
+            result[key.decode()] = raw.decode("ascii")
+    if line(handle) != b"BINDING-" + tag + b"-END":
+        raise ValueError
+    main_size = result["main-size"]
+    if not 512 <= main_size <= 67_108_864:
+        raise ValueError
+    if topology == "main-wal":
+        wal_size = result["wal-size"]
+        if not 32 <= wal_size <= 67_108_864 or main_size + wal_size > 134_217_728:
+            raise ValueError
+    return result
+
+
+def decode_component(handle, label, path, size, digest):
+    if line(handle) != b"BINDING-" + label + b"-BASE64-BEGIN":
+        raise ValueError
+    flags = os.O_WRONLY | os.O_TRUNC | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    calculated = hashlib.sha256()
+    written = 0
+    try:
+        opened = os.fstat(descriptor)
+        named = os.lstat(path)
+        if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
+            raise ValueError
+        while True:
+            encoded = line(handle)
+            if encoded == b"BINDING-" + label + b"-BASE64-END":
+                break
+            try:
+                decoded = base64.b64decode(encoded, validate=True)
+            except binascii.Error as error:
+                raise ValueError from error
+            written += len(decoded)
+            if written > size:
+                raise ValueError
+            calculated.update(decoded)
+            view = memoryview(decoded)
+            while view:
+                count = os.write(descriptor, view)
+                if count <= 0:
+                    raise OSError
+                view = view[count:]
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    if written != size or calculated.hexdigest() != digest:
+        raise ValueError
+    validate_private_file(path)
+    if os.lstat(path).st_size != size:
+        raise ValueError
+
+
+with open(transfer, "rb", buffering=0) as handle:
+    before = metadata(handle, b"PRE")
+    decode_component(
+        handle, b"MAIN", main_path,
+        before["main-size"], before["main-sha256"],
+    )
+    if before["topology"] == "main-wal":
+        decode_component(
+            handle, b"WAL", wal_path,
+            before["wal-size"], before["wal-sha256"],
+        )
+    after = metadata(handle, b"POST")
+    if before != after or handle.read(1):
+        raise ValueError
+PY
+  local topology
+  topology="$(python3 - "$transfer" 2>/dev/null <<'PY'
+import sys
+for raw in open(sys.argv[1], "rb"):
+    if raw in {b"topology=main\n", b"topology=main-wal\n"}:
+        print(raw.removeprefix(b"topology=").strip().decode("ascii"))
+        break
+else:
+    raise SystemExit(1)
+PY
+)" || return 1
+  [[ "$topology" == main || "$topology" == main-wal ]] || return 1
+  BINDING_SNAPSHOT_MAIN="$main_snapshot"
+  if [[ "$topology" == main-wal ]]; then
+    BINDING_SNAPSHOT_WAL="$wal_snapshot"
+  else
+    rm -f -- "$wal_snapshot" 2>/dev/null || return 1
+    forget_temp_file "$wal_snapshot"
+    BINDING_SNAPSHOT_WAL=''
+  fi
+  BINDING_SNAPSHOT_TOPOLOGY="$topology"
+}
+
+cleanup_private_binding_snapshot() {
+  local directory="${LOCAL_TEMP_DIR:-}"
+  local cleanup_status=0
+  local path
+  local -a owned_before=("${OWNED_TEMP_FILES[@]}")
+  if [[ -n "${BINDING_SNAPSHOT_MAIN:-}" ]]; then
+    path="$BINDING_SNAPSHOT_MAIN-shm"
+    if [[ -e "$path" || -L "$path" ]]; then
+      register_temp_file "$path"
+      owned_before+=("$path")
+    fi
+  fi
+  cleanup_local_temps || cleanup_status=1
+  if (( cleanup_status != 0 )); then
+    LOCAL_TEMP_DIR="$directory"
+    OWNED_TEMP_FILES=()
+    for path in "${owned_before[@]}"; do
+      if [[ -e "$path" || -L "$path" ]]; then
+        register_temp_file "$path"
+      fi
+    done
+  elif [[ -n "$directory" && ( -e "$directory" || -L "$directory" ) ]]; then
+    cleanup_status=1
+  fi
+  BINDING_SNAPSHOT_MAIN=''
+  BINDING_SNAPSHOT_WAL=''
+  BINDING_SNAPSHOT_TOPOLOGY=''
+  return "$cleanup_status"
 }
 
 validate_distinct_destinations() {
