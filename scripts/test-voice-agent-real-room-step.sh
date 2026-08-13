@@ -3929,16 +3929,91 @@ for publisher in (diagnostic_publisher, state_publisher):
     assert "follow_symlinks=True" in publisher
     assert "os._exit(0)" in publisher
     assert publisher.index("os.link(") < publisher.index("os._exit(0)")
-state_tree = ast.parse(state_publisher)
-publish = next(
-    node for node in state_tree.body
-    if isinstance(node, ast.FunctionDef) and node.name == "publish"
+def is_os_attribute(node, name):
+    return (
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "os"
+        and node.attr == name
+    )
+
+
+def validate_state_publisher(source):
+    tree = ast.parse(source)
+    publish = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "publish"
+    )
+    link_statement = publish.body[-2]
+    assert isinstance(link_statement, ast.Expr)
+    link_call = link_statement.value
+    assert isinstance(link_call, ast.Call)
+    assert is_os_attribute(link_call.func, "link")
+    assert len(link_call.args) == 2
+    expected_source = ast.parse(
+        'f"/proc/self/fd/{unnamed_fd}"', mode="eval"
+    ).body
+    assert ast.dump(link_call.args[0]) == ast.dump(expected_source)
+    assert isinstance(link_call.args[1], ast.Name)
+    assert link_call.args[1].id == "name"
+    keywords = {keyword.arg: keyword.value for keyword in link_call.keywords}
+    assert set(keywords) == {"dst_dir_fd", "follow_symlinks"}
+    assert isinstance(keywords["dst_dir_fd"], ast.Name)
+    assert keywords["dst_dir_fd"].id == "parent_fd"
+    assert isinstance(keywords["follow_symlinks"], ast.Constant)
+    assert keywords["follow_symlinks"].value is True
+    exit_statement = publish.body[-1]
+    assert isinstance(exit_statement, ast.Expr)
+    exit_call = exit_statement.value
+    assert isinstance(exit_call, ast.Call)
+    assert is_os_attribute(exit_call.func, "_exit")
+    assert len(exit_call.args) == 1
+    assert isinstance(exit_call.args[0], ast.Constant)
+    assert exit_call.args[0].value == 0
+    assert not exit_call.keywords
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if isinstance(node.func, ast.Attribute):
+            assert node.func.attr not in {"unlink", "remove"}
+        elif isinstance(node.func, ast.Name):
+            assert node.func.id not in {"unlink", "remove"}
+    for forbidden in (".voice-step-state.", "tempfile", "mkstemp"):
+        assert forbidden not in source
+
+
+def assert_state_publisher_rejected(source):
+    try:
+        validate_state_publisher(source)
+    except AssertionError:
+        return
+    raise AssertionError("mutated state publisher escaped source invariants")
+
+
+validate_state_publisher(state_publisher)
+mutations = (
+    state_publisher.replace("        dst_dir_fd=parent_fd,\n", ""),
+    state_publisher.replace(
+        'f"/proc/self/fd/{unnamed_fd}",\n', '"wrong-source",\n'
+    ),
+    state_publisher.replace("        name,\n", "        wrong_name,\n"),
+    state_publisher.replace(
+        "        follow_symlinks=True,\n", "        follow_symlinks=False,\n"
+    ),
+    state_publisher.replace(
+        "    for handled_signal in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):\n",
+        "    os.remove(name, dir_fd=parent_fd)\n"
+        "    for handled_signal in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):\n",
+    ),
+    state_publisher.replace(
+        "    for handled_signal in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):\n",
+        "    Path(name).unlink()\n"
+        "    for handled_signal in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):\n",
+    ),
 )
-assert isinstance(publish.body[-2], ast.Expr)
-assert ast.unparse(publish.body[-2]).startswith("os.link(")
-assert ast.unparse(publish.body[-1]) == "os._exit(0)"
-for forbidden in (".voice-step-state.", "os.unlink(", "tempfile", "mkstemp"):
-    assert forbidden not in state_publisher
+assert all(mutated != state_publisher for mutated in mutations)
+for mutated in mutations:
+    assert_state_publisher_rejected(mutated)
 for forbidden in (
     ".voice-step-diagnostic.",
     "os.unlink(",
