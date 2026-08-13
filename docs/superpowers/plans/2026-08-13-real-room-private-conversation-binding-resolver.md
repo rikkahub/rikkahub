@@ -35,6 +35,7 @@
 - `scripts/voice-agent-real-room-binding-selector.py`: validate a private local SQLite snapshot and creation window, read only the permitted columns, and return the selected UUID on private stdout.
 - `scripts/test-voice-agent-real-room-binding-selector.sh`: construct real main-only and main+WAL SQLite fixtures and test selection/validation without the managed-device layer.
 - `scripts/voice-agent-real-room-binding-publisher.py`: own the anonymous-inode publication and irreversible success boundary.
+- `scripts/voice-agent-real-room-signal-mask.py`: block HUP/INT/TERM before private resolver work and exec the Bash helper with the mask inherited.
 - `scripts/test-voice-agent-real-room-binding-publisher.sh`: isolate filesystem, race, signal, short-write, and output-fault behavior at the commit boundary.
 - `scripts/voice-agent-real-room-lib.sh`: add reusable creation-window, private-destination, snapshot capture/verification, and cleanup-proof helpers.
 - `scripts/voice-agent-real-room-step.sh`: parse and dispatch `resolve-binding`, orchestrate the managed read-only flow, and terminally `exec` the publisher.
@@ -256,6 +257,9 @@ git commit -m "feat: add terminal private binding publisher"
 ### Task 3: Managed Resolver Integration and Complete Regression Suite
 
 **Files:**
+- Create: `scripts/voice-agent-real-room-signal-mask.py`
+- Modify: `scripts/voice-agent-real-room-binding-publisher.py`
+- Modify: `scripts/test-voice-agent-real-room-binding-publisher.sh`
 - Modify: `scripts/voice-agent-real-room-lib.sh`
 - Modify: `scripts/voice-agent-real-room-step.sh`
 - Modify: `scripts/test-voice-agent-real-room-step.sh`
@@ -263,6 +267,14 @@ git commit -m "feat: add terminal private binding publisher"
 **Interfaces:**
 - Consumes: Task 1 executable `voice-agent-real-room-binding-selector.py MAIN WAL_OR_DASH AFTER BEFORE`; Task 2 executable `voice-agent-real-room-binding-publisher.py DESTINATION PARENT_DEV_INO UUID`.
 - Produces: public helper operation `resolve-binding --mdev-owner OWNER --package PACKAGE --binding-output PATH --created-after-epoch-ms INCLUSIVE --created-before-epoch-ms EXCLUSIVE`, with terminal success/failure semantics from the Global Constraints.
+
+The signal-mask launcher consumes `HELPER_PATH` followed by the unchanged
+helper argv, calls `signal.pthread_sigmask(signal.SIG_BLOCK, {SIGHUP, SIGINT,
+SIGTERM})`, sets one fixed private re-exec marker, and replaces itself with the
+helper through `os.execve`. The helper re-execs through it only for
+`resolve-binding` and only before validation or private work. The publisher
+installs its pre-link failure handlers, calls `signal.pthread_sigmask` to
+unblock exactly those signals, and only then proceeds toward its final link.
 
 - [ ] **Step 1: Add failing end-to-end fake-managed-device tests**
 

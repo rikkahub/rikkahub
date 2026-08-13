@@ -57,44 +57,50 @@ change the successful exit status.
 
 ## Data Flow
 
-1. Validate runtime, managed owner, debug package identity, and the private
+1. Before private work, re-exec `resolve-binding` once through a minimal Python
+   signal-mask launcher. It blocks HUP/INT/TERM in the current process and
+   execs the Bash helper, so the mask remains inherited throughout capture and
+   the terminal publisher handoff.
+2. Validate runtime, managed owner, debug package identity, and the private
    output destination.
-2. Validate the caller-supplied creation window, then open a mode-`0700` local
+3. Validate the caller-supplied creation window, then open a mode-`0700` local
    temporary directory.
-3. Capture one of exactly two allowed source topologies:
+4. Capture one of exactly two allowed source topologies:
    `databases/rikka_hub` alone, or `databases/rikka_hub` plus
    `databases/rikka_hub-wal`. Never transfer `databases/rikka_hub-shm`.
    SQLite documents that SHM contains no database content and is unnecessary
    for recovery; a clean final close normally checkpoints and removes both WAL
    and SHM. See [SQLite WAL-mode file format](https://www.sqlite.org/walformat.html).
-4. Require each captured source to be a regular non-symlink file. The main
+5. Require each captured source to be a regular non-symlink file. The main
    database must be between 512 bytes and 64 MiB; an extant WAL must be between
    32 bytes and 64 MiB; their aggregate must not exceed 128 MiB.
-5. Before capture, record the exact main/WAL topology and compute each source's
+6. Before capture, record the exact main/WAL topology and compute each source's
    byte size and SHA-256 content digest on-device. Read each source through the
    production managed `run-as ... sh -c` transport, encode it on-device with
    Base64, and decode it only inside the private host directory. Recompute the
    device topology, sizes, and content digests after capture and require exact
    equality with the pre-capture values. Independently require each decoded
    host file's size and digest to equal its bound device values.
-6. Open the local snapshot read-only with host Python `sqlite3`. For a
+7. Open the local snapshot read-only with host Python `sqlite3`. For a
    main+WAL topology, allow SQLite to reconstruct a host-local WAL index inside
    the private temporary directory; never copy the device SHM. Read only `id`
    and `create_at` from `ConversationEntity`; never read titles, nodes,
    `update_at`, prompts, or messages.
-7. Restrict candidates to `create_at >= INCLUSIVE` and
+8. Restrict candidates to `create_at >= INCLUSIVE` and
    `create_at < EXCLUSIVE`. Require canonical UUIDs and integer creation
    timestamps. Select the single row with the greatest `create_at`; an empty
    set, equal maximum timestamps, malformed row, invalid snapshot, or changed
    source fails closed.
-8. Retain only the selected UUID in command-local memory. Close SQLite and
+9. Retain only the selected UUID in command-local memory. Close SQLite and
    remove the database, WAL, any host-created SHM, Base64 intermediates, and
    every other local temporary. Cleanup failure is terminal and must occur
    while the caller's destination is still absent.
-9. After cleanup is proven complete, `exec` a private binding publisher as the
+10. After cleanup is proven complete, `exec` a private binding publisher as the
    terminal process. It reopens and revalidates the destination parent, writes
    the exact UUID payload into a mode-`0600` anonymous `O_TMPFILE` inode,
-   fsyncs and byte-verifies it, ignores HUP/INT/TERM, then atomically links it
+   fsyncs and byte-verifies it, installs its fixed-error pre-link handlers,
+   unblocks the inherited HUP/INT/TERM mask so pending signals fail closed,
+   then ignores those signals immediately before atomically linking the inode
    descriptor-relative through `/proc/self/fd`. That link is the final
    fallible commit. After a successful link, fixed success output is
    best-effort only and cannot change exit `0`; the publisher immediately
@@ -125,6 +131,10 @@ unique, it refuses to choose.
 - Treat the publisher's descriptor-relative link as the commit boundary. No
   unlink, cleanup, trap, signal handling, or outcome-affecting reporting
   follows it.
+- Block HUP/INT/TERM before any private resolver work and keep them blocked
+  across the Bash-to-publisher exec. The publisher alone installs the pre-link
+  failure handlers and unblocks them; no default-disposition handoff window is
+  permitted after private work begins.
 
 ## Error Handling
 
