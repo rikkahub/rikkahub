@@ -16,13 +16,13 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
+import me.rerere.rikkahub.CHAT_GENERATION_NOTIFICATION_ID
 import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
-import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.rikkahub.utils.sendNotification
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.uuid.Uuid
@@ -83,7 +83,7 @@ class ChatNotificationManager(
     }
 
     private fun handleGenerationEnded(event: AppEvent.ChatGenerationEnded) {
-        cancelLiveUpdateNotification(event.conversationId)
+        liveUpdateLastSentAt.remove(event.conversationId)
 
         val contentPreview = event.contentPreview ?: return
         if (isForeground.value) return
@@ -109,10 +109,6 @@ class ChatNotificationManager(
         }
     }
 
-    private fun getLiveUpdateNotificationId(conversationId: Uuid): Int {
-        return conversationId.hashCode() + 10000
-    }
-
     private fun sendLiveUpdateNotification(
         conversationId: Uuid,
         lastMessage: UIMessage,
@@ -123,7 +119,7 @@ class ChatNotificationManager(
 
         context.sendNotification(
             channelId = CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID,
-            notificationId = getLiveUpdateNotificationId(conversationId)
+            notificationId = CHAT_GENERATION_NOTIFICATION_ID
         ) {
             title = senderName
             content = contentText
@@ -179,11 +175,6 @@ class ChatNotificationManager(
                 )
             }
         }
-    }
-
-    private fun cancelLiveUpdateNotification(conversationId: Uuid) {
-        liveUpdateLastSentAt.remove(conversationId)
-        context.cancelNotification(getLiveUpdateNotificationId(conversationId))
     }
 
     private fun getPendingIntent(context: Context, conversationId: Uuid): PendingIntent {
