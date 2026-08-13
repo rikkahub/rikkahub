@@ -1168,7 +1168,7 @@ import re
 import sys
 
 lines = sys.stdin.read().splitlines()
-if not lines or lines[0] != "UID PID PPID STAT NAME":
+if not lines or lines[0].split() != ["UID", "PID", "PPID", "STAT", "NAME"]:
     raise SystemExit(1)
 for line in lines[1:]:
     fields = line.split()
