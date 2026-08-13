@@ -13,6 +13,7 @@ SUCCESS = (
 )
 ERROR = b"voice-step.error=operation failed\n"
 IDENTITY = re.compile(r"^([0-9]+):([0-9]+)$")
+HANDLED_SIGNALS = {signal.SIGHUP, signal.SIGINT, signal.SIGTERM}
 
 
 def write_all(fd: int, payload: bytes) -> None:
@@ -142,9 +143,9 @@ def exit_failure() -> None:
 
 def main() -> None:
     try:
-        signal.signal(signal.SIGHUP, fail_signal)
-        signal.signal(signal.SIGINT, fail_signal)
-        signal.signal(signal.SIGTERM, fail_signal)
+        for handled_signal in HANDLED_SIGNALS:
+            signal.signal(handled_signal, fail_signal)
+        signal.pthread_sigmask(signal.SIG_UNBLOCK, HANDLED_SIGNALS)
         publish(sys.argv[1:])
     except BaseException:
         exit_failure()

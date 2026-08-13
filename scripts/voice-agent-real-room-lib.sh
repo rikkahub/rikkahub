@@ -121,6 +121,11 @@ validate_fixture_size() {
 }
 
 validate_runtime() {
+  local broadcast_mode="${1:-ordered-broadcast}"
+  case "$broadcast_mode" in
+    ordered-broadcast|without-broadcast) ;;
+    *) die 'invalid runtime validation mode' ;;
+  esac
   validate_positive_integer "${VOICE_STEP_ADB_TIMEOUT_SECONDS:-10}"
   validate_positive_integer "${VOICE_STEP_WAIT_TIMEOUT_SECONDS:-120}"
   validate_positive_integer "${VOICE_STEP_MAX_WAIT_ATTEMPTS:-120}"
@@ -142,7 +147,7 @@ validate_runtime() {
   require_command cmp
   require_command flock
   require_command mkdir
-  if [[ "${VALIDATE_RUNTIME_SKIP_BROADCAST:-0}" != 1 ]]; then
+  if [[ "$broadcast_mode" == ordered-broadcast ]]; then
     ensure_ordered_broadcast_output
   fi
 }

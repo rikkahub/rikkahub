@@ -11,11 +11,14 @@ DIAGNOSTICS="$ROOT_DIR/scripts/voice-agent-real-room-diagnostics.sh"
 STATE_PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-state-publisher.py"
 SELECTOR="$ROOT_DIR/scripts/voice-agent-real-room-binding-selector.py"
 PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-binding-publisher.py"
+SIGNAL_MASK_LAUNCHER="$ROOT_DIR/scripts/voice-agent-real-room-signal-mask.py"
 REAL_TIMEOUT="$(command -v timeout)"
 REAL_LN="$(command -v ln)"
 REAL_RMDIR="$(command -v rmdir)"
 REAL_RM="$(command -v rm)"
 REAL_STAT="$(command -v stat)"
+REAL_BASE64="$(command -v base64)"
+REAL_SHA256SUM="$(command -v sha256sum)"
 CURRENT_UID="$(id -u)"
 MDEV_OWNER='OWNER_SECRET_123'
 OTHER_MDEV_OWNER='OTHER_OWNER_SECRET_456'
@@ -1281,12 +1284,21 @@ if (
         raise SystemExit(1)
     if exec_out_run_as_tail[-2:] != ["databases/rikka_hub", "databases/rikka_hub-wal"]:
         raise SystemExit(1)
-    main = remote_host_path(exec_out_run_as_tail[-2])
-    wal = remote_host_path(exec_out_run_as_tail[-1])
+    script = exec_out_run_as_tail[2]
+    remote_arguments = exec_out_run_as_tail[-2:]
+    main = remote_host_path(remote_arguments[0])
+    wal = remote_host_path(remote_arguments[1])
+    phase_log = os.environ.get("FAKE_BINDING_PHASE_LOG")
 
-    def inject(action):
+    def record_phase(value):
+        if phase_log:
+            with open(phase_log, "a", encoding="ascii") as handle:
+                handle.write(value + "\n")
+
+    def inject(action, phase):
         if not action:
             return
+        record_phase(phase + ":" + action)
         target = wal if action.endswith("-wal") else main
         if action.startswith("remove-"):
             target.unlink(missing_ok=True)
@@ -1304,73 +1316,148 @@ if (
             target.mkdir(mode=0o700)
         else:
             raise SystemExit(2)
+    inject(os.environ.get("FAKE_BINDING_BEFORE_METADATA"), "before-metadata")
+    wrapper_directory = REMOTE_APP_DATA_ROOT / ".binding-snapshot-bin"
+    wrapper_directory.mkdir(mode=0o700)
+    wrapper_source = wrapper_directory / "binding-tool"
+    wrapper_source.write_text(
+        r'''#!/usr/bin/env python3
+import base64
+import os
+import subprocess
+import sys
+from pathlib import Path
 
-    def component(path):
-        metadata = path.lstat()
-        if path.is_symlink() or not path.is_file():
-            raise OSError
-        minimum = 512 if path == main else 32
-        if metadata.st_size < minimum or metadata.st_size > 67_108_864:
-            raise OSError
-        payload = path.read_bytes()
-        return len(payload), hashlib.sha256(payload).hexdigest(), payload
+tool = os.path.basename(sys.argv[0])
+root = Path(os.environ["FAKE_BINDING_ROOT"])
+main = root / "databases/rikka_hub"
+wal = root / "databases/rikka_hub-wal"
+phase_log = os.environ.get("FAKE_BINDING_PHASE_LOG")
 
-    def snapshot():
-        main_value = component(main)
-        if wal.is_symlink():
-            raise OSError
-        wal_value = component(wal) if wal.exists() else None
-        if wal_value is not None and main_value[0] + wal_value[0] > 134_217_728:
-            raise OSError
-        return main_value, wal_value
 
-    def metadata(tag, values):
-        main_value, wal_value = values
-        topology = "main-wal" if wal_value is not None else "main"
-        lines = [
-            f"BINDING-{tag}-BEGIN",
-            f"topology={topology}",
-            f"main-size={main_value[0]}",
-            f"main-sha256={main_value[1]}",
-        ]
-        if wal_value is not None:
-            lines.extend((f"wal-size={wal_value[0]}", f"wal-sha256={wal_value[1]}"))
-        lines.append(f"BINDING-{tag}-END")
-        return "\n".join(lines).encode() + b"\n"
+def record(value):
+    if phase_log:
+        with open(phase_log, "a", encoding="ascii") as handle:
+            handle.write(value + "\n")
 
-    try:
-        inject(os.environ.get("FAKE_BINDING_BEFORE_METADATA"))
-        before = snapshot()
-        main_payload = before[0][2]
-        wal_payload = before[1][2] if before[1] is not None else None
-        transfer_corruption = os.environ.get("FAKE_BINDING_TRANSFER_CORRUPTION")
-        if transfer_corruption == "main-size":
-            main_payload += b"X"
-        elif transfer_corruption == "main-digest" and main_payload:
-            main_payload = bytes([main_payload[0] ^ 1]) + main_payload[1:]
-        elif transfer_corruption == "wal-size" and wal_payload is not None:
-            wal_payload += b"X"
-        elif transfer_corruption == "wal-digest" and wal_payload:
-            wal_payload = bytes([wal_payload[0] ^ 1]) + wal_payload[1:]
-        inject(os.environ.get("FAKE_BINDING_AFTER_ENCODED_TRANSFER"))
-        inject(os.environ.get("FAKE_BINDING_BEFORE_POST_METADATA"))
-        after = snapshot()
-    except (FileNotFoundError, OSError):
-        raise SystemExit(1)
-    output = bytearray(metadata("PRE", before))
-    output.extend(b"BINDING-MAIN-BASE64-BEGIN\n")
-    if transfer_corruption == "malformed-base64":
-        output.extend(b"!not-base64!\n")
+
+def inject(action, phase):
+    if not action:
+        return
+    record(phase + ":" + action)
+    target = wal if action.endswith("-wal") else main
+    if action.startswith("remove-"):
+        target.unlink(missing_ok=True)
+    elif action.startswith("mutate-"):
+        with target.open("ab") as handle:
+            handle.write(b"X")
+    elif action.startswith("add-"):
+        target.write_bytes(b"W" * 32)
+        target.chmod(0o600)
+    elif action.startswith("symlink-"):
+        target.unlink(missing_ok=True)
+        target.symlink_to(main if target == wal else wal)
+    elif action.startswith("directory-"):
+        target.unlink(missing_ok=True)
+        target.mkdir(mode=0o700)
     else:
-        output.extend(base64.encodebytes(main_payload))
-    output.extend(b"BINDING-MAIN-BASE64-END\n")
-    if wal_payload is not None:
-        output.extend(b"BINDING-WAL-BASE64-BEGIN\n")
-        output.extend(base64.encodebytes(wal_payload))
-        output.extend(b"BINDING-WAL-BASE64-END\n")
-    output.extend(metadata("POST", after))
-    sys.stdout.buffer.write(output)
+        raise SystemExit(92)
+
+
+expected_fd = int(os.environ["FAKE_BINDING_INHERITED_FD"])
+expected_identity = os.environ["FAKE_BINDING_INHERITED_IDENTITY"]
+try:
+    metadata = os.fstat(expected_fd)
+except OSError:
+    record("inherited-fd-closed")
+else:
+    if f"{metadata.st_dev}:{metadata.st_ino}" == expected_identity:
+        record("inherited-fd-leaked")
+        raise SystemExit(93)
+
+if tool == "stat":
+    counter = Path(os.environ["FAKE_BINDING_STAT_COUNTER"])
+    count = int(counter.read_text(encoding="ascii") or "0") + 1
+    counter.write_text(str(count), encoding="ascii")
+    if count == int(os.environ["FAKE_BINDING_POST_STAT_INDEX"]):
+        inject(os.environ.get("FAKE_BINDING_BEFORE_POST_METADATA"), "before-post-metadata")
+    executable = os.environ["REAL_STAT"]
+elif tool == "sha256sum":
+    executable = os.environ["REAL_SHA256SUM"]
+elif tool == "base64":
+    counter = Path(os.environ["FAKE_BINDING_BASE64_COUNTER"])
+    count = int(counter.read_text(encoding="ascii") or "0") + 1
+    counter.write_text(str(count), encoding="ascii")
+    target = Path(sys.argv[-1])
+    corruption = os.environ.get("FAKE_BINDING_TRANSFER_CORRUPTION")
+    component = "wal" if target.name.endswith("-wal") else "main"
+    if corruption == "malformed-base64" and component == "main":
+        sys.stdout.buffer.write(b"!not-base64!\n")
+    elif corruption in {component + "-size", component + "-digest"}:
+        payload = target.read_bytes()
+        if corruption.endswith("-size"):
+            payload += b"X"
+        elif payload:
+            payload = bytes([payload[0] ^ 1]) + payload[1:]
+        sys.stdout.buffer.write(base64.encodebytes(payload))
+    else:
+        completed = subprocess.run(
+            [os.environ["REAL_BASE64"], *sys.argv[1:]], check=False
+        )
+        if completed.returncode != 0:
+            raise SystemExit(completed.returncode)
+    if count == int(os.environ["FAKE_BINDING_EXPECTED_BASE64S"]):
+        inject(os.environ.get("FAKE_BINDING_AFTER_ENCODED_TRANSFER"), "after-transfer")
     raise SystemExit(0)
+else:
+    raise SystemExit(94)
+
+os.execv(executable, [executable, *sys.argv[1:]])
+''',
+        encoding="utf-8",
+    )
+    wrapper_source.chmod(0o700)
+    for name in ("stat", "sha256sum", "base64"):
+        (wrapper_directory / name).symlink_to(wrapper_source.name)
+    base64_counter = REMOTE_APP_DATA_ROOT / ".binding-base64-count"
+    stat_counter = REMOTE_APP_DATA_ROOT / ".binding-stat-count"
+    base64_counter.write_text("0", encoding="ascii")
+    stat_counter.write_text("0", encoding="ascii")
+    inherited_path = REMOTE_APP_DATA_ROOT / ".binding-inherited-private"
+    inherited_fd = os.open(inherited_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    inherited_metadata = os.fstat(inherited_fd)
+    environment = os.environ.copy()
+    has_wal = wal.exists() or wal.is_symlink()
+    environment.update({
+        "PATH": str(wrapper_directory) + os.pathsep + environment["PATH"],
+        "FAKE_BINDING_ROOT": str(REMOTE_APP_DATA_ROOT),
+        "FAKE_BINDING_BASE64_COUNTER": str(base64_counter),
+        "FAKE_BINDING_STAT_COUNTER": str(stat_counter),
+        "FAKE_BINDING_EXPECTED_BASE64S": "2" if has_wal else "1",
+        "FAKE_BINDING_POST_STAT_INDEX": "3" if has_wal else "2",
+        "FAKE_BINDING_INHERITED_FD": str(inherited_fd),
+        "FAKE_BINDING_INHERITED_IDENTITY": f"{inherited_metadata.st_dev}:{inherited_metadata.st_ino}",
+    })
+    executed_marker = os.environ.get("FAKE_BINDING_EXECUTED_BODY")
+    if executed_marker:
+        Path(executed_marker).write_text("started\n", encoding="ascii")
+    try:
+        completed = subprocess.run(
+            ["sh", "-c", script, "sh", *remote_arguments],
+            cwd=REMOTE_APP_DATA_ROOT,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=sys.stdout.buffer,
+            stderr=subprocess.DEVNULL,
+            pass_fds=(inherited_fd,),
+            check=False,
+        )
+    finally:
+        os.close(inherited_fd)
+    if executed_marker:
+        with open(executed_marker, "a", encoding="ascii") as handle:
+            handle.write(f"exit={completed.returncode}\n")
+    raise SystemExit(completed.returncode)
 if (
     exec_out_run_as_tail is not None
     and exec_out_run_as_tail[:2] == ["sh", "-c"]
@@ -1532,7 +1619,7 @@ export FAKE_ADB_LOG="$ADB_LOG"
 export FAKE_TIMEOUT_LOG="$TIMEOUT_LOG"
 export FAKE_LN_LOG="$LN_LOG"
 export FAKE_ADB_STATE="$FAKE_STATE"
-export REAL_TIMEOUT REAL_LN REAL_RMDIR REAL_RM REAL_STAT
+export REAL_TIMEOUT REAL_LN REAL_RMDIR REAL_RM REAL_STAT REAL_BASE64 REAL_SHA256SUM
 export FAKE_MDEV_OWNER="$MDEV_OWNER"
 export FAKE_REMOTE_APP_DATA_ROOT="$REMOTE_APP_DATA_ROOT"
 export FAKE_RMDIR_BOUNDARY_FILE="$RMDIR_BOUNDARY_FILE"
@@ -1658,11 +1745,16 @@ PY
   unset FAKE_BINDING_BEFORE_METADATA FAKE_BINDING_AFTER_ENCODED_TRANSFER
   unset FAKE_BINDING_BEFORE_POST_METADATA FAKE_BINDING_TRANSFER_CORRUPTION
   unset FAKE_BINDING_SELECTOR_FAILURE FAKE_BINDING_SELECTOR_LEAVE_SHM
-  unset FAKE_BINDING_CLEANUP_FAIL_ONCE
+  unset FAKE_BINDING_CLEANUP_FAIL_ONCE FAKE_BINDING_PHASE_LOG
+  unset FAKE_BINDING_EXECUTED_BODY VOICE_STEP_BINDING_ENV_LEAK_MARKER
+  unset VOICE_STEP_BINDING_PUBLISHER_UNBLOCKED
+  unset VOICE_STEP_SIGNAL_LAUNCHER_STARTED
   unset VOICE_STEP_BINDING_PUBLISHER_INJECTION VOICE_STEP_BINDING_PUBLISHER_MARKER
   unset VOICE_STEP_BINDING_PUBLISHER_SIGNAL VOICE_STEP_BINDING_PUBLISHER_PARENT
   unset VOICE_STEP_BINDING_PUBLISHER_REPLACEMENT_PARENT
   unset VOICE_STEP_BINDING_PUBLISHER_STARTED VOICE_STEP_RESOLVER_ORDER_LOG
+  unset RESOLVE_BINDING_ERROR_MODE VALIDATE_RUNTIME_SKIP_BROADCAST
+  unset VOICE_STEP_RESOLVE_SIGNAL_MASKED
 }
 
 make_fixture() {
@@ -1761,6 +1853,7 @@ from pathlib import Path
 
 is_publisher = os.path.basename(sys.argv[0]) == "voice-agent-real-room-binding-publisher.py"
 is_selector = os.path.basename(sys.argv[0]) == "voice-agent-real-room-binding-selector.py"
+is_launcher = os.path.basename(sys.argv[0]) == "voice-agent-real-room-signal-mask.py"
 action = os.environ.get("VOICE_STEP_BINDING_PUBLISHER_INJECTION")
 marker = os.environ.get("VOICE_STEP_BINDING_PUBLISHER_MARKER")
 real_open = os.open
@@ -1768,9 +1861,17 @@ real_write = os.write
 real_fstat = os.fstat
 real_link = os.link
 real_signal = signal.signal
+real_pthread_sigmask = signal.pthread_sigmask
 real_close = os.close
 shortened = False
 replaced = False
+
+leak_marker = os.environ.get("VOICE_STEP_BINDING_ENV_LEAK_MARKER")
+if leak_marker and "selected" in os.environ:
+    Path(leak_marker).write_text("private-value-exported\n", encoding="ascii")
+launcher_marker = os.environ.get("VOICE_STEP_SIGNAL_LAUNCHER_STARTED")
+if is_launcher and launcher_marker:
+    Path(launcher_marker).write_text("launcher-started\n", encoding="ascii")
 
 if is_selector and os.environ.get("FAKE_BINDING_SELECTOR_FAILURE") == "1":
     if os.environ.get("FAKE_BINDING_SELECTOR_LEAVE_SHM") == "1" and len(sys.argv) > 1:
@@ -1853,11 +1954,26 @@ def controlled_signal(signum, handler):
     return real_signal(signum, handler)
 
 
+def controlled_pthread_sigmask(how, mask):
+    if is_publisher and how == signal.SIG_UNBLOCK:
+        if set(mask) != {signal.SIGHUP, signal.SIGINT, signal.SIGTERM}:
+            raise AssertionError("publisher unblocked the wrong signal set")
+        unblocked = os.environ.get("VOICE_STEP_BINDING_PUBLISHER_UNBLOCKED")
+        if unblocked:
+            Path(unblocked).write_text("publisher-unblock\n", encoding="ascii")
+        order_log = os.environ.get("VOICE_STEP_RESOLVER_ORDER_LOG")
+        if order_log:
+            with open(order_log, "a", encoding="ascii") as handle:
+                handle.write("publisher-unblock\n")
+    return real_pthread_sigmask(how, mask)
+
+
 os.open = controlled_open
 os.write = controlled_write
 os.fstat = controlled_fstat
 os.link = controlled_link
 signal.signal = controlled_signal
+signal.pthread_sigmask = controlled_pthread_sigmask
 PY
 }
 
@@ -6483,6 +6599,21 @@ run_resolve_binding_tests() {
   local main="$REMOTE_APP_DATA_ROOT/databases/rikka_hub"
   local wal="$REMOTE_APP_DATA_ROOT/databases/rikka_hub-wal"
 
+  reset_fake
+  site="$TMP_DIR/binding-hostile-old-operation-site"
+  marker="$TMP_DIR/binding-hostile-old-operation-launcher"
+  make_binding_publisher_site "$site"
+  export RESOLVE_BINDING_ERROR_MODE=1 VALIDATE_RUNTIME_SKIP_BROADCAST=1
+  VOICE_STEP_SIGNAL_LAUNCHER_STARTED="$marker" PYTHONPATH="$site" \
+    run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=preflight\nvoice-step.device=ready\nvoice-step.package=ready\nvoice-step.automation=ready\nvoice-step.protected_path=ready'
+  [[ ! -e "$marker" ]] || fail "resolve-binding internal modes routed an old operation through launcher"
+  run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub
+  [[ "$RUN_STATUS" -ne 0 && "$(<"$STDERR_FILE")" == 'voice-step.error=invalid package' ]] ||
+    fail "resolve-binding inherited error mode changed old-operation failure surface"
+  unset RESOLVE_BINDING_ERROR_MODE VALIDATE_RUNTIME_SKIP_BROADCAST
+  pass
+
   for topology in main main-wal; do
     reset_fake
     make_default_binding_snapshot "$topology"
@@ -6491,11 +6622,20 @@ run_resolve_binding_tests() {
     chmod 700 "$output_parent"
     destination="$output_parent/binding"
     site="$TMP_DIR/binding-success-$topology-site"
+    marker="$TMP_DIR/binding-success-$topology-body"
+    local phase_log="$TMP_DIR/binding-success-$topology-phases"
     make_binding_publisher_site "$site"
-    VOICE_STEP_RESOLVER_ORDER_LOG="$RESOLVER_ORDER_LOG" PYTHONPATH="$site" \
+    FAKE_BINDING_EXECUTED_BODY="$marker" FAKE_BINDING_PHASE_LOG="$phase_log" \
+      VOICE_STEP_RESOLVER_ORDER_LOG="$RESOLVER_ORDER_LOG" PYTHONPATH="$site" \
       run_binding_helper "$destination"
     assert_binding_success "$destination"
-    [[ "$(<"$RESOLVER_ORDER_LOG")" == $'resolver-cleanup-complete\npublisher-link' ]] ||
+    [[ "$(<"$marker")" == $'started\nexit=0' ]] ||
+      fail "resolve-binding $topology: fake did not execute the production managed body"
+    grep -qx 'inherited-fd-closed' "$phase_log" ||
+      fail "resolve-binding $topology: production managed body did not close inherited fds"
+    ! grep -qx 'inherited-fd-leaked' "$phase_log" ||
+      fail "resolve-binding $topology: production managed body leaked inherited fd"
+    [[ "$(<"$RESOLVER_ORDER_LOG")" == $'resolver-cleanup-complete\npublisher-unblock\npublisher-link' ]] ||
       fail "resolve-binding $topology: cleanup did not precede publication"
   done
 
@@ -6510,6 +6650,24 @@ run_resolve_binding_tests() {
     --created-after-epoch-ms "0$BINDING_WINDOW_START" \
     --created-before-epoch-ms "0$BINDING_WINDOW_END"
   assert_binding_success "$destination"
+
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-hostile-selected"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  destination="$output_parent/binding"
+  site="$TMP_DIR/binding-hostile-selected-site"
+  marker="$TMP_DIR/binding-hostile-selected-leak"
+  make_binding_publisher_site "$site"
+  selected="$BINDING_INTENDED"
+  export selected
+  VOICE_STEP_BINDING_ENV_LEAK_MARKER="$marker" PYTHONPATH="$site" \
+    run_binding_helper "$destination"
+  unset selected
+  assert_binding_success "$destination"
+  [[ ! -e "$marker" ]] || fail "resolve-binding exported selected UUID to a child environment"
+  pass
 
   reset_fake
   make_default_binding_snapshot main
@@ -6678,7 +6836,45 @@ run_resolve_binding_tests() {
     destination="$output_parent/binding"
     run_binding_helper "$destination"
     assert_binding_failure "$destination" "$label"
+    [[ "$(<"$REMOTE_APP_DATA_ROOT/.binding-base64-count")" == 0 ]] ||
+      fail "resolve-binding $label: fake bounds preempted production validation"
   done
+
+  local boundary component size expected_base64
+  local outcome
+  for boundary in main-min:main:512:1:failure main-max:main:67108864:1:failure \
+      wal-min:wal:32:2:failure wal-max:wal:67108864:2:success; do
+    IFS=: read -r label component size expected_base64 outcome <<<"$boundary"
+    reset_fake
+    make_default_binding_snapshot main-wal
+    if [[ "$component" == main ]]; then
+      rm -f -- "$wal"
+      truncate -s "$size" "$main"
+    else
+      truncate -s "$size" "$wal"
+    fi
+    output_parent="$TMP_DIR/binding-boundary-$label"
+    mkdir "$output_parent"
+    chmod 700 "$output_parent"
+    destination="$output_parent/binding"
+    run_binding_helper "$destination"
+    if [[ "$outcome" == success ]]; then
+      assert_binding_success "$destination"
+    else
+      assert_binding_failure "$destination" "$label selector rejection"
+    fi
+    [[ "$(<"$REMOTE_APP_DATA_ROOT/.binding-base64-count")" == "$expected_base64" ]] ||
+      fail "resolve-binding $label: exact production boundary was not transferred"
+  done
+  python3 - "$LIBRARY" <<'PY' || fail "resolve-binding aggregate bound contract changed"
+import sys
+
+source = open(sys.argv[1], encoding="utf-8").read()
+assert 67_108_864 + 67_108_864 == 134_217_728
+assert "main_size + wal_size > 134_217_728" in source
+assert "$((main_size + wal_size)) -le 134217728" in source
+PY
+  pass
 
   for label in main-size main-digest wal-size wal-digest malformed-base64; do
     reset_fake
@@ -6692,6 +6888,19 @@ run_resolve_binding_tests() {
   done
 
   local phase action
+  reset_fake
+  make_default_binding_snapshot main-wal
+  output_parent="$TMP_DIR/binding-race-BEFORE_METADATA-remove-main"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  destination="$output_parent/binding"
+  phase_log="$TMP_DIR/binding-race-BEFORE_METADATA-remove-main-phases"
+  FAKE_BINDING_PHASE_LOG="$phase_log" FAKE_BINDING_BEFORE_METADATA=remove-main \
+    run_binding_helper "$destination"
+  assert_binding_failure "$destination" "BEFORE_METADATA remove-main"
+  grep -qx 'before-metadata:remove-main' "$phase_log" ||
+    fail "resolve-binding BEFORE_METADATA remove-main: distinct injection phase was not reached"
+
   for phase in AFTER_ENCODED_TRANSFER BEFORE_POST_METADATA; do
     for action in mutate-main remove-wal add-wal; do
       reset_fake
@@ -6701,12 +6910,19 @@ run_resolve_binding_tests() {
       mkdir "$output_parent"
       chmod 700 "$output_parent"
       destination="$output_parent/binding"
+      phase_log="$TMP_DIR/binding-race-$phase-$action-phases"
       if [[ "$phase" == AFTER_ENCODED_TRANSFER ]]; then
-        FAKE_BINDING_AFTER_ENCODED_TRANSFER="$action" run_binding_helper "$destination"
+        FAKE_BINDING_PHASE_LOG="$phase_log" FAKE_BINDING_AFTER_ENCODED_TRANSFER="$action" \
+          run_binding_helper "$destination"
       else
-        FAKE_BINDING_BEFORE_POST_METADATA="$action" run_binding_helper "$destination"
+        FAKE_BINDING_PHASE_LOG="$phase_log" FAKE_BINDING_BEFORE_POST_METADATA="$action" \
+          run_binding_helper "$destination"
       fi
       assert_binding_failure "$destination" "$phase $action"
+      case "$phase" in
+        AFTER_ENCODED_TRANSFER) grep -qx "after-transfer:$action" "$phase_log" ;;
+        BEFORE_POST_METADATA) grep -qx "before-post-metadata:$action" "$phase_log" ;;
+      esac || fail "resolve-binding $phase $action: distinct injection phase was not reached"
     done
   done
 
@@ -6791,6 +7007,49 @@ run_resolve_binding_tests() {
     assert_binding_failure "$destination" "publisher pre-link $signal_name"
   done
 
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-pending-handoff"
+  site="$TMP_DIR/binding-pending-handoff-site"
+  marker="$TMP_DIR/binding-pending-handoff-unblocked"
+  local block_ready="$TMP_DIR/binding-pending-handoff-ready"
+  local block_release="$TMP_DIR/binding-pending-handoff-release"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  destination="$output_parent/binding"
+  make_binding_publisher_site "$site"
+  : >"$STDOUT_FILE"
+  : >"$STDERR_FILE"
+  TMPDIR="$HELPER_TEMP_ROOT" FAKE_ADB_BLOCK_MATCH=voice-step-binding-snapshot-v1 \
+    FAKE_ADB_BLOCK_READY="$block_ready" FAKE_ADB_BLOCK_RELEASE="$block_release" \
+    VOICE_STEP_BINDING_PUBLISHER_UNBLOCKED="$marker" \
+    VOICE_STEP_RESOLVER_ORDER_LOG="$RESOLVER_ORDER_LOG" PYTHONPATH="$site" \
+    "$HELPER" resolve-binding --mdev-owner "$MDEV_OWNER" \
+      --package me.rerere.rikkahub.debug --binding-output "$destination" \
+      --created-after-epoch-ms "$BINDING_WINDOW_START" \
+      --created-before-epoch-ms "$BINDING_WINDOW_END" \
+      >"$STDOUT_FILE" 2>"$STDERR_FILE" &
+  local helper_pid=$!
+  local attempt
+  for ((attempt = 0; attempt < 500; attempt++)); do
+    [[ ! -e "$block_ready" ]] || break
+    sleep 0.01
+  done
+  [[ -e "$block_ready" ]] || fail "resolve-binding pending-signal barrier was not reached"
+  kill -TERM "$helper_pid"
+  sleep 0.05
+  [[ -d "/proc/$helper_pid" ]] || fail "resolve-binding pending signal terminated Bash before publisher handoff"
+  : >"$block_release"
+  set +e
+  wait "$helper_pid"
+  RUN_STATUS=$?
+  set -e
+  assert_binding_failure "$destination" "pending handoff TERM"
+  [[ "$(<"$marker")" == publisher-unblock ]] ||
+    fail "resolve-binding pending signal was not delivered at publisher unblock"
+  [[ "$(<"$RESOLVER_ORDER_LOG")" == $'resolver-cleanup-complete\npublisher-unblock' ]] ||
+    fail "resolve-binding pending signal crossed the cleanup/publication boundary incorrectly"
+
   for action in post-signal stdout-error; do
     reset_fake
     make_default_binding_snapshot main
@@ -6830,6 +7089,7 @@ for requested in "${SELECTED_OPERATIONS[@]}"; do
 done
 
 [[ -x "$HELPER" ]] || fail "voice-agent-real-room-step.sh does not exist"
+[[ -x "$SIGNAL_MASK_LAUNCHER" ]] || fail "voice-agent-real-room-signal-mask.py does not exist"
 
 if [[ "$SELECT_ALL" -eq 1 ]]; then
   run_general_validation_tests

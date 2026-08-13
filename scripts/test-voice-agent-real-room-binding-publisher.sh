@@ -6,6 +6,7 @@ set +x
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-binding-publisher.py"
+SIGNAL_MASK_LAUNCHER="$ROOT_DIR/scripts/voice-agent-real-room-signal-mask.py"
 TMP_DIR="$(mktemp -d)"
 chmod 700 "$TMP_DIR"
 UUID="123e4567-e89b-12d3-a456-426614174000"
@@ -49,6 +50,27 @@ run_publisher_arguments() {
   set +e
   { python3 "$PUBLISHER" "$@" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr"; } \
     2>"$TMP_DIR/launcher-stderr"
+  RUN_STATUS=$?
+  set -e
+}
+
+run_pending_publisher() {
+  local destination="$1" identity="$2" signal_name="$3"
+  : >"$TMP_DIR/stdout"
+  : >"$TMP_DIR/stderr"
+  set +e
+  python3 - "$PUBLISHER" "$destination" "$identity" "$UUID" "$signal_name" \
+    >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr" <<'PY'
+import os
+import signal
+import sys
+
+publisher, destination, identity, conversation, signal_name = sys.argv[1:]
+handled = {signal.SIGHUP, signal.SIGINT, signal.SIGTERM}
+signal.pthread_sigmask(signal.SIG_BLOCK, handled)
+os.kill(os.getpid(), getattr(signal, "SIG" + signal_name))
+os.execv(sys.executable, [sys.executable, publisher, destination, identity, conversation])
+PY
   RUN_STATUS=$?
   set -e
 }
@@ -225,6 +247,30 @@ assert_no_named_temporary() {
 }
 
 [[ -x "$PUBLISHER" ]] || fail "publisher: private binding publisher is missing"
+[[ -x "$SIGNAL_MASK_LAUNCHER" ]] || fail "publisher: signal-mask launcher is missing"
+
+launcher_target="$TMP_DIR/signal-mask-target.py"
+launcher_receipt="$TMP_DIR/signal-mask-receipt"
+cat >"$launcher_target" <<'PY'
+#!/usr/bin/env python3
+import os
+import signal
+import sys
+
+expected = {signal.SIGHUP, signal.SIGINT, signal.SIGTERM}
+blocked = signal.pthread_sigmask(signal.SIG_BLOCK, set())
+assert expected <= blocked
+assert os.environ.get("VOICE_STEP_RESOLVE_SIGNAL_MASKED") == "1"
+assert sys.argv[2:] == ["alpha", "two words"]
+with open(sys.argv[1], "w", encoding="ascii") as handle:
+    handle.write("masked\n")
+PY
+chmod 700 "$launcher_target"
+python3 "$SIGNAL_MASK_LAUNCHER" "$launcher_target" \
+  "$launcher_receipt" alpha "two words" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr"
+[[ "$(<"$launcher_receipt")" == masked && ! -s "$TMP_DIR/stdout" && ! -s "$TMP_DIR/stderr" ]] ||
+  fail "publisher: signal-mask launcher did not preserve argv and blocked mask"
+pass
 
 parent="$TMP_DIR/normal-parent"
 destination="$parent/record"
@@ -235,6 +281,18 @@ run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
 assert_success_stdout
 assert_record "$destination"
 assert_no_named_temporary "$parent"
+pass
+
+for signal_name in HUP INT TERM; do
+  parent="$TMP_DIR/pending-$signal_name-parent"
+  destination="$parent/record"
+  mkdir "$parent"
+  chmod 700 "$parent"
+  run_pending_publisher "$destination" "$(parent_identity "$parent")" "$signal_name"
+  [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: pending $signal_name was accepted"
+  assert_failure_output
+  [[ ! -e "$destination" ]] || fail "publisher: pending $signal_name published a destination"
+done
 pass
 
 parent="$TMP_DIR/invalid-parent"

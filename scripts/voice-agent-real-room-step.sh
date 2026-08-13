@@ -3,6 +3,9 @@ set -euo pipefail
 umask 077
 set +x
 
+# These are process-internal controls and private locals, never caller inputs.
+unset RESOLVE_BINDING_ERROR_MODE VALIDATE_RUNTIME_SKIP_BROADCAST selected
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACT_HELPERS="$ROOT_DIR/scripts/voice-agent-e2e-artifacts.sh"
 REAL_ROOM_LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
@@ -11,6 +14,7 @@ REAL_ROOM_DIAGNOSTIC_PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-diagnost
 REAL_ROOM_STATE_PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-state-publisher.py"
 REAL_ROOM_BINDING_SELECTOR="$ROOT_DIR/scripts/voice-agent-real-room-binding-selector.py"
 REAL_ROOM_BINDING_PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-binding-publisher.py"
+REAL_ROOM_SIGNAL_MASK_LAUNCHER="$ROOT_DIR/scripts/voice-agent-real-room-signal-mask.py"
 REAL_ROOM_CONTRACT="$ROOT_DIR/scripts/voice-agent-real-room-contract.py"
 PACKAGE_EXPECTED='me.rerere.rikkahub.debug'
 CONTROL_RECEIVER='me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver'
@@ -1024,10 +1028,12 @@ run_resolve_binding() {
   local created_after="$2"
   local created_before="$3"
   local original_parent_identity
-  local selected=''
+  local selected
+  export -n selected 2>/dev/null || true
+  selected=''
   local wal_argument
   local sqlite_shm
-  VALIDATE_RUNTIME_SKIP_BROADCAST=1 validate_runtime
+  validate_runtime without-broadcast
   prepare_mdev_owner
   validate_package "$PACKAGE"
   acquire_host_operation_lock
@@ -1081,6 +1087,21 @@ run_resolve_binding() {
 operation="${1:-}"
 [[ -n "$operation" ]] || die 'usage: voice-agent-real-room-step.sh OPERATION [options]'
 if [[ "$operation" == resolve-binding ]]; then
+  if [[ "${VOICE_STEP_RESOLVE_SIGNAL_MASKED:-}" != 1 ]]; then
+    unset VOICE_STEP_RESOLVE_SIGNAL_MASKED
+    exec python3 "$REAL_ROOM_SIGNAL_MASK_LAUNCHER" "$0" "$@"
+  fi
+  unset VOICE_STEP_RESOLVE_SIGNAL_MASKED
+  python3 - <<'PY' >/dev/null 2>&1 || {
+import signal
+
+expected = {signal.SIGHUP, signal.SIGINT, signal.SIGTERM}
+blocked = signal.pthread_sigmask(signal.SIG_BLOCK, set())
+raise SystemExit(0 if expected <= blocked else 1)
+PY
+    RESOLVE_BINDING_ERROR_MODE=1
+    die 'operation failed'
+  }
   RESOLVE_BINDING_ERROR_MODE=1
 fi
 shift
