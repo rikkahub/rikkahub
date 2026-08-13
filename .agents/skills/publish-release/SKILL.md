@@ -1,3 +1,10 @@
+---
+name: publish-release
+description: Use this skill when users request to publish an release update.
+---
+
+# Publish Release
+
 请基于git log生成更新日志，然后创建一个新的release
 
 ## 更新日志
