@@ -102,6 +102,7 @@ def injected_write(descriptor, payload):
     if action == "stdout-error" and marker is not None and os.path.exists(marker) and descriptor == 1:
         raise OSError("injected stdout failure")
     if action == "stderr-error" and descriptor == 2:
+        record("stderr-write")
         raise OSError("injected stderr failure")
     return real_write(descriptor, payload)
 
@@ -150,7 +151,7 @@ def injected_signal(signum, handler):
 
 
 def cleanup_hook(path, *args, **kwargs):
-    if marker is not None and os.path.exists(marker):
+    if action in {"post-signal", "stdout-error"} and marker is not None and os.path.exists(marker):
         record("cleanup")
     raise AssertionError("cleanup after link")
 
@@ -341,10 +342,12 @@ site="$TMP_DIR/stderr-error-site"
 mkdir "$parent" "$site"
 chmod 700 "$parent" "$site"
 write_sitecustomize "$site"
-PUBLISHER_INJECTION=stderr-error PYTHONPATH="$site" run_publisher "$destination" "$(parent_identity "$parent")" "123E4567-e89b-12d3-a456-426614174000"
+marker="$TMP_DIR/stderr-error-marker"
+PUBLISHER_INJECTION=stderr-error PUBLISHER_MARKER="$marker" PYTHONPATH="$site" run_publisher "$destination" "$(parent_identity "$parent")" "123E4567-e89b-12d3-a456-426614174000"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: stderr write failure was accepted"
 assert_stderr_write_failure
 [[ ! -e "$destination" ]] || fail "publisher: stderr write failure published a destination"
+[[ "$(<"$marker")" == stderr-write ]] || fail "publisher: stderr error injection did not intercept fd 2"
 pass
 
 parent="$TMP_DIR/link-race-parent"
