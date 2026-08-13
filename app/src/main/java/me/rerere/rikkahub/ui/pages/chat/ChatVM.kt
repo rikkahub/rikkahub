@@ -16,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -38,6 +39,8 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.ui.hooks.readBooleanPreference
+import me.rerere.rikkahub.ui.hooks.readStringPreference
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.UiState
@@ -61,6 +64,8 @@ class ChatVM(
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
     var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
+    var conversationInitialized by mutableStateOf(false) // initializeConversation 是否已完成
+        private set
 
     // 聊天输入状态 - 保存在 ViewModel 中避免 TransactionTooLargeException
     val inputState = ChatInputState()
@@ -83,9 +88,18 @@ class ChatVM(
         // 添加对话引用
         chatService.addConversationReference(_conversationId)
 
+        // 必须在写入 lastConversationId 之前读取: 重返同一会话 (如从设置页返回,
+        // ViewModel 被重建) 时不能把全局当前助手反向同步回本会话的助手
+        val isReturningToSameConversation =
+            context.readStringPreference("lastConversationId", null) == _conversationId.toString()
+
         // 初始化对话
         viewModelScope.launch {
-            chatService.initializeConversation(_conversationId)
+            chatService.initializeConversation(
+                conversationId = _conversationId,
+                syncAssistant = !isReturningToSameConversation,
+            )
+            conversationInitialized = true
         }
 
         // 记住对话ID, 方便下次启动恢复
@@ -276,8 +290,34 @@ class ChatVM(
         }
     }
 
-    fun moveConversationToAssistant(conversation: Conversation, targetAssistantId: Uuid) {
-        viewModelScope.launch {
+    /**
+     * 当前会话归属助手与全局当前助手不一致时 (如在设置页切换助手后返回本页),
+     * 返回应跳转的目标会话 id; 一致或当前助手无效时返回 null。
+     * 用 settingsFlow 的新鲜读取做权威判定, 避免 Compose 快照的时序竞态。
+     */
+    suspend fun resolveAssistantMismatchTarget(): Uuid? {
+        val currentSettings = settingsStore.settingsFlow.first()
+        if (conversation.value.assistantId == currentSettings.assistantId) return null
+        if (currentSettings.assistants.none { it.id == currentSettings.assistantId }) return null
+        return resolveConversationIdForAssistant(currentSettings.assistantId)
+    }
+
+    /**
+     * 解析当前助手对应的目标会话: 按偏好新建会话, 或复用该助手最近的会话。
+     * 与抽屉助手选择器切换后的跳转逻辑保持一致。
+     */
+    suspend fun resolveConversationIdForAssistant(assistantId: Uuid): Uuid {
+        return if (context.readBooleanPreference("create_new_conversation_on_start", true)) {
+            Uuid.random()
+        } else {
+            conversationRepo.getConversationsOfAssistant(assistantId)
+                .first()
+                .firstOrNull()
+                ?.id ?: Uuid.random()
+        }
+    }
+
+    fun moveConversationToAssistant(conversation: Conversation, targetAssistantId: Uuid) {        viewModelScope.launch {
             val conversationFull = conversationRepo.getConversationById(conversation.id) ?: return@launch
             // 文件夹是助手内分组，切换助手后原文件夹在新助手下不可见，需清空归属避免会话丢失
             val updatedConversation = conversationFull.copy(
