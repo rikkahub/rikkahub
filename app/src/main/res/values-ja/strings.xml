@@ -1286,5 +1286,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="search_picker_model_description">モデルプロバイダー内蔵のクラウド検索</string>
   <string name="search_picker_select_provider">検索プロバイダを選択</string>
   <string name="search_picker_turn_off">検索をオフにする</string>
+  <string name="setting_update_reminder_enabled">アップデート通知が有効になっています</string>
+  <string name="setting_update_reminder_paused_until">%1$sまで一時停止</string>
+  <string name="setting_update_reminder_pause_title">更新リマインダーを一時停止</string>
+  <string name="setting_update_reminder_pause_description">更新リマインダーを一時停止する期間を選択してください。自動的に再開されます。</string>
+  <string name="setting_update_reminder_pause_days">%1$d日間</string>
+  <string name="setting_update_reminder_resume_now">今すぐ再開</string>
 </resources>
 

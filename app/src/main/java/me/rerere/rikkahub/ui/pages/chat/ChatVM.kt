@@ -16,6 +16,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -164,8 +167,20 @@ class ChatVM(
     }
 
     // Update checker
-    val updateState =
-        updateChecker.checkUpdate().stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)
+    val updateState = settingsStore.settingsFlow
+        .map { settings ->
+            !settings.init &&
+                settings.displaySetting.updateCheckDisabledUntilEpochMillis <= System.currentTimeMillis()
+        }
+        .distinctUntilChanged()
+        .flatMapLatest { enabled ->
+            if (enabled) updateChecker.checkUpdate() else flowOf(UiState.Loading)
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000),
+            UiState.Loading,
+        )
 
     /**
      * 处理消息发送

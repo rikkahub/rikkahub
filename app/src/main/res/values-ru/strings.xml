@@ -1286,5 +1286,11 @@
   <string name="search_picker_model_description">Облачный поиск, встроенный в провайдера моделей</string>
   <string name="search_picker_select_provider">Выберите провайдера поиска</string>
   <string name="search_picker_turn_off">Отключить поиск</string>
+  <string name="setting_update_reminder_enabled">Напоминания об обновлениях включены</string>
+  <string name="setting_update_reminder_paused_until">Приостановлено до %1$s</string>
+  <string name="setting_update_reminder_pause_title">Приостановить напоминания об обновлениях</string>
+  <string name="setting_update_reminder_pause_description">Выберите, как долго приостановить напоминания об обновлениях. Они возобновятся автоматически.</string>
+  <string name="setting_update_reminder_pause_days">%1$d дн.</string>
+  <string name="setting_update_reminder_resume_now">Возобновить сейчас</string>
 </resources>
 

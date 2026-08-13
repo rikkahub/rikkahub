@@ -1286,5 +1286,11 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="search_picker_model_description">모델 제공자에 내장된 클라우드 검색</string>
   <string name="search_picker_select_provider">검색 제공자 선택</string>
   <string name="search_picker_turn_off">검색 끄기</string>
+  <string name="setting_update_reminder_enabled">업데이트 알림이 사용 설정되어 있습니다.</string>
+  <string name="setting_update_reminder_paused_until">%1$s까지 일시 중지됨</string>
+  <string name="setting_update_reminder_pause_title">업데이트 알림 일시중지</string>
+  <string name="setting_update_reminder_pause_description">업데이트 알림을 얼마나 오랫동안 일시 중지할지 선택하세요. 자동으로 다시 시작됩니다.</string>
+  <string name="setting_update_reminder_pause_days">%1$d일</string>
+  <string name="setting_update_reminder_resume_now">지금 재개</string>
 </resources>
 

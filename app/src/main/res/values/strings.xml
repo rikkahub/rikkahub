@@ -1291,4 +1291,10 @@
   <string name="assistant_page_context_message_limit_count">Context message limit: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">Unlimited context messages</string>
   <string name="assistant_page_context_message_limit_warning">Limiting context invalidates the prompt cache each time the context is trimmed. A larger limit trims less often; unlimited never trims and keeps the cache fully intact.</string>
+  <string name="setting_update_reminder_enabled">Update reminders are enabled</string>
+  <string name="setting_update_reminder_paused_until">Paused until %1$s</string>
+  <string name="setting_update_reminder_pause_title">Pause update reminders</string>
+  <string name="setting_update_reminder_pause_description">Choose how long to pause update reminders. They will resume automatically.</string>
+  <string name="setting_update_reminder_pause_days">%1$d days</string>
+  <string name="setting_update_reminder_resume_now">Resume now</string>
 </resources>

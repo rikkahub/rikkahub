@@ -1284,5 +1284,11 @@
   <string name="search_picker_model_description">模型提供者內建的雲端搜尋</string>
   <string name="search_picker_select_provider">選擇搜尋提供者</string>
   <string name="search_picker_turn_off">關閉搜尋</string>
+  <string name="setting_update_reminder_enabled">更新提醒已啟用</string>
+  <string name="setting_update_reminder_paused_until">已暫停至 %1$s</string>
+  <string name="setting_update_reminder_pause_title">暫停更新提醒</string>
+  <string name="setting_update_reminder_pause_description">選擇暫停更新提醒的時長。它們會自動恢復。</string>
+  <string name="setting_update_reminder_pause_days">%1$d 天</string>
+  <string name="setting_update_reminder_resume_now">立即恢復</string>
 </resources>
 
