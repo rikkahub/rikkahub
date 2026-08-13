@@ -166,7 +166,7 @@ git commit -m "feat: add private conversation snapshot selector"
 
 **Interfaces:**
 - Consumes: command line `DESTINATION EXPECTED_PARENT_IDENTITY CONVERSATION_ID`, where parent identity is decimal `st_dev:st_ino` and the UUID is lowercase canonical.
-- Produces: before commit, silent nonzero failure and absent destination; after descriptor-relative link succeeds, permanent mode-`0600` file plus exit `0`. Writable stdout receives exactly the three fixed success lines; stdout failure after link is ignored.
+- Produces: before commit, nonzero failure, absent destination, empty stdout, and exactly `voice-step.error=operation failed\n` on stderr; after descriptor-relative link succeeds, permanent mode-`0600` file plus exit `0`. Writable stdout receives exactly the three fixed success lines; stdout failure after link is ignored.
 
 - [ ] **Step 1: Write isolated failing publication-boundary tests**
 
@@ -174,9 +174,9 @@ Create an executable Bash test modeled on `test-voice-agent-real-room-diagnostic
 
 ```text
 normal: exact fixed stdout, empty stderr, byte-exact UUID newline, regular mode 0600, nlink 1
-invalid UUID and invalid/mismatched parent identity: nonzero, no output, destination absent
-pre-existing destination: nonzero and existing bytes unchanged
-O_TMPFILE failure: inject a Python sitecustomize wrapper around os.open; nonzero and destination absent
+invalid UUID and invalid/mismatched parent identity: nonzero, empty stdout, exact fixed error stderr, destination absent
+pre-existing destination: nonzero, exact fixed error stderr, and existing bytes unchanged
+O_TMPFILE failure: inject a Python sitecustomize wrapper around os.open; nonzero, exact fixed error stderr, and destination absent
 short write: inject an os.write wrapper that writes a prefix once; publisher's write_all completes exact bytes
 short write then error before link: nonzero and destination absent
 destination race at os.link: raced file remains unchanged; publisher nonzero
@@ -238,7 +238,7 @@ os.link(
 )
 ```
 
-After that call returns, catch and ignore every exception from `write_all(1, SUCCESS)`, then call `os._exit(0)` unconditionally. The post-link path must not stat, fsync, close, unlink, format dynamic data, restore signals, or return to a general exception handler. Any exception before link calls `os._exit(1)` without output; anonymous fds may be kernel-cleaned on process exit.
+After that call returns, catch and ignore every exception from `write_all(1, SUCCESS)`, then call `os._exit(0)` unconditionally. The post-link path must not stat, fsync, close, unlink, format dynamic data, restore signals, or return to a general exception handler. Any exception before link makes one best-effort `write_all(2, b"voice-step.error=operation failed\n")` attempt and then calls `os._exit(1)` regardless of stderr success; anonymous fds may be kernel-cleaned on process exit. No exception details or dynamic values are emitted.
 
 - [ ] **Step 4: Run publisher syntax and boundary tests**
 

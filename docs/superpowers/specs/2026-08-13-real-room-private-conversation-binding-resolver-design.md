@@ -134,6 +134,10 @@ remain on the helper's sanitized fixed error surface. They leave the
 destination absent. No failure automatically retries or invokes a call. The
 verification controller counts such a failure as a zero-attempt round.
 
+Because the publisher replaces Bash with `exec`, every publisher failure before
+the link emits only `voice-step.error=operation failed` on stderr, best-effort,
+then exits nonzero. It never emits exception details or dynamic values.
+
 After the anonymous inode is linked, the operation is committed success.
 Handled signals are already ignored, cleanup is already complete, fixed output
 is best-effort, and the publisher exits `0` without returning to Bash.
