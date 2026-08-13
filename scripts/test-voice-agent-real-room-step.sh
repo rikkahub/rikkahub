@@ -845,10 +845,23 @@ if command == ["shell", "pm", "path", EXPECTED_PACKAGE]:
 if command == ["shell", "dumpsys", "package", EXPECTED_PACKAGE]:
     print(f"Package [{EXPECTED_PACKAGE}]")
     print("  flags=[ DEBUGGABLE HAS_CODE ]")
-    print("  VOICE_AGENT_LIVEKIT_EXPERIMENT_ENABLED=true")
-    print(f"  {EXPECTED_PACKAGE}/{SERVICE}")
     print(f"  {EXPECTED_PACKAGE}/{CONTROL}")
     print(f"  {EXPECTED_PACKAGE}/{FIXTURE}")
+    raise SystemExit(0)
+if command == [
+    "shell", "cmd", "package", "query-services", "--brief", "--components",
+    "--user", "current", "-n", f"{EXPECTED_PACKAGE}/{SERVICE}",
+]:
+    mode = os.environ.get("FAKE_ADB_SERVICE_QUERY", "resolved")
+    if mode == "unresolved":
+        pass
+    elif mode == "ambiguous":
+        print(f"{EXPECTED_PACKAGE}/{SERVICE}")
+        print(f"{EXPECTED_PACKAGE}/me.rerere.rikkahub.voiceagent.OtherService")
+    elif mode == "malformed":
+        print(f"{EXPECTED_PACKAGE}/.VoiceAgentCallService")
+    else:
+        print(f"{EXPECTED_PACKAGE}/{SERVICE}")
     raise SystemExit(0)
 run_as_tail = None
 if command[:5] == ["shell", "run-as", EXPECTED_PACKAGE, "--user", str(state["android_user_id"])]:
@@ -1681,6 +1694,7 @@ PY
   unset FAKE_ADB_TWO_DEVICES FAKE_ADB_EMULATOR FAKE_ADB_NO_RUN_AS FAKE_TIMEOUT_EXIT
   unset FAKE_TIMEOUT_EXIT_MATCH FAKE_ADB_MALFORMED_ANDROID_USER
   unset FAKE_ADB_MALFORMED_STOPPED_ROW FAKE_ADB_SHARED_UID
+  unset FAKE_ADB_SERVICE_QUERY
   unset FAKE_ADB_MALFORMED_QUIESCENCE FAKE_ADB_PACKAGE_PROCESS FAKE_ADB_PADDED_PS_HEADER
   unset FAKE_ADB_MALFORMED_QUIESCENCE_AFTER_FORCE_STOP
   unset FAKE_ADB_ISOLATED_PROCESS FAKE_ADB_UNSTABLE_QUIESCENCE
@@ -3405,6 +3419,8 @@ run_preflight_tests() {
   [[ "$(exact_command_count -s DEVICE_SECRET_123 exec-out ps -A -n -o UID,PID,PPID,STAT,NAME)" == "1" &&
      "$(exact_command_count -s DEVICE_SECRET_123 shell cmd activity get-isolated-pids "$CURRENT_UID")" == "1" ]] ||
     fail "preflight-process test: exact package-process capability readbacks were absent"
+  [[ "$(exact_command_count -s DEVICE_SECRET_123 shell cmd package query-services --brief --components --user current -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.VoiceAgentCallService)" == "1" ]] ||
+    fail "package-contract test: exact service resolver was not required once"
   [[ "$(exact_command_count -s DEVICE_SECRET_123 shell run-as me.rerere.rikkahub.debug --user 0 id)" == "1" ]] ||
     fail "preflight-run-as test: package access was not pinned to the resolved Android user"
   [[ "$(command_count start-foreground-service)" == "0" ]] || fail "preflight-read-only test: service was started"
@@ -3426,6 +3442,18 @@ PY
     fail "managed-transport test: preflight used raw or non-owner-scoped Android access"
   fi
   pass
+
+  local service_mode
+  for service_mode in unresolved ambiguous malformed; do
+    reset_fake
+    export FAKE_ADB_SERVICE_QUERY="$service_mode"
+    run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
+    [[ "$RUN_STATUS" -ne 0 ]] ||
+      fail "package-contract test: $service_mode service resolution succeeded"
+    assert_no_adb_mutations
+    assert_private_output_absent
+    pass
+  done
 
   reset_fake
   export FAKE_ADB_PADDED_PS_HEADER=1

@@ -1222,12 +1222,15 @@ resolve_package_identity() {
 verify_package_contract() {
   local package_dump
   local protected_probe
+  local service_result
   package_dump="$(adb_read shell dumpsys package "$PACKAGE" 2>/dev/null)" || die 'package readback failed'
   [[ "$package_dump" == *'DEBUGGABLE'* &&
-     "$package_dump" == *'VOICE_AGENT_LIVEKIT_EXPERIMENT_ENABLED=true'* &&
-     "$package_dump" == *"$PACKAGE/$SERVICE_CLASS"* &&
      "$package_dump" == *"$PACKAGE/$CONTROL_RECEIVER"* &&
      "$package_dump" == *"$PACKAGE/$FIXTURE_RECEIVER"* ]] || die 'package contract mismatch'
+  service_result="$(adb_read shell cmd package query-services --brief --components \
+    --user current -n "$PACKAGE/$SERVICE_CLASS" 2>/dev/null)" || die 'package contract mismatch'
+  service_result="${service_result//$'\r'/}"
+  [[ "$service_result" == "$PACKAGE/$SERVICE_CLASS" ]] || die 'package contract mismatch'
   protected_probe="$(run_as_script shell '
 : voice-step-protected-root
 root=$(readlink -f files) || exit 1
