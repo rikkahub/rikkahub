@@ -43,6 +43,16 @@ run_publisher() {
   set -e
 }
 
+run_publisher_arguments() {
+  : >"$TMP_DIR/stdout"
+  : >"$TMP_DIR/stderr"
+  set +e
+  { python3 "$PUBLISHER" "$@" >"$TMP_DIR/stdout" 2>"$TMP_DIR/stderr"; } \
+    2>"$TMP_DIR/launcher-stderr"
+  RUN_STATUS=$?
+  set -e
+}
+
 write_sitecustomize() {
   local site="$1"
   cat >"$site/sitecustomize.py" <<'PY'
@@ -56,6 +66,7 @@ real_open = os.open
 real_write = os.write
 real_fstat = os.fstat
 real_signal = signal.signal
+real_close = os.close
 shortened = False
 replaced = False
 
@@ -67,7 +78,13 @@ def record(value):
 
 
 def injected_open(path, flags, *args, **kwargs):
-    if action == "tmpfile" and flags & os.O_TMPFILE:
+    if (
+        action == "tmpfile"
+        and os.fsdecode(path) == "."
+        and (flags & os.O_TMPFILE) == os.O_TMPFILE
+        and "dir_fd" in kwargs
+    ):
+        record("tmpfile")
         raise OSError("injected O_TMPFILE failure")
     return real_open(path, flags, *args, **kwargs)
 
@@ -105,7 +122,13 @@ def injected_link(source, target, *args, **kwargs):
     if action == "link-race":
         descriptor = real_open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o600, dir_fd=kwargs["dst_dir_fd"])
         real_write(descriptor, b"raced")
-        os.close(descriptor)
+        real_close(descriptor)
+        try:
+            real_link(source, target, *args, **kwargs)
+        except FileExistsError:
+            record("link-eexist")
+            raise
+        raise AssertionError("raced link unexpectedly succeeded")
     result = real_link(source, target, *args, **kwargs)
     if action in {"post-signal", "stdout-error"}:
         record("linked")
@@ -213,6 +236,37 @@ assert_silent
 [[ ! -e "$destination" ]] || fail "publisher: invalid identity published a destination"
 pass
 
+parent="$TMP_DIR/validation-parent"
+destination="$parent/record"
+mkdir "$parent"
+chmod 700 "$parent"
+run_publisher_arguments "$destination" "$(parent_identity "$parent")"
+[[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: malformed argument count was accepted"
+assert_silent
+[[ ! -e "$destination" ]] || fail "publisher: malformed argument count published a destination"
+run_publisher "$parent/./record" "$(parent_identity "$parent")" "$UUID"
+[[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: non-normalized destination was accepted"
+assert_silent
+[[ ! -e "$destination" ]] || fail "publisher: non-normalized destination published a destination"
+chmod 755 "$parent"
+run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
+[[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: non-0700 parent was accepted"
+assert_silent
+[[ ! -e "$destination" ]] || fail "publisher: non-0700 parent published a destination"
+chmod 700 "$parent"
+linked_parent="$TMP_DIR/validation-parent-link"
+ln -s "$parent" "$linked_parent"
+run_publisher "$linked_parent/record" "$(parent_identity "$parent")" "$UUID"
+[[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: symlink parent was accepted"
+assert_silent
+[[ ! -e "$destination" ]] || fail "publisher: symlink parent published a destination"
+ln -s sentinel "$destination"
+run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
+[[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: symlink destination was accepted"
+assert_silent
+[[ "$(readlink "$destination")" == sentinel ]] || fail "publisher: symlink destination changed"
+pass
+
 parent="$TMP_DIR/existing-parent"
 destination="$parent/record"
 mkdir "$parent"
@@ -231,10 +285,12 @@ site="$TMP_DIR/tmpfile-site"
 mkdir "$parent" "$site"
 chmod 700 "$parent" "$site"
 write_sitecustomize "$site"
-PUBLISHER_INJECTION=tmpfile PYTHONPATH="$site" run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
+marker="$TMP_DIR/tmpfile-marker"
+PUBLISHER_INJECTION=tmpfile PUBLISHER_MARKER="$marker" PYTHONPATH="$site" run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: O_TMPFILE failure was accepted"
 assert_silent
 [[ ! -e "$destination" ]] || fail "publisher: O_TMPFILE failure published a destination"
+[[ "$(<"$marker")" == tmpfile ]] || fail "publisher: O_TMPFILE injection missed anonymous inode open"
 pass
 
 parent="$TMP_DIR/short-write-parent"
@@ -267,10 +323,12 @@ site="$TMP_DIR/link-race-site"
 mkdir "$parent" "$site"
 chmod 700 "$parent" "$site"
 write_sitecustomize "$site"
-PUBLISHER_INJECTION=link-race PYTHONPATH="$site" run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
+marker="$TMP_DIR/link-race-marker"
+PUBLISHER_INJECTION=link-race PUBLISHER_MARKER="$marker" PYTHONPATH="$site" run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: link race was accepted"
 assert_silent
 [[ "$(<"$destination")" == raced ]] || fail "publisher: raced destination changed"
+[[ "$(<"$marker")" == link-eexist ]] || fail "publisher: link race did not reach real EEXIST link"
 pass
 
 parent="$TMP_DIR/replaced-parent"
