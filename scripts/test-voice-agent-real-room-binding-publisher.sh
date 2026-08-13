@@ -94,13 +94,15 @@ def injected_write(descriptor, payload):
     if action == "short-write" and not shortened and len(payload) > 1:
         shortened = True
         return real_write(descriptor, payload[:7])
-    if action == "write-error":
+    if action == "write-error" and descriptor != 2:
         if not shortened:
             shortened = True
             return real_write(descriptor, payload[:7])
         raise OSError("injected write failure")
     if action == "stdout-error" and marker is not None and os.path.exists(marker) and descriptor == 1:
         raise OSError("injected stdout failure")
+    if action == "stderr-error" and descriptor == 2:
+        raise OSError("injected stderr failure")
     return real_write(descriptor, payload)
 
 
@@ -138,7 +140,11 @@ def injected_link(source, target, *args, **kwargs):
 
 
 def injected_signal(signum, handler):
-    if action == "pre-signal" and signum == getattr(signal, "SIG" + os.environ["PUBLISHER_SIGNAL"]):
+    if (
+        action == "pre-signal"
+        and handler == signal.SIG_IGN
+        and signum == getattr(signal, "SIG" + os.environ["PUBLISHER_SIGNAL"])
+    ):
         os.kill(os.getpid(), signum)
     return real_signal(signum, handler)
 
@@ -160,9 +166,21 @@ os.close = cleanup_hook
 PY
 }
 
-assert_silent() {
+assert_failure_output() {
   [[ ! -s "$TMP_DIR/stdout" ]] || fail "publisher: stdout was not empty"
-  [[ ! -s "$TMP_DIR/stderr" ]] || fail "publisher: stderr was not empty"
+  if ! python3 - "$TMP_DIR/stderr" <<'PY'
+import sys
+
+assert open(sys.argv[1], "rb").read() == b"voice-step.error=operation failed\n"
+PY
+  then
+    fail "publisher: fixed failure stderr differed"
+  fi
+}
+
+assert_stderr_write_failure() {
+  [[ ! -s "$TMP_DIR/stdout" ]] || fail "publisher: stderr write failure produced stdout"
+  [[ ! -s "$TMP_DIR/stderr" ]] || fail "publisher: stderr write failure produced traceback or output"
 }
 
 assert_record() {
@@ -224,15 +242,15 @@ mkdir "$parent"
 chmod 700 "$parent"
 run_publisher "$destination" "$(parent_identity "$parent")" "123E4567-e89b-12d3-a456-426614174000"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: noncanonical UUID was accepted"
-assert_silent
+assert_failure_output
 [[ ! -e "$destination" ]] || fail "publisher: invalid UUID published a destination"
 run_publisher "$destination" "0:0" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: mismatched parent identity was accepted"
-assert_silent
+assert_failure_output
 [[ ! -e "$destination" ]] || fail "publisher: mismatched identity published a destination"
 run_publisher "$destination" "not-an-identity" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: invalid parent identity was accepted"
-assert_silent
+assert_failure_output
 [[ ! -e "$destination" ]] || fail "publisher: invalid identity published a destination"
 pass
 
@@ -242,28 +260,28 @@ mkdir "$parent"
 chmod 700 "$parent"
 run_publisher_arguments "$destination" "$(parent_identity "$parent")"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: malformed argument count was accepted"
-assert_silent
+assert_failure_output
 [[ ! -e "$destination" ]] || fail "publisher: malformed argument count published a destination"
 run_publisher "$parent/./record" "$(parent_identity "$parent")" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: non-normalized destination was accepted"
-assert_silent
+assert_failure_output
 [[ ! -e "$destination" ]] || fail "publisher: non-normalized destination published a destination"
 chmod 755 "$parent"
 run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: non-0700 parent was accepted"
-assert_silent
+assert_failure_output
 [[ ! -e "$destination" ]] || fail "publisher: non-0700 parent published a destination"
 chmod 700 "$parent"
 linked_parent="$TMP_DIR/validation-parent-link"
 ln -s "$parent" "$linked_parent"
 run_publisher "$linked_parent/record" "$(parent_identity "$parent")" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: symlink parent was accepted"
-assert_silent
+assert_failure_output
 [[ ! -e "$destination" ]] || fail "publisher: symlink parent published a destination"
 ln -s sentinel "$destination"
 run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: symlink destination was accepted"
-assert_silent
+assert_failure_output
 [[ "$(readlink "$destination")" == sentinel ]] || fail "publisher: symlink destination changed"
 pass
 
@@ -274,7 +292,7 @@ chmod 700 "$parent"
 printf 'raced' >"$destination"
 run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: existing destination was accepted"
-assert_silent
+assert_failure_output
 [[ "$(<"$destination")" == raced ]] || fail "publisher: existing destination changed"
 assert_no_named_temporary "$parent"
 pass
@@ -288,7 +306,7 @@ write_sitecustomize "$site"
 marker="$TMP_DIR/tmpfile-marker"
 PUBLISHER_INJECTION=tmpfile PUBLISHER_MARKER="$marker" PYTHONPATH="$site" run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: O_TMPFILE failure was accepted"
-assert_silent
+assert_failure_output
 [[ ! -e "$destination" ]] || fail "publisher: O_TMPFILE failure published a destination"
 [[ "$(<"$marker")" == tmpfile ]] || fail "publisher: O_TMPFILE injection missed anonymous inode open"
 pass
@@ -313,8 +331,20 @@ chmod 700 "$parent" "$site"
 write_sitecustomize "$site"
 PUBLISHER_INJECTION=write-error PYTHONPATH="$site" run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: write error before link was accepted"
-assert_silent
+assert_failure_output
 [[ ! -e "$destination" ]] || fail "publisher: write error before link published a destination"
+pass
+
+parent="$TMP_DIR/stderr-error-parent"
+destination="$parent/record"
+site="$TMP_DIR/stderr-error-site"
+mkdir "$parent" "$site"
+chmod 700 "$parent" "$site"
+write_sitecustomize "$site"
+PUBLISHER_INJECTION=stderr-error PYTHONPATH="$site" run_publisher "$destination" "$(parent_identity "$parent")" "123E4567-e89b-12d3-a456-426614174000"
+[[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: stderr write failure was accepted"
+assert_stderr_write_failure
+[[ ! -e "$destination" ]] || fail "publisher: stderr write failure published a destination"
 pass
 
 parent="$TMP_DIR/link-race-parent"
@@ -326,7 +356,7 @@ write_sitecustomize "$site"
 marker="$TMP_DIR/link-race-marker"
 PUBLISHER_INJECTION=link-race PUBLISHER_MARKER="$marker" PYTHONPATH="$site" run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: link race was accepted"
-assert_silent
+assert_failure_output
 [[ "$(<"$destination")" == raced ]] || fail "publisher: raced destination changed"
 [[ "$(<"$marker")" == link-eexist ]] || fail "publisher: link race did not reach real EEXIST link"
 pass
@@ -341,7 +371,7 @@ write_sitecustomize "$site"
 PUBLISHER_PARENT="$parent" PUBLISHER_REPLACEMENT_PARENT="$replacement" PUBLISHER_INJECTION=replace-parent PYTHONPATH="$site" \
   run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
 [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: replaced parent was accepted"
-assert_silent
+assert_failure_output
 [[ ! -e "$parent/record" && ! -e "$replacement/record" ]] || fail "publisher: parent replacement received a destination"
 pass
 
@@ -355,7 +385,7 @@ for signal_name in HUP INT TERM; do
   PUBLISHER_SIGNAL="$signal_name" PUBLISHER_INJECTION=pre-signal PYTHONPATH="$site" \
     run_publisher "$destination" "$(parent_identity "$parent")" "$UUID"
   [[ "$RUN_STATUS" -ne 0 ]] || fail "publisher: $signal_name before link was accepted"
-  assert_silent
+  assert_failure_output
   [[ ! -e "$destination" ]] || fail "publisher: $signal_name before link published a destination"
 done
 pass

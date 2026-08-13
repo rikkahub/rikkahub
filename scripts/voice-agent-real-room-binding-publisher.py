@@ -11,6 +11,7 @@ SUCCESS = (
     b"voice-step.operation=resolve-binding\n"
     b"voice-step.binding=resolved\n"
 )
+ERROR = b"voice-step.error=operation failed\n"
 IDENTITY = re.compile(r"^([0-9]+):([0-9]+)$")
 
 
@@ -127,11 +128,26 @@ def publish(arguments: list[str]) -> None:
     os._exit(0)
 
 
+def fail_signal(_signum: int, _frame: object) -> None:
+    raise OSError
+
+
+def exit_failure() -> None:
+    try:
+        write_all(2, ERROR)
+    except BaseException:
+        pass
+    os._exit(1)
+
+
 def main() -> None:
     try:
+        signal.signal(signal.SIGHUP, fail_signal)
+        signal.signal(signal.SIGINT, fail_signal)
+        signal.signal(signal.SIGTERM, fail_signal)
         publish(sys.argv[1:])
     except BaseException:
-        os._exit(1)
+        exit_failure()
 
 
 if __name__ == "__main__":
