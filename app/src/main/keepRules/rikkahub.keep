@@ -1,6 +1,9 @@
 # Release builds may shrink and optimize code, but must not rename symbols.
 -dontobfuscate
 
+# Kotlin reflection is used to instantiate serializable settings classes at runtime.
+-keep @kotlinx.serialization.Serializable class * { *; }
+
 # Keep source locations so release stack traces retain useful line information.
 -keepattributes SourceFile,LineNumberTable
 
