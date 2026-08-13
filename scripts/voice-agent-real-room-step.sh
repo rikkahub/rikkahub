@@ -8,6 +8,7 @@ ARTIFACT_HELPERS="$ROOT_DIR/scripts/voice-agent-e2e-artifacts.sh"
 REAL_ROOM_LIBRARY="$ROOT_DIR/scripts/voice-agent-real-room-lib.sh"
 REAL_ROOM_DIAGNOSTICS="$ROOT_DIR/scripts/voice-agent-real-room-diagnostics.sh"
 REAL_ROOM_DIAGNOSTIC_PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-diagnostic-publisher.py"
+REAL_ROOM_STATE_PUBLISHER="$ROOT_DIR/scripts/voice-agent-real-room-state-publisher.py"
 REAL_ROOM_CONTRACT="$ROOT_DIR/scripts/voice-agent-real-room-contract.py"
 PACKAGE_EXPECTED='me.rerere.rikkahub.debug'
 CONTROL_RECEIVER='me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver'
@@ -50,6 +51,7 @@ REMOTE_OWNER_HASH=''
 LOCAL_TEMP_DIR=''
 ORDERED_BROADCAST_OUTPUT=''
 STATE_PUBLICATION_TEMP=''
+STATE_PARENT_IDENTITY=''
 ERROR_REPORTED=0
 START_CLEANUP_NEEDED=0
 START_PREPARE_ATTEMPTED=0
@@ -1032,6 +1034,9 @@ case "$operation" in
       [[ -n "${PARSED[--diagnostic-record]}" ]] || die 'invalid diagnostic destination'
       validate_private_diagnostic_destination "${PARSED[--diagnostic-record]}" ||
         die 'invalid diagnostic destination'
+    fi
+    validate_state_destination "${PARSED[--state]}" || die 'invalid state destination'
+    if [[ -n "${PARSED[--diagnostic-record]+present}" ]]; then
       validate_distinct_diagnostic_state_destination "${PARSED[--state]}" \
         "${PARSED[--diagnostic-record]}" ||
         die 'diagnostic destination must differ from state'
@@ -1049,7 +1054,6 @@ case "$operation" in
     validate_identifier "$CONVERSATION_ID" 'conversation id'
     validate_hash "$RUN_HASH" 'run hash'
     validate_hash "$COMPARISON_HASH" 'comparison hash'
-    validate_absent_destination "${PARSED[--state]}" || die 'invalid state destination'
     run_start "${PARSED[--state]}" "${PARSED[--fixture]}"
     ;;
   inject)

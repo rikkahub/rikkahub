@@ -1514,6 +1514,10 @@ PY
   unset FAKE_ADB_CALL_ACTIVE_VISIBLE_AFTER
   unset FAKE_ADB_CHMOD_MATCH FAKE_ADB_CHMOD_PATH
   unset FAKE_ASSERT_CLOSED_DIAGNOSTIC_PARENT FAKE_RM_SIGNAL_MATCH
+  unset VOICE_STEP_STATE_PARENT VOICE_STEP_STATE_PINNED_PARENT
+  unset VOICE_STEP_STATE_DIAGNOSTIC_PARENT VOICE_STEP_STATE_PARENT_MARKER
+  unset VOICE_STEP_STATE_LINK_DESTINATION VOICE_STEP_STATE_LINK_MODE
+  unset VOICE_STEP_STATE_LINK_MARKER
   unset VOICE_STEP_DIAGNOSTIC_TMPFILE_MARKER VOICE_STEP_DIAGNOSTIC_LINK_MARKER
   unset VOICE_STEP_DIAGNOSTIC_UNLINK_MARKER VOICE_STEP_DIAGNOSTIC_DESTINATION
   unset VOICE_STEP_DIAGNOSTIC_PARENT VOICE_STEP_DIAGNOSTIC_PINNED_PARENT
@@ -1539,13 +1543,18 @@ make_diagnostic_tmpfile_failure_site() {
   chmod 700 "$site"
   cat > "$site/sitecustomize.py" <<'PY'
 import os
+import sys
 
 marker = os.environ["VOICE_STEP_DIAGNOSTIC_TMPFILE_MARKER"]
 real_open = os.open
 
 
 def controlled_open(path, flags, *args, **kwargs):
-    if flags & os.O_TMPFILE:
+    if (
+        os.path.basename(sys.argv[0])
+        == "voice-agent-real-room-diagnostic-publisher.py"
+        and flags & os.O_TMPFILE
+    ):
         with open(marker, "w", encoding="ascii") as handle:
             handle.write("tmpfile-attempted\n")
         raise OSError
@@ -1651,6 +1660,84 @@ def aliased_lstat(path, *args, **kwargs):
 
 
 os.lstat = aliased_lstat
+PY
+}
+
+make_state_publication_parent_race_site() {
+  local site="$1"
+  mkdir "$site"
+  chmod 700 "$site"
+  cat > "$site/sitecustomize.py" <<'PY'
+import os
+from pathlib import Path
+
+parent = os.environ["VOICE_STEP_STATE_PARENT"]
+pinned_parent = os.environ["VOICE_STEP_STATE_PINNED_PARENT"]
+diagnostic_parent = os.environ["VOICE_STEP_STATE_DIAGNOSTIC_PARENT"]
+marker = os.environ["VOICE_STEP_STATE_PARENT_MARKER"]
+real_open = os.open
+replaced = False
+
+
+def controlled_open(path, flags, *args, **kwargs):
+    global replaced
+    if (
+        not replaced
+        and os.fsdecode(path) == parent
+        and flags & os.O_DIRECTORY
+    ):
+        replaced = True
+        os.rename(parent, pinned_parent)
+        os.symlink(diagnostic_parent, parent, target_is_directory=True)
+        Path(marker).write_text("state-parent-replaced\n", encoding="ascii")
+    return real_open(path, flags, *args, **kwargs)
+
+
+os.open = controlled_open
+PY
+}
+
+make_state_publication_link_site() {
+  local site="$1"
+  mkdir "$site"
+  chmod 700 "$site"
+  cat > "$site/sitecustomize.py" <<'PY'
+import os
+import signal
+from pathlib import Path
+
+destination = os.environ["VOICE_STEP_STATE_LINK_DESTINATION"]
+mode = os.environ["VOICE_STEP_STATE_LINK_MODE"]
+marker = os.environ["VOICE_STEP_STATE_LINK_MARKER"]
+real_link = os.link
+
+
+def controlled_link(source, target, *args, **kwargs):
+    if (
+        os.fsdecode(source).startswith("/proc/self/fd/")
+        and os.fsdecode(target) == os.path.basename(destination)
+    ):
+        Path(marker).write_text(mode + "\n", encoding="ascii")
+        if mode == "race":
+            descriptor = os.open(
+                target,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
+                0o600,
+                dir_fd=kwargs["dst_dir_fd"],
+            )
+            os.write(descriptor, b"raced")
+            os.close(descriptor)
+        elif mode == "signal-before":
+            os.kill(os.getppid(), signal.SIGTERM)
+            raise OSError
+        elif mode == "signal-after":
+            result = real_link(source, target, *args, **kwargs)
+            os.kill(os.getppid(), signal.SIGTERM)
+            return result
+    return real_link(source, target, *args, **kwargs)
+
+
+os.link = controlled_link
 PY
 }
 
@@ -3064,13 +3151,19 @@ PY
 
   reset_fake
   local before_link="$TMP_DIR/signal-before-link-state.json"
-  export FAKE_LN_SIGNAL_DESTINATION="$before_link"
-  export FAKE_LN_SIGNAL_TIMING=before
-  run_helper start --state "$before_link" --mdev-owner OWNER_SECRET_123 \
+  local before_link_site="$TMP_DIR/signal-before-link-site"
+  local before_link_marker="$TMP_DIR/signal-before-link-marker"
+  make_state_publication_link_site "$before_link_site"
+  PYTHONPATH="$before_link_site" \
+    VOICE_STEP_STATE_LINK_DESTINATION="$before_link" \
+    VOICE_STEP_STATE_LINK_MODE=signal-before \
+    VOICE_STEP_STATE_LINK_MARKER="$before_link_marker" \
+    run_helper start --state "$before_link" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
-  [[ "$RUN_STATUS" -ne 0 && ! -e "$before_link" ]] ||
+  [[ -f "$before_link_marker" && "$(<"$before_link_marker")" == signal-before &&
+     "$RUN_STATUS" -ne 0 && ! -e "$before_link" ]] ||
     fail "start-commit test: a pre-link signal published state"
   [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "1" &&
      "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "1" ]] ||
@@ -3079,13 +3172,19 @@ PY
 
   reset_fake
   local after_link="$TMP_DIR/signal-after-link-state.json"
-  export FAKE_LN_SIGNAL_DESTINATION="$after_link"
-  export FAKE_LN_SIGNAL_TIMING=after
-  run_helper start --state "$after_link" --mdev-owner OWNER_SECRET_123 \
+  local after_link_site="$TMP_DIR/signal-after-link-site"
+  local after_link_marker="$TMP_DIR/signal-after-link-marker"
+  make_state_publication_link_site "$after_link_site"
+  PYTHONPATH="$after_link_site" \
+    VOICE_STEP_STATE_LINK_DESTINATION="$after_link" \
+    VOICE_STEP_STATE_LINK_MODE=signal-after \
+    VOICE_STEP_STATE_LINK_MARKER="$after_link_marker" \
+    run_helper start --state "$after_link" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
     --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
     --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
-  [[ "$RUN_STATUS" -ne 0 && -f "$after_link" && ! -L "$after_link" ]] ||
+  [[ -f "$after_link_marker" && "$(<"$after_link_marker")" == signal-after &&
+     "$RUN_STATUS" -ne 0 && -f "$after_link" && ! -L "$after_link" ]] ||
     fail "start-commit test: post-link signal did not retain committed state"
   [[ "$(exact_argument_count me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND)" == "0" &&
      "$(exact_argument_count me.rerere.rikkahub.voiceagent.action.END_BOUND)" == "0" ]] ||
@@ -3220,6 +3319,47 @@ run_tracing_tests() {
   assert_private_output_absent "$state_alias_parent" "$diagnostic_alias_parent"
   pass
 
+  reset_fake
+  local swapped_state_parent="$TMP_DIR/tracing-swapped-state-parent"
+  local pinned_state_parent="$TMP_DIR/tracing-pinned-state-parent"
+  local swapped_diagnostic_parent="$TMP_DIR/tracing-swapped-diagnostic-parent"
+  local swapped_state="$swapped_state_parent/shared-output"
+  local swapped_diagnostic="$swapped_diagnostic_parent/shared-output"
+  local state_parent_swap_marker="$TMP_DIR/tracing-state-parent-swap-marker"
+  local state_parent_swap_site="$TMP_DIR/tracing-state-parent-swap-site"
+  mkdir "$swapped_state_parent" "$swapped_diagnostic_parent"
+  chmod 700 "$swapped_state_parent" "$swapped_diagnostic_parent"
+  printf 'pinned-preserved\n' > "$swapped_state_parent/sentinel"
+  printf 'diagnostic-preserved\n' > "$swapped_diagnostic_parent/sentinel"
+  chmod 600 "$swapped_state_parent/sentinel" "$swapped_diagnostic_parent/sentinel"
+  make_state_publication_parent_race_site "$state_parent_swap_site"
+  PYTHONPATH="$state_parent_swap_site" \
+    VOICE_STEP_STATE_PARENT="$swapped_state_parent" \
+    VOICE_STEP_STATE_PINNED_PARENT="$pinned_state_parent" \
+    VOICE_STEP_STATE_DIAGNOSTIC_PARENT="$swapped_diagnostic_parent" \
+    VOICE_STEP_STATE_PARENT_MARKER="$state_parent_swap_marker" \
+    run_helper start --state "$swapped_state" --diagnostic-record "$swapped_diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 --run-hash "$hash_a" \
+    --comparison-hash "$hash_b" --fixture "$fixture"
+  [[ -f "$state_parent_swap_marker" &&
+     "$(<"$state_parent_swap_marker")" == state-parent-replaced ]] ||
+    fail "tracing-state-parent-swap test: deterministic namespace replacement did not run"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$pinned_state_parent/shared-output" ]] ||
+    fail "tracing-state-parent-swap test: start committed through a replaced state parent"
+  assert_diagnostic_record "$swapped_diagnostic" \
+    state-publication state-publication-failed none complete
+  [[ "$(<"$pinned_state_parent/sentinel")" == pinned-preserved &&
+     "$(<"$swapped_diagnostic_parent/sentinel")" == diagnostic-preserved ]] ||
+    fail "tracing-state-parent-swap test: a namespace sentinel changed"
+  if compgen -G "$pinned_state_parent/.voice-step-state.*" >/dev/null ||
+     compgen -G "$swapped_diagnostic_parent/.voice-step-state.*" >/dev/null; then
+    fail "tracing-state-parent-swap test: named state residue remained"
+  fi
+  assert_private_output_absent "$swapped_state_parent" "$pinned_state_parent" \
+    "$swapped_diagnostic_parent"
+  pass
+
   assert_stage_transition_signal_boundary
   pass
 
@@ -3335,9 +3475,18 @@ EOF
   pass
 
   reset_fake
-  export FAKE_LN_RACE_DESTINATION="$state"
-  assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
-    state-publication state-publication-failed none complete
+  local state_link_race_site="$TMP_DIR/tracing-state-link-race-site"
+  local state_link_race_marker="$TMP_DIR/tracing-state-link-race-marker"
+  make_state_publication_link_site "$state_link_race_site"
+  PYTHONPATH="$state_link_race_site" \
+    VOICE_STEP_STATE_LINK_DESTINATION="$state" \
+    VOICE_STEP_STATE_LINK_MODE=race \
+    VOICE_STEP_STATE_LINK_MARKER="$state_link_race_marker" \
+    assert_traced_start_failure "$fixture" "$state" "$diagnostic" \
+      state-publication state-publication-failed none complete
+  [[ -f "$state_link_race_marker" &&
+     "$(<"$state_link_race_marker")" == race ]] ||
+    fail "tracing-state-link-race test: deterministic link race did not run"
   pass
 
   local lock_fixture="$TMP_DIR/tracing-lock-fixture.pcm"

@@ -319,6 +319,36 @@ else:
 PY
 }
 
+validate_state_destination() {
+  local parent_identity
+  parent_identity="$(python3 - "$1" 2>/dev/null <<'PY'
+import os
+import stat
+import sys
+
+path = sys.argv[1]
+if not path or not os.path.isabs(path) or os.path.normpath(path) != path:
+    raise SystemExit(1)
+parent = os.path.dirname(path)
+name = os.path.basename(path)
+if not name or name in {".", ".."} or os.path.realpath(parent) != parent:
+    raise SystemExit(1)
+metadata = os.lstat(parent)
+if not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+    raise SystemExit(1)
+try:
+    os.lstat(path)
+except FileNotFoundError:
+    pass
+else:
+    raise SystemExit(1)
+print(f"{metadata.st_dev}:{metadata.st_ino}")
+PY
+  )" || return 1
+  [[ "$parent_identity" =~ ^[0-9]+:[0-9]+$ ]] || return 1
+  STATE_PARENT_IDENTITY="$parent_identity"
+}
+
 validate_distinct_destinations() {
   python3 - "$@" 2>/dev/null <<'PY'
 import os
@@ -1780,121 +1810,34 @@ PY
 
 publish_state() {
   local destination="$1"
-  local parent
-  local expected_hash
-  local link_status
-  parent="$(dirname -- "$destination")" || die 'state publication failed'
-  STATE_PUBLICATION_TEMP="$(mktemp "$parent/.voice-step-state.XXXXXX" 2>/dev/null)" ||
+  local diagnostic_identity=none
+  local diagnostic_name=none
+  local publication_status
+  [[ "${STATE_PARENT_IDENTITY:-}" =~ ^[0-9]+:[0-9]+$ ]] ||
     die 'state publication failed'
-  register_temp_file "$STATE_PUBLICATION_TEMP"
-  chmod 600 -- "$STATE_PUBLICATION_TEMP" 2>/dev/null || die 'state publication failed'
-  if ! python3 - "$STATE_PUBLICATION_TEMP" "$MDEV_OWNER_HASH" "$PACKAGE" "$ANDROID_USER_ID" \
-    "$PACKAGE_UID" "$CONVERSATION_ID" "$RUN_HASH" "$COMPARISON_HASH" "$FIXTURE_TOKEN" \
-    "$FIXTURE_PARENT_IDENTITY" "$FIXTURE_DIRECTORY_IDENTITY" "$FIXTURE_OWNERSHIP_NONCE" \
-    "$TRACE_ID" 2>/dev/null <<'PY'
-import json
-import os
-import sys
-
-(
-    path,
-    mdev_owner_hash,
-    package,
-    android_user_id,
-    package_uid,
-    conversation,
-    run_hash,
-    comparison_hash,
-    token,
-    parent_identity,
-    directory_identity,
-    ownership_nonce,
-    trace,
-) = sys.argv[1:]
-payload = {
-    "schemaVersion": 3,
-    "mdevOwnerHash": mdev_owner_hash,
-    "package": package,
-    "androidUserId": int(android_user_id),
-    "packageUid": int(package_uid),
-    "conversationId": conversation,
-    "runHash": run_hash,
-    "comparisonHash": comparison_hash,
-    "fixtureToken": token,
-    "fixtureParentIdentity": parent_identity,
-    "fixtureDirectoryIdentity": directory_identity,
-    "fixtureOwnershipNonce": ownership_nonce,
-    "traceId": trace,
-    "transport": "livekit_experimental",
-}
-flags = os.O_WRONLY | os.O_TRUNC | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-descriptor = os.open(path, flags)
-with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-    json.dump(payload, handle, separators=(",", ":"))
-    handle.write("\n")
-    handle.flush()
-    os.fsync(handle.fileno())
-PY
-  then
-    die 'state publication failed'
+  if (( ${DIAGNOSTIC_ENABLED:-0} == 1 )); then
+    diagnostic_identity="$DIAGNOSTIC_PARENT_IDENTITY"
+    diagnostic_name="${DIAGNOSTIC_DESTINATION##*/}"
   fi
-  [[ -s "$STATE_PUBLICATION_TEMP" ]] || die 'state publication failed'
-  expected_hash="$(sha256sum "$STATE_PUBLICATION_TEMP" 2>/dev/null | awk '{print $1}')" ||
-    die 'state publication failed'
   STATE_PUBLICATION_CRITICAL=1
-  if ln -T -- "$STATE_PUBLICATION_TEMP" "$destination" 2>/dev/null; then
-    link_status=0
+  if python3 "$REAL_ROOM_STATE_PUBLISHER" \
+    "$destination" "$STATE_PARENT_IDENTITY" \
+    "$diagnostic_identity" "$diagnostic_name" \
+    "$MDEV_OWNER_HASH" "$PACKAGE" "$ANDROID_USER_ID" "$PACKAGE_UID" \
+    "$CONVERSATION_ID" "$RUN_HASH" "$COMPARISON_HASH" "$FIXTURE_TOKEN" \
+    "$FIXTURE_PARENT_IDENTITY" "$FIXTURE_DIRECTORY_IDENTITY" \
+    "$FIXTURE_OWNERSHIP_NONCE" "$TRACE_ID" </dev/null >/dev/null 2>&1; then
+    publication_status=0
   else
-    link_status=$?
+    publication_status=$?
   fi
-  if (( link_status == 0 )); then
+  if (( publication_status == 0 )); then
     START_COMMITTED=1
     START_CLEANUP_NEEDED=0
   fi
   STATE_PUBLICATION_CRITICAL=0
-  (( link_status == 0 )) || die 'state publication failed'
+  (( publication_status == 0 )) || die 'state publication failed'
   if (( PUBLICATION_SIGNAL == 1 )); then
     die 'interrupted'
-  fi
-  if ! python3 - "$STATE_PUBLICATION_TEMP" "$destination" "$expected_hash" 2>/dev/null <<'PY'
-import hashlib
-import os
-import stat
-import sys
-
-temporary, destination, expected_hash = sys.argv[1:]
-temp_stat = os.lstat(temporary)
-dest_stat = os.lstat(destination)
-if (
-    stat.S_ISLNK(dest_stat.st_mode)
-    or not stat.S_ISREG(dest_stat.st_mode)
-    or stat.S_IMODE(dest_stat.st_mode) != 0o600
-    or (temp_stat.st_dev, temp_stat.st_ino) != (dest_stat.st_dev, dest_stat.st_ino)
-):
-    raise SystemExit(1)
-with open(destination, "rb") as handle:
-    content = handle.read()
-if hashlib.sha256(content).hexdigest() != expected_hash or len(content) != dest_stat.st_size:
-    raise SystemExit(1)
-PY
-  then
-    die 'state publication failed'
-  fi
-  rm -- "$STATE_PUBLICATION_TEMP" 2>/dev/null || die 'state publication failed'
-  forget_temp_file "$STATE_PUBLICATION_TEMP"
-  STATE_PUBLICATION_TEMP=''
-  if ! python3 - "$destination" 2>/dev/null <<'PY'
-import os
-import stat
-import sys
-
-metadata = os.lstat(sys.argv[1])
-if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
-    raise SystemExit(1)
-if stat.S_IMODE(metadata.st_mode) != 0o600 or metadata.st_nlink != 1:
-    raise SystemExit(1)
-PY
-  then
-    die 'state publication failed'
   fi
 }
