@@ -102,16 +102,21 @@ WINDOW_START=1776070800000
 WINDOW_END=1776072600000
 OLDER=11111111-1111-4111-8111-111111111111
 INTENDED=22222222-2222-4222-8222-222222222222
+BOUNDARY_START=33333333-3333-4333-8333-333333333333
+BOUNDARY_END=44444444-4444-4444-8444-444444444444
 
 main_parent="$TMP_DIR/main-only"
 mkdir "$main_parent"
 chmod 700 "$main_parent"
 main_path="$main_parent/rikka_hub"
 make_snapshot main-only "$main_path" \
-  "[[\"$OLDER\", 1776070860000, 1776070860001], [\"$INTENDED\", 1776070920000, 1776070920001]]"
+  "[[\"$BOUNDARY_START\", $WINDOW_START, $WINDOW_START], [\"$OLDER\", 1776070860000, 1776070860001], [\"$INTENDED\", 1776070920000, 1776070920001], [\"$BOUNDARY_END\", $WINDOW_END, $WINDOW_END]]"
 [[ ! -e "$main_path-wal" ]] || fail "main-only fixture unexpectedly has a WAL"
 run_selector "$main_path" - "$WINDOW_START" "$WINDOW_END"
 assert_selected "$INTENDED" "main-only snapshot"
+pass
+run_selector "$main_path" - "$WINDOW_START" "$((WINDOW_START + 1))"
+assert_selected "$BOUNDARY_START" "main-only start boundary"
 pass
 
 wal_parent="$TMP_DIR/main-wal"
@@ -119,10 +124,13 @@ mkdir "$wal_parent"
 chmod 700 "$wal_parent"
 wal_main="$wal_parent/rikka_hub"
 make_snapshot main-wal "$wal_main" \
-  "[[\"$OLDER\", 1776070860000, 1776070860001], [\"$INTENDED\", 1776070920000, 1776070920001]]"
+  "[[\"$BOUNDARY_START\", $WINDOW_START, $WINDOW_START], [\"$OLDER\", 1776070860000, 1776070860001], [\"$INTENDED\", 1776070920000, 1776070920001], [\"$BOUNDARY_END\", $WINDOW_END, $WINDOW_END]]"
 [[ -s "$wal_main-wal" ]] || fail "main+WAL fixture has no WAL"
 run_selector "$wal_main" "$wal_main-wal" "$WINDOW_START" "$WINDOW_END"
 assert_selected "$INTENDED" "main+WAL snapshot"
+pass
+run_selector "$wal_main" "$wal_main-wal" "$WINDOW_START" "$((WINDOW_START + 1))"
+assert_selected "$BOUNDARY_START" "main+WAL start boundary"
 pass
 
 update_parent="$TMP_DIR/older-later-update"
@@ -135,7 +143,7 @@ run_selector "$update_main" - "$WINDOW_START" "$WINDOW_END"
 assert_selected "$INTENDED" "older row with later update"
 pass
 
-run_selector "$main_path" - 1776072600000 1776074400000
+run_selector "$main_path" - 1776072600001 1776074400001
 assert_silent_failure "empty window"
 pass
 
@@ -187,6 +195,8 @@ invalid_windows=(
   "$WINDOW_START" "$WINDOW_START"
   "$WINDOW_END" "$WINDOW_START"
   "$WINDOW_START" 1776072600001
+  9223372036854775808 9223372036854775809
+  "$WINDOW_START" 9223372036854775808
 )
 for ((window_index = 0; window_index < ${#invalid_windows[@]}; window_index += 2)); do
   invalid_start="${invalid_windows[window_index]}"

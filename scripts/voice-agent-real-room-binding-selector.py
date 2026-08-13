@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 MAX_WINDOW_MS = 1_800_000
+MAX_EPOCH_MS = 9_223_372_036_854_775_807
 MAIN_MIN_BYTES = 512
 MAIN_MAX_BYTES = 64 * 1024 * 1024
 WAL_MIN_BYTES = 32
@@ -18,7 +19,10 @@ AGGREGATE_MAX_BYTES = 128 * 1024 * 1024
 def parse_epoch_ms(value: str) -> int:
     if not value.isascii() or not value.isdecimal():
         raise ValueError
-    return int(value, 10)
+    parsed = int(value, 10)
+    if parsed > MAX_EPOCH_MS:
+        raise ValueError
+    return parsed
 
 
 def canonical_uuid(value: object) -> str:
@@ -137,5 +141,5 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, sqlite3.Error):
+    except (OSError, OverflowError, ValueError, sqlite3.Error):
         os._exit(1)
