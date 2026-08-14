@@ -904,6 +904,7 @@ run_start() {
   local fixture_size
   local fixture_hash
   local remote_fixture_path
+  local receiver_fixture_path
   diagnostic_set_stage runtime-validation || die 'diagnostic state failed'
   validate_runtime
   diagnostic_set_stage host-lock || die 'diagnostic state failed'
@@ -912,6 +913,8 @@ run_start() {
   snapshot_fixture "$fixture_path" fixture_snapshot fixture_size fixture_hash
   REMOTE_FIXTURE_DIR="files/voice-real-room/${RUN_HASH#sha256:}"
   remote_fixture_path="$REMOTE_FIXTURE_DIR/request-${fixture_hash#sha256:}.pcm"
+  [[ "$remote_fixture_path" == files/* ]] || die 'invalid fixture path'
+  receiver_fixture_path="${remote_fixture_path#files/}"
   diagnostic_set_stage device-readiness || die 'diagnostic state failed'
   ensure_device_and_package
   diagnostic_set_stage package-identity || die 'diagnostic state failed'
@@ -943,7 +946,7 @@ run_start() {
 
   diagnostic_set_stage fixture-arm || die 'diagnostic state failed'
   reply="$(broadcast_read "$FIXTURE_RECEIVER" "$FIXTURE_ARM_ACTION" \
-    --es initial_path "$remote_fixture_path" \
+    --es initial_path "$receiver_fixture_path" \
     --el expected_size "$fixture_size" \
     --es expected_sha256 "$fixture_hash" \
     --ei chunk_bytes "$FIXTURE_CHUNK_BYTES" \

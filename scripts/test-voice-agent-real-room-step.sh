@@ -1254,14 +1254,32 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
         save_state(state)
         data = "status=ok\naction=finalize"
     elif action.endswith("ARM_CAPTURE_FIXTURE"):
+        if (
+            os.environ.get("FAKE_ADB_ENFORCE_RECEIVER_FILE_ROOT") == "1"
+            and values.get("initial_path", "").startswith("files/")
+        ):
+            complete(1, "status=error\nerror=invalid_request")
+            raise SystemExit(0)
         data = f'status=ok\naction=arm\ntoken={state["fixture_token"]}'
     elif action.endswith("STAGE_CAPTURE_FIXTURE"):
-        if os.environ.get("FAKE_ADB_STAGE_REJECT") == "1":
+        if (
+            os.environ.get("FAKE_ADB_STAGE_REJECT") == "1"
+            or (
+                os.environ.get("FAKE_ADB_ENFORCE_RECEIVER_FILE_ROOT") == "1"
+                and values.get("path", "").startswith("files/")
+            )
+        ):
             complete(1, "status=error\nerror=invalid_request")
             raise SystemExit(0)
         data = "status=ok\naction=stage\naccepted=true"
     elif action.endswith("TRIGGER_CAPTURE_FIXTURE"):
-        if os.environ.get("FAKE_ADB_TRIGGER_REJECT") == "1":
+        if (
+            os.environ.get("FAKE_ADB_TRIGGER_REJECT") == "1"
+            or (
+                os.environ.get("FAKE_ADB_ENFORCE_RECEIVER_FILE_ROOT") == "1"
+                and values.get("path", "").startswith("files/")
+            )
+        ):
             complete(1, "status=error\nerror=invalid_request")
             raise SystemExit(0)
         data = "status=ok\naction=trigger\naccepted=true"
@@ -1326,6 +1344,20 @@ if (
     if exec_out_run_as_tail[-2:] != ["databases/rikka_hub", "databases/rikka_hub-wal"]:
         raise SystemExit(1)
     script = exec_out_run_as_tail[2]
+    if os.environ.get("FAKE_BINDING_ANDROID_STALE_DESCRIPTOR") == "1":
+        descriptor_list = 'descriptor_list=$(LC_ALL=C ls -1 /proc/self/fd) || exit 1'
+        if descriptor_list in script:
+            script = script.replace(
+                descriptor_list,
+                descriptor_list + '\ndescriptor_list="10 $descriptor_list"',
+                1,
+            )
+        else:
+            script = script.replace(
+                "for descriptor_path in /proc/self/fd/*; do",
+                "for descriptor_path in /proc/self/fd/10 /proc/self/fd/*; do",
+                1,
+            )
     remote_arguments = exec_out_run_as_tail[-2:]
     main = remote_host_path(remote_arguments[0])
     wal = remote_host_path(remote_arguments[1])
@@ -3718,6 +3750,16 @@ PY
 
   reset_fake
   rm -f -- "$state"
+  export FAKE_ADB_ENFORCE_RECEIVER_FILE_ROOT=1
+  run_helper start --state "$state" --mdev-owner OWNER_SECRET_123 \
+    --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
+    --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
+    --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=start\nvoice-step.call=active'
+  pass
+
+  reset_fake
+  rm -f -- "$state"
   export FAKE_ADB_PREEXISTING_REMOTE_DIR=1
   run_helper start --state "$state" --mdev-owner OWNER_SECRET_123 \
     --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
@@ -4624,10 +4666,11 @@ import sys
 data = open(sys.argv[1], "rb").read()
 commands = [chunk.split(b"\0") for chunk in data.split(b"\0\0") if chunk]
 role = sys.argv[2]
-expected_path = (
+expected_staging_path = (
     "files/voice-real-room/" + "a" * 64 + "/" + role +
     "-66840dda154e8a113c31dd0ad32f7f3a366a80e8136979d8f5a101d3d29d6f72.pcm"
 ).encode()
+expected_receiver_path = expected_staging_path.removeprefix(b"files/")
 stream = [command for command in commands if any(b"voice-step-stage-owned-fixture" in value for value in command)]
 stage = [command for command in commands if any(b"STAGE_CAPTURE_FIXTURE" in value for value in command)]
 trigger = [command for command in commands if any(b"TRIGGER_CAPTURE_FIXTURE" in value for value in command)]
@@ -4646,14 +4689,14 @@ assert decoded[0:6] == [
     "run-as", "me.rerere.rikkahub.debug", "--user", "0", "sh", "-c",
 ]
 assert "voice-step-stage-owned-fixture" in decoded[6]
-assert decoded[7] == "sh" and decoded[9].encode() == expected_path
+assert decoded[7] == "sh" and decoded[9].encode() == expected_staging_path
 assert b"exec-in" not in stream[0]
 stream_script = next(value for value in stream[0] if b"voice-step-stage-owned-fixture" in value)
 assert b"voice-step-descriptor-owned-stage" in stream_script
 assert b"/proc/self/fd/" not in stream_script
 assert b"/proc/$$/fd/3" in stream_script
 assert b"mktemp" not in stream_script and b'cat > "$temporary"' not in stream_script
-assert expected_path in stage and expected_path in trigger
+assert expected_receiver_path in stage and expected_receiver_path in trigger
 assert b"fixture-1" in stage and b"fixture-1" in trigger
 assert b"chunk_bytes" in stage and b"3200" in stage
 assert b"chunk_delay_ms" in stage and b"100" in stage
@@ -4689,10 +4732,10 @@ for command in commands:
         shell = command.index(b"shell")
         assert len(command) == shell + 2
         remote = [value.encode() for value in shlex.split(command[shell + 1].decode(), posix=True)]
-        paths.extend(value for value in remote if value.startswith(b"files/voice-real-room/"))
+        paths.extend(value for value in remote if value.startswith(b"voice-real-room/"))
 assert paths == [
-    b"files/voice-real-room/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/request-66840dda154e8a113c31dd0ad32f7f3a366a80e8136979d8f5a101d3d29d6f72.pcm",
-    b"files/voice-real-room/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/request-74aeae04b0a57b8f19bb67f2b742072ee0b8f9ce5efd298f0134a16791c73607.pcm",
+    b"voice-real-room/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/request-66840dda154e8a113c31dd0ad32f7f3a366a80e8136979d8f5a101d3d29d6f72.pcm",
+    b"voice-real-room/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/request-74aeae04b0a57b8f19bb67f2b742072ee0b8f9ce5efd298f0134a16791c73607.pcm",
 ]
 PY
   pass
@@ -6820,6 +6863,28 @@ run_resolve_binding_tests() {
     [[ "$(<"$RESOLVER_ORDER_LOG")" == $'resolver-cleanup-complete\npublisher-unblock\npublisher-link' ]] ||
       fail "resolve-binding $topology: cleanup did not precede publication"
   done
+
+  reset_fake
+  make_default_binding_snapshot main
+  output_parent="$TMP_DIR/binding-android-stale-descriptor"
+  mkdir "$output_parent"
+  chmod 700 "$output_parent"
+  destination="$output_parent/binding"
+  site="$TMP_DIR/binding-android-stale-descriptor-site"
+  marker="$TMP_DIR/binding-android-stale-descriptor-body"
+  local stale_phase_log="$TMP_DIR/binding-android-stale-descriptor-phases"
+  make_binding_publisher_site "$site"
+  FAKE_BINDING_ANDROID_STALE_DESCRIPTOR=1 \
+    FAKE_BINDING_EXECUTED_BODY="$marker" FAKE_BINDING_PHASE_LOG="$stale_phase_log" \
+    VOICE_STEP_RESOLVER_ORDER_LOG="$RESOLVER_ORDER_LOG" PYTHONPATH="$site" \
+    run_binding_helper "$destination"
+  assert_binding_success "$destination"
+  [[ "$(<"$marker")" == $'started\nexit=0' ]] ||
+    fail "resolve-binding Android stale descriptor: production managed body failed"
+  grep -qx 'inherited-fd-closed' "$stale_phase_log" ||
+    fail "resolve-binding Android stale descriptor: inherited fd was not closed"
+  ! grep -qx 'inherited-fd-leaked' "$stale_phase_log" ||
+    fail "resolve-binding Android stale descriptor: inherited fd leaked"
 
   reset_fake
   make_default_binding_snapshot main

@@ -505,12 +505,15 @@ set -eu
 : voice-step-binding-snapshot-v1
 main=$1
 wal=$2
-for descriptor_path in /proc/self/fd/*; do
-  fd=${descriptor_path##*/}
+descriptor_list=$(LC_ALL=C ls -1 /proc/self/fd) || exit 1
+for fd in $descriptor_list; do
+  descriptor_path=/proc/self/fd/$fd
+  [ -L "$descriptor_path" ] || continue
   case "$fd" in
     0|1|2) ;;
     *[!0-9]*|"") exit 1 ;;
-    *) eval "exec ${fd}>&-" ;;
+    [3-9]) eval "exec ${fd}>&-" ;;
+    *) exit 1 ;;
   esac
 done
 component_metadata() {
@@ -1513,16 +1516,19 @@ inject_fixture_once() {
   local role="$4"
   local remote_directory
   local remote_path
+  local receiver_path
   local owner_hash
   local reply
   remote_directory="files/voice-real-room/${RUN_HASH#sha256:}"
   remote_path="$remote_directory/${role}-${fixture_hash#sha256:}.pcm"
+  [[ "$remote_path" == files/* ]] || die 'invalid fixture path'
+  receiver_path="${remote_path#files/}"
   owner_hash="$(compute_remote_owner_hash)"
   stage_owned_snapshot "$remote_directory" "$remote_path" "$owner_hash" \
     "$fixture_snapshot" "$fixture_size" "$fixture_hash"
   reply="$(broadcast_read "$FIXTURE_RECEIVER" "$FIXTURE_STAGE_ACTION" \
     --es token "$FIXTURE_TOKEN" \
-    --es path "$remote_path" \
+    --es path "$receiver_path" \
     --el expected_size "$fixture_size" \
     --es expected_sha256 "$fixture_hash" \
     --ei chunk_bytes "$FIXTURE_CHUNK_BYTES" \
@@ -1531,7 +1537,7 @@ inject_fixture_once() {
     die 'unexpected receiver response'
   reply="$(broadcast_read "$FIXTURE_RECEIVER" "$FIXTURE_TRIGGER_ACTION" \
     --es token "$FIXTURE_TOKEN" \
-    --es path "$remote_path")"
+    --es path "$receiver_path")"
   [[ "$reply" == $'status=ok\naction=trigger\naccepted=true' ]] ||
     die 'unexpected receiver response'
 }
