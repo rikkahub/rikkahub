@@ -6,6 +6,8 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceCloudflareAccessCredentials
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceCredentials
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -112,6 +114,98 @@ class VoiceAgentConfigResolverTest {
         assertEquals("https://dev-remote-machine-1.tail83108.ts.net:9447", config.hermesVoiceBaseUrl)
         assertEquals("profile-api-key", config.credentials.deviceApiKey)
         assertEquals("gemini-live-2.5-flash-preview", config.voiceModelId)
+    }
+
+    @Test
+    fun `passes paired Cloudflare Access headers to Hermes Voice without forwarding unrelated headers`() {
+        val assistantId = Uuid.random()
+        val modelId = Uuid.random()
+        val model = Model(
+            id = modelId,
+            modelId = "hermes-agent",
+            displayName = "Hermes Agent",
+            customHeaders = listOf(
+                CustomHeader("CF-Access-Client-Id", "voice-client-id"),
+                CustomHeader("CF-Access-Client-Secret", "voice-client-secret"),
+                CustomHeader("X-Unrelated-Provider-Secret", "must-not-forward"),
+            ),
+        )
+        val settings = Settings(
+            assistantId = assistantId,
+            chatModelId = modelId,
+            assistants = listOf(Assistant(id = assistantId)),
+            providers = listOf(
+                ProviderSetting.OpenAI(
+                    name = "RMS Hermes",
+                    apiKey = "profile-api-key",
+                    baseUrl = "https://muly-hermes-api.example.test/v1",
+                    models = listOf(model),
+                )
+            ),
+        )
+        val conversation = Conversation.ofId(id = Uuid.random(), assistantId = assistantId)
+
+        val config = (
+            VoiceAgentConfigResolver(baseUrlOverride = "")
+                .resolve(settings = settings, conversation = conversation) as VoiceAgentConfigResult.Available
+            ).config
+
+        assertEquals(
+            HermesVoiceCredentials(
+                deviceApiKey = "profile-api-key",
+                cloudflareAccess = HermesVoiceCloudflareAccessCredentials(
+                    clientId = "voice-client-id",
+                    clientSecret = "voice-client-secret",
+                ),
+            ),
+            config.credentials,
+        )
+
+        val changedModel = model.copy(
+            customHeaders = model.customHeaders.map {
+                if (it.name == "CF-Access-Client-Secret") it.copy(value = "changed-secret") else it
+            },
+        )
+        val changedSettings = settings.copy(
+            providers = listOf(
+                (settings.providers.single() as ProviderSetting.OpenAI).copy(models = listOf(changedModel))
+            ),
+        )
+        val changedConfig = (
+            VoiceAgentConfigResolver(baseUrlOverride = "")
+                .resolve(settings = changedSettings, conversation = conversation) as VoiceAgentConfigResult.Available
+            ).config
+        assertTrue(config.directAccountConfigurationHash != changedConfig.directAccountConfigurationHash)
+    }
+
+    @Test
+    fun `rejects an incomplete Cloudflare Access header pair`() {
+        val assistantId = Uuid.random()
+        val modelId = Uuid.random()
+        val model = Model(
+            id = modelId,
+            modelId = "hermes-agent",
+            displayName = "Hermes Agent",
+            customHeaders = listOf(CustomHeader("CF-Access-Client-Id", "voice-client-id")),
+        )
+        val settings = Settings(
+            assistantId = assistantId,
+            chatModelId = modelId,
+            assistants = listOf(Assistant(id = assistantId)),
+            providers = listOf(
+                ProviderSetting.OpenAI(
+                    name = "RMS Hermes",
+                    apiKey = "profile-api-key",
+                    baseUrl = "https://muly-hermes-api.example.test/v1",
+                    models = listOf(model),
+                )
+            ),
+        )
+
+        val result = VoiceAgentConfigResolver(baseUrlOverride = "")
+            .resolve(settings, Conversation.ofId(Uuid.random(), assistantId))
+
+        assertTrue(result is VoiceAgentConfigResult.Unavailable)
     }
 
     @Test

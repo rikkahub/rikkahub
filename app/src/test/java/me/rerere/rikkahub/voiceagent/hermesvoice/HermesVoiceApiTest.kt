@@ -58,6 +58,51 @@ class HermesVoiceApiTest {
     }
 
     @Test
+    fun `createSession sends configured Cloudflare Access credentials`() = runBlocking {
+        var seenRequest: Request? = null
+        val transport = transportFor { request ->
+            seenRequest = request
+            responseFor(
+                request = request,
+                body = """
+                {
+                  "token":"tok",
+                  "modelId":"gemini-flash",
+                  "providerModel":"gemini-3.1-flash-live-preview",
+                  "apiVersion":"v1alpha",
+                  "websocketUrl":"wss://example.test/live",
+                  "inputSampleRate":16000,
+                  "outputSampleRate":24000,
+                  "liveConnectConfig":{}
+                }
+                """.trimIndent(),
+            )
+        }
+        val api = HermesVoiceApi(
+            baseUrl = "https://hermes-voice.example.test",
+            credentials = HermesVoiceCredentials(
+                deviceApiKey = "device-api-key",
+                cloudflareAccess = HermesVoiceCloudflareAccessCredentials(
+                    clientId = "voice-client-id",
+                    clientSecret = "voice-client-secret",
+                ),
+            ),
+            transport = transport,
+        )
+
+        api.createSession("gemini-flash")
+
+        val request = requireNotNull(seenRequest)
+        assertEquals("Bearer device-api-key", request.header("Authorization"))
+        assertEquals("voice-client-id", request.header("CF-Access-Client-Id"))
+        assertEquals("voice-client-secret", request.header("CF-Access-Client-Secret"))
+        assertEquals(
+            setOf("Authorization", "CF-Access-Client-Id", "CF-Access-Client-Secret"),
+            request.headers.names(),
+        )
+    }
+
+    @Test
     fun `voice session response parses config trace metadata`() = runBlocking {
         val transport = transportFor { request ->
             responseFor(
@@ -1039,7 +1084,13 @@ class HermesVoiceApiTest {
             prompt = "private prompt",
             profileId = "default",
         )
-        val credentials = HermesVoiceCredentials(deviceApiKey = "profile-api-key")
+        val credentials = HermesVoiceCredentials(
+            deviceApiKey = "profile-api-key",
+            cloudflareAccess = HermesVoiceCloudflareAccessCredentials(
+                clientId = "cf-id",
+                clientSecret = "cf-secret",
+            ),
+        )
         val hermesResponse = MobileHermesResponse(
             callId = "call-1",
             answer = "private answer",

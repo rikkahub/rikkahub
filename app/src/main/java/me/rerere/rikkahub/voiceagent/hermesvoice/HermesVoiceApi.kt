@@ -286,6 +286,10 @@ class HermesVoiceApi internal constructor(
             .url(normalizedBaseUrl + path)
             .addHeader("Authorization", "Bearer ${credentials.deviceApiKey}")
             .apply {
+                credentials.cloudflareAccess?.let { access ->
+                    addHeader("CF-Access-Client-Id", access.clientId)
+                    addHeader("CF-Access-Client-Secret", access.clientSecret)
+                }
                 traceHeaders?.let {
                     addHeader("X-Voice-Trace-Id", it.traceId)
                     addHeader("X-Voice-Session-Id", it.voiceSessionId)

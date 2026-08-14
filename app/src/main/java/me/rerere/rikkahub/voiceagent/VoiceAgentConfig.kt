@@ -9,6 +9,7 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceCloudflareAccessCredentials
 import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceCredentials
 
 data class VoiceAgentLaunchConfig(
@@ -54,23 +55,48 @@ class VoiceAgentConfigResolver(
         if (hermesVoiceBaseUrl.isBlank()) {
             return VoiceAgentConfigResult.Unavailable("Voice Agent needs a Hermes origin on the current provider.")
         }
+        val cloudflareAccessClientId = headers.valueFor(CLOUDFLARE_ACCESS_CLIENT_ID_HEADER)
+        val cloudflareAccessClientSecret = headers.valueFor(CLOUDFLARE_ACCESS_CLIENT_SECRET_HEADER)
+        val cloudflareAccess = when {
+            cloudflareAccessClientId == null && cloudflareAccessClientSecret == null -> null
+            cloudflareAccessClientId != null && cloudflareAccessClientSecret != null ->
+                HermesVoiceCloudflareAccessCredentials(
+                    clientId = cloudflareAccessClientId,
+                    clientSecret = cloudflareAccessClientSecret,
+                )
+            else -> return VoiceAgentConfigResult.Unavailable(
+                "Voice Agent needs both Cloudflare Access headers when either is configured."
+            )
+        }
+
+        val directConfigurationValues = mutableListOf(
+            provider.id.toString(),
+            provider.apiKey,
+            provider.baseUrl,
+            provider.chatCompletionsPath,
+            provider.useResponseApi.toString(),
+            provider.includeHistoryReasoning.toString(),
+            hermesVoiceBaseUrl,
+        ).apply {
+            cloudflareAccess?.let {
+                add(it.clientId)
+                add(it.clientSecret)
+            }
+        }
 
         return VoiceAgentConfigResult.Available(
             VoiceAgentLaunchConfig(
                 hermesVoiceBaseUrl = hermesVoiceBaseUrl,
-                credentials = HermesVoiceCredentials(deviceApiKey = provider.apiKey),
+                credentials = HermesVoiceCredentials(
+                    deviceApiKey = provider.apiKey,
+                    cloudflareAccess = cloudflareAccess,
+                ),
                 voiceModelId = headers.valueFor(VOICE_AGENT_MODEL_ID_HEADER) ?: defaultVoiceModelId,
                 assistantName = assistant.name.ifBlank { "Default Assistant" },
                 assistantPrompt = conversation.customSystemPrompt ?: assistant.systemPrompt,
                 directAccountConfigurationHash = voiceConfigurationStateIdentity(
                     "voice-agent-account-v1",
-                    provider.id.toString(),
-                    provider.apiKey,
-                    provider.baseUrl,
-                    provider.chatCompletionsPath,
-                    provider.useResponseApi.toString(),
-                    provider.includeHistoryReasoning.toString(),
-                    hermesVoiceBaseUrl,
+                    *directConfigurationValues.toTypedArray(),
                 ),
             )
         )
@@ -99,5 +125,7 @@ class VoiceAgentConfigResolver(
         const val DEFAULT_VOICE_MODEL_ID = "gemini-flash"
         const val HERMES_VOICE_BASE_URL_HEADER = "X-Hermes-Voice-Base-Url"
         const val VOICE_AGENT_MODEL_ID_HEADER = "X-Voice-Agent-Model-Id"
+        const val CLOUDFLARE_ACCESS_CLIENT_ID_HEADER = "CF-Access-Client-Id"
+        const val CLOUDFLARE_ACCESS_CLIENT_SECRET_HEADER = "CF-Access-Client-Secret"
     }
 }

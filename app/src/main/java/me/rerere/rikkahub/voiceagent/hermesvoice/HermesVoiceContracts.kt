@@ -280,9 +280,19 @@ typealias MobileHermesJobSubmitResponse = HermesJobSnapshot
 typealias MobileHermesJobPollResponse = HermesJobSnapshot
 
 @Serializable
-data class HermesVoiceCredentials(
-    val deviceApiKey: String,
+data class HermesVoiceCloudflareAccessCredentials(
+    val clientId: String,
+    val clientSecret: String,
 ) {
     override fun toString(): String =
-        "HermesVoiceCredentials(deviceApiKey=[redacted])"
+        "HermesVoiceCloudflareAccessCredentials(clientId=[redacted], clientSecret=[redacted])"
+}
+
+@Serializable
+data class HermesVoiceCredentials(
+    val deviceApiKey: String,
+    val cloudflareAccess: HermesVoiceCloudflareAccessCredentials? = null,
+) {
+    override fun toString(): String =
+        "HermesVoiceCredentials(deviceApiKey=[redacted], cloudflareAccess=[redacted])"
 }

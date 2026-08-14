@@ -2,6 +2,7 @@ package me.rerere.rikkahub.voiceagent.livekit
 
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceApi
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceCloudflareAccessCredentials
 import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceCredentials
 import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceHttpTransport
 import okhttp3.Protocol
@@ -89,7 +90,13 @@ class LiveKitVoiceContractsTest {
         var seenRequest: Request? = null
         val api = HermesVoiceApi(
             baseUrl = "https://hermes-voice.example.test/base",
-            credentials = HermesVoiceCredentials(deviceApiKey = "device-api-key"),
+            credentials = HermesVoiceCredentials(
+                deviceApiKey = "device-api-key",
+                cloudflareAccess = HermesVoiceCloudflareAccessCredentials(
+                    clientId = "voice-client-id",
+                    clientSecret = "voice-client-secret",
+                ),
+            ),
             transport = transportFor { request ->
                 seenRequest = request
                 responseFor(
@@ -127,7 +134,12 @@ class LiveKitVoiceContractsTest {
         assertEquals("/base/api/mobile/livekit/session", request.url.encodedPath)
         assertEquals("application/json; charset=utf-8", request.body?.contentType().toString())
         assertEquals("Bearer device-api-key", request.header("Authorization"))
-        assertEquals(setOf("Authorization"), request.headers.names())
+        assertEquals("voice-client-id", request.header("CF-Access-Client-Id"))
+        assertEquals("voice-client-secret", request.header("CF-Access-Client-Secret"))
+        assertEquals(
+            setOf("Authorization", "CF-Access-Client-Id", "CF-Access-Client-Secret"),
+            request.headers.names(),
+        )
         assertEquals(
             "{\"conversationId\":\"018f0000-0000-7000-8000-000000000001\",\"traceId\":\"trace-1\"}",
             request.body.bodyToUtf8(),
