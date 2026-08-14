@@ -16,11 +16,13 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.ui.UIMessage
-import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.OpenAIReasoningMetadata
+import me.rerere.ai.ui.ReasoningType
 import me.rerere.ai.ui.ServerToolMetadata
 import me.rerere.ai.ui.ServerToolProtocol
 import me.rerere.ai.ui.ServerToolStatus
+import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.toMetadata
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
@@ -322,6 +324,50 @@ class ResponseApiRequestMessageTest {
                 lastCallIndex = i
             }
         }
+    }
+
+    @Test
+    fun `encrypted reasoning should not replay plaintext content`() {
+        val reasoningItem = invokeBuildMessages(listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.Reasoning(
+                    reasoning = "plaintext reasoning",
+                    metadata = OpenAIReasoningMetadata(
+                        reasoningId = "rs_1",
+                        encryptedContent = "encrypted",
+                    ).toMetadata(),
+                    reasoningType = ReasoningType.REASONING_TEXT,
+                )),
+            ),
+        )).single().jsonObject
+
+        assertEquals("reasoning", reasoningItem["type"]?.jsonPrimitive?.content)
+        assertEquals("rs_1", reasoningItem["id"]?.jsonPrimitive?.content)
+        assertEquals("encrypted", reasoningItem["encrypted_content"]?.jsonPrimitive?.content)
+        assertFalse(reasoningItem.containsKey("content"))
+    }
+
+    @Test
+    fun `unencrypted reasoning should replay plaintext content`() {
+        val reasoningItem = invokeBuildMessages(listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.Reasoning(
+                    reasoning = "plaintext reasoning",
+                    metadata = OpenAIReasoningMetadata(reasoningId = "rs_1").toMetadata(),
+                    reasoningType = ReasoningType.REASONING_TEXT,
+                )),
+            ),
+        )).single().jsonObject
+
+        val content = reasoningItem["content"]?.jsonArray
+        assertEquals(1, content?.size)
+        assertEquals(
+            "plaintext reasoning",
+            content?.single()?.jsonObject?.get("text")?.jsonPrimitive?.content,
+        )
+        assertFalse(reasoningItem.containsKey("encrypted_content"))
     }
 
     @Test
