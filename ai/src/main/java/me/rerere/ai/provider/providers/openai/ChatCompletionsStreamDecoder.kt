@@ -5,7 +5,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -48,20 +47,20 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
                 responseId = payload["id"]?.jsonPrimitive?.contentOrNull ?: responseId
                 responseModel = payload["model"]?.jsonPrimitive?.contentOrNull ?: responseModel
 
-                payload["choices"]?.jsonArray?.firstOrNull()?.jsonObject?.let { choice ->
-                    (choice["delta"]?.jsonObject ?: choice["message"]?.jsonObject)?.let { message ->
+                payload["choices"]?.jsonArrayOrNull?.firstOrNull()?.jsonObjectOrNull?.let { choice ->
+                    (choice["delta"]?.jsonObjectOrNull ?: choice["message"]?.jsonObjectOrNull)?.let { message ->
                         val messageWithoutTools = JsonObject(message.filterKeys { it != "tool_calls" })
                         addAll(streamState.append(parseMessage(messageWithoutTools), responseId))
 
-                        message["tool_calls"]?.jsonArray?.forEachIndexed { fallbackIndex, element ->
-                            val toolCall = element.jsonObject
+                        message["tool_calls"]?.jsonArrayOrNull?.forEachIndexed { fallbackIndex, element ->
+                            val toolCall = element.jsonObjectOrNull ?: return@forEachIndexed
                             val index = toolCall["index"]?.jsonPrimitive?.intOrNull ?: fallbackIndex
                             val toolId = toolCall["id"]?.jsonPrimitive?.contentOrNull
                                 ?.also { toolIdsByIndex[index] = it }
                                 ?: toolIdsByIndex.getOrPut(index) {
                                     "${responseId ?: "response"}:tool-$index"
                                 }
-                            val function = toolCall["function"]?.jsonObject
+                            val function = toolCall["function"]?.jsonObjectOrNull
                             addAll(streamState.append(
                                 UIMessage(
                                     role = MessageRole.ASSISTANT,
@@ -100,7 +99,7 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
         val reasoning = payload["reasoning_content"]?.jsonPrimitiveOrNull?.contentOrNull
             ?: payload["reasoning"]?.jsonPrimitiveOrNull?.contentOrNull
             ?: payload["content"]?.takeIf { it is JsonArray }?.let { array ->
-                array.jsonArrayOrNull?.getOrNull(0)?.jsonObject
+                array.jsonArrayOrNull?.getOrNull(0)?.jsonObjectOrNull
                     ?.get("thinking")?.jsonArrayOrNull?.getOrNull(0)?.jsonObjectOrNull
                     ?.get("text")?.jsonPrimitiveOrNull?.contentOrNull
             }
