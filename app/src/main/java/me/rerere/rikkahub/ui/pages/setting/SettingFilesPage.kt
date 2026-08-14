@@ -51,6 +51,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.R
@@ -87,7 +88,9 @@ fun SettingFilesPage(
     var showCleanDialog by remember { mutableStateOf(false) }
     var autoCleanupMenuOpen by remember { mutableStateOf(false) }
     val files by filesManager.observe(selectedFolder).collectAsState(initial = emptyList())
-    val autoCleanupDays by settingsStore.settingsFlow.collectAsState(initial = 0)
+    val autoCleanupDays by settingsStore.settingsFlow
+        .map { it.autoCleanupImageDays }
+        .collectAsState(initial = 0)
 
     if (pendingDelete != null) {
         val target = pendingDelete!!
