@@ -22,10 +22,5 @@
 -keepattributes Signature,InnerClasses,EnclosingMethod
 -keep,allowobfuscation class * extends com.fasterxml.jackson.core.type.TypeReference
 
-# JLaTeXMath loads these optional alphabet registrations by their binary names.
--keep,allowoptimization class org.scilab.forge.jlatexmath.cyrillic.CyrillicRegistration {
-    public <init>();
-}
--keep,allowoptimization class org.scilab.forge.jlatexmath.greek.GreekRegistration {
-    public <init>();
-}
+# Keep JlatexMath
+-keep class org.scilab.forge.jlatexmath.** { *; }
