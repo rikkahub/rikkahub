@@ -55,7 +55,11 @@
         "description": "模型将使用大量推理来回答问题。"
       },
       "xhigh": {
-        "label": "极限推理",
+        "label": "超高",
+        "description": "模型将使用超高推理强度来回答问题。"
+      },
+      "max": {
+        "label": "最大",
         "description": "模型将使用最大推理预算来回答问题。"
       }
     }

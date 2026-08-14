@@ -541,6 +541,7 @@
   <string name="reasoning_light_desc">The model will use a small amount of reasoning to answer questions.</string>
   <string name="reasoning_medium">Medium</string>
   <string name="reasoning_medium_desc">The model will use more reasoning to answer questions.</string>
+  <string name="reasoning_max">Max</string>
   <string name="reasoning_off">Off</string>
   <string name="reasoning_off_desc">Turn off reasoning functionality, the model will directly answer questions.</string>
   <string name="reasoning_picker_hint">Not all models support depth adjustment. Refer to the model and provider documentation.</string>

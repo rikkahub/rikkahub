@@ -1292,5 +1292,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_update_reminder_pause_description">更新リマインダーを一時停止する期間を選択してください。自動的に再開されます。</string>
   <string name="setting_update_reminder_pause_days">%1$d日間</string>
   <string name="setting_update_reminder_resume_now">今すぐ再開</string>
+  <string name="reasoning_max">最大</string>
 </resources>
 

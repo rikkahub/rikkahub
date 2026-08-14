@@ -362,8 +362,8 @@ class ChatCompletionsAPI(
                         })
                         if (level.isEnabled && level != ReasoningLevel.AUTO) {
                             val effort = when (level) {
-                                ReasoningLevel.MEDIUM -> "high"
-                                ReasoningLevel.XHIGH -> "max"
+                                ReasoningLevel.MEDIUM, ReasoningLevel.HIGH -> "high"
+                                ReasoningLevel.MAX -> "max"
                                 else -> level.effort
                             }
                             put("reasoning_effort", effort)
@@ -374,7 +374,7 @@ class ChatCompletionsAPI(
                         if ("deepseek-v4" in params.model.modelId.lowercase()) {
                             if (level != ReasoningLevel.AUTO) {
                                 val effort = when (level) {
-                                    ReasoningLevel.XHIGH -> "max"
+                                    ReasoningLevel.XHIGH, ReasoningLevel.MAX -> "max"
                                     ReasoningLevel.OFF -> "none"
                                     else -> "high"
                                 }

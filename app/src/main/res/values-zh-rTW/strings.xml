@@ -1290,5 +1290,6 @@
   <string name="setting_update_reminder_pause_description">選擇暫停更新提醒的時長。它們會自動恢復。</string>
   <string name="setting_update_reminder_pause_days">%1$d 天</string>
   <string name="setting_update_reminder_resume_now">立即恢復</string>
+  <string name="reasoning_max">最大</string>
 </resources>
 

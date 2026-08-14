@@ -1292,5 +1292,6 @@
   <string name="setting_update_reminder_pause_description">Выберите, как долго приостановить напоминания об обновлениях. Они возобновятся автоматически.</string>
   <string name="setting_update_reminder_pause_days">%1$d дн.</string>
   <string name="setting_update_reminder_resume_now">Возобновить сейчас</string>
+  <string name="reasoning_max">Максимум</string>
 </resources>
 

@@ -55,6 +55,10 @@
         "description": "Use extensive reasoning to answer."
       },
       "xhigh": {
+        "label": "XHigh",
+        "description": "Use very high reasoning effort to answer."
+      },
+      "max": {
         "label": "Max",
         "description": "Use maximum reasoning to answer."
       }
