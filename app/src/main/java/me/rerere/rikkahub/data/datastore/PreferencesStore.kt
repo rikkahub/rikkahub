@@ -146,6 +146,9 @@ class SettingsStore(
         // 备份提醒
         val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
 
+        // 历史图片自动清理
+        val AUTO_CLEANUP_IMAGE_DAYS = intPreferencesKey("auto_cleanup_image_days")
+
         // 统计
         val LAUNCH_COUNT = intPreferencesKey("launch_count")
 
@@ -244,6 +247,7 @@ class SettingsStore(
                 } ?: BackupReminderConfig(),
                 launchCount = preferences[LAUNCH_COUNT] ?: 0,
                 sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
+                autoCleanupImageDays = preferences[AUTO_CLEANUP_IMAGE_DAYS] ?: 0,
             )
         }
         .map {
@@ -412,6 +416,7 @@ class SettingsStore(
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
+            preferences[AUTO_CLEANUP_IMAGE_DAYS] = settings.autoCleanupImageDays.coerceIn(0, 365)
         }
     }
 
@@ -556,6 +561,7 @@ data class Settings(
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,
+    val autoCleanupImageDays: Int = 0,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

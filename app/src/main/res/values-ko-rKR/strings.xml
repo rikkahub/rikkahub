@@ -703,6 +703,11 @@
   <string name="setting_files_page_delete_file_title">파일 삭제</string>
   <string name="setting_files_page_deleted_toast">삭제됨</string>
   <string name="setting_files_page_folder_upload">업로드</string>
+  <string name="setting_files_page_auto_cleanup_title">오래된 이미지 자동 정리</string>
+  <string name="setting_files_page_auto_cleanup_desc">앱 시작 시 지정한 일수보다 오래된 이미지를 삭제합니다. 삭제된 이미지는 이전 채팅에서 표시되지 않습니다.</string>
+  <string name="setting_files_page_auto_cleanup_off">끄기</string>
+  <string name="setting_files_page_auto_cleanup_days">%1$d일</string>
+  <string name="setting_files_page_auto_cleanup_done">%1$d개 파일 정리, %2$d KB 확보</string>
   <string name="setting_files_page_no_files">파일 없음</string>
   <string name="setting_files_page_title">파일 관리</string>
   <string name="setting_mcp_page_add_header">헤더 추가</string>

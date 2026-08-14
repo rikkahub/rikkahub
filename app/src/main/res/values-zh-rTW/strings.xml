@@ -703,6 +703,11 @@
   <string name="setting_files_page_delete_file_title">刪除檔案</string>
   <string name="setting_files_page_deleted_toast">已刪除</string>
   <string name="setting_files_page_folder_upload">上傳</string>
+  <string name="setting_files_page_auto_cleanup_title">自動清理歷史圖片</string>
+  <string name="setting_files_page_auto_cleanup_desc">App 啟動時刪除超過設定天數的圖片。被清理的圖片在舊聊天中將無法顯示。</string>
+  <string name="setting_files_page_auto_cleanup_off">關閉</string>
+  <string name="setting_files_page_auto_cleanup_days">%1$d 天</string>
+  <string name="setting_files_page_auto_cleanup_done">已清理 %1$d 個檔案，釋放 %2$d KB</string>
   <string name="setting_files_page_no_files">無檔案</string>
   <string name="setting_files_page_title">檔案管理</string>
   <string name="setting_mcp_page_add_header">添加請求頭</string>

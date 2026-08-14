@@ -703,6 +703,11 @@
   <string name="setting_files_page_delete_file_title">Удалить файл</string>
   <string name="setting_files_page_deleted_toast">Удалено</string>
   <string name="setting_files_page_folder_upload">Загрузить</string>
+  <string name="setting_files_page_auto_cleanup_title">Автоочистка старых изображений</string>
+  <string name="setting_files_page_auto_cleanup_desc">Удалять изображения старше выбранного количества дней при запуске приложения. Удалённые изображения перестанут отображаться в старых чатах.</string>
+  <string name="setting_files_page_auto_cleanup_off">Выкл.</string>
+  <string name="setting_files_page_auto_cleanup_days">%1$d дней</string>
+  <string name="setting_files_page_auto_cleanup_done">Очищено файлов: %1$d, освобождено: %2$d КБ</string>
   <string name="setting_files_page_no_files">Нет файлов</string>
   <string name="setting_files_page_title">Управление файлами</string>
   <string name="setting_mcp_page_add_header">Добавить заголовок</string>

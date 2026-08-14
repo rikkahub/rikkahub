@@ -377,6 +377,34 @@ class FilesManager(
         repository.deleteById(id) > 0
     }
 
+    /**
+     * 删除指定天数以前上传的文件（按 created_at 判断），返回 (删除文件数, 释放字节数)。
+     * days <= 0 时不执行任何删除。
+     */
+    suspend fun deleteOlderThan(
+        days: Int,
+        folder: String = FileFolders.UPLOAD,
+    ): Pair<Int, Long> = withContext(Dispatchers.IO) {
+        if (days <= 0) {
+            return@withContext Pair(0, 0L)
+        }
+        val cutoff = System.currentTimeMillis() - days * 24L * 60 * 60 * 1000
+        var deletedCount = 0
+        var freedBytes = 0L
+        repository.listByFolder(folder).first().forEach { entity ->
+            if (entity.createdAt < cutoff) {
+                val file = getFile(entity)
+                if (file.delete()) {
+                    freedBytes += entity.sizeBytes
+                }
+                if (repository.deleteByPath(entity.relativePath) > 0) {
+                    deletedCount++
+                }
+            }
+        }
+        Pair(deletedCount, freedBytes)
+    }
+
     suspend fun deleteAll(folder: String = FileFolders.UPLOAD): Boolean = withContext(Dispatchers.IO) {
         val dir = File(context.filesDir, folder)
         val entries = dir.listFiles()

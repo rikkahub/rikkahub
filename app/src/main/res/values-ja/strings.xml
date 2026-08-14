@@ -703,6 +703,11 @@
   <string name="setting_files_page_delete_file_title">ファイルを削除</string>
   <string name="setting_files_page_deleted_toast">削除しました</string>
   <string name="setting_files_page_folder_upload">アップロード</string>
+  <string name="setting_files_page_auto_cleanup_title">古い画像を自動削除</string>
+  <string name="setting_files_page_auto_cleanup_desc">起動時に指定日数より古い画像を削除します。削除された画像は過去のチャットで表示されなくなります。</string>
+  <string name="setting_files_page_auto_cleanup_off">オフ</string>
+  <string name="setting_files_page_auto_cleanup_days">%1$d 日</string>
+  <string name="setting_files_page_auto_cleanup_done">%1$d 個のファイルを削除し、%2$d KB 解放しました</string>
   <string name="setting_files_page_no_files">ファイルがありません</string>
   <string name="setting_files_page_title">ファイル管理</string>
   <string name="setting_mcp_page_add_header">ヘッダーを追加</string>

@@ -24,6 +24,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +54,8 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -64,6 +68,7 @@ import java.io.File
 @Composable
 fun SettingFilesPage(
     filesManager: FilesManager = koinInject(),
+    settingsStore: SettingsStore = koinInject(),
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val gridState = rememberLazyStaggeredGridState()
@@ -80,7 +85,10 @@ fun SettingFilesPage(
     var selectedFolder by remember { mutableStateOf(FileFolders.UPLOAD) }
     var pendingDelete by remember { mutableStateOf<ManagedFileEntity?>(null) }
     var showCleanDialog by remember { mutableStateOf(false) }
+    var autoCleanupMenuOpen by remember { mutableStateOf(false) }
     val files by filesManager.observe(selectedFolder).collectAsState(initial = emptyList())
+    val autoCleanupDays by settingsStore.settingsFlow
+        .collectAsState(initial = Settings.dummy().autoCleanupImageDays)
 
     if (pendingDelete != null) {
         val target = pendingDelete!!
@@ -178,6 +186,29 @@ fun SettingFilesPage(
                 onFolderSelected = { selectedFolder = it }
             )
 
+            AutoCleanupRow(
+                autoCleanupDays = autoCleanupDays,
+                menuOpen = autoCleanupMenuOpen,
+                onMenuOpenChange = { autoCleanupMenuOpen = it },
+                onSelect = { days ->
+                    if (days != autoCleanupDays) {
+                        scope.launch {
+                            settingsStore.update { it.copy(autoCleanupImageDays = days) }
+                            if (days > 0) {
+                                val (count, freedBytes) = filesManager.deleteOlderThan(days)
+                                toaster.show(
+                                    stringResource(
+                                        R.string.setting_files_page_auto_cleanup_done,
+                                        count,
+                                        freedBytes / 1024
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            )
+
             if (files.isEmpty()) {
                 Box(
                     modifier = Modifier
@@ -241,6 +272,63 @@ private fun folderDisplayName(folder: String): String = when (folder) {
     FileFolders.UPLOAD -> stringResource(R.string.setting_files_page_folder_upload)
     else -> folder
 }
+
+private val autoCleanupOptions = listOf(0, 7, 30, 60, 90)
+
+@Composable
+private fun AutoCleanupRow(
+    autoCleanupDays: Int,
+    menuOpen: Boolean,
+    onMenuOpenChange: (Boolean) -> Unit,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            Text(
+                text = stringResource(R.string.setting_files_page_auto_cleanup_title),
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = stringResource(R.string.setting_files_page_auto_cleanup_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Box {
+            TextButton(onClick = { onMenuOpenChange(true) }) {
+                Text(autoCleanupDaysLabel(autoCleanupDays))
+            }
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { onMenuOpenChange(false) }
+            ) {
+                autoCleanupOptions.forEach { days ->
+                    DropdownMenuItem(
+                        text = { Text(autoCleanupDaysLabel(days)) },
+                        onClick = {
+                            onMenuOpenChange(false)
+                            onSelect(days)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun autoCleanupDaysLabel(days: Int): String =
+    if (days <= 0) {
+        stringResource(R.string.setting_files_page_auto_cleanup_off)
+    } else {
+        stringResource(R.string.setting_files_page_auto_cleanup_days, days)
+    }
 
 @Composable
 private fun FileItem(

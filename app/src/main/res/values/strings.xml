@@ -747,6 +747,11 @@
   <string name="setting_files_page_delete_file_title">Delete File</string>
   <string name="setting_files_page_deleted_toast">Deleted</string>
   <string name="setting_files_page_folder_upload">Upload</string>
+  <string name="setting_files_page_auto_cleanup_title">Auto-clean old images</string>
+  <string name="setting_files_page_auto_cleanup_desc">Delete images older than the selected days on app start. Images in old chats will no longer display.</string>
+  <string name="setting_files_page_auto_cleanup_off">Off</string>
+  <string name="setting_files_page_auto_cleanup_days">%1$d days</string>
+  <string name="setting_files_page_auto_cleanup_done">Cleaned %1$d files, freed %2$d KB</string>
   <string name="setting_files_page_no_files">No Files</string>
   <string name="setting_files_page_title">File Management</string>
   <string name="setting_mcp_page_add_header">Add Header</string>
