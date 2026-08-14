@@ -54,7 +54,6 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.db.entity.ManagedFileEntity
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.FilesManager
@@ -81,14 +80,14 @@ fun SettingFilesPage(
     val deleteFailedToast = stringResource(R.string.setting_files_page_delete_failed_toast)
     val cleanedToast = stringResource(R.string.setting_files_page_cleaned_toast)
     val cleanFailedToast = stringResource(R.string.setting_files_page_clean_failed_toast)
+    val autoCleanupDoneTemplate = stringResource(R.string.setting_files_page_auto_cleanup_done)
 
     var selectedFolder by remember { mutableStateOf(FileFolders.UPLOAD) }
     var pendingDelete by remember { mutableStateOf<ManagedFileEntity?>(null) }
     var showCleanDialog by remember { mutableStateOf(false) }
     var autoCleanupMenuOpen by remember { mutableStateOf(false) }
     val files by filesManager.observe(selectedFolder).collectAsState(initial = emptyList())
-    val autoCleanupDays by settingsStore.settingsFlow
-        .collectAsState(initial = Settings.dummy().autoCleanupImageDays)
+    val autoCleanupDays by settingsStore.settingsFlow.collectAsState(initial = 0)
 
     if (pendingDelete != null) {
         val target = pendingDelete!!
@@ -196,13 +195,7 @@ fun SettingFilesPage(
                             settingsStore.update { it.copy(autoCleanupImageDays = days) }
                             if (days > 0) {
                                 val (count, freedBytes) = filesManager.deleteOlderThan(days)
-                                toaster.show(
-                                    stringResource(
-                                        R.string.setting_files_page_auto_cleanup_done,
-                                        count,
-                                        freedBytes / 1024
-                                    )
-                                )
+                                toaster.show(autoCleanupDoneTemplate.format(count, freedBytes / 1024))
                             }
                         }
                     }
