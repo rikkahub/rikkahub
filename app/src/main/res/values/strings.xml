@@ -842,6 +842,10 @@
   <string name="setting_page_preferences_notification_desc">Update alerts, message generation notifications</string>
   <string name="setting_page_preferences_general">General</string>
   <string name="setting_page_preferences_general_desc">Interaction behavior, scrolling, input settings</string>
+  <string name="setting_page_image_compress_settings">Image Compression</string>
+  <string name="setting_general_page_image_compress_title">Compress images to a size limit</string>
+  <string name="setting_general_page_image_compress_desc">Compress images before sending them to models. Smaller uploads speed up responses and avoid rejection by providers with request size limits.</string>
+  <string name="setting_general_page_image_compress_max_size_title">Size limit (KB)</string>
   <string name="setting_page_preferences_ui">UI Preferences</string>
   <string name="setting_page_preferences_ui_desc">Message display, fonts, code blocks</string>
   <string name="setting_page_documentation">Documentation</string>

@@ -23,6 +23,8 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.util.ImageCompressConfig
+import me.rerere.ai.util.currentImageCompressConfig
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
@@ -146,6 +148,10 @@ class SettingsStore(
         // 备份提醒
         val BACKUP_REMINDER_CONFIG = stringPreferencesKey("backup_reminder_config")
 
+        // 图片发送压缩
+        val IMAGE_COMPRESS_ENABLED = booleanPreferencesKey("image_compress_enabled")
+        val IMAGE_COMPRESS_MAX_BYTES = intPreferencesKey("image_compress_max_bytes")
+
         // 统计
         val LAUNCH_COUNT = intPreferencesKey("launch_count")
 
@@ -244,6 +250,8 @@ class SettingsStore(
                 } ?: BackupReminderConfig(),
                 launchCount = preferences[LAUNCH_COUNT] ?: 0,
                 sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
+                imageCompressEnabled = preferences[IMAGE_COMPRESS_ENABLED] == true,
+                imageCompressMaxBytes = preferences[IMAGE_COMPRESS_MAX_BYTES]?.coerceIn(100, 5000) ?: 500,
             )
         }
         .map {
@@ -340,6 +348,9 @@ class SettingsStore(
         .onEach {
             get<PebbleEngine>().templateCache.invalidateAll()
         }
+        .onEach {
+            currentImageCompressConfig = it.toImageCompressConfig()
+        }
 
     val settingsFlow = settingsFlowRaw
         .distinctUntilChanged()
@@ -351,6 +362,7 @@ class SettingsStore(
             return
         }
         settingsFlow.value = settings
+        currentImageCompressConfig = settings.toImageCompressConfig()
         dataStore.edit { preferences ->
             preferences[DYNAMIC_COLOR] = settings.dynamicColor
             preferences[THEME_ID] = settings.themeId
@@ -412,6 +424,8 @@ class SettingsStore(
             preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
             preferences[LAUNCH_COUNT] = settings.launchCount
             preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
+            preferences[IMAGE_COMPRESS_ENABLED] = settings.imageCompressEnabled
+            preferences[IMAGE_COMPRESS_MAX_BYTES] = settings.imageCompressMaxBytes.coerceIn(100, 5000)
         }
     }
 
@@ -556,12 +570,26 @@ data class Settings(
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
     val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,
+    val imageCompressEnabled: Boolean = false,
+    val imageCompressMaxBytes: Int = 500,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
         fun dummy() = Settings(init = true)
     }
 }
+
+// 将设置转换为 ai 模块的图片压缩配置；未开启时保持默认行为（不限制文件大小）
+fun Settings.toImageCompressConfig(): ImageCompressConfig =
+    if (imageCompressEnabled) {
+        ImageCompressConfig(
+            maxDimension = 1600,
+            maxPixels = 4_000_000L,
+            maxBytes = imageCompressMaxBytes.coerceIn(100, 5000) * 1024L,
+        )
+    } else {
+        ImageCompressConfig()
+    }
 
 @Serializable
 enum class ChatFontFamily {

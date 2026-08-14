@@ -1138,6 +1138,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_preferences_notification_desc">更新提醒、消息生成通知</string>
   <string name="setting_page_preferences_general">常规</string>
   <string name="setting_page_preferences_general_desc">交互行为、滚动、输入设置</string>
+  <string name="setting_page_image_compress_settings">发送图片压缩</string>
+  <string name="setting_general_page_image_compress_title">压缩到指定大小</string>
+  <string name="setting_general_page_image_compress_desc">发送前将图片压缩到指定大小（KB）以内。上传更小，回复更快，也能避免部分上游拒绝大图。</string>
+  <string name="setting_general_page_image_compress_max_size_title">大小上限（KB）</string>
   <string name="setting_page_preferences_ui">界面偏好设置</string>
   <string name="setting_page_preferences_ui_desc">消息显示、字体、代码块</string>
   <string name="skills_page_import_from_file">从文件导入</string>
