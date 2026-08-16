@@ -228,7 +228,13 @@ class ResponseAPI(
             }
 
             // messages
-            put("input", buildMessages(messages))
+            put(
+                "input",
+                buildMessages(
+                    messages = messages,
+                    includeHistoryReasoning = providerSetting.includeHistoryReasoning,
+                )
+            )
 
             // reasoning
             if (params.model.abilities.contains(ModelAbility.REASONING)) {
@@ -294,26 +300,33 @@ class ResponseAPI(
         }.mergeCustomBody(params.customBody)
     }
 
-    internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
+    internal fun buildMessages(
+        messages: List<UIMessage>,
+        includeHistoryReasoning: Boolean = true,
+    ) = buildJsonArray {
         messages
             .filter { message ->
                 message.role != MessageRole.SYSTEM && (
                     message.isValidToUpload() || message.parts.any { part ->
-                        part is UIMessagePart.Reasoning &&
+                        includeHistoryReasoning &&
+                            part is UIMessagePart.Reasoning &&
                             part.metadataAs<OpenAIReasoningMetadata>()?.encryptedContent != null
                     }
                 )
             }
             .forEach { message ->
                 if (message.role == MessageRole.ASSISTANT) {
-                    addAssistantItems(message)
+                    addAssistantItems(message, includeHistoryReasoning)
                 } else {
                     addUserItems(message)
                 }
             }
     }
 
-    private fun JsonArrayBuilder.addAssistantItems(message: UIMessage) {
+    private fun JsonArrayBuilder.addAssistantItems(
+        message: UIMessage,
+        includeHistoryReasoning: Boolean,
+    ) {
         val groups = groupPartsByToolBoundary(message.parts)
         val contentBuffer = mutableListOf<UIMessagePart>()
 
@@ -324,9 +337,10 @@ class ResponseAPI(
                     group.parts.forEach { part ->
                         when (part) {
                             is UIMessagePart.Reasoning -> {
+                                if (!includeHistoryReasoning) return@forEach
                                 val reasoningMetadata = part.metadataAs<OpenAIReasoningMetadata>()
-                                val reasoningId = reasoningMetadata?.reasoningId
-                                if (reasoningId != null && !emittedReasoningIds.add(reasoningId)) {
+                                val reasoningId = reasoningMetadata?.reasoningId ?: return@forEach
+                                if (!emittedReasoningIds.add(reasoningId)) {
                                     return@forEach
                                 }
                                 // 先输出累积的文本/图片内容
@@ -335,16 +349,12 @@ class ResponseAPI(
                                     contentBuffer.clear()
                                 }
                                 // 输出 reasoning item
-                                val reasoningParts = if (reasoningId == null) {
-                                    listOf(part)
-                                } else {
-                                    group.parts.filterIsInstance<UIMessagePart.Reasoning>().filter {
-                                        it.metadataAs<OpenAIReasoningMetadata>()?.reasoningId == reasoningId
-                                    }
+                                val reasoningParts = group.parts.filterIsInstance<UIMessagePart.Reasoning>().filter {
+                                    it.metadataAs<OpenAIReasoningMetadata>()?.reasoningId == reasoningId
                                 }
                                 add(buildJsonObject {
                                     put("type", "reasoning")
-                                    reasoningId?.let { put("id", it) }
+                                    put("id", reasoningId)
                                     put("summary", buildJsonArray {
                                         reasoningParts
                                             .filter { it.reasoningType == ReasoningType.SUMMARY_TEXT }
