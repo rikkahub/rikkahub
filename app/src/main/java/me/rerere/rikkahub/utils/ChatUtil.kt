@@ -46,7 +46,7 @@ private val ALLOWED_MIME_TYPES = setOf(
 
 private val ALLOWED_FILE_EXTENSIONS = setOf(
     "txt", "md", "csv", "json", "js", "jsx", "mjs", "cjs",
-    "html", "css", "vue", "svelte", "xml",
+    "html", "css", "vue", "svelte", "xml", "agc",
     "py", "rb", "lua", "sql", "java", "kt", "ts", "tsx",
     "dart", "php", "swift", "go",
     "bat", "cmd", "ps1", "psm1", "sh", "bash", "zsh", "fish",
