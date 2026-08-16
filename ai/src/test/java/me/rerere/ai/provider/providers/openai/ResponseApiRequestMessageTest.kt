@@ -57,9 +57,10 @@ class ResponseApiRequestMessageTest {
     private fun invokeBuildRequestBody(
         providerSetting: ProviderSetting.OpenAI,
         params: TextGenerationParams,
-        stream: Boolean = false
+        stream: Boolean = false,
+        messages: List<UIMessage> = listOf(UIMessage.user("hello")),
     ): JsonObject {
-        return api.buildRequestBody(providerSetting, listOf(UIMessage.user("hello")), params, stream)
+        return api.buildRequestBody(providerSetting, messages, params, stream)
     }
 
     private fun createReasoningParams(reasoningLevel: ReasoningLevel = ReasoningLevel.OFF): TextGenerationParams {
@@ -368,6 +369,74 @@ class ResponseApiRequestMessageTest {
             content?.single()?.jsonObject?.get("text")?.jsonPrimitive?.content,
         )
         assertFalse(reasoningItem.containsKey("encrypted_content"))
+    }
+
+    @Test
+    fun `reasoning from another provider should replay as assistant text`() {
+        val result = invokeBuildMessages(listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "foreign reasoning"),
+                    UIMessagePart.Text("final answer"),
+                ),
+            ),
+        ))
+
+        assertFalse(result.any {
+            it.jsonObject["type"]?.jsonPrimitive?.content == "reasoning"
+        })
+        val content = result.single().jsonObject["content"]?.jsonArray ?: error("content not found")
+        assertEquals(2, content.size)
+        assertTrue(content.all { it.jsonObject["type"]?.jsonPrimitive?.content == "output_text" })
+        assertEquals("foreign reasoning", content[0].jsonObject["text"]?.jsonPrimitive?.content)
+        assertEquals("final answer", content[1].jsonObject["text"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `reasoning only message from another provider should replay as assistant text`() {
+        val result = invokeBuildMessages(listOf(
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(UIMessagePart.Reasoning(reasoning = "foreign reasoning")),
+            ),
+        ))
+
+        assertEquals("assistant", result.single().jsonObject["role"]?.jsonPrimitive?.content)
+        assertEquals("foreign reasoning", result.single().jsonObject["content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `history reasoning disabled should omit native Responses reasoning`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(
+                baseUrl = "https://api.openai.com/v1",
+                includeHistoryReasoning = false,
+            ),
+            params = createReasoningParams(),
+            messages = listOf(
+                UIMessage(
+                    role = MessageRole.ASSISTANT,
+                    parts = listOf(
+                        UIMessagePart.Reasoning(
+                            reasoning = "native reasoning",
+                            metadata = OpenAIReasoningMetadata(
+                                reasoningId = "rs_1",
+                                encryptedContent = "encrypted",
+                            ).toMetadata(),
+                        ),
+                        UIMessagePart.Reasoning(reasoning = "foreign reasoning"),
+                        UIMessagePart.Text("final answer"),
+                    ),
+                ),
+            ),
+        )
+        val result = requestBody["input"]?.jsonArray ?: error("input not found")
+
+        assertFalse(result.any {
+            it.jsonObject["type"]?.jsonPrimitive?.content == "reasoning"
+        })
+        assertEquals(1, result.size)
     }
 
     @Test
