@@ -594,7 +594,7 @@
   <string name="send">送信</string>
   <string name="setting_asr_configure_api_key">APIキー</string>
   <string name="setting_asr_configure_dashscope_api_key_desc">DashScope APIキー</string>
-  <string name="setting_asr_configure_dashscope_vad_desc">サーバーVAD感度、0でVAD無効</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">サーバーVAD検出しきい値。推奨値: 0.0。範囲: -1〜1。</string>
   <string name="setting_asr_configure_dashscope_websocket_desc">DashScopeリアルタイムWebSocketエンドポイント</string>
   <string name="setting_asr_configure_language">言語</string>
   <string name="setting_asr_configure_language_code_desc">オプションの言語コード、例: zh-CN、en-US、ja-JP</string>

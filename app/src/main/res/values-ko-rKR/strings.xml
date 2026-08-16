@@ -594,7 +594,7 @@
   <string name="send">전송</string>
   <string name="setting_asr_configure_api_key">API 키</string>
   <string name="setting_asr_configure_dashscope_api_key_desc">DashScope API 키</string>
-  <string name="setting_asr_configure_dashscope_vad_desc">서버 VAD 민감도, 0으로 설정 시 VAD 비활성화</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">서버 VAD 감지 임계값. 권장: 0.0; 범위: -1 ~ 1.</string>
   <string name="setting_asr_configure_dashscope_websocket_desc">DashScope 실시간 웹소켓 엔드포인트</string>
   <string name="setting_asr_configure_language">언어</string>
   <string name="setting_asr_configure_language_code_desc">선택 언어 코드, 예: zh-CN, en-US, ja-JP</string>

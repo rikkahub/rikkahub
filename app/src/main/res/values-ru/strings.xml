@@ -594,7 +594,7 @@
   <string name="send">Отправить</string>
   <string name="setting_asr_configure_api_key">Ключ API</string>
   <string name="setting_asr_configure_dashscope_api_key_desc">Ключ API DashScope</string>
-  <string name="setting_asr_configure_dashscope_vad_desc">Чувствительность VAD на сервере, установите 0 для отключения VAD</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">Серверный порог обнаружения VAD. Рекомендуемое значение: 0.0; диапазон: от -1 до 1.</string>
   <string name="setting_asr_configure_dashscope_websocket_desc">Конечная точка веб-сокета DashScope в реальном времени</string>
   <string name="setting_asr_configure_language">Язык</string>
   <string name="setting_asr_configure_language_code_desc">Необязательный код языка, например zh-CN, en-US, ja-JP</string>

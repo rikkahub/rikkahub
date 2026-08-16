@@ -33,13 +33,13 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "DashScopeASR"
 private const val MAX_WEBSOCKET_QUEUE_BYTES = 100_000L
+private const val SESSION_FINISH_TIMEOUT_MS = 10_000L
 
 class DashScopeASRController(
     private val context: Context,
@@ -53,6 +53,7 @@ class DashScopeASRController(
 
     private var webSocket: WebSocket? = null
     private var recorderJob: Job? = null
+    private var finishTimeoutJob: Job? = null
     private var audioRecord: AudioRecord? = null
     private var onTranscriptChange: ((String) -> Unit)? = null
     private val completedTranscripts = Collections.synchronizedList(mutableListOf<String>())
@@ -82,27 +83,46 @@ class DashScopeASRController(
         val request = Request.Builder()
             .url(provider.websocketEndpoint())
             .addHeader("Authorization", "Bearer ${provider.apiKey}")
-            .addHeader("OpenAI-Beta", "realtime=v1")
             .build()
 
         webSocket = httpClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                if (this@DashScopeASRController.webSocket !== webSocket ||
+                    state.value.status != ASRStatus.Connecting
+                ) {
+                    webSocket.close(1000, "cancelled")
+                    return
+                }
                 webSocket.send(provider.sessionUpdateEvent().toString())
                 _state.update { it.copy(status = ASRStatus.Listening, errorMessage = null) }
                 startRecorder(webSocket)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                handleServerEvent(text)
+                if (this@DashScopeASRController.webSocket === webSocket) {
+                    handleServerEvent(webSocket, text)
+                }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "DashScope ASR websocket failed", t)
+                val handshakeResult = response?.let { " (HTTP ${it.code} ${it.message})" }.orEmpty()
+                Log.e(TAG, "DashScope ASR websocket failed$handshakeResult", t)
+                if (this@DashScopeASRController.webSocket !== webSocket) return
+
+                finishTimeoutJob?.cancel()
+                finishTimeoutJob = null
+                this@DashScopeASRController.webSocket = null
                 releaseRecorder()
                 setError(t.message ?: "ASR websocket failed")
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                Log.d(TAG, "DashScope ASR websocket closed: code=$code, reason=$reason")
+                if (this@DashScopeASRController.webSocket !== webSocket) return
+
+                finishTimeoutJob?.cancel()
+                finishTimeoutJob = null
+                this@DashScopeASRController.webSocket = null
                 releaseRecorder()
                 _state.update {
                     it.copy(
@@ -115,26 +135,65 @@ class DashScopeASRController(
     }
 
     override fun stop() {
-        recorderJob?.cancel()
-        releaseRecorder()
+        val wasListening = state.value.status == ASRStatus.Listening
+        val activeRecorderJob = recorderJob
         val socket = webSocket
-        if (socket != null) {
-            _state.update { it.copy(status = ASRStatus.Stopping) }
-            scope.launch {
-                delay(500)
-                socket.close(1000, "stop")
-                if (webSocket === socket) {
-                    webSocket = null
-                    _state.update { it.copy(status = ASRStatus.Idle) }
-                }
-            }
-        } else {
+        if (socket == null && activeRecorderJob == null) {
+            releaseRecorder()
             _state.update { it.copy(status = ASRStatus.Idle) }
+            return
+        }
+
+        _state.update { it.copy(status = ASRStatus.Stopping) }
+        activeRecorderJob?.cancel()
+        // AudioRecord.read() is blocking, so stop it to let the cancelled recorder job finish.
+        runCatching { audioRecord?.stop() }
+
+        finishTimeoutJob?.cancel()
+        finishTimeoutJob = scope.launch {
+            // Do not enqueue session.finish until the capture loop can no longer send audio frames.
+            activeRecorderJob?.join()
+            releaseRecorder()
+
+            if (socket == null) {
+                _state.update { it.copy(status = ASRStatus.Idle) }
+                return@launch
+            }
+            if (webSocket !== socket) return@launch
+
+            if (!wasListening) {
+                socket.cancel()
+                webSocket = null
+                _state.update { it.copy(status = ASRStatus.Idle) }
+                return@launch
+            }
+
+            val finishSent = socket.send(sessionFinishEvent().toString())
+            if (!finishSent) {
+                Log.w(TAG, "Failed to finish DashScope ASR session; closing websocket")
+                socket.cancel()
+                webSocket = null
+                _state.update { it.copy(status = ASRStatus.Idle) }
+                return@launch
+            }
+
+            delay(SESSION_FINISH_TIMEOUT_MS)
+            if (webSocket === socket) {
+                Log.w(TAG, "Timed out waiting for session.finished; closing websocket")
+                socket.close(1000, "session finish timeout")
+                webSocket = null
+                _state.update { it.copy(status = ASRStatus.Idle) }
+            }
         }
     }
 
     override fun dispose() {
-        stop()
+        recorderJob?.cancel()
+        releaseRecorder()
+        finishTimeoutJob?.cancel()
+        finishTimeoutJob = null
+        webSocket?.cancel()
+        webSocket = null
         scope.cancel()
     }
 
@@ -183,15 +242,17 @@ class DashScopeASRController(
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Audio recording failed", e)
-                setError(e.message ?: "Audio recording failed")
+                if (isActive) {
+                    Log.e(TAG, "Audio recording failed", e)
+                    setError(e.message ?: "Audio recording failed")
+                }
             } finally {
                 releaseRecorder()
             }
         }
     }
 
-    private fun handleServerEvent(text: String) {
+    private fun handleServerEvent(socket: WebSocket, text: String) {
         val event = runCatching { JSONObject(text) }.getOrElse {
             Log.w(TAG, "Invalid realtime event: $text", it)
             return
@@ -209,9 +270,9 @@ class DashScopeASRController(
 
             "conversation.item.input_audio_transcription.text" -> {
                 val itemId = event.optString("item_id", "default")
-                val text = event.optString("text")
-                if (text.isNotEmpty()) {
-                    partialTranscripts[itemId] = text
+                val preview = event.optString("text") + event.optString("stash")
+                if (preview.isNotEmpty()) {
+                    partialTranscripts[itemId] = preview
                     publishTranscript()
                 }
             }
@@ -226,9 +287,27 @@ class DashScopeASRController(
                 publishTranscript()
             }
 
+            "conversation.item.input_audio_transcription.failed" -> {
+                val itemId = event.optString("item_id", "default")
+                val error = event.optJSONObject("error")
+                val message = error?.optString("message") ?: "ASR transcription failed"
+                Log.e(TAG, "DashScope ASR transcription failed: $message")
+                partialTranscripts.remove(itemId)
+                publishTranscript()
+                _state.update { it.copy(errorMessage = message) }
+            }
+
             "error" -> {
                 val error = event.optJSONObject("error")
-                setError(error?.optString("message") ?: "ASR realtime error")
+                val message = error?.optString("message") ?: "ASR realtime error"
+                Log.e(TAG, "DashScope ASR server error: $message")
+                setError(message)
+            }
+
+            "session.finished" -> {
+                finishTimeoutJob?.cancel()
+                finishTimeoutJob = null
+                socket.close(1000, "session finished")
             }
 
             else -> {
@@ -264,8 +343,17 @@ class DashScopeASRController(
     }
 }
 
+private fun sessionFinishEvent(): JSONObject {
+    return JSONObject()
+        .put("event_id", "evt_session_finish_${System.currentTimeMillis()}")
+        .put("type", "session.finish")
+}
+
 private fun ASRProviderSetting.DashScope.websocketEndpoint(): String {
-    val endpoint = websocketUrl.trim().trimEnd('/')
+    val endpoint = websocketUrl
+        .trim()
+        .trimEnd('/')
+        .replace("/api-ws/v1/inference", "/api-ws/v1/realtime")
     val separator = if (endpoint.contains("?")) "&" else "?"
     return if (endpoint.contains("model=")) endpoint
     else "${endpoint}${separator}model=${model}"
@@ -276,22 +364,17 @@ private fun ASRProviderSetting.DashScope.sessionUpdateEvent(): JSONObject {
     if (language.isNotBlank()) transcription.put("language", language)
 
     val session = JSONObject()
-        .put("modalities", JSONArray().put("text"))
         .put("input_audio_format", "pcm")
         .put("sample_rate", sampleRate)
         .put("input_audio_transcription", transcription)
 
-    if (vadThreshold > 0) {
-        session.put(
-            "turn_detection",
-            JSONObject()
-                .put("type", "server_vad")
-                .put("threshold", vadThreshold)
-                .put("silence_duration_ms", silenceDurationMs)
-        )
-    } else {
-        session.put("turn_detection", JSONObject.NULL)
-    }
+    session.put(
+        "turn_detection",
+        JSONObject()
+            .put("type", "server_vad")
+            .put("threshold", vadThreshold)
+            .put("silence_duration_ms", silenceDurationMs)
+    )
 
     return JSONObject()
         .put("event_id", "evt_session_update")

@@ -594,7 +594,7 @@
   <string name="send">發送</string>
   <string name="setting_asr_configure_api_key">API 金鑰</string>
   <string name="setting_asr_configure_dashscope_api_key_desc">DashScope API 金鑰</string>
-  <string name="setting_asr_configure_dashscope_vad_desc">伺服器 VAD 靈敏度，設為 0 可停用 VAD</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">伺服器端 VAD 偵測閾值。建議值：0.0；範圍：-1 到 1。</string>
   <string name="setting_asr_configure_dashscope_websocket_desc">DashScope 即時 websocket 端點</string>
   <string name="setting_asr_configure_language">語言</string>
   <string name="setting_asr_configure_language_code_desc">選填的語言代碼，例如 zh-CN、en-US、ja-JP</string>

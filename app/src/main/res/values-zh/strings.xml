@@ -602,7 +602,7 @@
   <string name="send">发送</string>
   <string name="setting_asr_configure_api_key">API密钥</string>
   <string name="setting_asr_configure_dashscope_api_key_desc">DashScope API密钥</string>
-  <string name="setting_asr_configure_dashscope_vad_desc">服务器 VAD 灵敏度，设为 0 可禁用 VAD</string>
+  <string name="setting_asr_configure_dashscope_vad_desc">服务器VAD检测阈值。推荐值：0.0；范围：-1到1。</string>
   <string name="setting_asr_configure_dashscope_websocket_desc">DashScope 实时 WebSocket 端点</string>
   <string name="setting_asr_configure_language">语言</string>
   <string name="setting_asr_configure_language_code_desc">可选语言代码，例如 zh-CN、en-US、ja-JP</string>
