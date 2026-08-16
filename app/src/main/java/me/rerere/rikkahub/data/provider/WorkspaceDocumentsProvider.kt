@@ -75,7 +75,10 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
                 add(Document.COLUMN_LAST_MODIFIED, null)
             }
         } else {
-            addFileRow(cursor, target.root, resolveFile(target.root, target.relPath))
+            val file = resolveFile(target.root, target.relPath)
+            if (file.exists()) {
+                addFileRow(cursor, target.root, file)
+            }
         }
         return cursor
     }
