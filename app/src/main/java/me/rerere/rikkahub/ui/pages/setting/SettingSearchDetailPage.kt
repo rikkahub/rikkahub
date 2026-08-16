@@ -56,6 +56,7 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.plus
+import me.rerere.search.DoubaoSearchMode
 import me.rerere.search.SearchCommonOptions
 import me.rerere.search.SearchResult
 import me.rerere.search.SearchService
@@ -178,6 +179,9 @@ private fun SearchServiceOptionsEditor(
         }
         is SearchServiceOptions.ZhipuOptions -> {
             ZhipuOptions(options) { onUpdateOptions(it) }
+        }
+        is SearchServiceOptions.DoubaoOptions -> {
+            DoubaoOptions(options) { onUpdateOptions(it) }
         }
         is SearchServiceOptions.SearXNGOptions -> {
             SearXNGOptions(options) { onUpdateOptions(it) }
@@ -426,6 +430,35 @@ internal fun ZhipuOptions(
             },
             modifier = Modifier.fillMaxWidth()
         )
+    }
+}
+
+@Composable
+internal fun DoubaoOptions(
+    options: SearchServiceOptions.DoubaoOptions,
+    onUpdateOptions: (SearchServiceOptions.DoubaoOptions) -> Unit
+) {
+    FormItem(label = { Text(stringResource(R.string.search_detail_api_key)) }) {
+        OutlinedTextField(
+            value = options.apiKey,
+            onValueChange = { onUpdateOptions(options.copy(apiKey = it)) },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
+    FormItem(label = { Text("Mode") }) {
+        val modes = DoubaoSearchMode.entries
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            modes.forEachIndexed { index, mode ->
+                SegmentedButton(
+                    shape = SegmentedButtonDefaults.itemShape(index, modes.size),
+                    onClick = { onUpdateOptions(options.copy(mode = mode)) },
+                    selected = options.mode == mode
+                ) {
+                    Text(mode.name.lowercase().replaceFirstChar(Char::uppercase))
+                }
+            }
+        }
     }
 }
 
