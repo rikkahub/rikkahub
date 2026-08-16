@@ -1156,9 +1156,18 @@ parse_status_data() {
     "$event_count" "$network" "$validated"
 }
 
+is_transient_unvalidated_status_data() {
+  local data="$1"
+  local validated_data
+  [[ "$data" == *$'\nvalidated=false' ]] || return 1
+  validated_data="${data%$'\nvalidated=false'}"$'\nvalidated=true'
+  parse_status_data "$validated_data" >/dev/null 2>&1
+}
+
 read_status_snapshot() {
   local data
   local parse_status
+  local snapshot
   if data="$(ordered_broadcast_read --user "$ANDROID_USER_ID" \
       -n "$PACKAGE/$CONTROL_RECEIVER" -a "$CONTROL_ACTION_PREFIX.STATUS")"; then
     parse_status=0
@@ -1167,7 +1176,12 @@ read_status_snapshot() {
   fi
   (( parse_status != 4 )) || return 3
   (( parse_status == 0 )) || return 2
-  parse_status_data "$data" || return 2
+  if snapshot="$(parse_status_data "$data")"; then
+    printf '%s' "$snapshot"
+    return 0
+  fi
+  is_transient_unvalidated_status_data "$data" && return 4
+  return 2
 }
 
 read_status() {
@@ -1278,7 +1292,7 @@ case "$root" in
   *) exit 1 ;;
 esac
 printf ready
-' 2>/dev/null)" || die 'protected path unavailable'
+' </dev/null 2>/dev/null)" || die 'protected path unavailable'
   [[ "$protected_probe" == ready ]] || die 'protected path unavailable'
 }
 
@@ -1295,7 +1309,7 @@ elif [ -e "$1" ]; then
 else
   printf absent
 fi
-' "$LATEST_TRACE_PATH" 2>/dev/null)" || die 'trace readback failed'
+' "$LATEST_TRACE_PATH" </dev/null 2>/dev/null)" || die 'trace readback failed'
   case "$probe" in
     absent)
       TRACE_POINTER_PRESENT=0
@@ -1795,7 +1809,7 @@ restore_force_stopped_package() {
   mapfile -t status <<< "$status_snapshot"
   [[ "${#status[@]}" == 7 && "${status[0]}" == idle && "${status[1]}" == none &&
      "${status[2]}" == none && "${status[3]}" == none && "${status[4]}" == 0 &&
-     "${status[5]}" == none && "${status[6]}" == true ]] || return 2
+     "${status[6]}" == true ]] || return 2
   read_package_stopped_state false || return 2
   PACKAGE_FORCE_STOP_OWNED=0
 }
@@ -2065,7 +2079,7 @@ read_source_metadata() {
 : voice-step-source-metadata
 [ -f "$1" ] && [ ! -L "$1" ] && [ "$(stat -c %a "$1")" = 600 ] || exit 1
 LC_ALL=C stat -c "%F|%h|%u|%a|%d|%i|%s|%y|%z" "$1"
-' "$source_path" 2>/dev/null)" || die 'artifact source unavailable'
+' "$source_path" </dev/null 2>/dev/null)" || die 'artifact source unavailable'
   [[ "$metadata" =~ ^regular\ file\|1\|[0-9]+\|600\|[0-9]+\|[0-9]+\|[1-9][0-9]*\|[-0-9:.+\ ]+\|[-0-9:.+\ ]+$ ]] ||
     die 'artifact source invalid'
   printf '%s' "$metadata"
@@ -2143,7 +2157,7 @@ for path do
   [ -f "$path" ] && [ ! -L "$path" ] && [ -s "$path" ] || exit 1
   printf "present\n"
 done
-' "$automation_path" "$private_path" "$sanitized_path" 2>/dev/null)" ||
+' "$automation_path" "$private_path" "$sanitized_path" </dev/null 2>/dev/null)" ||
     die 'required artifact unavailable'
   [[ "$presence" == $'present\npresent\npresent' ]] || die 'required artifact unavailable'
   ensure_local_temp_dir

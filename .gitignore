@@ -14,3 +14,6 @@ local.properties
 docs/run/
 docs/tool-output/
 .worktrees/
+__pycache__/
+*.py[cod]
+*$py.class

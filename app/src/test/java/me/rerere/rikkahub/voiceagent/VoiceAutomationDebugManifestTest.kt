@@ -20,6 +20,7 @@ class VoiceAutomationDebugManifestTest {
         assertEquals("android.permission.DUMP", debugReceiver.getAttribute("android:permission"))
         assertEquals(
             setOf(
+                "me.rerere.rikkahub.voiceagent.automation.BINDING",
                 "me.rerere.rikkahub.voiceagent.automation.PREPARE",
                 "me.rerere.rikkahub.voiceagent.automation.STATUS",
                 "me.rerere.rikkahub.voiceagent.automation.MARK",

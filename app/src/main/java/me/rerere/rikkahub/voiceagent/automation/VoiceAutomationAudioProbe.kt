@@ -27,6 +27,11 @@ internal interface VoiceAutomationAudioProbe {
     fun captureLiveKitMediaOwner(): VoiceAutomationMediaOwner? = null
     fun onLiveKitRemoteTrackAttached(owner: VoiceAutomationMediaOwner) = Unit
     fun onLiveKitRemoteTrackDetached(owner: VoiceAutomationMediaOwner) = Unit
+    fun onLiveKitOutputObserved(
+        owner: VoiceAutomationMediaOwner,
+        nonSilent: Boolean,
+        beforeSemanticBoundary: () -> Unit,
+    ): Boolean = true
     fun onLiveKitOutputWritten(
         owner: VoiceAutomationMediaOwner,
         byteCount: Int,
@@ -36,10 +41,22 @@ internal interface VoiceAutomationAudioProbe {
     ) {
         onOutputWritten(byteCount, nonSilent)
     }
+    fun onLiveKitProgressWritten(
+        owner: VoiceAutomationMediaOwner,
+        byteCount: Int,
+        nonSilent: Boolean,
+        rmsActive: Boolean,
+        audioWindowMicros: Long,
+    ) {
+        onLiveKitOutputWritten(owner, byteCount, nonSilent, rmsActive, audioWindowMicros)
+    }
     fun onLiveKitOutputDrained(owner: VoiceAutomationMediaOwner) {
         onOutputDrained()
     }
-    fun onLiveKitOutputSilenceConfirmed(owner: VoiceAutomationMediaOwner) {
+    fun onLiveKitOutputSilenceConfirmed(
+        owner: VoiceAutomationMediaOwner,
+        beforePlaybackStops: () -> Unit = {},
+    ) {
         onOutputSilenceConfirmed()
     }
     fun onOutputDrained()
@@ -215,6 +232,25 @@ internal class DefaultVoiceAutomationAudioProbe(
     }
 
     @Synchronized
+    override fun onLiveKitOutputObserved(
+        owner: VoiceAutomationMediaOwner,
+        nonSilent: Boolean,
+        beforeSemanticBoundary: () -> Unit,
+    ): Boolean {
+        var accepted = false
+        withActiveLiveKitOwner(owner) { runtime ->
+            observeOutput(
+                runtime = runtime,
+                nonSilent = nonSilent,
+                mediaOwner = owner,
+                beforePlaybackEpochChange = beforeSemanticBoundary,
+            )
+            accepted = true
+        }
+        return accepted
+    }
+
+    @Synchronized
     override fun onLiveKitOutputWritten(
         owner: VoiceAutomationMediaOwner,
         byteCount: Int,
@@ -228,6 +264,26 @@ internal class DefaultVoiceAutomationAudioProbe(
                 runtime,
                 byteCount,
                 nonSilent,
+                mediaOwner = owner,
+                rmsActive = rmsActive,
+                audioWindowMicros = audioWindowMicros,
+            )
+        }
+    }
+
+    @Synchronized
+    override fun onLiveKitProgressWritten(
+        owner: VoiceAutomationMediaOwner,
+        byteCount: Int,
+        nonSilent: Boolean,
+        rmsActive: Boolean,
+        audioWindowMicros: Long,
+    ) {
+        if (byteCount <= 0) return
+        withActiveLiveKitOwner(owner) { runtime ->
+            recordOutputProgress(
+                runtime = runtime,
+                byteCount = byteCount,
                 mediaOwner = owner,
                 rmsActive = rmsActive,
                 audioWindowMicros = audioWindowMicros,
@@ -275,9 +331,16 @@ internal class DefaultVoiceAutomationAudioProbe(
     }
 
     @Synchronized
-    override fun onLiveKitOutputSilenceConfirmed(owner: VoiceAutomationMediaOwner) {
+    override fun onLiveKitOutputSilenceConfirmed(
+        owner: VoiceAutomationMediaOwner,
+        beforePlaybackStops: () -> Unit,
+    ) {
         withActiveLiveKitOwner(owner) { runtime ->
-            confirmOutputSilence(runtime, mediaOwner = owner)
+            confirmOutputSilence(
+                runtime = runtime,
+                mediaOwner = owner,
+                beforePlaybackStops = beforePlaybackStops,
+            )
         }
     }
 
@@ -350,9 +413,20 @@ internal class DefaultVoiceAutomationAudioProbe(
         rmsActive: Boolean? = null,
         audioWindowMicros: Long? = null,
     ) {
-        prepareOutputEpoch()
+        observeOutput(runtime, nonSilent, mediaOwner)
+        recordOutputProgress(runtime, byteCount, mediaOwner, rmsActive, audioWindowMicros)
+    }
+
+    private fun observeOutput(
+        runtime: VoiceAutomationRuntime,
+        nonSilent: Boolean,
+        mediaOwner: VoiceAutomationMediaOwner?,
+        beforePlaybackEpochChange: () -> Unit = {},
+    ) {
+        prepareOutputEpoch(beforePlaybackEpochChange)
         if (nonSilent) {
             if (outputState == OutputState.Dropout) {
+                beforePlaybackEpochChange()
                 playbackEpoch += 1
                 record(
                     runtime,
@@ -400,6 +474,16 @@ internal class DefaultVoiceAutomationAudioProbe(
                 scheduleDropoutTransition(mediaOwner)
             }
         }
+    }
+
+    private fun recordOutputProgress(
+        runtime: VoiceAutomationRuntime,
+        byteCount: Int,
+        mediaOwner: VoiceAutomationMediaOwner?,
+        rmsActive: Boolean? = null,
+        audioWindowMicros: Long? = null,
+    ) {
+        if (playbackEpoch == 0L) return
         record(
             runtime,
             VoiceAutomationEventInput(
@@ -459,12 +543,14 @@ internal class DefaultVoiceAutomationAudioProbe(
     private fun confirmOutputSilence(
         runtime: VoiceAutomationRuntime,
         mediaOwner: VoiceAutomationMediaOwner?,
+        beforePlaybackStops: () -> Unit = {},
     ) {
         val lastOutputMs = lastNonSilentMs ?: return
         if (
             outputState != OutputState.Interrupted ||
             monotonicMs() - lastOutputMs < INTERRUPTION_SILENCE_MS
         ) return
+        beforePlaybackStops()
         if (!record(
                 runtime,
                 VoiceAutomationEventInput(
@@ -502,13 +588,14 @@ internal class DefaultVoiceAutomationAudioProbe(
         return "sha256:${sha256Hex(value)}"
     }
 
-    private fun prepareOutputEpoch() {
+    private fun prepareOutputEpoch(beforePlaybackEpochChange: () -> Unit = {}) {
         if (playbackEpoch == 0L) {
             playbackEpoch = 1L
         } else if (
             outputState == OutputState.Drained ||
             outputState == OutputState.Stopped
         ) {
+            beforePlaybackEpochChange()
             playbackEpoch += 1
             outputState = OutputState.BeforeOutput
         }

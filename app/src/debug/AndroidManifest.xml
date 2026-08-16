@@ -42,6 +42,7 @@
       android:exported="true"
       android:permission="android.permission.DUMP">
       <intent-filter>
+        <action android:name="me.rerere.rikkahub.voiceagent.automation.BINDING" />
         <action android:name="me.rerere.rikkahub.voiceagent.automation.PREPARE" />
         <action android:name="me.rerere.rikkahub.voiceagent.automation.STATUS" />
         <action android:name="me.rerere.rikkahub.voiceagent.automation.MARK" />

@@ -1,13 +1,16 @@
 package me.rerere.rikkahub.voiceagent.livekit
 
 import java.nio.ByteBuffer
+import java.nio.file.Files
 import me.rerere.rikkahub.voiceagent.VoiceAgentTransport
 import me.rerere.rikkahub.voiceagent.automation.DefaultVoiceAutomationAudioProbe
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationAudioProbe
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationClock
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationCorrelationKind
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventInput
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventName
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationMediaOwner
+import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationNetwork
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRunBinding
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRunState
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRuntime
@@ -20,7 +23,7 @@ import org.junit.Test
 
 class LiveKitRemoteAudioProbeTest {
     @Test
-    fun `byte progress is throttled to 50 milliseconds and state changes flush immediately`() {
+    fun `durable progress uses 250 millisecond windows without flushing noisy state changes`() {
         val clock = FakeClock()
         val recording = RecordingAudioProbe()
         val probe = LiveKitRemoteAudioProbe(
@@ -38,13 +41,13 @@ class LiveKitRemoteAudioProbeTest {
         probe.onData(ByteBuffer.wrap(byteArrayOf(4, 0)), 16, 48_000, 1, 1, 4)
         clock.advanceBy(1)
         probe.onData(ByteBuffer.wrap(byteArrayOf(0, 0)), 16, 48_000, 1, 1, 5)
+        probe.close()
 
         assertEquals(0, first.position())
         assertEquals(
             listOf(
                 Written(2, true, false, 20),
-                Written(6, true, false, 60),
-                Written(2, false, false, 20),
+                Written(8, true, false, 80),
             ),
             recording.written,
         )
@@ -62,10 +65,11 @@ class LiveKitRemoteAudioProbeTest {
         probe.onData(pcm16(255, 480), 16, 48_000, 1, 480, 2)
         clock.advanceBy(1)
         probe.onData(pcm16(256, 480), 16, 48_000, 1, 480, 3)
-        clock.advanceBy(48)
+        clock.advanceBy(248)
         probe.onData(pcm16(255, 480), 16, 48_000, 1, 480, 4)
-        clock.advanceBy(50)
+        clock.advanceBy(1)
         probe.onData(pcm16(255, 480), 16, 48_000, 1, 480, 5)
+        probe.close()
 
         assertEquals(
             listOf(
@@ -75,6 +79,83 @@ class LiveKitRemoteAudioProbeTest {
             ),
             recording.written,
         )
+    }
+
+    @Test
+    fun `round 26 sized noisy stream stays bounded and finalizes with lossless boundaries`() {
+        val root = Files.createTempDirectory("livekit-playback-coalescing").toFile()
+        try {
+            val clock = FakeClock()
+            val scheduler = FakeScheduler(clock)
+            val runtime = me.rerere.rikkahub.voiceagent.automation.DefaultVoiceAutomationRuntime(
+                noBackupFilesDir = root,
+                clock = clock,
+            )
+            runtime.prepare(
+                VoiceAutomationRunBinding(
+                    RUN_HASH,
+                    COMPARISON_HASH,
+                    VoiceAgentTransport.LiveKitExperimental,
+                ),
+            )
+            runtime.record(VoiceAutomationEventInput(VoiceAutomationEventName.RECONNECT_STARTED))
+            assertTrue(runtime.markReconnectTransportRestored(RUN_HASH))
+            runtime.record(VoiceAutomationEventInput(VoiceAutomationEventName.HANDOVER_STARTED))
+            runtime.record(
+                VoiceAutomationEventInput(
+                    VoiceAutomationEventName.HANDOVER_CELLULAR_OBSERVED,
+                    network = VoiceAutomationNetwork.CELLULAR,
+                ),
+            )
+            runtime.record(
+                VoiceAutomationEventInput(
+                    VoiceAutomationEventName.HANDOVER_WIFI_RESTORED,
+                    network = VoiceAutomationNetwork.WIFI,
+                ),
+            )
+            val sharedProbe = DefaultVoiceAutomationAudioProbe(
+                runtimeProvider = { runtime },
+                monotonicMs = clock::nowMs,
+                scheduler = scheduler,
+            )
+            val probe = LiveKitRemoteAudioProbe(sharedProbe, clock::nowMs)
+
+            repeat(ROUND_26_PLAYBACK_FRAME_COUNT) { index ->
+                val frame = if (index % 2 == 0) {
+                    byteArrayOf(1, 0)
+                } else {
+                    byteArrayOf(0, 0)
+                }
+                probe.onData(ByteBuffer.wrap(frame), 16, 48_000, 1, 1, index.toLong())
+                scheduler.advanceBy(10)
+            }
+            probe.close()
+            runtime.record(
+                VoiceAutomationEventInput(
+                    VoiceAutomationEventName.CALL_STOPPED,
+                    succeeded = true,
+                ),
+            )
+
+            val artifact = runtime.finalizeRun()
+            val lines = artifact.readLines()
+            val playbackWrittenCount = lines.count { "\"name\":\"playback_written\"" in it }
+
+            assertTrue(
+                "Expected at most $MAX_BOUNDED_PLAYBACK_ROWS playback rows, got $playbackWrittenCount",
+                playbackWrittenCount <= MAX_BOUNDED_PLAYBACK_ROWS,
+            )
+            assertTrue(
+                "Expected at least 4x headroom under 16 MiB, got ${artifact.length()} bytes",
+                artifact.length() <= MAX_BOUNDED_ARTIFACT_BYTES,
+            )
+            assertEquals(1, lines.count { "\"name\":\"handover_media_restored\"" in it })
+            assertEquals(1, lines.count { "\"name\":\"reconnect_media_restored\"" in it })
+            assertTrue("\"name\":\"call_stopped\"" in lines[lines.lastIndex - 1])
+            assertTrue("\"name\":\"run_finalized\"" in lines.last())
+        } finally {
+            root.deleteRecursively()
+        }
     }
 
     @Test
@@ -311,10 +392,14 @@ class LiveKitRemoteAudioProbeTest {
         return ByteBuffer.wrap(bytes)
     }
 
-    private class FakeClock {
+    private class FakeClock : VoiceAutomationClock {
         private var currentMs = 1L
 
         fun nowMs(): Long = currentMs
+
+        override fun monotonicMs(): Long = currentMs
+
+        override fun wallClockMs(): Long = 1_000_000L + currentMs
 
         fun advanceBy(durationMs: Long) {
             currentMs += durationMs
@@ -390,5 +475,8 @@ class LiveKitRemoteAudioProbeTest {
             "sha256:86514ed998b71abd571da38b70a6e1e3708d725df54af09202793b529b783148"
         const val MEDIA_STATE_EPOCH_2_HASH =
             "sha256:dad4c9b5ee69ff80c451dffb8b56c298fab9a432faead88bb2aef88fa0072fd6"
+        const val ROUND_26_PLAYBACK_FRAME_COUNT = 24_848
+        const val MAX_BOUNDED_PLAYBACK_ROWS = 1_000
+        const val MAX_BOUNDED_ARTIFACT_BYTES = 4L * 1024L * 1024L
     }
 }

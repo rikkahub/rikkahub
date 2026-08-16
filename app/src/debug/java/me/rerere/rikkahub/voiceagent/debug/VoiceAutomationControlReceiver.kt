@@ -7,6 +7,8 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import java.io.File
 import me.rerere.rikkahub.voiceagent.VoiceAgentCallEndpointType
+import me.rerere.rikkahub.voiceagent.VoiceAgentCallLifecycle
+import me.rerere.rikkahub.voiceagent.VoiceAgentCallServiceController
 import me.rerere.rikkahub.voiceagent.VoiceAgentTelecomCallRegistry
 import me.rerere.rikkahub.voiceagent.VoiceAgentTransport
 import me.rerere.rikkahub.voiceagent.VoiceE2EArtifactPaths
@@ -27,11 +29,13 @@ class VoiceAutomationControlReceiver : BroadcastReceiver() {
             decodeStringExtras(intent)?.let { extras ->
                 val koin = GlobalContext.get()
                 val connectivityManager = context.getSystemService(ConnectivityManager::class.java)
+                val callController = koin.get<VoiceAgentCallServiceController>()
                 VoiceAutomationControl(
                     runtime = koin.get<VoiceAutomationRuntime>(),
                     routeRequester = koin.get<VoiceAgentTelecomCallRegistry>()::requestActiveAudioRoute,
                     connectivityReader = { connectivityManager.readAutomationConnectivity() },
                     artifactFile = { status -> context.automationArtifactFile(status) },
+                    lifecycleReader = { callController.lifecycle.value },
                 ).handle(intent.action, extras)
             } ?: VoiceAutomationControl.invalidRequest()
         }.getOrElse {
@@ -90,10 +94,12 @@ internal class VoiceAutomationControl(
     private val routeRequester: (VoiceAgentCallEndpointType) -> Boolean,
     private val connectivityReader: () -> VoiceAutomationConnectivity,
     private val artifactFile: (VoiceAutomationStatus) -> File?,
+    private val lifecycleReader: () -> VoiceAgentCallLifecycle,
 ) {
     fun handle(action: String?, extras: Map<String, String>): VoiceAutomationControlResult =
         try {
             when (action) {
+                ACTION_BINDING -> binding(extras)
                 ACTION_PREPARE -> prepare(extras)
                 ACTION_STATUS -> status(extras)
                 ACTION_MARK -> mark(extras)
@@ -110,6 +116,20 @@ internal class VoiceAutomationControl(
         } catch (_: Throwable) {
             error("runtime_failure")
         }
+
+    private fun binding(extras: Map<String, String>): VoiceAutomationControlResult {
+        requireExactKeys(extras, emptySet())
+        val conversationId = when (val lifecycle = lifecycleReader()) {
+            is VoiceAgentCallLifecycle.Starting -> lifecycle.conversationId
+            is VoiceAgentCallLifecycle.Active -> lifecycle.conversationId
+            VoiceAgentCallLifecycle.Idle,
+            is VoiceAgentCallLifecycle.Stopping,
+            is VoiceAgentCallLifecycle.CleanupFailed,
+            -> null
+        }
+        checkNotNull(conversationId) { "No current conversation binding" }
+        return success("binding", "conversation_id" to conversationId.toString())
+    }
 
     private fun prepare(extras: Map<String, String>): VoiceAutomationControlResult {
         requireExactKeys(
@@ -287,6 +307,7 @@ internal class VoiceAutomationControl(
     }
 
     companion object {
+        const val ACTION_BINDING = "me.rerere.rikkahub.voiceagent.automation.BINDING"
         const val ACTION_PREPARE = "me.rerere.rikkahub.voiceagent.automation.PREPARE"
         const val ACTION_STATUS = "me.rerere.rikkahub.voiceagent.automation.STATUS"
         const val ACTION_MARK = "me.rerere.rikkahub.voiceagent.automation.MARK"

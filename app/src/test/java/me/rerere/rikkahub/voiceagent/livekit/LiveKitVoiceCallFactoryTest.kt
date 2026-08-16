@@ -26,6 +26,7 @@ import me.rerere.rikkahub.voiceagent.VoiceAgentCleanupMode
 import me.rerere.rikkahub.voiceagent.VoiceAgentCleanupResult
 import me.rerere.rikkahub.voiceagent.VoiceAgentSessionCreationResult
 import me.rerere.rikkahub.voiceagent.VoiceAgentTransport
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceHttpException
 import me.rerere.rikkahub.voiceagent.orchestratorRequest
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import org.junit.Assert.assertEquals
@@ -90,10 +91,33 @@ class LiveKitVoiceCallFactoryTest {
         runCurrent()
 
         val failure = result.await() as VoiceAgentSessionCreationResult.FailedClean
-        assertTrue(failure.error is LiveKitExperimentalVoiceCallException)
-        assertTrue(failure.error.message.orEmpty().contains("timed out"))
+        val error = failure.error as LiveKitExperimentalVoiceCallException
+        assertEquals(LiveKitSessionFailureCategory.SessionTimeout, error.failureCategory)
+        assertTrue(error.message.orEmpty().contains("timed out"))
         assertEquals(1, route.retirementCalls)
         assertEquals(0, roomFactoryCalls)
+    }
+
+    @Test
+    fun `session HTTP server failure retains only a fixed diagnostic category`() = runTest {
+        val privateDetail = "private upstream response detail"
+        val requestError = HermesVoiceHttpException(
+            statusCode = 502,
+            safePreview = privateDetail,
+        )
+        val factory = factory(sessionDetailsFactory = { _, _ -> throw requestError })
+
+        val result = factory.createOwned(
+            request(),
+            OrchestratorFakeRoute().lease,
+            backgroundScope,
+        )
+
+        val failure = result as VoiceAgentSessionCreationResult.FailedClean
+        val error = failure.error as LiveKitExperimentalVoiceCallException
+        assertEquals(LiveKitSessionFailureCategory.HttpServerFailure, error.failureCategory)
+        assertTrue(error.message.orEmpty().contains("request failed"))
+        assertTrue(!error.message.orEmpty().contains(privateDetail))
     }
 
     @Test

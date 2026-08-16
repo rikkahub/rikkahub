@@ -17,7 +17,8 @@ internal class LiveKitRemoteAudioProbe(
     private var pendingNonSilent = false
     private var pendingRmsActive = false
     private var pendingAudioWindowMicros = 0L
-    private var lastNonSilent: Boolean? = null
+    private var activeEvidencePublished = false
+    private var pendingStartedMs: Long? = null
     private var lastProgressMs: Long? = null
     private var trackAttached = false
     private var trackDetached = false
@@ -53,31 +54,34 @@ internal class LiveKitRemoteAudioProbe(
         synchronized(lock) {
             if (closed) return
             val owner = mediaOwner ?: return
-            val previousState = lastNonSilent
-            if (previousState != null && previousState != nonSilent) {
-                flushProgress(owner, nowMs)
-            }
+            var playbackEpochChanged = false
+            if (!automationAudioProbe.onLiveKitOutputObserved(owner, nonSilent) {
+                    flushProgress(owner, nowMs)
+                    playbackEpochChanged = true
+                }
+            ) return
             if (
                 pendingBytes > Int.MAX_VALUE - byteCount ||
                 pendingAudioWindowMicros > Long.MAX_VALUE - durationMicros
             ) {
                 flushProgress(owner, nowMs)
             }
+            if (pendingBytes == 0) pendingStartedMs = nowMs
             pendingBytes += byteCount
             pendingNonSilent = pendingNonSilent || nonSilent
             pendingRmsActive = pendingRmsActive || rmsActive
             pendingAudioWindowMicros += durationMicros
-            val stateChanged = previousState == null || previousState != nonSilent
-            lastNonSilent = nonSilent
             if (
-                stateChanged ||
-                lastProgressMs == null ||
-                nowMs - checkNotNull(lastProgressMs) >= PROGRESS_INTERVAL_MS
+                playbackEpochChanged ||
+                (nonSilent && !activeEvidencePublished) ||
+                nowMs - checkNotNull(lastProgressMs ?: pendingStartedMs) >= PROGRESS_INTERVAL_MS
             ) {
                 flushProgress(owner, nowMs)
             }
             if (!nonSilent) {
-                automationAudioProbe.onLiveKitOutputSilenceConfirmed(owner)
+                automationAudioProbe.onLiveKitOutputSilenceConfirmed(owner) {
+                    flushProgress(owner, nowMs)
+                }
             }
         }
     }
@@ -113,17 +117,19 @@ internal class LiveKitRemoteAudioProbe(
         nowMs: Long,
     ) {
         if (pendingBytes <= 0) return
-        automationAudioProbe.onLiveKitOutputWritten(
+        automationAudioProbe.onLiveKitProgressWritten(
             owner = owner,
             byteCount = pendingBytes,
             nonSilent = pendingNonSilent,
             rmsActive = pendingRmsActive,
             audioWindowMicros = pendingAudioWindowMicros,
         )
+        activeEvidencePublished = activeEvidencePublished || pendingNonSilent
         pendingBytes = 0
         pendingNonSilent = false
         pendingRmsActive = false
         pendingAudioWindowMicros = 0L
+        pendingStartedMs = null
         lastProgressMs = nowMs
     }
 
@@ -133,6 +139,6 @@ internal class LiveKitRemoteAudioProbe(
         const val RMS_ACTIVE_THRESHOLD = 256
         const val MICROS_PER_SECOND = 1_000_000L
         const val NANOS_PER_MILLISECOND = 1_000_000L
-        const val PROGRESS_INTERVAL_MS = 50L
+        const val PROGRESS_INTERVAL_MS = 250L
     }
 }

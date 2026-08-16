@@ -3,6 +3,7 @@ package me.rerere.rikkahub.voiceagent.automation
 import java.io.File
 import kotlin.io.path.createTempDirectory
 import me.rerere.rikkahub.voiceagent.VoiceAgentCallEndpointType
+import me.rerere.rikkahub.voiceagent.VoiceAgentCallLifecycle
 import me.rerere.rikkahub.voiceagent.VoiceAgentTransport
 import me.rerere.rikkahub.voiceagent.debug.VoiceAutomationConnectivity
 import me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControl
@@ -11,8 +12,49 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.uuid.Uuid
 
 class VoiceAutomationControlTest {
+    @Test
+    fun `binding returns the conversation for a starting or active call`() {
+        val conversationId = "11111111-1111-4111-8111-111111111111"
+
+        listOf(
+            VoiceAgentCallLifecycle.Starting(Uuid.parse(conversationId)),
+            VoiceAgentCallLifecycle.Active(Uuid.parse(conversationId)),
+        ).forEach { lifecycle ->
+            val result = control(lifecycleReader = { lifecycle }).handle(
+                VoiceAutomationControl.ACTION_BINDING,
+                emptyMap(),
+            )
+
+            assertEquals(VoiceAutomationControl.RESULT_OK, result.resultCode)
+            assertEquals(
+                "status=ok\naction=binding\nconversation_id=$conversationId",
+                result.resultData,
+            )
+        }
+    }
+
+    @Test
+    fun `binding rejects call states without a current conversation`() {
+        listOf(
+            VoiceAgentCallLifecycle.Idle,
+            VoiceAgentCallLifecycle.Stopping(
+                Uuid.parse("22222222-2222-4222-8222-222222222222"),
+            ),
+            VoiceAgentCallLifecycle.CleanupFailed(IllegalStateException("cleanup failed")),
+        ).forEach { lifecycle ->
+            val result = control(lifecycleReader = { lifecycle }).handle(
+                VoiceAutomationControl.ACTION_BINDING,
+                emptyMap(),
+            )
+
+            assertEquals(VoiceAutomationControl.RESULT_ERROR, result.resultCode)
+            assertEquals("status=error\nerror=invalid_state", result.resultData)
+        }
+    }
+
     @Test
     fun `prepare accepts only fixed hashes transport and lifecycle`() {
         val runtime = RecordingRuntime()
@@ -65,6 +107,7 @@ class VoiceAutomationControlTest {
                     "voice-e2e/${status.runHash?.removePrefix("sha256:")}/automation-events.jsonl",
                 )
             },
+            lifecycleReader = { VoiceAgentCallLifecycle.Idle },
         )
 
         assertSuccess(
@@ -122,6 +165,7 @@ class VoiceAutomationControlTest {
                     ).takeIf(File::isFile)
                 }
             },
+            lifecycleReader = { VoiceAgentCallLifecycle.Idle },
         )
         assertSuccess(control.handle(VoiceAutomationControl.ACTION_PREPARE, validPrepareExtras()))
         assertSuccess(control.handle(VoiceAutomationControl.ACTION_FINALIZE, emptyMap()))
@@ -300,6 +344,7 @@ class VoiceAutomationControlTest {
                 )
             },
             artifactFile = { null },
+            lifecycleReader = { VoiceAgentCallLifecycle.Idle },
         )
 
         val result = control.handle(VoiceAutomationControl.ACTION_STATUS, emptyMap())
@@ -364,6 +409,7 @@ class VoiceAutomationControlTest {
                 VoiceAutomationConnectivity(VoiceAutomationNetwork.NONE, false)
             },
             artifactFile = { artifact },
+            lifecycleReader = { VoiceAgentCallLifecycle.Idle },
         )
 
         assertSuccess(control.handle(VoiceAutomationControl.ACTION_FINALIZE, emptyMap()))
@@ -531,6 +577,7 @@ class VoiceAutomationControlTest {
     @Test
     fun `actions without extras reject unexpected fields and unknown actions`() {
         listOf(
+            VoiceAutomationControl.ACTION_BINDING,
             VoiceAutomationControl.ACTION_STATUS,
             VoiceAutomationControl.ACTION_FINALIZE,
             VoiceAutomationControl.ACTION_DUMP,
@@ -545,12 +592,14 @@ class VoiceAutomationControlTest {
         runtime: RecordingRuntime = RecordingRuntime(),
         connectivity: VoiceAutomationConnectivity =
             VoiceAutomationConnectivity(VoiceAutomationNetwork.WIFI, true),
+        lifecycleReader: () -> VoiceAgentCallLifecycle = { VoiceAgentCallLifecycle.Idle },
         routeRequester: (VoiceAgentCallEndpointType) -> Boolean = { true },
     ) = VoiceAutomationControl(
         runtime = runtime,
         routeRequester = routeRequester,
         connectivityReader = { connectivity },
         artifactFile = { runtime.finalizedFile },
+        lifecycleReader = lifecycleReader,
     )
 
     private fun validPrepareExtras() = mapOf(
@@ -573,6 +622,7 @@ class VoiceAutomationControlTest {
             VoiceAutomationConnectivity(VoiceAutomationNetwork.NONE, false)
         },
         artifactFile = { null },
+        lifecycleReader = { VoiceAgentCallLifecycle.Idle },
     )
 
     private fun assertSuccess(result: VoiceAutomationControlResult) {

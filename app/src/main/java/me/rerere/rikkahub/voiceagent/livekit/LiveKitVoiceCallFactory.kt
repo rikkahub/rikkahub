@@ -18,6 +18,7 @@ import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureFixtureArming
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureSource
 import me.rerere.rikkahub.voiceagent.finishFailedOwnedVoiceSessionCreation
 import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceApi
+import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceHttpException
 import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceTraceHeaders
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStore
 import me.rerere.rikkahub.voiceagent.hermes.HermesToolRecordWriter
@@ -27,6 +28,7 @@ import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
 import me.rerere.rikkahub.voiceagent.voiceAgentRouteCleanupOperation
 import me.rerere.rikkahub.voiceagent.createDefaultVoiceE2EArtifactWriter
 import java.io.File
+import java.io.IOException
 import kotlin.uuid.Uuid
 
 internal class LiveKitVoiceCallFactory internal constructor(
@@ -137,7 +139,8 @@ internal class LiveKitVoiceCallFactory internal constructor(
             VoiceAgentSessionCreationResult.Created(session)
         } catch (_: TimeoutCancellationException) {
             val creationError = LiveKitExperimentalVoiceCallException(
-                "LiveKit experimental voice session request timed out",
+                message = "LiveKit experimental voice session request timed out",
+                failureCategory = LiveKitSessionFailureCategory.SessionTimeout,
             )
             if (!resourcesTransferred) {
                 runCatching { captureSource?.close() }
@@ -167,6 +170,7 @@ internal class LiveKitVoiceCallFactory internal constructor(
                     LiveKitExperimentalVoiceCallException(
                         message = "LiveKit experimental voice session request failed",
                         cause = creationError,
+                        failureCategory = creationError.toLiveKitSessionFailureCategory(),
                     )
                 },
                 cleanup,
@@ -196,4 +200,31 @@ private class LiveKitPersistenceResources(
 internal class LiveKitExperimentalVoiceCallException(
     message: String,
     cause: Throwable? = null,
+    val failureCategory: LiveKitSessionFailureCategory = LiveKitSessionFailureCategory.Unexpected,
 ) : IllegalStateException(message, cause)
+
+internal enum class LiveKitSessionFailureCategory(val wireName: String) {
+    SessionTimeout("session_timeout"),
+    HttpAccessDenied("http_access_denied"),
+    HttpRateLimited("http_rate_limited"),
+    HttpClientFailure("http_client_failure"),
+    HttpServerFailure("http_server_failure"),
+    HttpUnexpected("http_unexpected"),
+    TransportIo("transport_io"),
+    ResponseValidation("response_validation"),
+    Unexpected("unexpected"),
+}
+
+private fun Throwable.toLiveKitSessionFailureCategory(): LiveKitSessionFailureCategory =
+    when (this) {
+        is HermesVoiceHttpException -> when (statusCode) {
+            401, 403 -> LiveKitSessionFailureCategory.HttpAccessDenied
+            429 -> LiveKitSessionFailureCategory.HttpRateLimited
+            in 400..499 -> LiveKitSessionFailureCategory.HttpClientFailure
+            in 500..599 -> LiveKitSessionFailureCategory.HttpServerFailure
+            else -> LiveKitSessionFailureCategory.HttpUnexpected
+        }
+        is IOException -> LiveKitSessionFailureCategory.TransportIo
+        is IllegalArgumentException -> LiveKitSessionFailureCategory.ResponseValidation
+        else -> LiveKitSessionFailureCategory.Unexpected
+    }

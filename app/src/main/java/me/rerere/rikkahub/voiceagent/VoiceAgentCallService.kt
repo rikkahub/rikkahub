@@ -12,6 +12,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.voiceagent.livekit.LiveKitExperimentalVoiceCallException
 import org.koin.android.ext.android.inject
 import kotlin.uuid.Uuid
 
@@ -49,7 +50,7 @@ class VoiceAgentCallService : Service() {
                 }
 
                 override fun reportFailure(error: Throwable) {
-                    VoiceAgentLog.w(TAG, "service operation failed: ${error.toVoiceAgentLogDetail()}")
+                    VoiceAgentLog.w(TAG, error.toVoiceAgentServiceLogMessage())
                 }
 
                 override fun destroyBaseService() {
@@ -168,6 +169,16 @@ class VoiceAgentCallService : Service() {
 internal class VoiceAgentCallConfigurationException(message: String) : IllegalStateException(message)
 
 internal fun shouldStartForegroundForVoiceAgentEnd(activeConversationId: Uuid?): Boolean = true
+
+internal fun Throwable.toVoiceAgentServiceLogMessage(): String {
+    val liveKitCategory =
+        (this as? LiveKitExperimentalVoiceCallException)?.failureCategory?.wireName
+    return if (liveKitCategory == null) {
+        "service operation failed: ${toVoiceAgentLogDetail()}"
+    } else {
+        "service operation failed category=$liveKitCategory"
+    }
+}
 
 internal fun Throwable.toVoiceAgentLogDetail(): String =
     "${javaClass.simpleName}: ${(message ?: "").redactForVoiceAgentLog()}".take(512)

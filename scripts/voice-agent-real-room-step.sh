@@ -872,6 +872,28 @@ wait_for_new_trace() {
   die 'trace activation timed out'
 }
 
+wait_for_pre_call_status() {
+  local attempt=0
+  local started=$SECONDS
+  local snapshot
+  local status
+  while (( attempt < ${VOICE_STEP_MAX_WAIT_ATTEMPTS:-120} )); do
+    attempt=$((attempt + 1))
+    if snapshot="$(read_status_snapshot)"; then
+      printf '%s' "$snapshot"
+      return 0
+    else
+      status=$?
+    fi
+    (( status == 4 )) || die 'unexpected status response'
+    if (( SECONDS - started >= ${VOICE_STEP_WAIT_TIMEOUT_SECONDS:-120} )); then
+      break
+    fi
+    sleep "${VOICE_STEP_POLL_SECONDS:-1}"
+  done
+  die 'unexpected status response'
+}
+
 run_preflight() {
   local status_snapshot
   local -a status=()
@@ -922,7 +944,7 @@ run_start() {
   diagnostic_set_stage package-contract || die 'diagnostic state failed'
   verify_package_contract
   diagnostic_set_stage status-read || die 'diagnostic state failed'
-  status_snapshot="$(read_status)"
+  status_snapshot="$(wait_for_pre_call_status)"
   mapfile -t status <<< "$status_snapshot"
   [[ "${status[0]}" == idle || "${status[0]}" == finalized ]] ||
     die 'automation is not ready'
@@ -998,17 +1020,17 @@ run_with_decoded_state() {
   mapfile -t state <<< "$state_snapshot"
   [[ "${#state[@]}" == 12 ]] || die 'invalid state'
   local stored_mdev_owner_hash="${state[0]}"
-  local PACKAGE="${state[1]}"
-  local ANDROID_USER_ID="${state[2]}"
-  local PACKAGE_UID="${state[3]}"
-  local CONVERSATION_ID="${state[4]}"
-  local RUN_HASH="${state[5]}"
-  local COMPARISON_HASH="${state[6]}"
-  local FIXTURE_TOKEN="${state[7]}"
-  local FIXTURE_PARENT_IDENTITY="${state[8]}"
-  local FIXTURE_DIRECTORY_IDENTITY="${state[9]}"
-  local FIXTURE_OWNERSHIP_NONCE="${state[10]}"
-  local TRACE_ID="${state[11]}"
+  PACKAGE="${state[1]}"
+  ANDROID_USER_ID="${state[2]}"
+  PACKAGE_UID="${state[3]}"
+  CONVERSATION_ID="${state[4]}"
+  RUN_HASH="${state[5]}"
+  COMPARISON_HASH="${state[6]}"
+  FIXTURE_TOKEN="${state[7]}"
+  FIXTURE_PARENT_IDENTITY="${state[8]}"
+  FIXTURE_DIRECTORY_IDENTITY="${state[9]}"
+  FIXTURE_OWNERSHIP_NONCE="${state[10]}"
+  TRACE_ID="${state[11]}"
   [[ "$stored_mdev_owner_hash" == "$MDEV_OWNER_HASH" ]] || die 'managed owner mismatch'
   case "$requested_operation" in
     inject|interrupt|status|finalize|capture|end)

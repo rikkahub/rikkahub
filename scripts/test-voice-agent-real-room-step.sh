@@ -1066,6 +1066,11 @@ if run_as_tail is not None:
             raise SystemExit(0)
         if "voice-step-source-metadata" in script:
             remote_path = tail[-1]
+            if (
+                os.environ.get("FAKE_ADB_FAIL_POST_CLEANUP_METADATA") == "1"
+                and state.get("cleanup_broker_completed")
+            ):
+                raise SystemExit(1)
             content = artifact_content(remote_path, state)
             if content is None:
                 raise SystemExit(1)
@@ -1142,7 +1147,7 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
             save_state(state)
             malformed = os.environ.get("FAKE_ADB_MALFORMED_RESTORATION")
             if malformed == "duplicate":
-                complete(0, "status=ok\naction=status\nrun_state=idle\nrun_hash=none\ncomparison_hash=none\nrequested_transport=none\nevent_count=0\nnetwork=none\nvalidated=true")
+                complete(0, "status=ok\naction=status\nrun_state=idle\nrun_hash=none\ncomparison_hash=none\nrequested_transport=none\nevent_count=0\nnetwork=wifi\nvalidated=true")
             data = "\n".join([
                 "status=ok",
                 "action=status",
@@ -1151,7 +1156,7 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
                 "comparison_hash=" + (state["comparison_hash"] if not was_stopped else "none"),
                 "requested_transport=" + (state["transport"] if not was_stopped else "none"),
                 "event_count=" + (str(state.get("event_count", 17)) if not was_stopped else "0"),
-                "network=none",
+                "network=wifi",
                 "validated=true",
             ])
             complete(0, data)
@@ -1182,7 +1187,14 @@ if command[:4] == ["shell", "am", "broadcast", "--user"]:
                 f'requested_transport={state["transport"] if state["automation_state"] != "idle" else "none"}',
                 f"event_count={status_event_count}",
                 f"network={status_network}",
-                "validated=" + ("false" if os.environ.get("FAKE_ADB_VALIDATED_FALSE") == "1" else "true"),
+                "validated=" + (
+                    "false"
+                    if os.environ.get("FAKE_ADB_VALIDATED_FALSE") == "1"
+                    or state["status_reads"] <= int(
+                        os.environ.get("FAKE_ADB_UNVALIDATED_STATUS_READS", "0")
+                    )
+                    else "true"
+                ),
             ]
         )
         post_finalize_status = os.environ.get("FAKE_ADB_POST_FINALIZE_STATUS")
@@ -1652,6 +1664,11 @@ if exec_out_run_as_tail is not None and exec_out_run_as_tail[:1] == ["cat"]:
         state["automation_artifact_reads"] = state.get("automation_artifact_reads", 0) + 1
     save_state(state)
     content = artifact_content(remote_path, state)
+    if (
+        os.environ.get("FAKE_ADB_FAIL_POST_CLEANUP_ARTIFACT_READ") == "1"
+        and state.get("cleanup_broker_completed")
+    ):
+        raise SystemExit(1)
     if content is None:
         raise SystemExit(1)
     destination = os.environ.get("FAKE_ADB_CREATE_CAPTURE_DESTINATION")
@@ -1771,7 +1788,9 @@ PY
   unset FAKE_ADB_BLOCK FAKE_TIMEOUT_ENFORCE FAKE_LN_RACE_DESTINATION
   unset FAKE_LN_SIGNAL_DESTINATION FAKE_LN_SIGNAL_TIMING
   unset FAKE_ADB_PREEXISTING_REMOTE_DIR FAKE_ADB_REMOTE_DESTINATION_TYPE
-  unset FAKE_ADB_VALIDATED_FALSE FAKE_ADB_SUBSECOND_METADATA_CHANGE
+  unset FAKE_ADB_VALIDATED_FALSE FAKE_ADB_UNVALIDATED_STATUS_READS
+  unset FAKE_ADB_SUBSECOND_METADATA_CHANGE FAKE_ADB_FAIL_POST_CLEANUP_METADATA
+  unset FAKE_ADB_FAIL_POST_CLEANUP_ARTIFACT_READ
   unset FAKE_MDEV_REQUIRE_SINGLE_RUN_AS_SCRIPT
   unset FAKE_ADB_PRIVATE_NOISE FAKE_ADB_DEVICE_LOST FAKE_ADB_RETAIN_FIXTURE_DIR
   unset FAKE_ADB_DEVICE_ENUMERATION_STATE FAKE_ADB_SIGNAL_DURING_FORCE_STOP
@@ -3620,6 +3639,15 @@ PY
   assert_no_adb_mutations
   assert_private_output_absent
   pass
+
+  reset_fake
+  export FAKE_ADB_VALIDATED_FALSE=1
+  run_helper preflight --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug
+  [[ "$RUN_STATUS" -ne 0 && "$(command_count .STATUS)" == "1" ]] ||
+    fail "preflight-status validation test: unvalidated connectivity was retried"
+  assert_no_adb_mutations
+  assert_private_output_absent
+  pass
 }
 
 run_start_tests() {
@@ -4028,6 +4056,93 @@ PY
   assert_service_action_pinned 'me.rerere.rikkahub.voiceagent.action.END_BOUND' 10
   [[ "$(exact_remote_shell_command_count -s DEVICE_SECRET_123 shell am broadcast --user 10 --include-stopped-packages -n me.rerere.rikkahub.debug/me.rerere.rikkahub.voiceagent.debug.VoiceAutomationControlReceiver 'intent:#Intent;action=me.rerere.rikkahub.voiceagent.automation.STATUS;end')" == 1 ]] ||
     fail "pinned-user rollback test: package restoration changed Android user"
+  pass
+
+  reset_fake
+  rm -f -- "$state"
+  export FAKE_ADB_UNVALIDATED_STATUS_READS=1
+  run_helper start --state "$state" --mdev-owner OWNER_SECRET_123 \
+    --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
+    --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
+    --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
+  [[ "$RUN_STATUS" -eq 0 ]] ||
+    fail "start-status-read retry test: one transient unvalidated response did not recover"
+  [[ "$(command_count .STATUS)" == "2" ]] ||
+    fail "start-status-read retry test: readiness was not proven on the second status read"
+  python3 - "$ADB_LOG" <<'PY' || fail "start-status-read retry test: mutation preceded readiness"
+import shlex
+import sys
+
+commands = [
+    chunk.split(b"\0")
+    for chunk in open(sys.argv[1], "rb").read().split(b"\0\0")
+    if chunk
+]
+
+def flattened(command):
+    values = list(command)
+    if b"shell" in command:
+        shell = command.index(b"shell")
+        if len(command) == shell + 2:
+            values.extend(
+                value.encode()
+                for value in shlex.split(command[shell + 1].decode(), posix=True)
+            )
+    return values
+
+status = [index for index, command in enumerate(commands) if any(b".STATUS" in value for value in flattened(command))]
+mutations = [
+    index
+    for index, command in enumerate(commands)
+    if any(
+        marker in value
+        for value in flattened(command)
+        for marker in (
+            b"voice-step-create-owned-directory",
+            b"voice-step-stage-owned-fixture",
+            b".PREPARE",
+            b"ARM_CAPTURE_FIXTURE",
+            b"start-foreground-service",
+        )
+    )
+]
+assert len(status) == 2 and mutations and max(status) < min(mutations)
+PY
+  [[ "$(command_count PREPARE)" == "1" &&
+     "$(command_count ARM_CAPTURE_FIXTURE)" == "1" &&
+     "$(command_count start-foreground-service)" == "1" ]] ||
+    fail "start-status-read retry test: recovered start mutation was duplicated"
+  assert_private_output_absent
+  pass
+
+  reset_fake
+  rm -f -- "$state"
+  local retry_diagnostic="$TMP_DIR/start-status-retry-diagnostic.txt"
+  export FAKE_ADB_UNVALIDATED_STATUS_READS=10
+  run_helper start --state "$state" --diagnostic-record "$retry_diagnostic" \
+    --mdev-owner OWNER_SECRET_123 --package me.rerere.rikkahub.debug \
+    --conversation-id CONVERSATION_SECRET_123 \
+    --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
+    --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
+  [[ "$RUN_STATUS" -ne 0 && "$(command_count .STATUS)" == "2" ]] ||
+    fail "start-status-read retry bound test: retry exhaustion did not fail at the configured bound"
+  assert_diagnostic_record "$retry_diagnostic" \
+    status-read unexpected-status-response none complete
+  assert_no_adb_mutations
+  assert_private_output_absent
+  pass
+
+  reset_fake
+  rm -f -- "$state"
+  export FAKE_ADB_MALFORMED_BROADCAST='me.rerere.rikkahub.voiceagent.automation.STATUS'
+  run_helper start --state "$state" --mdev-owner OWNER_SECRET_123 \
+    --package me.rerere.rikkahub.debug --conversation-id CONVERSATION_SECRET_123 \
+    --run-hash "sha256:$(printf 'a%.0s' {1..64})" \
+    --comparison-hash "sha256:$(printf 'b%.0s' {1..64})" --fixture "$fixture"
+  [[ "$RUN_STATUS" -ne 0 && "$(command_count .STATUS)" == "1" ]] ||
+    fail "start-status-read malformed test: malformed response was retried"
+  assert_no_adb_mutations
+  assert_private_output_absent
   pass
 }
 
@@ -5108,6 +5223,8 @@ PY
   export FAKE_ADB_VALIDATED_FALSE=1
   run_helper status --state "$state" --expect single_result_announced
   [[ "$RUN_STATUS" -ne 0 ]] || fail "status-validation test: validated=false succeeded"
+  [[ "$(command_count .STATUS)" == "1" ]] ||
+    fail "status-validation test: validated=false was retried"
   [[ ! -s "$STDOUT_FILE" ]] || fail "status-validation test: failed validation wrote stdout"
   assert_private_output_absent
   pass
@@ -6664,6 +6781,54 @@ assert state["restoration_count"] == 1
 PY
   [[ -d "$REMOTE_APP_DATA_ROOT/files/voice-real-room/$(printf 'a%.0s' {1..64})" ]] ||
     fail "end-retained-directory test: controlled final rmdir failure lost the directory"
+  pass
+
+  rm -f -- "$cleanup_output" "$state" "$finalization"
+  reset_fake
+  finalize_fake_run false
+  write_valid_state "$state"
+  write_finalization "$finalization"
+  export FAKE_ADB_FAIL_POST_CLEANUP_METADATA=1
+  run_helper end --state "$state" --finalization "$finalization" \
+    --cleanup-output "$cleanup_output"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
+    fail "end-post-cleanup-metadata-failure test: failed post-cleanup metadata read published cleanup"
+  [[ "$(<"$STDERR_FILE")" == *"voice-step.error=artifact source unavailable"* ]] ||
+    fail "end-post-cleanup-metadata-failure test: diagnostic error category mismatch"
+  python3 - "$FAKE_STATE" <<'PY' || fail "end-post-cleanup-metadata-failure test: package restoration failed"
+import json
+import sys
+
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["cleanup_broker_completed"] is True
+assert state["package_stopped"] is False
+assert state["restoration_count"] == 1
+PY
+  assert_private_output_absent
+  pass
+
+  rm -f -- "$cleanup_output" "$state" "$finalization"
+  reset_fake
+  finalize_fake_run false
+  write_valid_state "$state"
+  write_finalization "$finalization"
+  export FAKE_ADB_FAIL_POST_CLEANUP_ARTIFACT_READ=1
+  run_helper end --state "$state" --finalization "$finalization" \
+    --cleanup-output "$cleanup_output"
+  [[ "$RUN_STATUS" -ne 0 && ! -e "$cleanup_output" ]] ||
+    fail "end-post-cleanup-artifact-read-failure test: failed post-cleanup artifact read published cleanup"
+  [[ "$(<"$STDERR_FILE")" == *"voice-step.error=artifact read failed"* ]] ||
+    fail "end-post-cleanup-artifact-read-failure test: diagnostic error category mismatch"
+  python3 - "$FAKE_STATE" <<'PY' || fail "end-post-cleanup-artifact-read-failure test: package restoration failed"
+import json
+import sys
+
+state = json.load(open(sys.argv[1], encoding="utf-8"))
+assert state["cleanup_broker_completed"] is True
+assert state["package_stopped"] is False
+assert state["restoration_count"] == 1
+PY
+  assert_private_output_absent
   pass
 
   rm -f -- "$cleanup_output" "$state" "$finalization"
