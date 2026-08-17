@@ -7698,6 +7698,7 @@ run_wait_automation_tests() {
   export VOICE_STEP_POLL_SECONDS=0.01 VOICE_STEP_WAIT_TIMEOUT_SECONDS=2
   reset_fake
   activate_fake_run
+  rm -f -- "$state"
   write_valid_state "$state"
   export FAKE_ADB_AUTOMATION_PROGRESS=reconnect-restored
   run_helper wait-automation --state "$state" --expect reconnect_started
@@ -7707,6 +7708,7 @@ run_wait_automation_tests() {
 
   reset_fake
   activate_fake_run
+  rm -f -- "$state"
   write_valid_state "$state"
   export VOICE_STEP_POLL_SECONDS=0.01 VOICE_STEP_WAIT_TIMEOUT_SECONDS=2
   export FAKE_ADB_AUTOMATION_PROGRESS=network-timeout
