@@ -277,6 +277,42 @@ run_interrupt() {
     'voice-step.fixture=accepted'
 }
 
+run_wait_automation() {
+  local expectation="$1"
+  local snapshot_path
+  local artifact_path
+  local attempt=0
+  local started_at=$SECONDS
+  ensure_local_temp_dir
+  snapshot_path="$LOCAL_TEMP_DIR/automation-progress.jsonl"
+  : > "$snapshot_path"
+  chmod 600 -- "$snapshot_path" || die 'automation progress snapshot failed'
+  register_temp_file "$snapshot_path"
+  artifact_path="$(app_artifact_path "$APP_ARTIFACT_ROOT/${RUN_HASH#sha256:}" automation-events.jsonl)"
+  while (( attempt < ${VOICE_STEP_MAX_WAIT_ATTEMPTS:-120} )); do
+    attempt=$((attempt + 1))
+    : > "$snapshot_path"
+    if adb_read exec-out run-as "$PACKAGE" --user "$ANDROID_USER_ID" \
+        cat "$artifact_path" >"$snapshot_path" 2>/dev/null &&
+       python3 "$REAL_ROOM_CONTRACT" --evaluate-automation-progress \
+        "$expectation" "$snapshot_path" "$RUN_HASH" "$COMPARISON_HASH" \
+        >/dev/null 2>&1; then
+      cleanup_local_temps || die 'cleanup failed'
+      printf '%s\n' \
+        'voice-step.status=ok' \
+        'voice-step.operation=wait-automation' \
+        "voice-step.expectation=$expectation" \
+        'voice-step.expectation_met=true'
+      return
+    fi
+    if (( SECONDS - started_at >= ${VOICE_STEP_WAIT_TIMEOUT_SECONDS:-120} )); then
+      break
+    fi
+    sleep "${VOICE_STEP_POLL_SECONDS:-1}"
+  done
+  die 'automation progress not proven'
+}
+
 run_status_operation() {
   local expectation="$1"
   local status_snapshot
@@ -1033,12 +1069,17 @@ run_with_decoded_state() {
   TRACE_ID="${state[11]}"
   [[ "$stored_mdev_owner_hash" == "$MDEV_OWNER_HASH" ]] || die 'managed owner mismatch'
   case "$requested_operation" in
+    wait-automation)
+      validate_runtime without-broadcast
+      acquire_host_operation_lock
+      ;;
     inject|interrupt|status|finalize|capture|end)
       validate_runtime
       acquire_host_operation_lock
       ;;
   esac
   case "$requested_operation" in
+    wait-automation) run_wait_automation "$@" ;;
     inject) run_inject "$@" ;;
     interrupt) run_interrupt "$@" ;;
     status) run_status_operation "$@" ;;
@@ -1180,6 +1221,16 @@ case "$operation" in
     validate_hash "$RUN_HASH" 'run hash'
     validate_hash "$COMPARISON_HASH" 'comparison hash'
     run_start "${PARSED[--state]}" "${PARSED[--fixture]}"
+    ;;
+  wait-automation)
+    parse_options '--mdev-owner --state --expect' "$@"
+    require_options --mdev-owner --state --expect
+    MDEV_OWNER="${PARSED[--mdev-owner]}"
+    prepare_mdev_owner
+    python3 "$REAL_ROOM_CONTRACT" --validate-automation-progress \
+      "${PARSED[--expect]}" >/dev/null 2>&1 || die 'invalid automation expectation'
+    run_with_decoded_state wait-automation "${PARSED[--state]}" \
+      "${PARSED[--expect]}"
     ;;
   inject)
     parse_options '--mdev-owner --state --fixture --role' "$@"

@@ -85,6 +85,9 @@ internal data class VoiceAutomationEvent(
     val rmsActive: Boolean? = null,
     val audioWindowMicros: Long? = null,
     val succeeded: Boolean? = null,
+    val reconnectDurationMs: Long? = null,
+    val failureCategory: String? = null,
+    val failureMessage: String? = null,
     val correlationKind: VoiceAutomationCorrelationKind? = null,
     val correlationHash: String? = null,
     val requestedModelHash: String? = null,
@@ -115,6 +118,9 @@ internal data class VoiceAutomationEventInput(
     val rmsActive: Boolean? = null,
     val audioWindowMicros: Long? = null,
     val succeeded: Boolean? = null,
+    val reconnectDurationMs: Long? = null,
+    val failureCategory: String? = null,
+    val failureMessage: String? = null,
     val correlationKind: VoiceAutomationCorrelationKind? = null,
     val correlationHash: String? = null,
     val requestedModelHash: String? = null,
@@ -179,6 +185,28 @@ internal object VoiceAutomationEventValidation {
             require(event.captureSource == null && event.micBytes == null && event.fixtureBytes == null) {
                 "Capture fields are only allowed on capture attestation"
             }
+        }
+        if (
+            event.requestedTransport == VoiceAgentTransport.LiveKitExperimental &&
+            event.name == VoiceAutomationEventName.RECONNECT_TRANSPORT_RESTORED
+        ) {
+            requireNotNull(event.reconnectDurationMs)
+            require(event.reconnectDurationMs in 0 until 20_000)
+        } else {
+            require(event.reconnectDurationMs == null)
+        }
+
+        if (event.name == VoiceAutomationEventName.FAILURE) {
+            require(event.requestedTransport == VoiceAgentTransport.LiveKitExperimental)
+            val expectedMessage = when (event.failureCategory) {
+                "NETWORK_TIMEOUT" -> "LiveKit connection timed out after 20s"
+                "WORKER_UNAVAILABLE" -> "LiveKit worker participant disconnected"
+                else -> throw IllegalArgumentException("Unsupported Spec A failure category")
+            }
+            require(event.succeeded == false)
+            require(event.failureMessage == expectedMessage)
+        } else {
+            require(event.failureCategory == null && event.failureMessage == null)
         }
         require((event.correlationKind == null) == (event.correlationHash == null)) {
             "correlation kind and hash must be supplied together"

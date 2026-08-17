@@ -491,7 +491,17 @@ def sanitized_events():
     return "".join(canonical_row(row) + "\n" for row in sanitized_event_rows())
 
 
-def automation_event(state, sequence, name, *, observed_transport=None, succeeded=None):
+def automation_event(
+    state,
+    sequence,
+    name,
+    *,
+    observed_transport=None,
+    succeeded=None,
+    reconnect_duration_ms=None,
+    failure_category=None,
+    failure_message=None,
+):
     return {
         "schemaVersion": 1,
         "monotonicMs": sequence,
@@ -509,6 +519,9 @@ def automation_event(state, sequence, name, *, observed_transport=None, succeede
         "rmsActive": None,
         "audioWindowMicros": None,
         "succeeded": succeeded,
+        "reconnect_duration_ms": reconnect_duration_ms,
+        "failure_category": failure_category,
+        "failure_message": failure_message,
         "correlationKind": None,
         "correlationHash": None,
         "requestedModelHash": None,
@@ -540,26 +553,71 @@ def automation_events(state):
                 observed_transport=state["transport"],
             )
         )
+    if os.environ.get("FAKE_ADB_AUTOMATION_PROGRESS"):
+        progress = os.environ["FAKE_ADB_AUTOMATION_PROGRESS"]
+        reads = state.get("automation_artifact_reads", 0)
+        if reads >= 2:
+            rows.append(
+                automation_event(
+                    state,
+                    len(rows) + 1,
+                    "reconnect_started",
+                )
+            )
+        if reads >= 4:
+            if progress == "reconnect-restored":
+                rows.append(
+                    automation_event(
+                        state,
+                        len(rows) + 1,
+                        "reconnect_transport_restored",
+                        reconnect_duration_ms=5_000,
+                    )
+                )
+            elif progress == "network-timeout":
+                rows.append(
+                    automation_event(
+                        state,
+                        len(rows) + 1,
+                        "failure",
+                        succeeded=False,
+                        failure_category="NETWORK_TIMEOUT",
+                        failure_message="LiveKit connection timed out after 20s",
+                    )
+                )
+    failure_offset = 0
+    if os.environ.get("FAKE_ADB_INCLUDE_SPEC_A_FAILURE") == "NETWORK_TIMEOUT":
+        rows.append(
+            automation_event(
+                state,
+                3,
+                "failure",
+                succeeded=False,
+                failure_category="NETWORK_TIMEOUT",
+                failure_message="LiveKit connection timed out after 20s",
+            )
+        )
+        failure_offset = 1
     stop_visible_after = int(os.environ.get("FAKE_ADB_DURABLE_STOP_VISIBLE_AFTER", "0"))
     stop_visible = state.get("automation_artifact_reads", 0) >= stop_visible_after
     if state.get("call_stopped_recorded") and stop_visible:
         rows.append(
             automation_event(
                 state,
-                3,
+                3 + failure_offset,
                 "call_stopped",
                 succeeded=os.environ.get("FAKE_ADB_CALL_STOP_FAILED") != "1",
             )
         )
     if state.get("run_finalized_recorded"):
-        rows.append(automation_event(state, 4, "run_finalized"))
+        rows.append(automation_event(state, 4 + failure_offset, "run_finalized"))
     malformed = os.environ.get("FAKE_ADB_MALFORMED_DURABLE_ENDING")
     if malformed == "stopped-false" and rows and rows[-1]["name"] in {"call_stopped", "run_finalized"}:
         for row in rows:
             if row["name"] == "call_stopped":
                 row["succeeded"] = False
     elif malformed == "event-after-finalized" and any(row["name"] == "run_finalized" for row in rows):
-        rows.append(automation_event(state, 5, "network_observed", succeeded=True))
+        rows.append(automation_event(state, 5 + failure_offset, "network_observed", succeeded=True))
     elif malformed == "binding-mismatch" and rows:
         rows[-1]["comparisonHash"] = hash_value("c")
     elif malformed == "missing-call-stopped":
@@ -1817,6 +1875,7 @@ PY
   unset FAKE_ADB_DEVICE_LOST_ON_FORCE_STOP FAKE_ADB_CAPTURE_CRLF
   unset FAKE_ADB_DEVICE_LOST_AFTER_FINALIZE FAKE_ADB_ROUTE_LOST_AFTER_FINALIZE
   unset FAKE_ADB_MALFORMED_AFTER_FINALIZE
+  unset FAKE_ADB_INCLUDE_SPEC_A_FAILURE FAKE_ADB_AUTOMATION_PROGRESS
   unset FAKE_ADB_PREOPEN_REPLACE_CAPTURE_SOURCE
   unset FAKE_ADB_EXIT_MATCH FAKE_ADB_EXIT_STATUS
   unset FAKE_ADB_START_DOES_NOT_ACTIVATE FAKE_ADB_START_RETAINS_TRACE
@@ -2630,7 +2689,7 @@ run_helper() {
   for argument in "$@"; do
     [[ "$argument" == --mdev-owner ]] && has_owner=1
   done
-  if [[ "${RUN_HELPER_SKIP_OWNER:-0}" != 1 && "$has_owner" -eq 0 && "${1:-}" =~ ^(preflight|start|inject|interrupt|status|finalize|capture|end|resolve-binding)$ ]]; then
+  if [[ "${RUN_HELPER_SKIP_OWNER:-0}" != 1 && "$has_owner" -eq 0 && "${1:-}" =~ ^(preflight|start|inject|interrupt|status|finalize|capture|end|resolve-binding|wait-automation)$ ]]; then
     invocation=("$1" --mdev-owner "$MDEV_OWNER" "${@:2}")
   fi
   for (( index = 0; index + 1 < ${#invocation[@]}; index++ )); do
@@ -5451,6 +5510,123 @@ except contract.ContractError:
 else:
     raise AssertionError("non-positive playback epoch was accepted")
 
+valid_reconnect = dict.fromkeys(contract.AUTOMATION_KEYS)
+valid_reconnect.update({
+    "schemaVersion": 1,
+    "monotonicMs": 1,
+    "wallClockMs": 1_800_000_000_001,
+    "runHash": digest("a"),
+    "comparisonHash": digest("b"),
+    "requestedTransport": "livekit_experimental",
+    "name": "reconnect_transport_restored",
+    "reconnect_duration_ms": 5_000,
+})
+valid_failure = dict(valid_reconnect)
+valid_failure.update({
+    "monotonicMs": 2,
+    "wallClockMs": 1_800_000_000_002,
+    "name": "failure",
+    "reconnect_duration_ms": None,
+    "succeeded": False,
+    "failure_category": "NETWORK_TIMEOUT",
+    "failure_message": "LiveKit connection timed out after 20s",
+})
+content = "".join(
+    json.dumps(row, separators=(",", ":")) + "\n"
+    for row in (valid_reconnect, valid_failure)
+).encode()
+assert len(contract.parse_automation_bytes(content)) == 2
+
+for field, invalid in (
+    ("reconnect_duration_ms", 20_000),
+    ("failure_category", "UNKNOWN"),
+    ("failure_message", "different text"),
+):
+    mutated = dict(valid_reconnect if field == "reconnect_duration_ms" else valid_failure)
+    mutated[field] = invalid
+    try:
+        contract.parse_automation_bytes(
+            (json.dumps(mutated, separators=(",", ":")) + "\n").encode(),
+        )
+    except contract.ContractError as error:
+        assert error.boundary == "automation_evidence"
+    else:
+        raise AssertionError(f"invalid {field} was accepted")
+
+def progress_row(monotonic_ms: int, name: str, **fields: object) -> dict[str, object]:
+    row = dict.fromkeys(contract.AUTOMATION_KEYS)
+    row.update(
+        schemaVersion=1,
+        monotonicMs=monotonic_ms,
+        wallClockMs=1_700_000_000_000 + monotonic_ms,
+        runHash=digest("a"),
+        comparisonHash=digest("b"),
+        requestedTransport="livekit_experimental",
+        name=name,
+    )
+    row.update(fields)
+    return row
+
+
+def canonical_rows(*rows: dict[str, object]) -> bytes:
+    return b"".join(
+        json.dumps(row, separators=(",", ":")).encode() + b"\n"
+        for row in rows
+    )
+
+
+run_prepared = progress_row(1, "run_prepared")
+reconnect_started = progress_row(2, "reconnect_started")
+reconnect_restored = progress_row(
+    3,
+    "reconnect_transport_restored",
+    reconnect_duration_ms=5_000,
+)
+network_timeout = progress_row(
+    3,
+    "failure",
+    succeeded=False,
+    failure_category="NETWORK_TIMEOUT",
+    failure_message="LiveKit connection timed out after 20s",
+)
+started_only = contract.parse_automation_bytes(
+    canonical_rows(run_prepared, reconnect_started),
+    digest("a"),
+    digest("b"),
+)
+restored = contract.parse_automation_bytes(
+    canonical_rows(run_prepared, reconnect_started, reconnect_restored),
+    digest("a"),
+    digest("b"),
+)
+timed_out = contract.parse_automation_bytes(
+    canonical_rows(run_prepared, reconnect_started, network_timeout),
+    digest("a"),
+    digest("b"),
+)
+contract.evaluate_automation_progress(
+    contract.AutomationProgressExpectation.RECONNECT_STARTED,
+    started_only,
+)
+contract.evaluate_automation_progress(
+    contract.AutomationProgressExpectation.RECONNECT_TRANSPORT_RESTORED,
+    restored,
+)
+contract.evaluate_automation_progress(
+    contract.AutomationProgressExpectation.NETWORK_TIMEOUT,
+    timed_out,
+)
+for expectation, rows in (
+    (contract.AutomationProgressExpectation.RECONNECT_TRANSPORT_RESTORED, started_only),
+    (contract.AutomationProgressExpectation.NETWORK_TIMEOUT, restored),
+):
+    try:
+        contract.evaluate_automation_progress(expectation, rows)
+    except contract.ContractError as error:
+        assert error.boundary == "automation_progress"
+    else:
+        raise AssertionError(f"premature progress accepted for {expectation}")
+
 first = identity(1)
 second = identity(2)
 single = announced_sequence(first)
@@ -5926,6 +6102,16 @@ assert state["call_stopped_recorded"] is True
 assert state["run_finalized_recorded"] is True
 assert state["automation_artifact_reads"] >= 3
 PY
+  pass
+
+  reset_fake
+  activate_fake_run
+  rm -f -- "$state" "$finalization"
+  write_valid_state "$state"
+  export FAKE_ADB_INCLUDE_SPEC_A_FAILURE=NETWORK_TIMEOUT
+  run_helper finalize --state "$state" --finalization-output "$finalization"
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=finalize\nvoice-step.outcome=complete'
+  assert_finalization_record "$finalization" complete complete true true false
   pass
 
   reset_fake
@@ -7507,6 +7693,32 @@ PY
   done
 }
 
+run_wait_automation_tests() {
+  local state="$TMP_DIR/wait-automation-state.json"
+  export VOICE_STEP_POLL_SECONDS=0.01 VOICE_STEP_WAIT_TIMEOUT_SECONDS=2
+  reset_fake
+  activate_fake_run
+  write_valid_state "$state"
+  export FAKE_ADB_AUTOMATION_PROGRESS=reconnect-restored
+  run_helper wait-automation --state "$state" --expect reconnect_started
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=wait-automation\nvoice-step.expectation=reconnect_started\nvoice-step.expectation_met=true'
+  run_helper wait-automation --state "$state" --expect reconnect_transport_restored
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=wait-automation\nvoice-step.expectation=reconnect_transport_restored\nvoice-step.expectation_met=true'
+
+  reset_fake
+  activate_fake_run
+  write_valid_state "$state"
+  export VOICE_STEP_POLL_SECONDS=0.01 VOICE_STEP_WAIT_TIMEOUT_SECONDS=2
+  export FAKE_ADB_AUTOMATION_PROGRESS=network-timeout
+  run_helper wait-automation --state "$state" --expect network_timeout
+  assert_exact_output $'voice-step.status=ok\nvoice-step.operation=wait-automation\nvoice-step.expectation=network_timeout\nvoice-step.expectation_met=true'
+
+  export VOICE_STEP_WAIT_TIMEOUT_SECONDS=1
+  run_helper wait-automation --state "$state" --expect reconnect_transport_restored
+  [[ "$RUN_STATUS" -ne 0 ]] || fail "wait-automation accepted the wrong terminal event"
+  pass
+}
+
 SELECT_ALL=0
 SELECTED_OPERATIONS=("$@")
 if [[ "$#" -eq 0 ]]; then
@@ -7514,7 +7726,7 @@ if [[ "$#" -eq 0 ]]; then
 fi
 for requested in "${SELECTED_OPERATIONS[@]}"; do
   case "$requested" in
-    preflight|start|inject|interrupt|status|finalize|finalization|capture|end|cleanup|fixture-bounds|checkpoints|tracing|state-publisher|resolve-binding) ;;
+    preflight|start|inject|interrupt|status|finalize|finalization|capture|end|cleanup|fixture-bounds|checkpoints|tracing|state-publisher|resolve-binding|wait-automation) ;;
     *) fail "test filter must name a real-room operation" ;;
   esac
 done
@@ -7544,6 +7756,7 @@ if selected finalize || selected finalization; then
 fi
 selected capture && run_capture_tests
 selected resolve-binding && run_resolve_binding_tests
+selected wait-automation && run_wait_automation_tests
 if selected end || selected cleanup; then
   run_end_tests
 fi

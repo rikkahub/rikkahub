@@ -25,6 +25,8 @@ internal interface VoiceAutomationRuntime {
         status().let { status ->
             status.state == VoiceAutomationRunState.Active && status.runHash == runHash
         }
+    fun markReconnectTransportRestored(runHash: String, reconnectDurationMs: Long): Boolean =
+        markReconnectTransportRestored(runHash)
     fun status(): VoiceAutomationStatus
     fun activeBindingMatches(binding: VoiceAutomationRunBinding): Boolean =
         status().let { status ->
@@ -152,6 +154,26 @@ internal class DefaultVoiceAutomationRuntime(
         }
         recordActive(
             VoiceAutomationEventInput(VoiceAutomationEventName.RECONNECT_TRANSPORT_RESTORED),
+        )
+        return true
+    }
+
+    @Synchronized
+    override fun markReconnectTransportRestored(
+        runHash: String,
+        reconnectDurationMs: Long,
+    ): Boolean {
+        if (
+            currentStatus.state != VoiceAutomationRunState.Active ||
+            binding?.runHash != runHash
+        ) {
+            return false
+        }
+        recordActive(
+            VoiceAutomationEventInput(
+                name = VoiceAutomationEventName.RECONNECT_TRANSPORT_RESTORED,
+                reconnectDurationMs = reconnectDurationMs,
+            ),
         )
         return true
     }
@@ -327,6 +349,9 @@ internal class DefaultVoiceAutomationRuntime(
         rmsActive = input.rmsActive,
         audioWindowMicros = input.audioWindowMicros,
         succeeded = input.succeeded,
+        reconnectDurationMs = input.reconnectDurationMs,
+        failureCategory = input.failureCategory,
+        failureMessage = input.failureMessage,
         correlationKind = input.correlationKind,
         correlationHash = input.correlationHash,
         requestedModelHash = input.requestedModelHash,

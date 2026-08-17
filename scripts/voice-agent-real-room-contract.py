@@ -115,6 +115,9 @@ AUTOMATION_KEYS = (
     "rmsActive",
     "audioWindowMicros",
     "succeeded",
+    "reconnect_duration_ms",
+    "failure_category",
+    "failure_message",
     "correlationKind",
     "correlationHash",
     "requestedModelHash",
@@ -934,6 +937,32 @@ def parse_automation_bytes(
             row.get("succeeded") is None or type(row.get("succeeded")) is bool,
             "automation_evidence",
         )
+        reconnect_duration_ms = row.get("reconnect_duration_ms")
+        failure_category = row.get("failure_category")
+        failure_message = row.get("failure_message")
+        if row["requestedTransport"] == "livekit_experimental" and row["name"] == "reconnect_transport_restored":
+            _require(
+                type(reconnect_duration_ms) is int and 0 <= reconnect_duration_ms < 20_000,
+                "automation_evidence",
+            )
+        else:
+            _require(reconnect_duration_ms is None, "automation_evidence")
+        if row["name"] == "failure":
+            _require(
+                row["requestedTransport"] == "livekit_experimental"
+                and row.get("succeeded") is False,
+                "automation_evidence",
+            )
+            expected_message = {
+                "NETWORK_TIMEOUT": "LiveKit connection timed out after 20s",
+                "WORKER_UNAVAILABLE": "LiveKit worker participant disconnected",
+            }.get(failure_category)
+            _require(
+                expected_message is not None and failure_message == expected_message,
+                "automation_evidence",
+            )
+        else:
+            _require(failure_category is None and failure_message is None, "automation_evidence")
         correlation_kind = row.get("correlationKind")
         correlation_hash = row.get("correlationHash")
         _require((correlation_kind is None) == (correlation_hash is None), "automation_evidence")
@@ -1228,6 +1257,48 @@ def _sanitized_projection(private: dict[str, Any], raw: bytes) -> dict[str, Any]
     return projected
 
 
+class AutomationProgressExpectation(enum.StrEnum):
+    RECONNECT_STARTED = "reconnect_started"
+    RECONNECT_TRANSPORT_RESTORED = "reconnect_transport_restored"
+    NETWORK_TIMEOUT = "network_timeout"
+
+
+def evaluate_automation_progress(
+    expectation: AutomationProgressExpectation,
+    automation: Sequence[dict[str, Any]],
+) -> None:
+    started = [
+        index for index, row in enumerate(automation)
+        if row["name"] == "reconnect_started"
+    ]
+    _require(len(started) == 1, "automation_progress")
+    if expectation is AutomationProgressExpectation.RECONNECT_STARTED:
+        return
+
+    restored = [
+        index for index, row in enumerate(automation)
+        if row["name"] == "reconnect_transport_restored"
+    ]
+    timeout_failures = [
+        index for index, row in enumerate(automation)
+        if row["name"] == "failure"
+        and row["failure_category"] == "NETWORK_TIMEOUT"
+        and row["failure_message"] == "LiveKit connection timed out after 20s"
+    ]
+    if expectation is AutomationProgressExpectation.RECONNECT_TRANSPORT_RESTORED:
+        _require(
+            len(restored) == 1 and started[0] < restored[0] and not timeout_failures,
+            "automation_progress",
+        )
+        return
+    _require(
+        len(timeout_failures) == 1
+        and started[0] < timeout_failures[0]
+        and not restored,
+        "automation_progress",
+    )
+
+
 def _validate_terminal_order(
     automation: Sequence[dict[str, Any]],
     finalization: Mapping[str, object],
@@ -1364,6 +1435,27 @@ def _read(path: str) -> bytes:
 
 
 def _main(arguments: Sequence[str]) -> int:
+    if len(arguments) == 2 and arguments[0] == "--validate-automation-progress":
+        try:
+            AutomationProgressExpectation(arguments[1])
+        except ValueError:
+            return 2
+        return 0
+    if len(arguments) == 5 and arguments[0] == "--evaluate-automation-progress":
+        _, expectation_value, automation_path, run_hash, comparison_hash = arguments
+        try:
+            expectation = AutomationProgressExpectation(expectation_value)
+            automation = parse_automation_bytes(
+                _read(automation_path),
+                run_hash,
+                comparison_hash,
+            )
+            evaluate_automation_progress(expectation, automation)
+        except (ValueError, ContractError) as error:
+            boundary = error.boundary if isinstance(error, ContractError) else "automation_progress"
+            print(boundary)
+            return 3
+        return 0
     if len(arguments) == 2 and arguments[0] == "--validate-expectation":
         try:
             Expectation(arguments[1])

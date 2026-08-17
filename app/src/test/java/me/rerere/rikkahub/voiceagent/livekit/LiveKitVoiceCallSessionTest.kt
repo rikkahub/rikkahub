@@ -44,7 +44,12 @@ import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationStatus
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureFixture
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureFixtureArming
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureSource
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceAttributes
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceSpan
+import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
+import android.os.SystemClock
 import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -123,6 +128,141 @@ class LiveKitVoiceCallSessionTest {
             Regex("""\"name\":\"([^\"]+)\"""").find(line)!!.groupValues[1]
         }
         assertEquals(2, names.count { it == "reconnect_started" })
+    }
+
+    @Test
+    fun `reconnecting event mutes mic, starts 20s watchdog without resetting on repeated events, and reconnected restores mic`() = runTest {
+        val recordedEvents = mutableListOf<Pair<String, Map<String, Any?>>>()
+        val fakeObservability = object : VoiceObservability {
+            override fun recordEvent(name: String, trace: VoiceTraceContext, attributes: VoiceAttributes) {
+                recordedEvents.add(name to attributes)
+            }
+            override suspend fun <T> withSpan(name: String, trace: VoiceTraceContext, block: suspend (VoiceSpan) -> T): T = error("")
+            override fun captureException(throwable: Throwable, trace: VoiceTraceContext, attributes: VoiceAttributes) = Unit
+        }
+        var mockNanos = 1_000_000_000L
+        val automationRuntime = SessionRecordingAutomationRuntime()
+        val fixture = fixture(
+            observability = fakeObservability,
+            monotonicNanos = { mockNanos },
+            automationRuntime = automationRuntime,
+        )
+        fixture.session.start()
+        runCurrent()
+        fixture.room.emit(LiveKitRoomEvent.Data(AGENT_IDENTITY, READY_TOPIC, readyJson()))
+        runCurrent()
+        assertTrue("Mic should start published", fixture.room.sdkMicrophoneEnabled)
+
+        fixture.room.emit(LiveKitRoomEvent.Reconnecting)
+        runCurrent()
+        assertEquals(VoiceSessionStatus.Reconnecting, fixture.session.state.value.session)
+        assertFalse("Mic must be muted during reconnecting", fixture.room.sdkMicrophoneEnabled)
+
+        // Repeat reconnecting event at t=10s; must not extend 20s watchdog
+        mockNanos += 10_000_000_000L
+        advanceTimeBy(10_000)
+        fixture.room.emit(LiveKitRoomEvent.Reconnecting)
+        runCurrent()
+
+        fixture.room.emit(LiveKitRoomEvent.Reconnected)
+        runCurrent()
+        assertEquals(VoiceSessionStatus.Connected, fixture.session.state.value.session)
+        assertTrue("Mic must be restored after reconnected", fixture.room.sdkMicrophoneEnabled)
+
+        val reconnectEvent = recordedEvents.firstOrNull { it.first == "voice.reconnect" }
+        requireNotNull(reconnectEvent)
+        assertEquals(10_000L, reconnectEvent.second["reconnect_duration_ms"])
+        assertTrue(
+            automationRuntime.events.any {
+                it.name == VoiceAutomationEventName.RECONNECT_TRANSPORT_RESTORED &&
+                    it.reconnectDurationMs == 10_000L
+            },
+        )
+
+        fixture.session.cleanupOperation.run(VoiceAgentCleanupMode.Immediate)
+    }
+
+    @Test
+    fun `reconnecting preserves user-muted state across reconnection`() = runTest {
+        val fixture = fixture()
+        fixture.session.start()
+        runCurrent()
+        fixture.room.emit(LiveKitRoomEvent.Data(AGENT_IDENTITY, READY_TOPIC, readyJson()))
+        runCurrent()
+
+        fixture.session.setMuted(true)
+        runCurrent()
+        assertFalse(fixture.room.sdkMicrophoneEnabled)
+
+        fixture.room.emit(LiveKitRoomEvent.Reconnecting)
+        runCurrent()
+
+        fixture.room.emit(LiveKitRoomEvent.Reconnected)
+        runCurrent()
+        assertFalse("User-muted mic must remain muted after reconnected", fixture.room.sdkMicrophoneEnabled)
+
+        fixture.session.cleanupOperation.run(VoiceAgentCleanupMode.Immediate)
+    }
+
+    @Test
+    fun `reconnecting 20s timeout triggers fail-closed cleanup with error and diagnostic`() = runTest {
+        val automationRuntime = SessionRecordingAutomationRuntime()
+        val fixture = fixture(automationRuntime = automationRuntime)
+        fixture.session.start()
+        runCurrent()
+        fixture.room.emit(LiveKitRoomEvent.Data(AGENT_IDENTITY, READY_TOPIC, readyJson()))
+        runCurrent()
+
+        fixture.room.emit(LiveKitRoomEvent.Reconnecting)
+        runCurrent()
+
+        advanceTimeBy(10_000)
+        fixture.room.emit(LiveKitRoomEvent.Reconnecting) // repeat at 10s
+        runCurrent()
+
+        advanceTimeBy(10_001) // reaches 20.001s total from initial reconnecting
+        runCurrent()
+        val state = fixture.session.state.value.session
+        assertTrue("Expected Error state on timeout", state is VoiceSessionStatus.Error)
+        assertEquals("LiveKit connection timed out after 20s", (state as VoiceSessionStatus.Error).message)
+        assertTrue(fixture.session.state.value.diagnostics.any { it.name == "failure_category" && it.detail == "NETWORK_TIMEOUT" })
+        assertTrue(
+            automationRuntime.events.any {
+                it.name == VoiceAutomationEventName.FAILURE &&
+                    it.failureCategory == "NETWORK_TIMEOUT" &&
+                    it.failureMessage == "LiveKit connection timed out after 20s"
+            },
+        )
+        assertFalse("Route lease must be retired on timeout fail-closed", fixture.session.isRouteUsable)
+        assertEquals("Disconnect must be called on cleanup", 1, fixture.room.disconnectCalls)
+        assertEquals("Close must be called on cleanup", 1, fixture.room.closeCalls)
+    }
+
+    @Test
+    fun `worker participant departure triggers fail-closed cleanup with error and diagnostic`() = runTest {
+        val automationRuntime = SessionRecordingAutomationRuntime()
+        val fixture = fixture(automationRuntime = automationRuntime)
+        fixture.session.start()
+        runCurrent()
+        fixture.room.emit(LiveKitRoomEvent.Data(AGENT_IDENTITY, READY_TOPIC, readyJson()))
+        runCurrent()
+
+        fixture.room.emit(LiveKitRoomEvent.ParticipantDisconnected(AGENT_IDENTITY))
+        runCurrent()
+        val state = fixture.session.state.value.session
+        assertTrue("Expected Error state on worker departure", state is VoiceSessionStatus.Error)
+        assertEquals("LiveKit worker participant disconnected", (state as VoiceSessionStatus.Error).message)
+        assertTrue(fixture.session.state.value.diagnostics.any { it.name == "failure_category" && it.detail == "WORKER_UNAVAILABLE" })
+        assertTrue(
+            automationRuntime.events.any {
+                it.name == VoiceAutomationEventName.FAILURE &&
+                    it.failureCategory == "WORKER_UNAVAILABLE" &&
+                    it.failureMessage == "LiveKit worker participant disconnected"
+            },
+        )
+        assertFalse("Route lease must be retired on worker departure fail-closed", fixture.session.isRouteUsable)
+        assertEquals("Disconnect must be called on cleanup", 1, fixture.room.disconnectCalls)
+        assertEquals("Close must be called on cleanup", 1, fixture.room.closeCalls)
     }
 
     @Test
@@ -1142,7 +1282,7 @@ class LiveKitVoiceCallSessionTest {
         runCurrent()
         val status = fixture.session.state.value.session
         assertTrue(status is VoiceSessionStatus.Error)
-        assertTrue((status as VoiceSessionStatus.Error).message.contains("experimental", ignoreCase = true))
+        assertEquals("LiveKit worker participant disconnected", (status as VoiceSessionStatus.Error).message)
     }
 
     @Test
@@ -1197,6 +1337,8 @@ class LiveKitVoiceCallSessionTest {
         automationAudioProbe: VoiceAutomationAudioProbe? = null,
         captureSource: VoiceCaptureSource = VoiceCaptureSource.Microphone,
         roomLifecycleObserver: (String) -> Unit = {},
+        observability: VoiceObservability = NoOpVoiceObservability,
+        monotonicNanos: () -> Long = { System.nanoTime() },
     ): SessionFixture {
         val room = FakeLiveKitRoomFacade(
             connectFailure = connectFailure,
@@ -1221,6 +1363,8 @@ class LiveKitVoiceCallSessionTest {
                 automationRuntimeProvider = { automationRuntime },
                 automationAudioProbeProvider = { automationAudioProbe },
                 captureSource = captureSource,
+                observability = observability,
+                monotonicNanos = monotonicNanos,
             ),
             room = room,
             route = route,
@@ -1446,6 +1590,18 @@ private class SessionRecordingAutomationRuntime(
     override fun markReconnectTransportRestored(runHash: String): Boolean {
         if (runHash != activeRunHash) return false
         events += VoiceAutomationEventInput(VoiceAutomationEventName.RECONNECT_TRANSPORT_RESTORED)
+        return true
+    }
+
+    override fun markReconnectTransportRestored(
+        runHash: String,
+        reconnectDurationMs: Long,
+    ): Boolean {
+        if (runHash != activeRunHash) return false
+        events += VoiceAutomationEventInput(
+            name = VoiceAutomationEventName.RECONNECT_TRANSPORT_RESTORED,
+            reconnectDurationMs = reconnectDurationMs,
+        )
         return true
     }
 

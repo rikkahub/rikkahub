@@ -181,6 +181,43 @@ class VoiceAutomationRuntimeTest {
     }
 
     @Test
+    fun `failure evidence remains bound-finalizable after successful call stop`() {
+        val binding = VoiceAutomationRunBinding(
+            RUN_HASH,
+            COMPARISON_HASH,
+            VoiceAgentTransport.LiveKitExperimental,
+        )
+        val runtime = DefaultVoiceAutomationRuntime(
+            Files.createTempDirectory("voice-automation-runtime-failure-finalize").toFile(),
+            FakeClock(),
+        ).also { it.prepare(binding) }
+        runtime.record(
+            VoiceAutomationEventInput(
+                name = VoiceAutomationEventName.FAILURE,
+                succeeded = false,
+                failureCategory = "NETWORK_TIMEOUT",
+                failureMessage = "LiveKit connection timed out after 20s",
+            ),
+        )
+        runtime.record(
+            VoiceAutomationEventInput(
+                name = VoiceAutomationEventName.CALL_STOPPED,
+                succeeded = true,
+            ),
+        )
+
+        val artifact = requireNotNull(runtime.finalizeRunIfMatches(binding))
+
+        assertEquals(
+            listOf("failure", "call_stopped", "run_finalized"),
+            artifact.readLines().takeLast(3).map(::eventName),
+        )
+        assertTrue(artifact.readLines().any {
+            "\"name\":\"call_stopped\"" in it && "\"succeeded\":true" in it
+        })
+    }
+
+    @Test
     fun `successful call stopped remains the last active event until runtime finalization`() {
         val runtime = preparedRuntime()
 
@@ -260,7 +297,7 @@ class VoiceAutomationRuntimeTest {
                 network = VoiceAutomationNetwork.CELLULAR,
             ),
         ).forEach { event -> assertTrue(runtime.recordIfActiveRun(RUN_HASH, event)) }
-        assertTrue(runtime.markReconnectTransportRestored(RUN_HASH))
+        assertTrue(runtime.markReconnectTransportRestored(RUN_HASH, 5_000))
         assertTrue(
             runtime.recordIfActiveRun(
                 RUN_HASH,
@@ -288,7 +325,9 @@ class VoiceAutomationRuntimeTest {
         ).forEach { event -> assertTrue(runtime.recordIfActiveRun(RUN_HASH, event)) }
 
         val artifact = runtime.finalizeRun()
-        val names = artifact.readLines().map { line ->
+        val lines = artifact.readLines()
+        assertTrue(lines.any { "\"name\":\"reconnect_transport_restored\"" in it && "\"reconnect_duration_ms\":5000" in it })
+        val names = lines.map { line ->
             Regex("""\"name\":\"([^\"]+)\"""").find(line)!!.groupValues[1]
         }
         assertEquals(

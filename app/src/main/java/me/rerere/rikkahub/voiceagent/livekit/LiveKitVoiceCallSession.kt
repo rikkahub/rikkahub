@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.voiceagent.livekit
 
+import android.os.SystemClock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -10,6 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,6 +41,9 @@ import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventInput
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventName
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRunState
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRuntime
+import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 import org.koin.core.context.GlobalContext
@@ -64,6 +69,8 @@ internal class LiveKitVoiceCallSession(
         ::liveKitAutomationRuntimeOrNull,
     private val automationAudioProbeProvider: () -> VoiceAutomationAudioProbe? =
         VoiceAutomationAudioProbes::activeSharedOrNull,
+    private val observability: VoiceObservability = NoOpVoiceObservability,
+    private val monotonicNanos: () -> Long = { SystemClock.elapsedRealtimeNanos() },
 ) : RouteOwnedManagedVoiceCallSession {
     private val registeredRpcMethods = buildMap {
         require(LIVEKIT_PERSISTENCE_RPC !in rpcMethods) {
@@ -85,6 +92,9 @@ internal class LiveKitVoiceCallSession(
     private val roomConnected = CompletableDeferred<Unit>()
     private val microphoneCommands = Channel<Unit>(capacity = Channel.CONFLATED)
     private var desiredMicrophoneEnabled = true
+    private var isReconnecting = false
+    private var reconnectWatchdogJob: Job? = null
+    private var reconnectingStartNanos: Long? = null
     private var wasReady = false
     private var eventJob: Job? = null
     private var connectionJob: Job? = null
@@ -249,7 +259,9 @@ internal class LiveKitVoiceCallSession(
         roomConnected.await()
         for (ignored in microphoneCommands) {
             while (true) {
-                val requested = synchronized(microphoneStateLock) { desiredMicrophoneEnabled }
+                val requested = synchronized(microphoneStateLock) {
+                    if (isReconnecting) false else desiredMicrophoneEnabled
+                }
                 try {
                     if (!room.setMicrophoneEnabled(requested)) {
                         appendDiagnostic("livekit_microphone_failed", "publication_rejected")
@@ -264,9 +276,12 @@ internal class LiveKitVoiceCallSession(
                     return
                 }
                 while (microphoneCommands.tryReceive().isSuccess) {
-                    // Requests are represented by desiredMicrophoneEnabled; discard stale wakeups.
+                    // Requests are represented by desiredMicrophoneEnabled and isReconnecting; discard stale wakeups.
                 }
-                if (requested == synchronized(microphoneStateLock) { desiredMicrophoneEnabled }) break
+                val currentTarget = synchronized(microphoneStateLock) {
+                    if (isReconnecting) false else desiredMicrophoneEnabled
+                }
+                if (requested == currentTarget) break
             }
         }
     }
@@ -280,13 +295,53 @@ internal class LiveKitVoiceCallSession(
                 }
             }
             LiveKitRoomEvent.Reconnecting -> {
-                recordOwnedAutomationEvent(
-                    VoiceAutomationEventInput(VoiceAutomationEventName.RECONNECT_STARTED),
-                )
+                var startedReconnect = false
+                synchronized(microphoneStateLock) {
+                    if (!isReconnecting) {
+                        reconnectingStartNanos = monotonicNanos()
+                        isReconnecting = true
+                        startedReconnect = true
+                        reconnectWatchdogJob = scope.launch {
+                            delay(20_000)
+                            failExperimental(
+                                message = "LiveKit connection timed out after 20s",
+                                failureCategory = "NETWORK_TIMEOUT",
+                            )
+                        }
+                    }
+                }
+                if (startedReconnect) {
+                    recordOwnedAutomationEvent(
+                        VoiceAutomationEventInput(VoiceAutomationEventName.RECONNECT_STARTED),
+                    )
+                }
+                microphoneCommands.trySend(Unit)
                 mutableState.update { it.copy(session = VoiceSessionStatus.Reconnecting) }
             }
             LiveKitRoomEvent.Reconnected -> {
-                markOwnedReconnectTransportRestored()
+                reconnectWatchdogJob?.cancel()
+                reconnectWatchdogJob = null
+                val durationMs = reconnectingStartNanos?.let { start ->
+                    ((monotonicNanos() - start) / 1_000_000).also { measuredDurationMs ->
+                        observability.recordEvent(
+                            name = "voice.reconnect",
+                            trace = VoiceTraceContext(
+                                traceId = activeTraceId,
+                                voiceSessionId = details.voiceSessionId,
+                            ),
+                            attributes = mapOf(
+                                "reconnect_duration_ms" to measuredDurationMs,
+                                "transport" to "LiveKit",
+                            ),
+                        )
+                    }
+                }
+                reconnectingStartNanos = null
+                synchronized(microphoneStateLock) {
+                    isReconnecting = false
+                }
+                microphoneCommands.trySend(Unit)
+                durationMs?.let(::markOwnedReconnectTransportRestored)
                 mutableState.update {
                     it.copy(
                         session = if (wasReady) VoiceSessionStatus.Connected else VoiceSessionStatus.ConnectingGemini,
@@ -294,11 +349,21 @@ internal class LiveKitVoiceCallSession(
                 }
             }
             is LiveKitRoomEvent.Data -> handleReady(event)
-            is LiveKitRoomEvent.Failed -> failExperimental("LiveKit experimental voice connection failed")
-            is LiveKitRoomEvent.Disconnected -> failExperimental("LiveKit experimental voice call disconnected")
+            is LiveKitRoomEvent.Failed -> {
+                reconnectWatchdogJob?.cancel()
+                failExperimental("LiveKit experimental voice connection failed")
+            }
+            is LiveKitRoomEvent.Disconnected -> {
+                reconnectWatchdogJob?.cancel()
+                failExperimental("LiveKit experimental voice call disconnected")
+            }
             is LiveKitRoomEvent.ParticipantDisconnected -> {
                 if (event.participantIdentity == details.agentParticipantIdentity) {
-                    failExperimental("LiveKit experimental voice agent disconnected")
+                    reconnectWatchdogJob?.cancel()
+                    failExperimental(
+                        message = "LiveKit worker participant disconnected",
+                        failureCategory = "WORKER_UNAVAILABLE",
+                    )
                 }
             }
         }
@@ -327,8 +392,19 @@ internal class LiveKitVoiceCallSession(
         mutableState.update { it.copy(session = VoiceSessionStatus.Connected, error = null) }
     }
 
-    private fun failExperimental(message: String) {
+    private fun failExperimental(message: String, failureCategory: String? = null) {
         if (!requestCloseForCleanup()) return
+        failureCategory?.let { category ->
+            appendDiagnostic("failure_category", category)
+            recordOwnedAutomationEvent(
+                VoiceAutomationEventInput(
+                    name = VoiceAutomationEventName.FAILURE,
+                    succeeded = false,
+                    failureCategory = category,
+                    failureMessage = message,
+                ),
+            )
+        }
         mutableState.update {
             it.copy(
                 session = VoiceSessionStatus.Error(message),
@@ -354,11 +430,11 @@ internal class LiveKitVoiceCallSession(
         }.getOrDefault(false)
     }
 
-    private fun markOwnedReconnectTransportRestored(): Boolean {
+    private fun markOwnedReconnectTransportRestored(reconnectDurationMs: Long): Boolean {
         val runtime = automationRuntime ?: return false
         val runHash = automationRunHash ?: return false
         return runCatching {
-            runtime.markReconnectTransportRestored(runHash)
+            runtime.markReconnectTransportRestored(runHash, reconnectDurationMs)
         }.getOrDefault(false)
     }
 
@@ -392,6 +468,8 @@ internal class LiveKitVoiceCallSession(
     private fun requestCloseForCleanup(): Boolean {
         return synchronized(lifecycleLock) {
             synchronized(microphoneStateLock) {
+                reconnectWatchdogJob?.cancel()
+                reconnectWatchdogJob = null
                 rpcAdmission.close()
                 closed.compareAndSet(false, true)
             }

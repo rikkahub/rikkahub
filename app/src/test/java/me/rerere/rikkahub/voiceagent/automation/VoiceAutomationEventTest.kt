@@ -45,6 +45,8 @@ class VoiceAutomationEventTest {
                 "\"route\":\"Speaker\",\"network\":\"wifi\",\"lifecycle\":\"foreground\"," +
                 "\"playbackEpoch\":1,\"byteCount\":3200,\"rmsActive\":null," +
                 "\"audioWindowMicros\":null,\"succeeded\":true," +
+                "\"reconnect_duration_ms\":null,\"failure_category\":null," +
+                "\"failure_message\":null," +
                 "\"correlationKind\":\"session\",\"correlationHash\":\"$CORRELATION_HASH\"," +
                 "\"requestedModelHash\":null,\"observedModelHash\":null,\"voiceHash\":null," +
                 "\"instructionHash\":null,\"directAccountConfigurationHash\":null," +
@@ -155,6 +157,41 @@ class VoiceAutomationEventTest {
         }
     }
 
+    @Test
+    fun `LiveKit reconnect restoration serializes reconnect duration and failure serializes fixed diagnostics`() {
+        val writer = VoiceAutomationEventWriter.create(
+            Files.createTempDirectory("voice-automation-spec-a-evidence").toFile(),
+            RUN_HASH,
+        )
+        val reconnect = event(
+            monotonicMs = 10,
+            requestedTransport = VoiceAgentTransport.LiveKitExperimental,
+            name = VoiceAutomationEventName.RECONNECT_TRANSPORT_RESTORED,
+            reconnectDurationMs = 5_000,
+        )
+        val failure = event(
+            monotonicMs = 11,
+            requestedTransport = VoiceAgentTransport.LiveKitExperimental,
+            name = VoiceAutomationEventName.FAILURE,
+            succeeded = false,
+            failureCategory = "NETWORK_TIMEOUT",
+            failureMessage = "LiveKit connection timed out after 20s",
+        )
+
+        VoiceAutomationEventValidation.validate(reconnect)
+        VoiceAutomationEventValidation.validate(failure)
+        assertFailsWith<IllegalArgumentException> {
+            VoiceAutomationEventValidation.validate(
+                failure.copy(requestedTransport = VoiceAgentTransport.DirectGemini),
+            )
+        }
+        writer.append(reconnect)
+        writer.append(failure)
+        val serialized = writer.file.readText()
+        assertTrue(serialized.contains("\"reconnect_duration_ms\":5000"))
+        assertTrue(serialized.contains("\"failure_category\":\"NETWORK_TIMEOUT\""))
+    }
+
     private fun event(
         monotonicMs: Long = 10,
         wallClockMs: Long = 20,
@@ -166,6 +203,10 @@ class VoiceAutomationEventTest {
         byteCount: Long? = null,
         rmsActive: Boolean? = null,
         audioWindowMicros: Long? = null,
+        succeeded: Boolean? = null,
+        reconnectDurationMs: Long? = null,
+        failureCategory: String? = null,
+        failureMessage: String? = null,
     ) = VoiceAutomationEvent(
         monotonicMs = monotonicMs,
         wallClockMs = wallClockMs,
@@ -178,6 +219,10 @@ class VoiceAutomationEventTest {
         byteCount = byteCount,
         rmsActive = rmsActive,
         audioWindowMicros = audioWindowMicros,
+        succeeded = succeeded,
+        reconnectDurationMs = reconnectDurationMs,
+        failureCategory = failureCategory,
+        failureMessage = failureMessage,
         correlationKind = correlationKind,
         correlationHash = null,
     )
