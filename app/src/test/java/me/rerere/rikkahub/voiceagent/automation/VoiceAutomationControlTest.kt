@@ -226,21 +226,27 @@ class VoiceAutomationControlTest {
     }
 
     @Test
-    fun `route accepts only speaker and earpiece and records request before routing`() {
+    fun `route accepts all four Spec A routes and records request before routing`() {
         val events = mutableListOf<String>()
         val runtime = RecordingRuntime(onRecord = { events += "record:${it.route}" })
         val control = control(runtime) { route ->
             events += "route:$route"
             true
         }
+        val routes = listOf(
+            "speaker" to VoiceAgentCallEndpointType.Speaker,
+            "earpiece" to VoiceAgentCallEndpointType.Earpiece,
+            "bluetooth" to VoiceAgentCallEndpointType.Bluetooth,
+            "wired_headset" to VoiceAgentCallEndpointType.WiredHeadset,
+        )
 
         assertEquals(
-            listOf("speaker", "earpiece"),
-            listOf(VoiceAgentCallEndpointType.Speaker, VoiceAgentCallEndpointType.Earpiece).map { route ->
+            routes.map { it.first },
+            routes.map { (wireName, route) ->
                 events.clear()
                 val result = control.handle(
                     VoiceAutomationControl.ACTION_ROUTE,
-                    mapOf(VoiceAutomationControl.EXTRA_ROUTE to route.name.lowercase()),
+                    mapOf(VoiceAutomationControl.EXTRA_ROUTE to wireName),
                 )
                 assertSuccess(result)
                 assertEquals(listOf("record:$route", "route:$route"), events)
@@ -255,11 +261,31 @@ class VoiceAutomationControlTest {
             emptyMap(),
             mapOf(VoiceAutomationControl.EXTRA_ROUTE to ""),
             mapOf(VoiceAutomationControl.EXTRA_ROUTE to "Speaker"),
-            mapOf(VoiceAutomationControl.EXTRA_ROUTE to "bluetooth"),
+            mapOf(VoiceAutomationControl.EXTRA_ROUTE to "wiredheadset"),
             mapOf(VoiceAutomationControl.EXTRA_ROUTE to "speaker", "transport" to "direct_gemini"),
         ).forEach { extras ->
             assertInvalid(control().handle(VoiceAutomationControl.ACTION_ROUTE, extras))
         }
+    }
+
+    @Test
+    fun `endpoints exposes the sorted available routes from the active production seam`() {
+        val result = control(
+            endpointReader = {
+                setOf(
+                    VoiceAgentCallEndpointType.WiredHeadset,
+                    VoiceAgentCallEndpointType.Speaker,
+                    VoiceAgentCallEndpointType.Bluetooth,
+                    VoiceAgentCallEndpointType.Earpiece,
+                )
+            },
+        ).handle(VoiceAutomationControl.ACTION_ENDPOINTS, emptyMap())
+
+        assertSuccess(result)
+        assertEquals(
+            "status=ok\naction=endpoints\navailable_routes=bluetooth,earpiece,speaker,wired_headset",
+            result.resultData,
+        )
     }
 
     @Test
@@ -579,6 +605,7 @@ class VoiceAutomationControlTest {
         listOf(
             VoiceAutomationControl.ACTION_BINDING,
             VoiceAutomationControl.ACTION_STATUS,
+            VoiceAutomationControl.ACTION_ENDPOINTS,
             VoiceAutomationControl.ACTION_FINALIZE,
             VoiceAutomationControl.ACTION_DUMP,
         ).forEach { action ->
@@ -593,9 +620,11 @@ class VoiceAutomationControlTest {
         connectivity: VoiceAutomationConnectivity =
             VoiceAutomationConnectivity(VoiceAutomationNetwork.WIFI, true),
         lifecycleReader: () -> VoiceAgentCallLifecycle = { VoiceAgentCallLifecycle.Idle },
+        endpointReader: () -> Set<VoiceAgentCallEndpointType>? = { null },
         routeRequester: (VoiceAgentCallEndpointType) -> Boolean = { true },
     ) = VoiceAutomationControl(
         runtime = runtime,
+        endpointReader = endpointReader,
         routeRequester = routeRequester,
         connectivityReader = { connectivity },
         artifactFile = { runtime.finalizedFile },

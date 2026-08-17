@@ -280,6 +280,7 @@ private class FinalResolutionDelivery(
                     acquisition = lease.claimUndeliveredCleanup(),
                 )
                 is DirectFallbackVoiceAgentRouteLease -> DirectFinalDeliveryCleanup(lease)
+                else -> DirectFinalDeliveryCleanup(lease)
             }
             is VoiceAgentRouteResolution.CleanupFailed -> CompletedFinalDeliveryCleanup(
                 Result.failure(undelivered.error),
@@ -355,7 +356,7 @@ private class TelecomFinalDeliveryCleanup(
 }
 
 private class DirectFinalDeliveryCleanup(
-    private val lease: DirectFallbackVoiceAgentRouteLease,
+    private val lease: VoiceAgentRouteLease,
 ) : FinalDeliveryCleanupWork {
     private val completion = kotlinx.coroutines.CompletableDeferred<Result<Unit>>()
 

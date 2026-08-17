@@ -25,6 +25,7 @@ class VoiceAutomationDebugManifestTest {
                 "me.rerere.rikkahub.voiceagent.automation.STATUS",
                 "me.rerere.rikkahub.voiceagent.automation.MARK",
                 "me.rerere.rikkahub.voiceagent.automation.ROUTE",
+                "me.rerere.rikkahub.voiceagent.automation.ENDPOINTS",
                 "me.rerere.rikkahub.voiceagent.automation.FINALIZE",
                 "me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND",
                 "me.rerere.rikkahub.voiceagent.automation.DUMP",

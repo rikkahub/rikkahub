@@ -30,9 +30,11 @@ class VoiceAutomationControlReceiver : BroadcastReceiver() {
                 val koin = GlobalContext.get()
                 val connectivityManager = context.getSystemService(ConnectivityManager::class.java)
                 val callController = koin.get<VoiceAgentCallServiceController>()
+                val telecomRegistry = koin.get<VoiceAgentTelecomCallRegistry>()
                 VoiceAutomationControl(
                     runtime = koin.get<VoiceAutomationRuntime>(),
-                    routeRequester = koin.get<VoiceAgentTelecomCallRegistry>()::requestActiveAudioRoute,
+                    endpointReader = telecomRegistry::readActiveAutomationRoutes,
+                    routeRequester = telecomRegistry::requestActiveAudioRoute,
                     connectivityReader = { connectivityManager.readAutomationConnectivity() },
                     artifactFile = { status -> context.automationArtifactFile(status) },
                     lifecycleReader = { callController.lifecycle.value },
@@ -91,6 +93,7 @@ internal data class VoiceAutomationControlResult(
 
 internal class VoiceAutomationControl(
     private val runtime: VoiceAutomationRuntime,
+    private val endpointReader: () -> Set<VoiceAgentCallEndpointType>? = { null },
     private val routeRequester: (VoiceAgentCallEndpointType) -> Boolean,
     private val connectivityReader: () -> VoiceAutomationConnectivity,
     private val artifactFile: (VoiceAutomationStatus) -> File?,
@@ -104,6 +107,7 @@ internal class VoiceAutomationControl(
                 ACTION_STATUS -> status(extras)
                 ACTION_MARK -> mark(extras)
                 ACTION_ROUTE -> route(extras)
+                ACTION_ENDPOINTS -> endpoints(extras)
                 ACTION_FINALIZE -> finalize(extras)
                 ACTION_FINALIZE_BOUND -> finalizeBound(extras)
                 ACTION_DUMP -> dump(extras)
@@ -219,6 +223,8 @@ internal class VoiceAutomationControl(
         val type = when (extras.getValue(EXTRA_ROUTE)) {
             "speaker" -> VoiceAgentCallEndpointType.Speaker
             "earpiece" -> VoiceAgentCallEndpointType.Earpiece
+            "bluetooth" -> VoiceAgentCallEndpointType.Bluetooth
+            "wired_headset" -> VoiceAgentCallEndpointType.WiredHeadset
             else -> throw IllegalArgumentException("Invalid route")
         }
         runtime.record(
@@ -233,6 +239,24 @@ internal class VoiceAutomationControl(
             "route" to extras.getValue(EXTRA_ROUTE),
             "accepted" to accepted.toString(),
         )
+    }
+
+    private fun endpoints(extras: Map<String, String>): VoiceAutomationControlResult {
+        requireExactKeys(extras, emptySet())
+        requireActiveRun()
+        val routes = checkNotNull(endpointReader()) { "No active Telecom route owner" }
+        val available = routes.map { route ->
+            when (route) {
+                VoiceAgentCallEndpointType.Bluetooth -> "bluetooth"
+                VoiceAgentCallEndpointType.Earpiece -> "earpiece"
+                VoiceAgentCallEndpointType.Speaker -> "speaker"
+                VoiceAgentCallEndpointType.WiredHeadset -> "wired_headset"
+                VoiceAgentCallEndpointType.Streaming,
+                VoiceAgentCallEndpointType.Unknown,
+                -> throw IllegalStateException("Unexpected automation endpoint")
+            }
+        }.sorted().joinToString(",")
+        return success("endpoints", "available_routes" to available)
     }
 
     private fun finalize(extras: Map<String, String>): VoiceAutomationControlResult {
@@ -312,6 +336,7 @@ internal class VoiceAutomationControl(
         const val ACTION_STATUS = "me.rerere.rikkahub.voiceagent.automation.STATUS"
         const val ACTION_MARK = "me.rerere.rikkahub.voiceagent.automation.MARK"
         const val ACTION_ROUTE = "me.rerere.rikkahub.voiceagent.automation.ROUTE"
+        const val ACTION_ENDPOINTS = "me.rerere.rikkahub.voiceagent.automation.ENDPOINTS"
         const val ACTION_FINALIZE = "me.rerere.rikkahub.voiceagent.automation.FINALIZE"
         const val ACTION_FINALIZE_BOUND = "me.rerere.rikkahub.voiceagent.automation.FINALIZE_BOUND"
         const val ACTION_DUMP = "me.rerere.rikkahub.voiceagent.automation.DUMP"

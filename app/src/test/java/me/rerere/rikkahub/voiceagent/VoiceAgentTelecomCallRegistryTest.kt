@@ -15,6 +15,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,10 +25,12 @@ class VoiceAgentTelecomCallRegistryTest {
     fun `automation route returns false without an active routable connection`() {
         val registry = VoiceAgentTelecomCallRegistry()
 
+        assertNull(registry.readActiveAutomationRoutes())
         assertFalse(registry.requestActiveAudioRoute(VoiceAgentCallEndpointType.Speaker))
 
         val attempt = registry.beginAttempt().requireAllocatedAttemptId()
         assertTrue(registry.activate(attempt, FakeTelecomCall()))
+        assertNull(registry.readActiveAutomationRoutes())
         assertFalse(registry.requestActiveAudioRoute(VoiceAgentCallEndpointType.Earpiece))
     }
 
@@ -41,11 +44,19 @@ class VoiceAgentTelecomCallRegistryTest {
                 return true
             }
 
+            override fun availableAutomationRoutes(): Set<VoiceAgentCallEndpointType> =
+                setOf(VoiceAgentCallEndpointType.Bluetooth, VoiceAgentCallEndpointType.WiredHeadset)
+
             override fun disconnectFromApp() = Unit
         }
+        assertNull(registry.readActiveAutomationRoutes())
         val attempt = registry.beginAttempt().requireAllocatedAttemptId()
 
         assertTrue(registry.activate(attempt, call))
+        assertEquals(
+            setOf(VoiceAgentCallEndpointType.Bluetooth, VoiceAgentCallEndpointType.WiredHeadset),
+            registry.readActiveAutomationRoutes(),
+        )
         assertTrue(registry.requestActiveAudioRoute(VoiceAgentCallEndpointType.Speaker))
         assertEquals(listOf(VoiceAgentCallEndpointType.Speaker), requestedRoutes)
     }

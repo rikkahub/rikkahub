@@ -14,6 +14,7 @@ import me.rerere.rikkahub.voiceagent.VoiceAgentRouteLease
 import me.rerere.rikkahub.voiceagent.VoiceAgentSessionCreationResult
 import me.rerere.rikkahub.voiceagent.VoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceE2EArtifactWriter
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureFixtureArming
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureSource
 import me.rerere.rikkahub.voiceagent.finishFailedOwnedVoiceSessionCreation
@@ -78,6 +79,12 @@ internal class LiveKitVoiceCallFactory internal constructor(
         scope: CoroutineScope,
         endDrainTimeoutMillis: Long,
     ): VoiceAgentSessionCreationResult {
+        if (routeLease.metadata.owner != VoiceAudioRouteOwner.Telecom) {
+            return finishFailedOwnedVoiceSessionCreation(
+                IllegalArgumentException("LiveKit requires Telecom route owner"),
+                voiceAgentRouteCleanupOperation(routeLease),
+            )
+        }
         val cleanup = voiceAgentRouteCleanupOperation(routeLease)
         var captureSource: VoiceCaptureSource? = null
         var conversationStore: VoiceConversationStore? = null

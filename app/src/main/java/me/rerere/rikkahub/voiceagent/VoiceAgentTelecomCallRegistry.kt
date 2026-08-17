@@ -2,6 +2,7 @@ package me.rerere.rikkahub.voiceagent
 
 internal interface VoiceAgentAutomationRoutableCall {
     fun requestAutomationRoute(type: VoiceAgentCallEndpointType): Boolean
+    fun availableAutomationRoutes(): Set<VoiceAgentCallEndpointType>
 }
 
 class VoiceAgentTelecomCallRegistry internal constructor(
@@ -21,6 +22,15 @@ class VoiceAgentTelecomCallRegistry internal constructor(
             active.connection as? VoiceAgentAutomationRoutableCall
         } ?: return false
         return routableCall.requestAutomationRoute(type)
+    }
+
+    internal fun readActiveAutomationRoutes(): Set<VoiceAgentCallEndpointType>? {
+        val routableCall = synchronized(lock) {
+            val current = currentAttemptId ?: return@synchronized null
+            val active = attempts[current]?.phase as? AttemptPhase.Active ?: return@synchronized null
+            active.connection as? VoiceAgentAutomationRoutableCall
+        } ?: return null
+        return routableCall.availableAutomationRoutes()
     }
 
     fun beginAttempt(): VoiceAgentTelecomAttemptStartResult {

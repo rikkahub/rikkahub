@@ -22,7 +22,7 @@ sealed interface VoiceAgentRouteResolution {
     ) : VoiceAgentRouteResolution
 }
 
-sealed interface VoiceAgentRouteLease {
+interface VoiceAgentRouteLease {
     val metadata: VoiceAgentRouteMetadata
     val isUsable: Boolean
     fun retire()
@@ -135,6 +135,10 @@ internal class DirectFallbackVoiceAgentRouteLease(
 internal fun VoiceAgentRouteLease.retireUndelivered(): UndeliveredRouteRetirement = when (this) {
     is TelecomVoiceAgentRouteLease -> retireUndelivered()
     is DirectFallbackVoiceAgentRouteLease -> {
+        retire()
+        UndeliveredRouteRetirement.Retired
+    }
+    else -> {
         retire()
         UndeliveredRouteRetirement.Retired
     }

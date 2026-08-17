@@ -156,60 +156,59 @@ internal class VoiceAgentTelecomConnection private constructor(
     }
 
     override fun requestAutomationRoute(type: VoiceAgentCallEndpointType): Boolean {
-        val legacyRoute = when (type) {
-            VoiceAgentCallEndpointType.Speaker -> CallAudioState.ROUTE_SPEAKER
-            VoiceAgentCallEndpointType.Earpiece -> CallAudioState.ROUTE_EARPIECE
-            else -> return false
-        }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val legacyRoute = when (type) {
+                VoiceAgentCallEndpointType.Speaker -> CallAudioState.ROUTE_SPEAKER
+                VoiceAgentCallEndpointType.Earpiece -> CallAudioState.ROUTE_EARPIECE
+                else -> return false
+            }
             return runCatching {
                 @Suppress("DEPRECATION")
                 setAudioRoute(legacyRoute)
             }.isSuccess
         }
 
+        if (!isSpecAAutomationEndpointRoute(type)) return false
         val endpoint = availableAutomationEndpoints.firstOrNull {
             it.toCandidate().type == type
         } ?: return false
-        return runCatching {
-            requestCallEndpointChange(
-                endpoint,
-                endpointRequestExecutor,
-                object : OutcomeReceiver<Void?, CallEndpointException> {
-                    override fun onResult(result: Void?) {
-                        VoiceAgentLog.d(
-                            TAG,
-                            "automation call endpoint request accepted endpoint=${endpoint.safeLabel()}",
-                        )
-                    }
-
-                    override fun onError(error: CallEndpointException) {
-                        VoiceAgentLog.w(
-                            TAG,
-                            "automation call endpoint request failed " +
-                                "endpoint=${endpoint.safeLabel()} code=${error.code}",
-                        )
-                    }
-                },
-            )
-        }.isSuccess
+        return requestAutomationEndpoint(endpoint)
     }
+
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun requestAutomationEndpoint(endpoint: CallEndpoint): Boolean = runCatching {
+        requestCallEndpointChange(
+            endpoint,
+            endpointRequestExecutor,
+            object : OutcomeReceiver<Void?, CallEndpointException> {
+                override fun onResult(result: Void?) {
+                    VoiceAgentLog.d(
+                        TAG,
+                        "automation call endpoint request accepted endpoint=${endpoint.safeLabel()}",
+                    )
+                }
+
+                override fun onError(error: CallEndpointException) {
+                    VoiceAgentLog.w(
+                        TAG,
+                        "automation call endpoint request failed " +
+                            "endpoint=${endpoint.safeLabel()} code=${error.code}",
+                    )
+                }
+            },
+        )
+    }.isSuccess
 
     private fun recordObservedAutomationRoute(type: VoiceAgentCallEndpointType?) {
-        if (type !in setOf(VoiceAgentCallEndpointType.Speaker, VoiceAgentCallEndpointType.Earpiece)) {
-            return
-        }
-        val runtime = automationRuntimeProvider() ?: return
-        if (runtime.status().state != me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRunState.Active) {
-            return
-        }
-        runtime.record(
-            VoiceAutomationEventInput(
-                name = VoiceAutomationEventName.ROUTE_OBSERVED,
-                route = type,
-            ),
-        )
+        recordObservedAutomationRoute(type, automationRuntimeProvider())
     }
+
+    override fun availableAutomationRoutes(): Set<VoiceAgentCallEndpointType> =
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            emptySet()
+        } else {
+            availableSpecAAutomationEndpointRoutes(availableAutomationEndpoints.map { it.toCandidate() })
+        }
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private fun CallEndpoint.toCandidate(): VoiceAgentCallEndpointCandidate =
@@ -272,6 +271,46 @@ internal class VoiceAgentTelecomConnection private constructor(
     private companion object {
         const val TAG = "VoiceAgentTelecomConnection"
     }
+}
+
+internal fun isSpecAAutomationEndpointRoute(type: VoiceAgentCallEndpointType): Boolean =
+    type in setOf(
+        VoiceAgentCallEndpointType.Speaker,
+        VoiceAgentCallEndpointType.Earpiece,
+        VoiceAgentCallEndpointType.Bluetooth,
+        VoiceAgentCallEndpointType.WiredHeadset,
+    )
+
+internal fun availableSpecAAutomationEndpointRoutes(
+    candidates: List<VoiceAgentCallEndpointCandidate>,
+): Set<VoiceAgentCallEndpointType> =
+    candidates.map(VoiceAgentCallEndpointCandidate::type)
+        .filter(::isSpecAAutomationEndpointRoute)
+        .toSet()
+
+internal fun recordObservedAutomationRoute(
+    type: VoiceAgentCallEndpointType?,
+    runtime: VoiceAutomationRuntime?,
+) {
+    if (type !in setOf(
+            VoiceAgentCallEndpointType.Speaker,
+            VoiceAgentCallEndpointType.Earpiece,
+            VoiceAgentCallEndpointType.Bluetooth,
+            VoiceAgentCallEndpointType.WiredHeadset,
+        )
+    ) {
+        return
+    }
+    val activeRuntime = runtime ?: return
+    if (activeRuntime.status().state != me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRunState.Active) {
+        return
+    }
+    activeRuntime.record(
+        VoiceAutomationEventInput(
+            name = VoiceAutomationEventName.ROUTE_OBSERVED,
+            route = type,
+        ),
+    )
 }
 
 internal class VoiceAgentTelecomRetirement<Cause>(

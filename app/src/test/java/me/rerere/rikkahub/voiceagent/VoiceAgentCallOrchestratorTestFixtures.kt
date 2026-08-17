@@ -8,6 +8,20 @@ import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceCredentials
 import kotlin.uuid.Uuid
 
+internal class SpyVoiceAgentRouteLease(
+    override val metadata: VoiceAgentRouteMetadata = VoiceAgentRouteMetadata(VoiceAudioRouteOwner.DirectFallback),
+    private val onRetire: () -> Unit = {},
+) : VoiceAgentRouteLease {
+    var retireCalls = 0
+    override val isUsable: Boolean
+        get() = retireCalls == 0
+
+    override fun retire() {
+        retireCalls += 1
+        onRetire()
+    }
+}
+
 internal class OrchestratorFakeRoute(
     private val onDisconnect: () -> Unit = {},
 ) {

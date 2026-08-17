@@ -22,10 +22,13 @@ import me.rerere.rikkahub.voiceagent.VoiceConversationStore
 import me.rerere.rikkahub.voiceagent.VoiceE2EArtifact
 import me.rerere.rikkahub.voiceagent.VoiceE2EArtifactWriter
 import me.rerere.rikkahub.voiceagent.OrchestratorFakeRoute
+import me.rerere.rikkahub.voiceagent.SpyVoiceAgentRouteLease
 import me.rerere.rikkahub.voiceagent.VoiceAgentCleanupMode
 import me.rerere.rikkahub.voiceagent.VoiceAgentCleanupResult
+import me.rerere.rikkahub.voiceagent.VoiceAgentRouteMetadata
 import me.rerere.rikkahub.voiceagent.VoiceAgentSessionCreationResult
 import me.rerere.rikkahub.voiceagent.VoiceAgentTransport
+import me.rerere.rikkahub.voiceagent.audio.VoiceAudioRouteOwner
 import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceHttpException
 import me.rerere.rikkahub.voiceagent.orchestratorRequest
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
@@ -41,6 +44,44 @@ import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
 
 class LiveKitVoiceCallFactoryTest {
+    @Test
+    fun `non-Telecom route lease is rejected cleanly and lease is retired`() = runTest {
+        val spyLease = SpyVoiceAgentRouteLease(
+            metadata = VoiceAgentRouteMetadata(VoiceAudioRouteOwner.DirectFallback),
+        )
+
+        val factory = factory(
+            sessionDetailsFactory = { _, _ -> factoryDetails(SESSION_BINDING) },
+        )
+        val result = factory.createOwned(
+            request(),
+            spyLease,
+            backgroundScope,
+        )
+
+        assertTrue("Expected FailedClean outcome", result is VoiceAgentSessionCreationResult.FailedClean)
+        assertEquals("Route lease retire() must be invoked exactly once", 1, spyLease.retireCalls)
+    }
+
+    @Test
+    fun `non-Telecom route lease returns FailedDirty if retirement throws exception`() = runTest {
+        val failingLease = SpyVoiceAgentRouteLease(
+            metadata = VoiceAgentRouteMetadata(VoiceAudioRouteOwner.DirectFallback),
+            onRetire = { throw IllegalStateException("Retirement error") },
+        )
+
+        val factory = factory(
+            sessionDetailsFactory = { _, _ -> factoryDetails(SESSION_BINDING) },
+        )
+        val result = factory.createOwned(
+            request(),
+            failingLease,
+            backgroundScope,
+        )
+
+        assertTrue("Expected FailedDirty outcome on cleanup failure", result is VoiceAgentSessionCreationResult.FailedDirty)
+    }
+
     @Test
     fun `each locally recomputable binding mismatch fails before room construction`() = runTest {
         val mismatches = listOf(
