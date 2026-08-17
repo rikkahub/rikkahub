@@ -95,10 +95,10 @@ internal class LiveKitRemoteAudioProbe(
         val coordinator = synchronized(lock) {
             if (closed) return
             closed = true
-            telemetryCoordinator.also {
-                val owner = mediaOwner ?: return@synchronized null
+            mediaOwner?.let { owner ->
                 flushProgress(owner, nowMs)
             }
+            telemetryCoordinator
         }
         coordinator?.onExplicitPlaybackDrain()
     }
