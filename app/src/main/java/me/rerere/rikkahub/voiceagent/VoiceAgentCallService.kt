@@ -1,10 +1,12 @@
 package me.rerere.rikkahub.voiceagent
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.ServiceCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,41 +24,35 @@ class VoiceAgentCallService : Service() {
     private val chatService: ChatService by inject()
     private val notificationFactory: VoiceAgentNotificationFactory by inject()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val wakeLockController by lazy(LazyThreadSafetyMode.NONE) {
+        VoiceAgentWakeLockController {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            AndroidVoiceAgentWakeLock(
+                powerManager.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "rikkahub:voice_agent_call",
+                ),
+            )
+        }
+    }
     private val lifecycle by lazy(LazyThreadSafetyMode.NONE) {
         VoiceAgentCallServiceLifecycle(
             controller = controller,
             serviceScope = serviceScope,
-            host = object : VoiceAgentCallServiceLifecycleHost {
-                override fun cancelNotification() = Unit
-
-                override fun startForeground(
-                    conversationId: String,
-                    transport: VoiceAgentTransport,
-                    state: VoiceAgentUiState,
-                ) {
-                    startForegroundFor(conversationId, transport, state)
-                }
-
-                override fun endCompleted(conversationId: Uuid?) {
+            host = VoiceAgentCallServiceHost(
+                wakeLockController = wakeLockController,
+                cancelNotificationAction = {},
+                startForegroundAction = ::startForegroundFor,
+                endCompletedAction = { conversationId ->
                     VoiceAgentLog.d(TAG, "end completed conversationId=${conversationId ?: "none"}")
-                }
-
-                override fun stopForeground() {
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                }
-
-                override fun stopSelf() {
-                    this@VoiceAgentCallService.stopSelf()
-                }
-
-                override fun reportFailure(error: Throwable) {
+                },
+                stopForegroundAction = { stopForeground(STOP_FOREGROUND_REMOVE) },
+                stopSelfAction = { this@VoiceAgentCallService.stopSelf() },
+                reportFailureAction = { error ->
                     VoiceAgentLog.w(TAG, error.toVoiceAgentServiceLogMessage())
-                }
-
-                override fun destroyBaseService() {
-                    this@VoiceAgentCallService.destroyBaseService()
-                }
-            },
+                },
+                destroyBaseServiceAction = ::destroyBaseService,
+            ),
         )
     }
 
@@ -163,6 +159,110 @@ class VoiceAgentCallService : Service() {
 
     private companion object {
         const val TAG = "VoiceAgentCallService"
+    }
+}
+
+internal interface VoiceAgentWakeLock {
+    fun acquire()
+    fun release()
+    val isHeld: Boolean
+}
+
+internal class AndroidVoiceAgentWakeLock(
+    private val wakeLock: PowerManager.WakeLock,
+) : VoiceAgentWakeLock {
+    override fun acquire() {
+        if (!wakeLock.isHeld) {
+            wakeLock.acquire()
+        }
+    }
+
+    override fun release() {
+        if (wakeLock.isHeld) {
+            wakeLock.release()
+        }
+    }
+
+    override val isHeld: Boolean
+        get() = wakeLock.isHeld
+}
+
+internal class VoiceAgentWakeLockController(
+    private val wakeLockProvider: () -> VoiceAgentWakeLock,
+) {
+    private var wakeLock: VoiceAgentWakeLock? = null
+
+    fun acquireLock() {
+        if (wakeLock == null) {
+            try {
+                val lock = wakeLockProvider()
+                lock.acquire()
+                wakeLock = lock
+            } catch (error: Throwable) {
+                VoiceAgentLog.w("VoiceAgentWakeLock", "Failed to acquire wake lock: ${error.message}")
+            }
+        }
+    }
+
+    fun releaseLock() {
+        try {
+            wakeLock?.release()
+        } finally {
+            wakeLock = null
+        }
+    }
+
+    val isHeld: Boolean
+        get() = wakeLock?.isHeld == true
+}
+
+internal class VoiceAgentCallServiceHost(
+    private val wakeLockController: VoiceAgentWakeLockController,
+    private val cancelNotificationAction: () -> Unit,
+    private val startForegroundAction: (String, VoiceAgentTransport, VoiceAgentUiState) -> Unit,
+    private val endCompletedAction: (Uuid?) -> Unit,
+    private val stopForegroundAction: () -> Unit,
+    private val stopSelfAction: () -> Unit,
+    private val reportFailureAction: (Throwable) -> Unit,
+    private val destroyBaseServiceAction: () -> Unit,
+) : VoiceAgentCallServiceLifecycleHost {
+    override fun cancelNotification() = cancelNotificationAction()
+
+    override fun startForeground(
+        conversationId: String,
+        transport: VoiceAgentTransport,
+        state: VoiceAgentUiState,
+    ) {
+        startForegroundAction(conversationId, transport, state)
+        wakeLockController.acquireLock()
+    }
+
+    override fun endCompleted(conversationId: Uuid?) {
+        try {
+            endCompletedAction(conversationId)
+        } finally {
+            wakeLockController.releaseLock()
+        }
+    }
+
+    override fun stopForeground() = stopForegroundAction()
+
+    override fun stopSelf() {
+        try {
+            stopSelfAction()
+        } finally {
+            wakeLockController.releaseLock()
+        }
+    }
+
+    override fun reportFailure(error: Throwable) = reportFailureAction(error)
+
+    override fun destroyBaseService() {
+        try {
+            destroyBaseServiceAction()
+        } finally {
+            wakeLockController.releaseLock()
+        }
     }
 }
 
