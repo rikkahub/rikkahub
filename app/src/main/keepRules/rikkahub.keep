@@ -22,5 +22,9 @@
 -keepattributes Signature,InnerClasses,EnclosingMethod
 -keep,allowobfuscation class * extends com.fasterxml.jackson.core.type.TypeReference
 
+# Auth0 java-jwt parses JWT headers and payloads through Jackson reflection.
+-keep class com.fasterxml.jackson.** { *; }
+-keep class com.auth0.jwt.** { *; }
+
 # Keep JlatexMath
 -keep class org.scilab.forge.jlatexmath.** { *; }
