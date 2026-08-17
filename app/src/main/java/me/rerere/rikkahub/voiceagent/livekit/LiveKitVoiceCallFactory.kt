@@ -24,6 +24,9 @@ import me.rerere.rikkahub.voiceagent.hermesvoice.HermesVoiceTraceHeaders
 import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStore
 import me.rerere.rikkahub.voiceagent.hermes.HermesToolRecordWriter
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
+import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceLatencyTelemetryCoordinator
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
 import me.rerere.rikkahub.voiceagent.voiceAgentRouteCleanupOperation
@@ -35,6 +38,7 @@ import kotlin.uuid.Uuid
 internal class LiveKitVoiceCallFactory internal constructor(
     private val context: Context,
     private val chatService: ChatService? = null,
+    private val observability: VoiceObservability = NoOpVoiceObservability,
     private val traceContextFactory: () -> VoiceTraceContext = ::newVoiceTraceContext,
     private val sessionDetailsFactory: suspend (VoiceAgentCallRequest, VoiceTraceContext) -> LiveKitSessionDetails =
         { request, trace ->
@@ -63,9 +67,11 @@ internal class LiveKitVoiceCallFactory internal constructor(
     constructor(
         context: Context,
         chatService: ChatService,
+        observability: VoiceObservability = NoOpVoiceObservability,
     ) : this(
         context = context,
         chatService = chatService,
+        observability = observability,
         traceContextFactory = ::newVoiceTraceContext,
     )
 
@@ -130,10 +136,17 @@ internal class LiveKitVoiceCallFactory internal constructor(
                 bridge = persistenceBridge,
                 artifactWriter = artifactWriter,
             )
+            val room = roomFactory()
+            val telemetryCoordinator = VoiceLatencyTelemetryCoordinator(
+                traceContext = trace,
+                transport = "LiveKit",
+                observability = observability,
+            )
+            room.attachTelemetry(telemetryCoordinator)
             val session = LiveKitVoiceCallSession(
                 details = details,
                 traceId = trace.traceId,
-                room = roomFactory(),
+                room = room,
                 routeLease = routeLease,
                 scope = scope,
                 captureSource = checkNotNull(captureSource),
@@ -141,6 +154,8 @@ internal class LiveKitVoiceCallFactory internal constructor(
                     persistenceBridge.handle(invocation.callerIdentity, invocation.payload)
                 },
                 persistenceOwner = persistenceOwner,
+                observability = observability,
+                telemetryCoordinator = telemetryCoordinator,
             )
             resourcesTransferred = true
             VoiceAgentSessionCreationResult.Created(session)

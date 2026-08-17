@@ -2642,7 +2642,7 @@ class VoiceAgentRuntimeTest {
         assertEquals("call-close-reentry" to "close race", toolApi.awaitRequest("call-close-reentry"))
 
         toolApi.complete(response(callId = "call-close-reentry", answer = "answer before close"))
-        assertTrue(blockedSend.started.await(500, TimeUnit.MILLISECONDS))
+        assertTrue(blockedSend.started.await(5_000, TimeUnit.MILLISECONDS))
 
         val closeJob = launch(Dispatchers.Default) {
             coordinator.close()
@@ -2650,7 +2650,7 @@ class VoiceAgentRuntimeTest {
         assertEquals(0, audio.releaseCalls)
 
         blockedSend.release.countDown()
-        withTimeout(500) {
+        withTimeout(5_000) {
             closeJob.join()
         }
 

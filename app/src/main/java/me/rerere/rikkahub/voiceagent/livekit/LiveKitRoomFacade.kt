@@ -3,6 +3,7 @@ package me.rerere.rikkahub.voiceagent.livekit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureSource
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceLatencyTelemetryCoordinator
 
 internal sealed interface LiveKitRoomEvent {
     data object Connected : LiveKitRoomEvent
@@ -45,6 +46,7 @@ internal interface LiveKitRoomFacade {
     val automationAudio: LiveKitAutomationAudioBinding
         get() = UnavailableLiveKitAutomationAudioBinding
 
+    fun attachTelemetry(telemetryCoordinator: VoiceLatencyTelemetryCoordinator) = Unit
     fun selectRemoteAudioParticipant(participantIdentity: String) = Unit
     suspend fun connect(url: String, token: String)
     suspend fun setMicrophoneEnabled(enabled: Boolean): Boolean

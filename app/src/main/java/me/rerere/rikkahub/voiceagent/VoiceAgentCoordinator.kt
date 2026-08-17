@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.voiceagent
 
 import android.util.Log
+import java.util.Base64
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +30,7 @@ import me.rerere.rikkahub.voiceagent.hermes.HermesQueueStatus
 import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.persistence.VoiceTranscriptPersister
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceLatencyTelemetryCoordinator
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnosticEvent
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
@@ -52,6 +54,11 @@ class VoiceAgentCoordinator(
     private val diagnostics: VoiceDiagnostics = VoiceDiagnostics(),
     private val observability: VoiceObservability = NoOpVoiceObservability,
     private val traceContext: VoiceTraceContext = newVoiceTraceContext(),
+    private val telemetryCoordinator: VoiceLatencyTelemetryCoordinator = VoiceLatencyTelemetryCoordinator(
+        traceContext = traceContext,
+        transport = "DirectGemini",
+        observability = observability,
+    ),
     private val hermesResponseExpectedHash: String? = BuildConfig.VOICE_AGENT_HERMES_E2E_EXPECTED_HASH,
     private val logHermesRequestHash: (String) -> Unit = { detail ->
         Log.i(E2E_TAG, "hermes_tool_request_hash $detail")
@@ -199,6 +206,7 @@ class VoiceAgentCoordinator(
             }
             is VoicePlaybackEvent.Drained -> {
                 hermesJobManager.announcer.onPlaybackDrained(event.playbackEpoch)
+                telemetryCoordinator.onExplicitPlaybackDrain()
                 recordPlaybackDiagnosticSafely("voice_playback_drained", event.playbackEpoch)
             }
         }
@@ -535,6 +543,10 @@ class VoiceAgentCoordinator(
             name = "output_audio_chunk",
             detail = "sessionId=${sessionId ?: "none"}, base64Chars=${base64Pcm16.length}",
         )
+        val decoded = runCatching { Base64.getDecoder().decode(base64Pcm16) }.getOrNull()
+        if (decoded != null) {
+            telemetryCoordinator.onPlaybackPcm16(decoded, sampleRateHz = 24000, channelCount = 1)
+        }
         val accepted = audio.playPcm16(base64Pcm16, sessionId = sessionId)
         if (!accepted) {
             diagnostics.record(

@@ -41,7 +41,9 @@ import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventInput
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationEventName
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRunState
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRuntime
+import me.rerere.rikkahub.voiceagent.telemetry.defaultMonotonicNanos
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceLatencyTelemetryCoordinator
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import java.time.Instant
@@ -70,7 +72,8 @@ internal class LiveKitVoiceCallSession(
     private val automationAudioProbeProvider: () -> VoiceAutomationAudioProbe? =
         VoiceAutomationAudioProbes::activeSharedOrNull,
     private val observability: VoiceObservability = NoOpVoiceObservability,
-    private val monotonicNanos: () -> Long = { SystemClock.elapsedRealtimeNanos() },
+    private val monotonicNanos: () -> Long = ::defaultMonotonicNanos,
+    private val telemetryCoordinator: VoiceLatencyTelemetryCoordinator? = null,
 ) : RouteOwnedManagedVoiceCallSession {
     private val registeredRpcMethods = buildMap {
         require(LIVEKIT_PERSISTENCE_RPC !in rpcMethods) {

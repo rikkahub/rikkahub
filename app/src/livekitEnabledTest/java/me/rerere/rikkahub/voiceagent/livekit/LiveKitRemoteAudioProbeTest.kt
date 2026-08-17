@@ -99,7 +99,7 @@ class LiveKitRemoteAudioProbeTest {
                 ),
             )
             runtime.record(VoiceAutomationEventInput(VoiceAutomationEventName.RECONNECT_STARTED))
-            assertTrue(runtime.markReconnectTransportRestored(RUN_HASH))
+            assertTrue(runtime.markReconnectTransportRestored(RUN_HASH, 5_000L))
             runtime.record(VoiceAutomationEventInput(VoiceAutomationEventName.HANDOVER_STARTED))
             runtime.record(
                 VoiceAutomationEventInput(

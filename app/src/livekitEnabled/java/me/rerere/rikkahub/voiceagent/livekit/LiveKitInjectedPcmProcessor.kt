@@ -14,6 +14,7 @@ import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureSource
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRunState
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationRuntime
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationStatus
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceLatencyTelemetryCoordinator
 import org.koin.core.context.GlobalContext
 
 internal class LiveKitAutomationPcmSource(
@@ -244,21 +245,59 @@ internal class LiveKitAutomationPcmSource(
 internal class LiveKitInjectedPcmProcessor(
     private val source: LiveKitAutomationPcmSource,
 ) : AudioProcessorInterface {
+    private var currentSampleRateHz = 16000
     private var currentChannelCount = 1
+    private var telemetryCoordinator: VoiceLatencyTelemetryCoordinator? = null
+
+    fun attachTelemetry(coordinator: VoiceLatencyTelemetryCoordinator) {
+        this.telemetryCoordinator = coordinator
+    }
 
     override fun getName(): String = "rikka-stage1-pcm"
-    override fun isEnabled(): Boolean = source.isActive
+    override fun isEnabled(): Boolean = source.isActive || telemetryCoordinator != null
+
     override fun initializeAudioProcessing(sampleRateHz: Int, numChannels: Int) {
+        currentSampleRateHz = sampleRateHz
         currentChannelCount = numChannels
         source.configureOutputFormat(sampleRateHz, numChannels)
     }
 
     override fun resetAudioProcessing(newRate: Int) {
+        currentSampleRateHz = newRate
         source.configureOutputFormat(newRate, currentChannelCount)
     }
 
     override fun processAudio(numBands: Int, numFrames: Int, buffer: ByteBuffer) {
-        source.replaceOrZero(buffer)
+        val coordinator = telemetryCoordinator
+        if (source.isActive) {
+            source.replaceOrZero(buffer)
+            if (coordinator != null) {
+                dispatchCapturedFloats(buffer, coordinator)
+            }
+        } else if (coordinator != null) {
+            dispatchCapturedFloats(buffer, coordinator)
+        }
+    }
+
+    private fun dispatchCapturedFloats(
+        buffer: ByteBuffer,
+        coordinator: VoiceLatencyTelemetryCoordinator,
+    ) {
+        val duplicate = buffer.duplicate()
+        if (duplicate.position() > 0) {
+            duplicate.flip()
+        }
+        duplicate.order(ByteOrder.nativeOrder())
+        val sampleCount = duplicate.remaining() / Float.SIZE_BYTES
+        if (sampleCount <= 0) return
+        val pcm16 = ByteArray(sampleCount * 2)
+        for (i in 0 until sampleCount) {
+            val floatSample = duplicate.float
+            val shortSample = floatSample.toInt().coerceIn(-32768, 32767).toShort()
+            pcm16[i * 2] = (shortSample.toInt() and 0xFF).toByte()
+            pcm16[i * 2 + 1] = ((shortSample.toInt() shr 8) and 0xFF).toByte()
+        }
+        coordinator.onCapturePcm16(pcm16, currentSampleRateHz, currentChannelCount)
     }
 }
 

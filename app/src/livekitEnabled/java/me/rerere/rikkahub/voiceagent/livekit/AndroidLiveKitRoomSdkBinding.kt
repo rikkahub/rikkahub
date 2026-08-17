@@ -14,6 +14,7 @@ import io.livekit.android.room.track.Track
 import java.util.IdentityHashMap
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.mapNotNull
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceLatencyTelemetryCoordinator
 
 internal fun createLiveKitRoomSdkAdapter(context: Context): LiveKitRoomSdkAdapter {
     val automationAudio = LiveKitAutomationPcmSource()
@@ -26,6 +27,7 @@ internal fun createLiveKitRoomSdkAdapter(context: Context): LiveKitRoomSdkAdapte
             ),
         ),
         automationAudio = automationAudio,
+        injectedPcmProcessor = injectedPcmProcessor,
     )
 }
 
@@ -48,11 +50,23 @@ internal class AndroidLiveKitRoomSdkAdapter(
     private val remoteAudioProbeFactory: () -> LiveKitRemoteAudioProbe = {
         LiveKitRemoteAudioProbe()
     },
+    private val injectedPcmProcessor: LiveKitInjectedPcmProcessor? = null,
 ) : LiveKitRoomSdkAdapter {
     private val remoteAudioLock = Any()
     private val remoteAudioProbes = IdentityHashMap<RemoteAudioTrack, RemoteAudioAttachment>()
     private var remoteAudioClosed = false
     private var expectedRemoteParticipantIdentity: String? = null
+    private var telemetryCoordinator: VoiceLatencyTelemetryCoordinator? = null
+
+    override fun attachTelemetry(telemetryCoordinator: VoiceLatencyTelemetryCoordinator) {
+        synchronized(remoteAudioLock) {
+            this.telemetryCoordinator = telemetryCoordinator
+            injectedPcmProcessor?.attachTelemetry(telemetryCoordinator)
+            remoteAudioProbes.values.forEach { attachment ->
+                attachment.probe.attachTelemetry(telemetryCoordinator)
+            }
+        }
+    }
 
     override val events: Flow<LiveKitSdkRoomEvent> = sdkEvents.mapNotNull(::toSdkEvent)
 
@@ -157,7 +171,9 @@ internal class AndroidLiveKitRoomSdkAdapter(
             ) {
                 return
             }
-            val probe = remoteAudioProbeFactory()
+            val probe = remoteAudioProbeFactory().also { newProbe ->
+                telemetryCoordinator?.let(newProbe::attachTelemetry)
+            }
             try {
                 track.addSink(probe)
             } catch (error: Throwable) {

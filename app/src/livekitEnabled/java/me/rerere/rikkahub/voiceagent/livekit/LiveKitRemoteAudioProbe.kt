@@ -6,10 +6,12 @@ import me.rerere.rikkahub.voiceagent.audio.voicePcm16Level
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationAudioProbe
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationAudioProbes
 import me.rerere.rikkahub.voiceagent.automation.VoiceAutomationMediaOwner
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceLatencyTelemetryCoordinator
 
 internal class LiveKitRemoteAudioProbe(
     private val automationAudioProbe: VoiceAutomationAudioProbe = VoiceAutomationAudioProbes.shared,
     private val monotonicMs: () -> Long = { System.nanoTime() / NANOS_PER_MILLISECOND },
+    private var telemetryCoordinator: VoiceLatencyTelemetryCoordinator? = null,
 ) : AudioTrackSink, AutoCloseable {
     private val lock = Any()
     private var closed = false
@@ -48,6 +50,8 @@ internal class LiveKitRemoteAudioProbe(
         val frame = ByteArray(byteCount).also { bytes ->
             audioData.duplicate().get(bytes)
         }
+        val coordinator = synchronized(lock) { telemetryCoordinator }
+        coordinator?.onPlaybackPcm16(frame, sampleRate, numberOfChannels)
         val nonSilent = frame.any { byte -> byte.toInt() != 0 }
         val rmsActive = voicePcm16Level(frame).rms >= RMS_ACTIVE_THRESHOLD
         val nowMs = monotonicMs()
@@ -88,11 +92,20 @@ internal class LiveKitRemoteAudioProbe(
 
     override fun close() {
         val nowMs = monotonicMs()
-        synchronized(lock) {
+        val coordinator = synchronized(lock) {
             if (closed) return
             closed = true
-            val owner = mediaOwner ?: return
-            flushProgress(owner, nowMs)
+            telemetryCoordinator.also {
+                val owner = mediaOwner ?: return@synchronized null
+                flushProgress(owner, nowMs)
+            }
+        }
+        coordinator?.onExplicitPlaybackDrain()
+    }
+
+    fun attachTelemetry(coordinator: VoiceLatencyTelemetryCoordinator) {
+        synchronized(lock) {
+            this.telemetryCoordinator = coordinator
         }
     }
 

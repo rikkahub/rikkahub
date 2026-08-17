@@ -15,6 +15,7 @@ import me.rerere.rikkahub.voiceagent.audio.VoiceCaptureSource
 import me.rerere.rikkahub.voiceagent.gemini.GeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.gemini.OkHttpGeminiLiveVoiceClient
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceLatencyTelemetryCoordinator
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
 import me.rerere.rikkahub.voiceagent.telemetry.newVoiceTraceContext
@@ -201,6 +202,11 @@ internal class DefaultVoiceAgentCallFactory internal constructor(
                 traceHeaders = traceHeaders,
             )
             audio = audioFactory(route.owner, captureSource)
+            val telemetryCoordinator = VoiceLatencyTelemetryCoordinator(
+                traceContext = traceContext,
+                transport = "DirectGemini",
+                observability = observability,
+            )
             VoiceAgentCallSession(
                 modelId = config.voiceModelId,
                 sessionApi = sessionApiFactory(mobileApi),
@@ -211,6 +217,7 @@ internal class DefaultVoiceAgentCallFactory internal constructor(
                 contextProvider = contextProviderFactory(config.voiceModelId),
                 observability = observability,
                 traceContext = traceContext,
+                telemetryCoordinator = telemetryCoordinator,
                 voiceE2EArtifacts = artifactWriterFactory(context.noBackupFilesDir, traceContext, scope),
                 sessionMetadata = buildDefaultVoiceE2ESessionMetadata(
                     traceContext = traceContext,

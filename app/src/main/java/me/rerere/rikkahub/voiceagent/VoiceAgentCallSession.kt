@@ -25,6 +25,7 @@ import me.rerere.rikkahub.voiceagent.hermes.HermesSessionBridge
 import me.rerere.rikkahub.voiceagent.persistence.VoiceContext
 import me.rerere.rikkahub.voiceagent.hermesvoice.MobileVoiceSessionResponse
 import me.rerere.rikkahub.voiceagent.telemetry.NoOpVoiceObservability
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceLatencyTelemetryCoordinator
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceObservability
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceDiagnostics
 import me.rerere.rikkahub.voiceagent.telemetry.VoiceTraceContext
@@ -43,6 +44,11 @@ class VoiceAgentCallSession internal constructor(
     diagnostics: VoiceDiagnostics = VoiceDiagnostics(),
     private val observability: VoiceObservability = NoOpVoiceObservability,
     private val traceContext: VoiceTraceContext = newVoiceTraceContext(),
+    private val telemetryCoordinator: VoiceLatencyTelemetryCoordinator = VoiceLatencyTelemetryCoordinator(
+        traceContext = traceContext,
+        transport = "DirectGemini",
+        observability = observability,
+    ),
     private val voiceE2EArtifacts: VoiceE2EArtifactWriter = VoiceE2EArtifactWriter.disabled(),
     private var sessionMetadata: VoiceE2ESessionMetadata? = null,
     private val reconnectPolicy: VoiceReconnectPolicy = VoiceReconnectPolicy(),
@@ -91,6 +97,7 @@ class VoiceAgentCallSession internal constructor(
         diagnostics = diagnostics,
         observability = observability,
         traceContext = traceContext,
+        telemetryCoordinator = telemetryCoordinator,
         conversationStore = conversationStore,
         hermesAnnouncementNowMs = hermesAnnouncementNowMs,
         writeVoiceE2EArtifact = voiceE2EArtifacts::write,
@@ -1162,6 +1169,7 @@ class VoiceAgentCallSession internal constructor(
         try {
             audio.startCapture(
                 onPcm16 = { pcm16 ->
+                    telemetryCoordinator.onCapturePcm16(pcm16, 16000, 1)
                     val sent = captureEpochOwner.tryAdmit(token)?.use {
                         gemini.sendAudio(
                             base64Pcm16 = Base64.getEncoder().encodeToString(pcm16),

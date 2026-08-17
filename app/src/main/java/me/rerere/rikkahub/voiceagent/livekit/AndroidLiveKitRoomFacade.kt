@@ -3,6 +3,7 @@ package me.rerere.rikkahub.voiceagent.livekit
 import android.content.Context
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.mapNotNull
+import me.rerere.rikkahub.voiceagent.telemetry.VoiceLatencyTelemetryCoordinator
 
 internal sealed interface LiveKitSdkRoomEvent {
     data object Connected : LiveKitSdkRoomEvent
@@ -28,6 +29,8 @@ internal interface LiveKitRoomSdkAdapter {
     val automationAudio: LiveKitAutomationAudioBinding
         get() = UnavailableLiveKitAutomationAudioBinding
 
+    fun attachTelemetry(telemetryCoordinator: VoiceLatencyTelemetryCoordinator) = Unit
+
     fun selectRemoteAudioParticipant(participantIdentity: String)
     suspend fun connect(url: String, token: String)
     suspend fun setMicrophoneEnabled(enabled: Boolean): Boolean
@@ -45,6 +48,10 @@ internal class AndroidLiveKitRoomFacade(
 
     override val events: Flow<LiveKitRoomEvent> = sdk.events.mapNotNull(::toFacadeEvent)
     override val automationAudio: LiveKitAutomationAudioBinding = sdk.automationAudio
+
+    override fun attachTelemetry(telemetryCoordinator: VoiceLatencyTelemetryCoordinator) {
+        sdk.attachTelemetry(telemetryCoordinator)
+    }
 
     override fun selectRemoteAudioParticipant(participantIdentity: String) {
         sdk.selectRemoteAudioParticipant(participantIdentity)
