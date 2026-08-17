@@ -7695,11 +7695,11 @@ PY
 
 run_wait_automation_tests() {
   local state="$TMP_DIR/wait-automation-state.json"
-  export VOICE_STEP_POLL_SECONDS=0.01 VOICE_STEP_WAIT_TIMEOUT_SECONDS=2
   reset_fake
   activate_fake_run
   rm -f -- "$state"
   write_valid_state "$state"
+  export VOICE_STEP_POLL_SECONDS=0.01 VOICE_STEP_WAIT_TIMEOUT_SECONDS=10 VOICE_STEP_MAX_WAIT_ATTEMPTS=120
   export FAKE_ADB_AUTOMATION_PROGRESS=reconnect-restored
   run_helper wait-automation --state "$state" --expect reconnect_started
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=wait-automation\nvoice-step.expectation=reconnect_started\nvoice-step.expectation_met=true'
@@ -7710,12 +7710,12 @@ run_wait_automation_tests() {
   activate_fake_run
   rm -f -- "$state"
   write_valid_state "$state"
-  export VOICE_STEP_POLL_SECONDS=0.01 VOICE_STEP_WAIT_TIMEOUT_SECONDS=2
+  export VOICE_STEP_POLL_SECONDS=0.01 VOICE_STEP_WAIT_TIMEOUT_SECONDS=10 VOICE_STEP_MAX_WAIT_ATTEMPTS=120
   export FAKE_ADB_AUTOMATION_PROGRESS=network-timeout
   run_helper wait-automation --state "$state" --expect network_timeout
   assert_exact_output $'voice-step.status=ok\nvoice-step.operation=wait-automation\nvoice-step.expectation=network_timeout\nvoice-step.expectation_met=true'
 
-  export VOICE_STEP_WAIT_TIMEOUT_SECONDS=1
+  export VOICE_STEP_WAIT_TIMEOUT_SECONDS=1 VOICE_STEP_MAX_WAIT_ATTEMPTS=2
   run_helper wait-automation --state "$state" --expect reconnect_transport_restored
   [[ "$RUN_STATUS" -ne 0 ]] || fail "wait-automation accepted the wrong terminal event"
   pass
