@@ -22,5 +22,10 @@
 -keepattributes Signature,InnerClasses,EnclosingMethod
 -keep,allowobfuscation class * extends com.fasterxml.jackson.core.type.TypeReference
 
+# The embedded Ktor server signs and verifies JWTs through Auth0/Jackson at runtime.
+# Keep their implementation intact because R8 optimization can break JWT payload parsing.
+-keep class com.fasterxml.jackson.** { *; }
+-keep class com.auth0.jwt.** { *; }
+
 # Keep JlatexMath
 -keep class org.scilab.forge.jlatexmath.** { *; }
