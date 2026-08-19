@@ -329,6 +329,8 @@
   <string name="emoji_picker_select_skin_tone">选择肤色</string>
   <string name="error_title_compress_conversation">对话压缩失败</string>
   <string name="error_title_generate_title">自动生成标题失败</string>
+  <string name="error_title_cloudflare_blocked">API 被 Cloudflare 防护阻止，请使用其他模型</string>
+  <string name="error_title_unknown">发生未知错误</string>
   <string name="error_title_generation">消息生成失败</string>
   <string name="error_title_operation">操作失败</string>
   <string name="error_title_regenerate_message">消息重新生成失败</string>

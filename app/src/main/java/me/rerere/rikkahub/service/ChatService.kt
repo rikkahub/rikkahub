@@ -779,8 +779,13 @@ class ChatService(
             }
         }.onFailure {
             it.printStackTrace()
+            val friendlyMessage = if (it.message?.contains("403") == true || it.message?.contains("Just a moment") == true) {
+                context.getString(R.string.error_title_cloudflare_blocked)
+            } else {
+                it.message ?: context.getString(R.string.error_title_unknown)
+            }
             addError(
-                error = it,
+                error = Exception(friendlyMessage, it),
                 conversationId = conversationId,
                 title = context.getString(R.string.error_title_generate_title),
                 solution = ChatErrorSolution.CheckTitleModelSettings,

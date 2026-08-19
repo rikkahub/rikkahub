@@ -329,6 +329,8 @@
   <string name="emoji_picker_select_skin_tone">Select Skin Tone</string>
   <string name="error_title_compress_conversation">Conversation compression failed</string>
   <string name="error_title_generate_title">Auto title generation failed</string>
+  <string name="error_title_cloudflare_blocked">API blocked by Cloudflare protection. Please use a different model.</string>
+  <string name="error_title_unknown">An unexpected error occurred</string>
   <string name="error_title_generation">Message generation failed</string>
   <string name="error_title_operation">Operation failed</string>
   <string name="error_title_regenerate_message">Message regeneration failed</string>
