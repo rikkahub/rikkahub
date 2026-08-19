@@ -779,10 +779,16 @@ class ChatService(
             }
         }.onFailure {
             it.printStackTrace()
-            val friendlyMessage = if (it.message?.contains("403") == true || it.message?.contains("Just a moment") == true) {
-                context.getString(R.string.error_title_cloudflare_blocked)
-            } else {
-                it.message ?: context.getString(R.string.error_title_unknown)
+            val errorMessage = it.message ?: ""
+            val friendlyMessage = when {
+                errorMessage.contains("403") || errorMessage.contains("Just a moment") ->
+                    context.getString(R.string.error_title_cloudflare_blocked)
+                errorMessage.contains("Unexpected JSON token") && errorMessage.contains("DOCTYPE") ->
+                    context.getString(R.string.error_title_cloudflare_blocked)
+                errorMessage.contains("Cloudflare") ->
+                    context.getString(R.string.error_title_cloudflare_blocked)
+                else ->
+                    it.message ?: context.getString(R.string.error_title_unknown)
             }
             addError(
                 error = Exception(friendlyMessage, it),
