@@ -47,7 +47,7 @@ object BingSearchService : SearchService<SearchServiceOptions.BingLocalOptions> 
             val locale = Locale.getDefault()
             val acceptLanguage = "${locale.language}-${locale.country},${locale.language}"
             val doc = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36")
                 .header(
                     "Accept",
                     "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
@@ -58,14 +58,13 @@ object BingSearchService : SearchService<SearchServiceOptions.BingLocalOptions> 
                 .header("Connection", "keep-alive")
                 .referrer("https://www.bing.com/")
                 .cookie("SRCHHPGUSR", "ULSR=1")
-                .timeout(5000)
+                .timeout(10000)
                 .get()
 
-            // 解析搜索结果
             val results = doc.select("li.b_algo").map { element ->
                 val title = element.select("h2").text()
                 val link = element.select("h2 > a").attr("href")
-                val snippet = element.select(".b_caption p").text()
+                val snippet = element.select(".b_caption p, p.b_algoSlug").text()
                 SearchResultItem(
                     title = title,
                     url = link,
@@ -73,11 +72,21 @@ object BingSearchService : SearchService<SearchServiceOptions.BingLocalOptions> 
                 )
             }
 
-            require(results.isNotEmpty()) {
-                "Search failed: no results found"
+            if (results.isEmpty()) {
+                val fallbackResults = doc.select(".b_algo, .b_ans").map { element ->
+                    val title = element.select("h2, .b_algoheader a").text()
+                    val link = element.select("h2 a, .b_algoheader a").attr("href")
+                    val snippet = element.select("p, .b_caption p, .b_snippet").text()
+                    SearchResultItem(
+                        title = title,
+                        url = link,
+                        text = snippet
+                    )
+                }
+                SearchResult(items = fallbackResults)
+            } else {
+                SearchResult(items = results)
             }
-
-            SearchResult(items = results)
         }
     }
 
