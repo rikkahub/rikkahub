@@ -160,6 +160,71 @@ val DEFAULT_PROVIDERS = listOf(
         )
     ),
     ProviderSetting.OpenAI(
+        id = Uuid.parse("f8e7d6c5-b4a3-4221-9876-543210987654"),
+        name = "OVH AI",
+        baseUrl = "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+        apiKey = "",
+        enabled = true,
+        builtIn = true,
+        description = {
+            Text(
+                text = buildAnnotatedString {
+                    append("Free AI endpoints by OVHcloud. No API key required.")
+                }
+            )
+        },
+        models = listOf(
+            Model(
+                id = Uuid.parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
+                modelId = "Meta-Llama-3_3-70B-Instruct",
+                displayName = "Llama 3.3 70B",
+                inputModalities = listOf(Modality.TEXT),
+                outputModalities = listOf(Modality.TEXT),
+                abilities = emptyList(),
+            ),
+            Model(
+                id = Uuid.parse("c3d4e5f6-a7b8-9012-cdef-123456789012"),
+                modelId = "Qwen2.5-VL-72B-Instruct",
+                displayName = "Qwen2.5 VL 72B",
+                inputModalities = listOf(Modality.TEXT, Modality.IMAGE),
+                outputModalities = listOf(Modality.TEXT),
+                abilities = emptyList(),
+            ),
+            Model(
+                id = Uuid.parse("d4e5f6a7-b8c9-0123-defa-234567890123"),
+                modelId = "Qwen3-32B",
+                displayName = "Qwen3 32B",
+                inputModalities = listOf(Modality.TEXT),
+                outputModalities = listOf(Modality.TEXT),
+                abilities = emptyList(),
+            ),
+            Model(
+                id = Uuid.parse("e5f6a7b8-c9d0-1234-efab-345678901234"),
+                modelId = "Qwen3.5-397B-A17B",
+                displayName = "Qwen3.5 397B A17B",
+                inputModalities = listOf(Modality.TEXT),
+                outputModalities = listOf(Modality.TEXT),
+                abilities = emptyList(),
+            ),
+            Model(
+                id = Uuid.parse("f6a7b8c9-d0e1-2345-fabc-456789012345"),
+                modelId = "Qwen3.6-27B",
+                displayName = "Qwen3.6 27B",
+                inputModalities = listOf(Modality.TEXT),
+                outputModalities = listOf(Modality.TEXT),
+                abilities = emptyList(),
+            ),
+            Model(
+                id = Uuid.parse("a7b8c9d0-e1f2-3456-abcd-567890123456"),
+                modelId = "gpt-oss-120b",
+                displayName = "GPT OSS 120B",
+                inputModalities = listOf(Modality.TEXT),
+                outputModalities = listOf(Modality.TEXT),
+                abilities = emptyList(),
+            ),
+        )
+    ),
+    ProviderSetting.OpenAI(
         id = Uuid.parse("da020a90-f7b3-4c29-b90e-c511a0630630"),
         name = "小马算力",
         baseUrl = "https://api.tokenpony.cn/v1",
@@ -308,70 +373,5 @@ val DEFAULT_PROVIDERS = listOf(
                 }
             )
         }
-    ),
-    ProviderSetting.OpenAI(
-        id = Uuid.parse("f8e7d6c5-b4a3-4221-9876-543210987654"),
-        name = "OVH AI",
-        baseUrl = "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
-        apiKey = "",
-        enabled = true,
-        builtIn = true,
-        description = {
-            Text(
-                text = buildAnnotatedString {
-                    append("Free AI endpoints by OVHcloud. No API key required.")
-                }
-            )
-        },
-        models = listOf(
-            Model(
-                id = Uuid.parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
-                modelId = "Meta-Llama-3_3-70B-Instruct",
-                displayName = "Llama 3.3 70B",
-                inputModalities = listOf(Modality.TEXT),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = emptyList(),
-            ),
-            Model(
-                id = Uuid.parse("c3d4e5f6-a7b8-9012-cdef-123456789012"),
-                modelId = "Qwen2.5-VL-72B-Instruct",
-                displayName = "Qwen2.5 VL 72B",
-                inputModalities = listOf(Modality.TEXT, Modality.IMAGE),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = emptyList(),
-            ),
-            Model(
-                id = Uuid.parse("d4e5f6a7-b8c9-0123-defa-234567890123"),
-                modelId = "Qwen3-32B",
-                displayName = "Qwen3 32B",
-                inputModalities = listOf(Modality.TEXT),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = emptyList(),
-            ),
-            Model(
-                id = Uuid.parse("e5f6a7b8-c9d0-1234-efab-345678901234"),
-                modelId = "Qwen3.5-397B-A17B",
-                displayName = "Qwen3.5 397B A17B",
-                inputModalities = listOf(Modality.TEXT),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = emptyList(),
-            ),
-            Model(
-                id = Uuid.parse("f6a7b8c9-d0e1-2345-fabc-456789012345"),
-                modelId = "Qwen3.6-27B",
-                displayName = "Qwen3.6 27B",
-                inputModalities = listOf(Modality.TEXT),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = emptyList(),
-            ),
-            Model(
-                id = Uuid.parse("a7b8c9d0-e1f2-3456-abcd-567890123456"),
-                modelId = "gpt-oss-120b",
-                displayName = "GPT OSS 120B",
-                inputModalities = listOf(Modality.TEXT),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = emptyList(),
-            ),
-        )
     ),
 )
