@@ -735,7 +735,7 @@ internal val DEFAULT_ASSISTANTS = listOf(
     ),
     Assistant(
         id = Uuid.parse("3d47790c-c415-4b90-9388-751128adb0a0"),
-        name = "",
+        name = "Smart Assistant",
         systemPrompt = """
             You are a helpful assistant, called {{char}}, based on model {{model_name}}.
 
