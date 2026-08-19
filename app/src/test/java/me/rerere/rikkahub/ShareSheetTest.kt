@@ -2,6 +2,8 @@ package me.rerere.rikkahub
 
 import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.OpenAIAuthType
+import me.rerere.ai.provider.OpenAICodexCredentials
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
 import me.rerere.rikkahub.ui.components.ui.encodeForShare
@@ -11,6 +13,24 @@ import org.junit.Test
 import kotlin.uuid.Uuid
 
 class ShareSheetTest {
+    @Test
+    fun `sharing Codex provider strips subscription credentials`() {
+        val original = ProviderSetting.OpenAI(
+            name = "OpenAI Codex",
+            authType = OpenAIAuthType.CHATGPT_SUBSCRIPTION,
+            codexCredentials = OpenAICodexCredentials(
+                accessToken = "access-secret",
+                refreshToken = "refresh-secret",
+                accountId = "account-id",
+            ),
+        )
+
+        val decoded = decodeProviderSetting(original.encodeForShare()) as ProviderSetting.OpenAI
+
+        assertEquals(OpenAIAuthType.CHATGPT_SUBSCRIPTION, decoded.authType)
+        assertEquals(null, decoded.codexCredentials)
+    }
+
     @Test
     fun `share round trip should restore OpenAI settings without models`() {
         val originalId = Uuid.random()

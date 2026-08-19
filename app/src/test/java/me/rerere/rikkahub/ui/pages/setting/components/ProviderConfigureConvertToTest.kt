@@ -2,6 +2,8 @@ package me.rerere.rikkahub.ui.pages.setting.components
 
 import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.OPENAI_CODEX_BASE_URL
+import me.rerere.ai.provider.OpenAIAuthType
 import me.rerere.ai.provider.ProviderSetting
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.junit.Assert.assertEquals
@@ -11,6 +13,18 @@ import org.junit.Test
 import kotlin.uuid.Uuid
 
 class ProviderConfigureConvertToTest {
+    @Test
+    fun `convertTo treats Codex subscription endpoint as an official OpenAI endpoint`() {
+        val original = ProviderSetting.OpenAI(
+            authType = OpenAIAuthType.CHATGPT_SUBSCRIPTION,
+            baseUrl = OPENAI_CODEX_BASE_URL,
+        )
+
+        val converted = original.convertTo(ProviderSetting.Google::class) as ProviderSetting.Google
+
+        assertEquals("https://generativelanguage.googleapis.com/v1beta", converted.baseUrl)
+    }
+
     @Test
     fun `convertTo should keep common fields and switch official endpoint to target default`() {
         val model = Model(

@@ -931,6 +931,16 @@
   <string name="setting_provider_page_advanced_settings">Advanced Settings</string>
   <string name="setting_provider_page_api_base_url">API Base Url</string>
   <string name="setting_provider_page_api_key">API Key</string>
+  <string name="setting_provider_page_auth_method">Authentication</string>
+  <string name="setting_provider_page_chatgpt_subscription">ChatGPT plan</string>
+  <string name="setting_provider_page_chatgpt_subscription_desc">Use the Codex access included with an eligible ChatGPT subscription. This signs in through OpenAI in your browser and does not use API credits.</string>
+  <string name="setting_provider_page_signed_in">Signed in</string>
+  <string name="setting_provider_page_sign_in_chatgpt">Sign in with ChatGPT</string>
+  <string name="setting_provider_page_signing_in">Waiting for sign-in…</string>
+  <string name="setting_provider_page_sign_out">Sign out</string>
+  <string name="setting_provider_page_device_code_title">Sign in to OpenAI Codex</string>
+  <string name="setting_provider_page_device_code_desc">The one-time code below was copied to your clipboard. Paste it into the OpenAI page opened in your browser.</string>
+  <string name="setting_provider_page_open_browser">Open browser</string>
   <string name="setting_provider_page_api_path">API Path</string>
   <string name="setting_provider_page_avaliable_models">Avaliable Models</string>
   <string name="setting_provider_page_balance_api_path">Balance API Path</string>

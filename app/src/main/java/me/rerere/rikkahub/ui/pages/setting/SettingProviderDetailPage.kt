@@ -96,6 +96,7 @@ import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ModelType
+import me.rerere.ai.provider.OpenAIAuthType
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
@@ -279,10 +280,11 @@ private fun SettingProviderConfigPage(
             }
         )
 
-        if (internalProvider is ProviderSetting.OpenAI) {
+        val openAIProvider = internalProvider as? ProviderSetting.OpenAI
+        if (openAIProvider?.authType == OpenAIAuthType.API_KEY) {
             SettingProviderBalanceOption(
-                provider = internalProvider,
-                balanceOption = internalProvider.balanceOption,
+                provider = openAIProvider,
+                balanceOption = openAIProvider.balanceOption,
                 onEdit = { internalProvider = internalProvider.copyProvider(balanceOption = it) }
             )
             ProviderBalanceText(providerSetting = provider, style = MaterialTheme.typography.labelSmall)

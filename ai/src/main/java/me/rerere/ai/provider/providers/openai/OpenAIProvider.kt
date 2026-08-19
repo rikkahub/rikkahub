@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -47,22 +48,30 @@ private const val TAG = "OpenAIProvider"
 
 class OpenAIProvider(
     private val client: OkHttpClient,
-    context: Context? = null
+    context: Context? = null,
+    codexTokenProvider: OpenAICodexTokenProvider? = null,
 ) : Provider<ProviderSetting.OpenAI> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()
+    private val authenticator = OpenAIRequestAuthenticator(keyRoulette, codexTokenProvider)
 
-    private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette)
-    private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette)
+    private val chatCompletionsAPI = ChatCompletionsAPI(
+        client = client,
+        keyRoulette = keyRoulette,
+        codexTokenProvider = codexTokenProvider,
+    )
+    private val responseAPI = ResponseAPI(
+        client = client,
+        keyRoulette = keyRoulette,
+        codexTokenProvider = codexTokenProvider,
+    )
 
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
         withContext(Dispatchers.IO) {
-            val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
-                .addHeader("Authorization", "Bearer $key")
                 .get()
-                .build()
+            val request = authenticator.authenticate(requestBuilder, providerSetting).build()
 
             val response = client.newCall(request).await()
             if (!response.isSuccessful) {
@@ -71,31 +80,41 @@ class OpenAIProvider(
 
             val bodyStr = response.body?.string() ?: ""
             val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-            val data = bodyJson["data"]?.jsonArray ?: return@withContext emptyList()
+            val data = bodyJson["data"]?.jsonArray
+                ?: bodyJson["models"]?.jsonArray
+                ?: return@withContext emptyList()
 
             data.mapNotNull { modelJson ->
                 val modelObj = modelJson.jsonObject
-                val id = modelObj["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                if (modelObj["supported_in_api"]?.jsonPrimitive?.booleanOrNull == false) {
+                    return@mapNotNull null
+                }
+                if (modelObj["visibility"]?.jsonPrimitive?.contentOrNull == "hide") {
+                    return@mapNotNull null
+                }
+                val id = modelObj["id"]?.jsonPrimitive?.contentOrNull
+                    ?: modelObj["slug"]?.jsonPrimitive?.contentOrNull
+                    ?: modelObj["model"]?.jsonPrimitive?.contentOrNull
+                    ?: return@mapNotNull null
+                val displayName = modelObj["display_name"]?.jsonPrimitive?.contentOrNull ?: id
 
                 Model(
                     modelId = id,
-                    displayName = id,
+                    displayName = displayName,
                 )
             }
         }
 
     override suspend fun getBalance(providerSetting: ProviderSetting.OpenAI): String = withContext(Dispatchers.IO) {
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         val url = if (providerSetting.balanceOption.apiPath.startsWith("http")) {
             providerSetting.balanceOption.apiPath
         } else {
             "${providerSetting.baseUrl}${providerSetting.balanceOption.apiPath}"
         }
-        val request = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url(url)
-            .addHeader("Authorization", "Bearer $key")
             .get()
-            .build()
+        val request = authenticator.authenticate(requestBuilder, providerSetting).build()
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
             error("Failed to get balance: ${response.code} ${response.body?.string()}")
@@ -154,7 +173,6 @@ class OpenAIProvider(
     ): EmbeddingGenerationResult = withContext(Dispatchers.IO) {
         require(params.input.isNotEmpty()) { "Embedding input cannot be empty" }
 
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         val requestBody = json.encodeToString(
             buildJsonObject {
                 put("model", params.model.modelId)
@@ -169,13 +187,12 @@ class OpenAIProvider(
             }.mergeCustomBody(params.customBody)
         )
 
-        val request = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url("${providerSetting.baseUrl}/embeddings")
             .headers(params.customHeaders.toHeaders())
-            .addHeader("Authorization", "Bearer $key")
             .addHeader("Content-Type", "application/json")
             .post(requestBody.toRequestBody("application/json".toMediaType()))
-            .build()
+        val request = authenticator.authenticate(requestBuilder, providerSetting).build()
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
@@ -207,8 +224,6 @@ class OpenAIProvider(
             "Expected OpenAI provider setting"
         }
 
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
-
         val requestBody = json.encodeToString(
             buildJsonObject {
                 put("model", params.model.modelId)
@@ -227,14 +242,13 @@ class OpenAIProvider(
 
         Log.i(TAG, "generateImage: $requestBody")
 
-        val request = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url("${providerSetting.baseUrl}/images/generations")
             .headers(params.customHeaders.toHeaders())
-            .addHeader("Authorization", "Bearer $key")
             .addHeader("Content-Type", "application/json")
             .post(requestBody.toRequestBody("application/json".toMediaType()))
             .configureReferHeaders(providerSetting.baseUrl)
-            .build()
+        val request = authenticator.authenticate(requestBuilder, providerSetting).build()
 
         val items = withContext(Dispatchers.IO) {
             val response = client.newCall(request).await()
@@ -258,7 +272,6 @@ class OpenAIProvider(
             "At least one image is required"
         }
 
-        val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         val bodyBuilder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("model", params.model.modelId)
@@ -292,13 +305,12 @@ class OpenAIProvider(
             bodyBuilder.addFormDataPart(customBody.key, value)
         }
 
-        val request = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url("${providerSetting.baseUrl}/images/edits")
             .headers(params.customHeaders.toHeaders())
-            .addHeader("Authorization", "Bearer $key")
             .post(bodyBuilder.build())
             .configureReferHeaders(providerSetting.baseUrl)
-            .build()
+        val request = authenticator.authenticate(requestBuilder, providerSetting).build()
 
         val items = withContext(Dispatchers.IO) {
             val response = client.newCall(request).await()

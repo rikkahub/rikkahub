@@ -91,7 +91,14 @@ fun ProviderSetting.encodeForShare(): String {
         append("ai-provider:")
         append("v1:")
 
-        val value = JsonInstant.encodeToString(this@encodeForShare.copyProvider(models = emptyList()))
+        val withoutModels = this@encodeForShare.copyProvider(models = emptyList())
+        // Subscription refresh tokens grant account access and must never leave the device via QR/share.
+        val shareable = if (withoutModels is ProviderSetting.OpenAI) {
+            withoutModels.copy(codexCredentials = null)
+        } else {
+            withoutModels
+        }
+        val value = JsonInstant.encodeToString(shareable)
         append(Base64.encode(value.encodeToByteArray()))
     }
 }
