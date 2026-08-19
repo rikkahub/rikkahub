@@ -54,13 +54,21 @@ class OpenAIProvider(
     private val chatCompletionsAPI = ChatCompletionsAPI(client = client, keyRoulette = keyRoulette)
     private val responseAPI = ResponseAPI(client = client, keyRoulette = keyRoulette)
 
+    private fun authHeaderValue(providerSetting: ProviderSetting.OpenAI, apiKey: String): String {
+        return if (providerSetting.authHeaderPrefix.isBlank()) {
+            apiKey
+        } else {
+            "${providerSetting.authHeaderPrefix} $apiKey"
+        }
+    }
+
 
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
         withContext(Dispatchers.IO) {
             val key = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
             val request = Request.Builder()
                 .url("${providerSetting.baseUrl}/models")
-                .addHeader("Authorization", "Bearer $key")
+                .addHeader(providerSetting.authHeaderName, authHeaderValue(providerSetting, key))
                 .get()
                 .build()
 
@@ -93,7 +101,7 @@ class OpenAIProvider(
         }
         val request = Request.Builder()
             .url(url)
-            .addHeader("Authorization", "Bearer $key")
+            .addHeader(providerSetting.authHeaderName, authHeaderValue(providerSetting, key))
             .get()
             .build()
         val response = client.newCall(request).await()
@@ -172,7 +180,7 @@ class OpenAIProvider(
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/embeddings")
             .headers(params.customHeaders.toHeaders())
-            .addHeader("Authorization", "Bearer $key")
+            .addHeader(providerSetting.authHeaderName, authHeaderValue(providerSetting, key))
             .addHeader("Content-Type", "application/json")
             .post(requestBody.toRequestBody("application/json".toMediaType()))
             .build()
@@ -230,7 +238,7 @@ class OpenAIProvider(
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/images/generations")
             .headers(params.customHeaders.toHeaders())
-            .addHeader("Authorization", "Bearer $key")
+            .addHeader(providerSetting.authHeaderName, authHeaderValue(providerSetting, key))
             .addHeader("Content-Type", "application/json")
             .post(requestBody.toRequestBody("application/json".toMediaType()))
             .configureReferHeaders(providerSetting.baseUrl)
@@ -295,7 +303,7 @@ class OpenAIProvider(
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}/images/edits")
             .headers(params.customHeaders.toHeaders())
-            .addHeader("Authorization", "Bearer $key")
+            .addHeader(providerSetting.authHeaderName, authHeaderValue(providerSetting, key))
             .post(bodyBuilder.build())
             .configureReferHeaders(providerSetting.baseUrl)
             .build()

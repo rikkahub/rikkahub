@@ -87,11 +87,17 @@ class ChatCompletionsAPI(
                 providerSetting = providerSetting
             )
 
+        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val authValue = if (providerSetting.authHeaderPrefix.isBlank()) {
+            apiKey
+        } else {
+            "${providerSetting.authHeaderPrefix} $apiKey"
+        }
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
+            .addHeader(providerSetting.authHeaderName, authValue)
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
 
@@ -138,11 +144,17 @@ class ChatCompletionsAPI(
             stream = true,
         )
 
+        val apiKey = keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
+        val authValue = if (providerSetting.authHeaderPrefix.isBlank()) {
+            apiKey
+        } else {
+            "${providerSetting.authHeaderPrefix} $apiKey"
+        }
         val request = Request.Builder()
             .url("${providerSetting.baseUrl}${providerSetting.chatCompletionsPath}")
             .headers(params.customHeaders.toHeaders())
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
+            .addHeader(providerSetting.authHeaderName, authValue)
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
             .build()
