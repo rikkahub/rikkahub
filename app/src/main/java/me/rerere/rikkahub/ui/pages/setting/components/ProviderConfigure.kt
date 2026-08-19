@@ -21,6 +21,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -216,6 +217,13 @@ private val OFFICIAL_PROVIDER_HOSTS = setOf(
     CLAUDE_OFFICIAL_HOST
 )
 
+internal fun ProviderSetting.OpenAI.supportsChatGPTSubscription(): Boolean {
+    return baseUrl.toHttpUrlOrNull()?.host?.lowercase() in setOf(
+        OPENAI_OFFICIAL_HOST,
+        OPENAI_CODEX_HOST,
+    )
+}
+
 @Composable
 private fun ProviderConfigureOpenAI(
     provider: ProviderSetting.OpenAI,
@@ -229,6 +237,23 @@ private fun ProviderConfigureOpenAI(
     var deviceCode by remember(provider.id) { mutableStateOf<OpenAICodexDeviceCode?>(null) }
     var authError by remember(provider.id) { mutableStateOf<String?>(null) }
     var signingIn by remember(provider.id) { mutableStateOf(false) }
+    val supportsChatGPTSubscription = provider.supportsChatGPTSubscription()
+    val selectedAuthType = if (supportsChatGPTSubscription) {
+        provider.authType
+    } else {
+        OpenAIAuthType.API_KEY
+    }
+
+    LaunchedEffect(provider.authType, supportsChatGPTSubscription) {
+        if (!supportsChatGPTSubscription && provider.authType == OpenAIAuthType.CHATGPT_SUBSCRIPTION) {
+            onEdit(
+                provider.copy(
+                    authType = OpenAIAuthType.API_KEY,
+                    codexCredentials = null,
+                )
+            )
+        }
+    }
 
     provider.description()
 
@@ -239,42 +264,44 @@ private fun ProviderConfigureOpenAI(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    Text(stringResource(R.string.setting_provider_page_auth_method))
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        OpenAIAuthType.entries.forEachIndexed { index, authType ->
-            SegmentedButton(
-                shape = SegmentedButtonDefaults.itemShape(
-                    index = index,
-                    count = OpenAIAuthType.entries.size,
-                ),
-                label = {
-                    Text(
-                        when (authType) {
-                            OpenAIAuthType.API_KEY -> stringResource(R.string.setting_provider_page_api_key)
-                            OpenAIAuthType.CHATGPT_SUBSCRIPTION -> stringResource(R.string.setting_provider_page_chatgpt_subscription)
-                        }
-                    )
-                },
-                selected = provider.authType == authType,
-                onClick = {
-                    val baseUrl = when {
-                        authType == OpenAIAuthType.CHATGPT_SUBSCRIPTION -> OPENAI_CODEX_BASE_URL
-                        provider.baseUrl == OPENAI_CODEX_BASE_URL -> ProviderSetting.OpenAI().baseUrl
-                        else -> provider.baseUrl
-                    }
-                    onEdit(
-                        provider.copy(
-                            authType = authType,
-                            baseUrl = baseUrl,
-                            useResponseApi = authType == OpenAIAuthType.CHATGPT_SUBSCRIPTION || provider.useResponseApi,
+    if (supportsChatGPTSubscription) {
+        Text(stringResource(R.string.setting_provider_page_auth_method))
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            OpenAIAuthType.entries.forEachIndexed { index, authType ->
+                SegmentedButton(
+                    shape = SegmentedButtonDefaults.itemShape(
+                        index = index,
+                        count = OpenAIAuthType.entries.size,
+                    ),
+                    label = {
+                        Text(
+                            when (authType) {
+                                OpenAIAuthType.API_KEY -> stringResource(R.string.setting_provider_page_api_key)
+                                OpenAIAuthType.CHATGPT_SUBSCRIPTION -> stringResource(R.string.setting_provider_page_chatgpt_subscription)
+                            }
                         )
-                    )
-                },
-            )
+                    },
+                    selected = provider.authType == authType,
+                    onClick = {
+                        val baseUrl = when {
+                            authType == OpenAIAuthType.CHATGPT_SUBSCRIPTION -> OPENAI_CODEX_BASE_URL
+                            provider.baseUrl == OPENAI_CODEX_BASE_URL -> ProviderSetting.OpenAI().baseUrl
+                            else -> provider.baseUrl
+                        }
+                        onEdit(
+                            provider.copy(
+                                authType = authType,
+                                baseUrl = baseUrl,
+                                useResponseApi = authType == OpenAIAuthType.CHATGPT_SUBSCRIPTION || provider.useResponseApi,
+                            )
+                        )
+                    },
+                )
+            }
         }
     }
 
-    when (provider.authType) {
+    when (selectedAuthType) {
         OpenAIAuthType.API_KEY -> {
             var keyVisible by remember { mutableStateOf(false) }
             OutlinedTextField(
@@ -386,10 +413,10 @@ private fun ProviderConfigureOpenAI(
         label = { Text(stringResource(R.string.setting_provider_page_api_base_url)) },
         modifier = Modifier.fillMaxWidth(),
         isError = provider.baseUrl.isNotBlank() && !provider.baseUrl.isValidBaseUrl(),
-        enabled = provider.authType == OpenAIAuthType.API_KEY,
+        enabled = selectedAuthType == OpenAIAuthType.API_KEY,
     )
 
-    if (!provider.useResponseApi && provider.authType == OpenAIAuthType.API_KEY) {
+    if (!provider.useResponseApi && selectedAuthType == OpenAIAuthType.API_KEY) {
         OutlinedTextField(
             value = provider.chatCompletionsPath,
             onValueChange = { onEdit(provider.copy(chatCompletionsPath = it.trim())) },
@@ -420,7 +447,7 @@ private fun ProviderConfigureOpenAI(
         Text(stringResource(R.string.setting_provider_page_response_api))
         Switch(
             checked = provider.useResponseApi,
-            enabled = provider.authType == OpenAIAuthType.API_KEY,
+            enabled = selectedAuthType == OpenAIAuthType.API_KEY,
             onCheckedChange = {
                 onEdit(provider.copy(useResponseApi = it))
                 if (it && provider.baseUrl.toHttpUrlOrNull()?.host != "api.openai.com") {

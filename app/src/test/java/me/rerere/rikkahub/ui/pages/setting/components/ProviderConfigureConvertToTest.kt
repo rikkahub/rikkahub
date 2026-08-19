@@ -7,12 +7,33 @@ import me.rerere.ai.provider.OpenAIAuthType
 import me.rerere.ai.provider.ProviderSetting
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
 
 class ProviderConfigureConvertToTest {
+    @Test
+    fun `ChatGPT subscription is only offered for official OpenAI endpoints`() {
+        assertTrue(
+            ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1")
+                .supportsChatGPTSubscription()
+        )
+        assertTrue(
+            ProviderSetting.OpenAI(baseUrl = OPENAI_CODEX_BASE_URL)
+                .supportsChatGPTSubscription()
+        )
+        assertFalse(
+            ProviderSetting.OpenAI(baseUrl = "https://openrouter.ai/api/v1")
+                .supportsChatGPTSubscription()
+        )
+        assertFalse(
+            ProviderSetting.OpenAI(baseUrl = "not-a-url")
+                .supportsChatGPTSubscription()
+        )
+    }
+
     @Test
     fun `convertTo treats Codex subscription endpoint as an official OpenAI endpoint`() {
         val original = ProviderSetting.OpenAI(

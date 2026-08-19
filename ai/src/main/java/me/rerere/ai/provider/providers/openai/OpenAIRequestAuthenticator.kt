@@ -2,8 +2,11 @@ package me.rerere.ai.provider.providers.openai
 
 import me.rerere.ai.provider.OpenAIAuthType
 import me.rerere.ai.provider.OpenAICodexCredentials
+import me.rerere.ai.provider.OPENAI_CODEX_BASE_URL
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.util.KeyRoulette
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
 
 /** Supplies a fresh ChatGPT subscription token to the provider request layer. */
@@ -30,6 +33,12 @@ internal class OpenAIRequestAuthenticator(
             }
 
             OpenAIAuthType.CHATGPT_SUBSCRIPTION -> {
+                val configuredHost = providerSetting.baseUrl.toHttpUrlOrNull()?.host
+                val requestHost = builder.build().url.host
+                val codexHost = OPENAI_CODEX_BASE_URL.toHttpUrl().host
+                require(configuredHost == codexHost && requestHost == codexHost) {
+                    "ChatGPT subscription authentication is only available for the official OpenAI Codex endpoint."
+                }
                 val credentials = codexTokenProvider?.getCredentials(providerSetting)
                     ?: providerSetting.codexCredentials
                     ?: error("OpenAI Codex is not signed in. Sign in with ChatGPT first.")

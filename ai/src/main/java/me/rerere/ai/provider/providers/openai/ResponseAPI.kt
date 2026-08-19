@@ -71,6 +71,11 @@ import okhttp3.sse.EventSources
 import kotlin.time.Clock
 
 private const val TAG = "ResponseAPI"
+private const val EVENT_STREAM_MEDIA_TYPE = "text/event-stream"
+
+internal fun Request.Builder.acceptEventStream(): Request.Builder {
+    return header("Accept", EVENT_STREAM_MEDIA_TYPE)
+}
 
 class ResponseAPI(
     private val client: OkHttpClient,
@@ -134,6 +139,9 @@ class ResponseAPI(
         val requestBuilder = Request.Builder()
             .url("${providerSetting.baseUrl}/responses")
             .headers(params.customHeaders.toHeaders())
+            // OkHttp's EventSource does not add this header for us. Without it the Codex
+            // backend may return a successful response without an SSE Content-Type.
+            .acceptEventStream()
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .configureReferHeaders(providerSetting.baseUrl)
         val request = authenticator.authenticate(requestBuilder, providerSetting).build()

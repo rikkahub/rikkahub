@@ -6,10 +6,22 @@ import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessagePart
+import okhttp3.Request
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ResponseApiStreamingGenerationTest {
+    @Test
+    fun `streaming request requires SSE response content type`() {
+        val request = Request.Builder()
+            .url("https://chatgpt.com/backend-api/codex/responses")
+            .header("Accept", "application/json")
+            .acceptEventStream()
+            .build()
+
+        assertEquals("text/event-stream", request.header("Accept"))
+    }
+
     @Test
     fun `streaming generation aggregates chunks into non streaming result`() = runBlocking {
         val usage = TokenUsage(promptTokens = 3, completionTokens = 2, totalTokens = 5)
