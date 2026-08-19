@@ -56,6 +56,10 @@ object BochaSearchService : SearchService<SearchServiceOptions.BochaOptions> {
         serviceOptions: SearchServiceOptions.BochaOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
+            if (serviceOptions.apiKey.isBlank()) {
+                error("Bocha API key is required")
+            }
+
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
 
             val body = buildJsonObject {
@@ -98,8 +102,8 @@ object BochaSearchService : SearchService<SearchServiceOptions.BochaOptions> {
                     )
                 )
             } else {
-                println(response.body.string())
-                error("response failed #${response.code}")
+                val errorBody = response.body?.string() ?: response.message
+                error("Bocha search failed with code ${response.code}: $errorBody")
             }
         }
     }

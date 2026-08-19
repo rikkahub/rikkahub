@@ -46,6 +46,10 @@ object RikkaHubSearchService : SearchService<SearchServiceOptions.RikkaHubOption
         serviceOptions: SearchServiceOptions.RikkaHubOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
+            if (serviceOptions.apiKey.isBlank()) {
+                error("RikkaHub API key is required")
+            }
+
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
             val body = buildJsonObject {
                 put("q", JsonPrimitive(query))

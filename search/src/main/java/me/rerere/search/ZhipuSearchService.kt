@@ -56,6 +56,10 @@ object ZhipuSearchService : SearchService<SearchServiceOptions.ZhipuOptions> {
         serviceOptions: SearchServiceOptions.ZhipuOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
+            if (serviceOptions.apiKey.isBlank()) {
+                error("Zhipu API key is required")
+            }
+
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
 
             val body = buildJsonObject {
@@ -92,8 +96,8 @@ object ZhipuSearchService : SearchService<SearchServiceOptions.ZhipuOptions> {
                         }
                     ))
             } else {
-                println(response.body?.string())
-                error("response failed #${response.code}")
+                val errorBody = response.body?.string() ?: response.message
+                error("Zhipu search failed with code ${response.code}: $errorBody")
             }
         }
     }

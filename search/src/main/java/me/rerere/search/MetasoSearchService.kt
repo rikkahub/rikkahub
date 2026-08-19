@@ -54,6 +54,10 @@ object MetasoSearchService : SearchService<SearchServiceOptions.MetasoOptions> {
         serviceOptions: SearchServiceOptions.MetasoOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
+            if (serviceOptions.apiKey.isBlank()) {
+                error("Metaso API key is required")
+            }
+
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
 
             val requestBody = buildJsonObject {
