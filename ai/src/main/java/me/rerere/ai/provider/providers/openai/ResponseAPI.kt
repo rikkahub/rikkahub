@@ -7,6 +7,7 @@ import kotlinx.coroutines.channels.onFailure
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArrayBuilder
 import kotlinx.serialization.json.JsonObject
@@ -28,6 +29,7 @@ import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.OpenAIAuthType
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
@@ -36,6 +38,7 @@ import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.StreamChunk
+import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.OpenAIReasoningMetadata
 import me.rerere.ai.ui.ReasoningType
 import me.rerere.ai.ui.ServerToolMetadata
@@ -81,6 +84,13 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): TextGenerationResult {
+        if (providerSetting.authType == OpenAIAuthType.CHATGPT_SUBSCRIPTION) {
+            return collectStreamingTextGeneration(
+                model = params.model,
+                stream = streamText(providerSetting, messages, params),
+            )
+        }
+
         val requestBody = buildRequestBody(
             providerSetting = providerSetting,
             messages = messages,
@@ -203,7 +213,7 @@ class ResponseAPI(
     ): JsonObject {
         val host = providerSetting.baseUrl.toHttpUrl().host
         val capabilities = resolveResponseProviderCapabilities(host)
-        return buildJsonObject {
+        val body = buildJsonObject {
             put("model", params.model.modelId)
             put("stream", stream)
             put("store", false)
@@ -287,6 +297,12 @@ class ResponseAPI(
                 }
             }
         }.mergeCustomBody(params.customBody)
+
+        return if (providerSetting.authType == OpenAIAuthType.CHATGPT_SUBSCRIPTION) {
+            JsonObject(body + ("stream" to JsonPrimitive(true)))
+        } else {
+            body
+        }
     }
 
     internal fun buildMessages(messages: List<UIMessage>) = buildJsonArray {
@@ -650,6 +666,30 @@ class ResponseAPI(
                 ?: 0
         )
     }
+}
+
+internal suspend fun collectStreamingTextGeneration(
+    model: Model,
+    stream: Flow<StreamChunk>,
+): TextGenerationResult {
+    val handler = StreamChunkHandler(model)
+    var messages = listOf(UIMessage(role = MessageRole.USER, parts = emptyList()))
+    var finish: StreamChunk.Finish? = null
+
+    stream.collect { chunk ->
+        messages = handler.handle(messages, chunk)
+        if (chunk is StreamChunk.Finish) finish = chunk
+    }
+
+    val message = messages.lastOrNull { it.role == MessageRole.ASSISTANT }
+        ?: error("Streaming response completed without an assistant message")
+    return TextGenerationResult(
+        id = finish?.responseId.orEmpty(),
+        model = finish?.model ?: model.modelId,
+        message = message,
+        finishReason = finish?.finishReason,
+        usage = message.usage,
+    )
 }
 
 internal fun isOpenAIServerToolCall(type: String): Boolean =
