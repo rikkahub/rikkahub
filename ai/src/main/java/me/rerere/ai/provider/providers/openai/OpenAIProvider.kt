@@ -20,6 +20,7 @@ import me.rerere.ai.provider.EmbeddingGenerationResult
 import me.rerere.ai.provider.ImageEditParams
 import me.rerere.ai.provider.ImageGenerationParams
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.OpenAIAuthType
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationResult
@@ -34,8 +35,10 @@ import me.rerere.ai.util.mergeCustomBody
 import me.rerere.ai.util.toHeaders
 import me.rerere.common.http.await
 import me.rerere.common.http.getByKey
-import okhttp3.MultipartBody
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -45,6 +48,7 @@ import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
 private const val TAG = "OpenAIProvider"
+private const val CODEX_MODELS_CLIENT_VERSION = "0.148.0"
 
 class OpenAIProvider(
     private val client: OkHttpClient,
@@ -69,7 +73,7 @@ class OpenAIProvider(
     override suspend fun listModels(providerSetting: ProviderSetting.OpenAI): List<Model> =
         withContext(Dispatchers.IO) {
             val requestBuilder = Request.Builder()
-                .url("${providerSetting.baseUrl}/models")
+                .url(openAIModelsUrl(providerSetting))
                 .get()
             val request = authenticator.authenticate(requestBuilder, providerSetting).build()
 
@@ -78,31 +82,7 @@ class OpenAIProvider(
                 error("Failed to get models: ${response.code} ${response.body?.string()}")
             }
 
-            val bodyStr = response.body?.string() ?: ""
-            val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
-            val data = bodyJson["data"]?.jsonArray
-                ?: bodyJson["models"]?.jsonArray
-                ?: return@withContext emptyList()
-
-            data.mapNotNull { modelJson ->
-                val modelObj = modelJson.jsonObject
-                if (modelObj["supported_in_api"]?.jsonPrimitive?.booleanOrNull == false) {
-                    return@mapNotNull null
-                }
-                if (modelObj["visibility"]?.jsonPrimitive?.contentOrNull == "hide") {
-                    return@mapNotNull null
-                }
-                val id = modelObj["id"]?.jsonPrimitive?.contentOrNull
-                    ?: modelObj["slug"]?.jsonPrimitive?.contentOrNull
-                    ?: modelObj["model"]?.jsonPrimitive?.contentOrNull
-                    ?: return@mapNotNull null
-                val displayName = modelObj["display_name"]?.jsonPrimitive?.contentOrNull ?: id
-
-                Model(
-                    modelId = id,
-                    displayName = displayName,
-                )
-            }
+            parseOpenAIModels(response.body.string())
         }
 
     override suspend fun getBalance(providerSetting: ProviderSetting.OpenAI): String = withContext(Dispatchers.IO) {
@@ -380,5 +360,43 @@ class OpenAIProvider(
 
     companion object {
         private val SUPPORTED_EDIT_IMAGE_EXTENSIONS = setOf("png", "jpg", "jpeg", "webp")
+    }
+}
+
+internal fun openAIModelsUrl(providerSetting: ProviderSetting.OpenAI): HttpUrl =
+    "${providerSetting.baseUrl.trimEnd('/')}/models"
+        .toHttpUrl()
+        .newBuilder()
+        .apply {
+            if (providerSetting.authType == OpenAIAuthType.CHATGPT_SUBSCRIPTION) {
+                addQueryParameter("client_version", CODEX_MODELS_CLIENT_VERSION)
+            }
+        }
+        .build()
+
+internal fun parseOpenAIModels(body: String): List<Model> {
+    val bodyJson = json.parseToJsonElement(body).jsonObject
+    val data = bodyJson["data"]?.jsonArray
+        ?: bodyJson["models"]?.jsonArray
+        ?: return emptyList()
+
+    return data.mapNotNull { modelJson ->
+        val modelObj = modelJson.jsonObject
+        if (modelObj["supported_in_api"]?.jsonPrimitive?.booleanOrNull == false) {
+            return@mapNotNull null
+        }
+        if (modelObj["visibility"]?.jsonPrimitive?.contentOrNull == "hide") {
+            return@mapNotNull null
+        }
+        val id = modelObj["id"]?.jsonPrimitive?.contentOrNull
+            ?: modelObj["slug"]?.jsonPrimitive?.contentOrNull
+            ?: modelObj["model"]?.jsonPrimitive?.contentOrNull
+            ?: return@mapNotNull null
+        val displayName = modelObj["display_name"]?.jsonPrimitive?.contentOrNull ?: id
+
+        Model(
+            modelId = id,
+            displayName = displayName,
+        )
     }
 }
