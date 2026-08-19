@@ -8,6 +8,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -60,13 +63,6 @@ class OpenAICodexAuthService(
     }
     private val credentialCache = ConcurrentHashMap<Uuid, OpenAICodexCredentials>()
     private val refreshLocks = ConcurrentHashMap<Uuid, Mutex>()
-
-    @Serializable
-    private data class DeviceCodeResponse(
-        @SerialName("device_auth_id") val deviceAuthId: String,
-        @SerialName("user_code") val userCode: String,
-        val interval: Long = DEFAULT_POLL_INTERVAL_SECONDS,
-    )
 
     @Serializable
     private data class DeviceAuthorizationResponse(
@@ -156,7 +152,7 @@ class OpenAICodexAuthService(
         deviceCode: DeviceCodeResponse,
     ): DeviceAuthorizationResponse {
         val deadline = System.currentTimeMillis() + DEVICE_AUTH_TIMEOUT_MS
-        val intervalMs = deviceCode.interval.coerceAtLeast(1L) * 1000L
+        val intervalMs = deviceCode.intervalSeconds.coerceAtLeast(1L) * 1000L
         while (System.currentTimeMillis() < deadline) {
             val requestBody = json.encodeToString(
                 buildJsonObject {
@@ -304,6 +300,11 @@ class OpenAICodexAuthService(
 
     private fun httpError(prefix: String, response: HttpResult): String {
         val detail = response.errorMessage().takeIf { it.isNotBlank() }
+            ?: if (response.code == 403) {
+                "OpenAI denied this network request. Make sure the emulator can access auth.openai.com and uses the same proxy or VPN as the host."
+            } else {
+                null
+            }
         return buildString {
             append(prefix)
             append(" (HTTP ${response.code})")
@@ -312,12 +313,46 @@ class OpenAICodexAuthService(
     }
 
     private fun HttpResult.errorMessage(): String = runCatching {
-        val obj = json.parseToJsonElement(body).jsonObject
-        obj["error_description"]?.jsonPrimitive?.contentOrNull
-            ?: obj["message"]?.jsonPrimitive?.contentOrNull
-            ?: obj["error"]?.jsonPrimitive?.contentOrNull
-            ?: ""
+        extractOpenAIAuthError(body)
     }.getOrDefault("")
 
     private data class HttpResult(val code: Int, val body: String)
 }
+
+@Serializable
+internal data class DeviceCodeResponse(
+    @SerialName("device_auth_id") val deviceAuthId: String,
+    @SerialName("user_code") val userCode: String,
+    @SerialName("interval") private val rawInterval: JsonElement? = null,
+) {
+    val intervalSeconds: Long
+        get() = (rawInterval as? JsonPrimitive)?.longOrNull
+            ?: DEFAULT_POLL_INTERVAL_SECONDS
+}
+
+internal fun extractOpenAIAuthError(body: String): String {
+    val normalizedBody = body.trim()
+    if (normalizedBody.isBlank()) return ""
+
+    val root = runCatching {
+        Json.parseToJsonElement(normalizedBody) as? JsonObject
+    }.getOrNull()
+    val message = root?.firstString("error_description", "message", "detail")
+        ?: when (val error = root?.get("error")) {
+            is JsonPrimitive -> error.contentOrNull
+            is JsonObject -> error.firstString("message", "error_description", "code", "type")
+            else -> null
+        }
+    if (!message.isNullOrBlank()) return message.normalizedForError()
+
+    return normalizedBody
+        .replace(Regex("<[^>]+>"), " ")
+        .normalizedForError()
+}
+
+private fun JsonObject.firstString(vararg keys: String): String? = keys.firstNotNullOfOrNull { key ->
+    (get(key) as? JsonPrimitive)?.contentOrNull?.takeIf(String::isNotBlank)
+}
+
+private fun String.normalizedForError(): String =
+    replace(Regex("\\s+"), " ").trim().take(500)
