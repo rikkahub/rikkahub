@@ -626,7 +626,17 @@ class ChatService(
             appEventBus.tryEmit(AppEvent.ChatGenerationEnded(conversationId, senderName, null))
 
             it.printStackTrace()
-            addError(it, conversationId, title = context.getString(R.string.error_title_generation))
+            val errorMessage = it.message ?: ""
+            val isCloudflare = errorMessage.contains("403") ||
+                errorMessage.contains("Just a moment") ||
+                errorMessage.contains("Cloudflare") ||
+                errorMessage.contains("Unexpected JSON token")
+            val friendlyException = if (isCloudflare) {
+                Exception(context.getString(R.string.error_title_cloudflare_blocked), it)
+            } else {
+                it
+            }
+            addError(friendlyException, conversationId, title = context.getString(R.string.error_title_generation))
             Logging.log(TAG, "handleMessageComplete: $it")
             Logging.log(TAG, it.stackTraceToString())
         }.onSuccess {
@@ -780,15 +790,14 @@ class ChatService(
         }.onFailure {
             it.printStackTrace()
             val errorMessage = it.message ?: ""
-            val friendlyMessage = when {
-                errorMessage.contains("403") || errorMessage.contains("Just a moment") ->
-                    context.getString(R.string.error_title_cloudflare_blocked)
-                errorMessage.contains("Unexpected JSON token") && errorMessage.contains("DOCTYPE") ->
-                    context.getString(R.string.error_title_cloudflare_blocked)
-                errorMessage.contains("Cloudflare") ->
-                    context.getString(R.string.error_title_cloudflare_blocked)
-                else ->
-                    it.message ?: context.getString(R.string.error_title_unknown)
+            val isCloudflare = errorMessage.contains("403") ||
+                errorMessage.contains("Just a moment") ||
+                errorMessage.contains("Cloudflare") ||
+                errorMessage.contains("Unexpected JSON token")
+            val friendlyMessage = if (isCloudflare) {
+                context.getString(R.string.error_title_cloudflare_blocked)
+            } else {
+                it.message ?: context.getString(R.string.error_title_unknown)
             }
             addError(
                 error = Exception(friendlyMessage, it),

@@ -109,7 +109,22 @@ class ChatCompletionsAPI(
         }
 
         val bodyStr = response.body?.string() ?: ""
-        val bodyJson = json.parseToJsonElement(bodyStr).jsonObject
+        Log.i(TAG, "Response body: ${bodyStr.take(500)}")
+        val bodyJson = try {
+            json.parseToJsonElement(bodyStr).jsonObject
+        } catch (e: Exception) {
+            Log.e(TAG, "JSON parse error: ${e.message}")
+            Log.e(TAG, "Response was: ${bodyStr.take(1000)}")
+            val isCloudflare = bodyStr.contains("<!DOCTYPE") ||
+                bodyStr.contains("<html") ||
+                bodyStr.contains("Cloudflare") ||
+                bodyStr.contains("Our systems have detected") ||
+                bodyStr.contains("unusual traffic")
+            if (isCloudflare) {
+                throw Exception("API blocked by Cloudflare protection. Please try again later or use a different provider.", e)
+            }
+            throw e
+        }
 
         // 从 JsonObject 中提取必要的信息
         val id = bodyJson["id"]?.jsonPrimitive?.contentOrNull ?: ""
@@ -195,20 +210,27 @@ class ChatCompletionsAPI(
                 var exception = t
 
                 t?.printStackTrace()
-                println("[onFailure] 发生错误: ${t?.javaClass?.name} ${t?.message} / $response")
 
                 val bodyRaw = response?.body?.stringSafe()
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        println(bodyElement)
                         exception = bodyElement.parseErrorDetail()
                         Log.i(TAG, "onFailure: $exception")
                     }
                 } catch (e: Throwable) {
                     Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
-                    e.printStackTrace()
-                    exception = e
+                    val isCloudflare = bodyRaw?.contains("<!DOCTYPE") == true ||
+                        bodyRaw?.contains("<html") == true ||
+                        bodyRaw?.contains("Just a moment") == true ||
+                        bodyRaw?.contains("Cloudflare") == true ||
+                        bodyRaw?.contains("Our systems have detected") == true ||
+                        bodyRaw?.contains("unusual traffic") == true
+                    if (isCloudflare) {
+                        exception = Exception("API blocked by Cloudflare protection. Please try again later or use a different provider.", e)
+                    } else {
+                        exception = e
+                    }
                 } finally {
                     close(exception)
                 }
