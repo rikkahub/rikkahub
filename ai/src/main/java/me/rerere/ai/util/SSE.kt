@@ -14,6 +14,7 @@ import java.io.IOException
 class SSEEventSource(
     private val request: Request,
     private val listener: EventSourceListener,
+    private val allowMissingContentType: Boolean = false,
 ) : EventSource,
     ServerSentEventReader.Callback,
     Callback {
@@ -45,7 +46,7 @@ class SSEEventSource(
 
             val body = response.body
 
-            if (!body.isEventStream()) {
+            if (!body.isEventStream() && !(allowMissingContentType && body.contentType() == null)) {
                 listener.onFailure(
                     this,
                     IllegalStateException("Invalid content-type: ${body.contentType()}"),
@@ -116,7 +117,10 @@ class SSEEventSource(
     }
 
     companion object {
-        fun factory(callFactory: Call.Factory) = EventSource.Factory { request, listener ->
+        fun factory(
+            callFactory: Call.Factory,
+            allowMissingContentType: Boolean = false,
+        ) = EventSource.Factory { request, listener ->
             val actualRequest =
                 if (request.header("Accept") == null) {
                     request.newBuilder().addHeader("Accept", "text/event-stream").build()
@@ -124,7 +128,11 @@ class SSEEventSource(
                     request
                 }
 
-            SSEEventSource(actualRequest, listener).apply {
+            SSEEventSource(
+                request = actualRequest,
+                listener = listener,
+                allowMissingContentType = allowMissingContentType,
+            ).apply {
                 connect(callFactory)
             }
         }
