@@ -54,6 +54,10 @@ object BraveSearchService : SearchService<SearchServiceOptions.BraveOptions> {
         serviceOptions: SearchServiceOptions.BraveOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
+            if (serviceOptions.apiKey.isBlank()) {
+                error("Brave API key is required")
+            }
+
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
             val url = "https://api.search.brave.com/res/v1/web/search" +
                     "?q=${java.net.URLEncoder.encode(query, "UTF-8")}" +
@@ -85,7 +89,8 @@ object BraveSearchService : SearchService<SearchServiceOptions.BraveOptions> {
                     )
                 )
             } else {
-                error("Brave search failed with code ${response.code}: ${response.message}")
+                val errorBody = response.body?.string() ?: response.message
+                error("Brave search failed with code ${response.code}: $errorBody")
             }
         }
     }

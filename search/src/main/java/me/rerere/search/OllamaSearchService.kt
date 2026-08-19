@@ -61,6 +61,10 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
         serviceOptions: SearchServiceOptions.OllamaOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
+            if (serviceOptions.apiKey.isBlank()) {
+                error("Ollama API key is required")
+            }
+
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
 
             val body = buildJsonObject {
@@ -91,7 +95,8 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
                     )
                 )
             } else {
-                error("Ollama search failed with code ${response.code}: ${response.message}")
+                val errorBody = response.body?.string() ?: response.message
+                error("Ollama search failed with code ${response.code}: $errorBody")
             }
         }
     }
@@ -102,6 +107,10 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
         serviceOptions: SearchServiceOptions.OllamaOptions
     ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
         runCatching {
+            if (serviceOptions.apiKey.isBlank()) {
+                error("Ollama API key is required")
+            }
+
             val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
 
             val body = buildJsonObject {
@@ -116,7 +125,8 @@ object OllamaSearchService : SearchService<SearchServiceOptions.OllamaOptions> {
 
             val response = httpClient.newCall(request).await()
             if (!response.isSuccessful) {
-                error("response failed for url $url #${response.code}")
+                val errorBody = response.body?.string() ?: response.message
+                error("Ollama scrape failed for url $url #${response.code}: $errorBody")
             }
             val responseData = response.body.string().let {
                 json.decodeFromString<OllamaScrapeResponse>(it)

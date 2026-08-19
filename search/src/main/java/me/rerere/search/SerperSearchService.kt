@@ -63,6 +63,9 @@ object SerperSearchService : SearchService<SearchServiceOptions.SerperOptions> {
                 put("num", commonOptions.resultSize)
             }
             val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
+            if (apiKey.isBlank()) {
+                error("Serper API key is required")
+            }
 
             val request = Request.Builder()
                 .url("https://google.serper.dev/search")
@@ -94,7 +97,8 @@ object SerperSearchService : SearchService<SearchServiceOptions.SerperOptions> {
                     )
                 )
             } else {
-                error("Serper search failed with code ${response.code}: ${response.message}")
+                val errorBody = response.body?.string() ?: response.message
+                error("Serper search failed with code ${response.code}: $errorBody")
             }
         }
     }

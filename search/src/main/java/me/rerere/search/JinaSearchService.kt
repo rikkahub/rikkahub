@@ -65,6 +65,10 @@ object JinaSearchService : SearchService<SearchServiceOptions.JinaOptions> {
         serviceOptions: SearchServiceOptions.JinaOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
+            if (serviceOptions.apiKey.isBlank()) {
+                error("Jina API key is required")
+            }
+
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
 
             val body = buildJsonObject {
@@ -99,7 +103,8 @@ object JinaSearchService : SearchService<SearchServiceOptions.JinaOptions> {
                     )
                 )
             } else {
-                error("response failed #${response.code}")
+                val errorBody = response.body?.string() ?: response.message
+                error("Jina search failed with code ${response.code}: $errorBody")
             }
         }
     }
@@ -110,6 +115,10 @@ object JinaSearchService : SearchService<SearchServiceOptions.JinaOptions> {
         serviceOptions: SearchServiceOptions.JinaOptions
     ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
         runCatching {
+            if (serviceOptions.apiKey.isBlank()) {
+                error("Jina API key is required")
+            }
+
             val url = params["url"]?.jsonPrimitive?.content ?: error("urls is required")
 
             val body = buildJsonObject {
@@ -129,7 +138,8 @@ object JinaSearchService : SearchService<SearchServiceOptions.JinaOptions> {
 
             val response = httpClient.newCall(request).await()
             if (!response.isSuccessful) {
-                error("response failed for url $url #${response.code}")
+                val errorBody = response.body?.string() ?: response.message
+                error("Jina scrape failed for url $url #${response.code}: $errorBody")
             }
             val responseData = response.body.string().let {
                 json.decodeFromString<JinaScrapeResponse>(it)

@@ -77,6 +77,11 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
         serviceOptions: SearchServiceOptions.ExaOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
+            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
+            if (apiKey.isBlank()) {
+                error("Exa API key is required")
+            }
+
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
             val body = buildJsonObject {
                 put("query", JsonPrimitive(query))
@@ -86,7 +91,6 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                     put("text", JsonPrimitive(true))
                 })
             }
-            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
 
             val request = Request.Builder()
                 .url("https://api.exa.ai/search")
@@ -118,8 +122,8 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                         images = response.results.mapNotNull { it.image?.takeIf { url -> url.isNotBlank() } },
                     ))
             } else {
-                println(response.body.string())
-                error("response failed #${response.code}")
+                val errorBody = response.body?.string() ?: response.message
+                error("Exa search failed with code ${response.code}: $errorBody")
             }
         }
     }
@@ -130,6 +134,11 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
         serviceOptions: SearchServiceOptions.ExaOptions
     ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
         runCatching {
+            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
+            if (apiKey.isBlank()) {
+                error("Exa API key is required")
+            }
+
             val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
             val body = buildJsonObject {
                 put("urls", buildJsonArray {
@@ -137,7 +146,6 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                 })
                 put("text", JsonPrimitive(true))
             }
-            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
 
             val request = Request.Builder()
                 .url("https://api.exa.ai/contents")
@@ -170,8 +178,8 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                     )
                 )
             } else {
-                println(response.body.string())
-                error("response failed #${response.code}")
+                val errorBody = response.body?.string() ?: response.message
+                error("Exa scrape failed with code ${response.code}: $errorBody")
             }
         }
     }

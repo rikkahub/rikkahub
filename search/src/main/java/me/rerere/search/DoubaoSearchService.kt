@@ -53,6 +53,11 @@ object DoubaoSearchService : SearchService<SearchServiceOptions.DoubaoOptions> {
         serviceOptions: SearchServiceOptions.DoubaoOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
+            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
+            if (apiKey.isBlank()) {
+                error("Doubao API key is required")
+            }
+
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
             val body = when (serviceOptions.mode) {
                 DoubaoSearchMode.GLOBAL -> buildJsonObject {
@@ -75,7 +80,6 @@ object DoubaoSearchService : SearchService<SearchServiceOptions.DoubaoOptions> {
                 DoubaoSearchMode.GLOBAL -> "global_search"
                 DoubaoSearchMode.CUSTOM -> "web_search"
             }
-            val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
             val request = Request.Builder()
                 .url("https://open.feedcoopapi.com/search_api/$endpoint")
                 .post(json.encodeToString(body).toRequestBody(JSON_MEDIA_TYPE))

@@ -64,6 +64,10 @@ object TinyfishSearchService : SearchService<SearchServiceOptions.TinyfishOption
         serviceOptions: SearchServiceOptions.TinyfishOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
+            if (serviceOptions.apiKey.isBlank()) {
+                error("Tinyfish API key is required")
+            }
+
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
             val url = "https://api.search.tinyfish.ai" +
                     "?query=${java.net.URLEncoder.encode(query, "UTF-8")}"
@@ -93,7 +97,8 @@ object TinyfishSearchService : SearchService<SearchServiceOptions.TinyfishOption
                     )
                 )
             } else {
-                error("Tinyfish search failed with code ${response.code}: ${response.message}")
+                val errorBody = response.body?.string() ?: response.message
+                error("Tinyfish search failed with code ${response.code}: $errorBody")
             }
         }
     }
@@ -104,6 +109,10 @@ object TinyfishSearchService : SearchService<SearchServiceOptions.TinyfishOption
         serviceOptions: SearchServiceOptions.TinyfishOptions
     ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
         runCatching {
+            if (serviceOptions.apiKey.isBlank()) {
+                error("Tinyfish API key is required")
+            }
+
             val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
             val body = buildJsonObject {
                 put("urls", kotlinx.serialization.json.buildJsonArray {
@@ -139,7 +148,8 @@ object TinyfishSearchService : SearchService<SearchServiceOptions.TinyfishOption
                     )
                 )
             } else {
-                error("Tinyfish fetch failed with code ${response.code}: ${response.message}")
+                val errorBody = response.body?.string() ?: response.message
+                error("Tinyfish fetch failed with code ${response.code}: $errorBody")
             }
         }
     }
