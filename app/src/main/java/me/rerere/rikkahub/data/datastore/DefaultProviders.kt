@@ -311,31 +311,23 @@ val DEFAULT_PROVIDERS = listOf(
     ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("f8e7d6c5-b4a3-4221-9876-543210987654"),
-        name = "OVH AI Endpoints",
-        baseUrl = "https://endpoints.ai.cloud.ovh.net",
+        name = "OVH AI",
+        baseUrl = "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
         apiKey = "",
-        enabled = false,
+        enabled = true,
         builtIn = true,
         description = {
             Text(
                 text = buildAnnotatedString {
-                    append("Free AI endpoints by OVHcloud. Provides open-source models like Llama and Mistral.")
+                    append("Free AI endpoints by OVHcloud. No API key required.")
                 }
             )
         },
         models = listOf(
             Model(
                 id = Uuid.parse("a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
-                modelId = "llama3-8b-instruct",
-                displayName = "Llama 3 8B",
-                inputModalities = listOf(Modality.TEXT),
-                outputModalities = listOf(Modality.TEXT),
-                abilities = emptyList(),
-            ),
-            Model(
-                id = Uuid.parse("b2c3d4e5-f6a7-8901-bcde-f12345678901"),
-                modelId = "mixtral-8x7b-instruct",
-                displayName = "Mixtral 8x7B",
+                modelId = "Meta-Llama-3_3-70B-Instruct",
+                displayName = "Llama 3.3 70B",
                 inputModalities = listOf(Modality.TEXT),
                 outputModalities = listOf(Modality.TEXT),
                 abilities = emptyList(),
