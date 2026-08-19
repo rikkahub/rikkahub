@@ -132,6 +132,7 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
                 providers = settings.providers,
                 onSelect = { vm.updateSettings(settings.copy(titleModelId = it.id)) },
                 onClear = { vm.updateSettings(settings.copy(titleModelId = null)) },
+                showAuto = true,
             )
         }
         item {
@@ -156,6 +157,8 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
                 modelId = settings.ocrModelId,
                 providers = settings.providers,
                 onSelect = { vm.updateSettings(settings.copy(ocrModelId = it.id)) },
+                onClear = { vm.updateSettings(settings.copy(ocrModelId = null)) },
+                showAuto = true,
             )
         }
         item {
@@ -206,7 +209,7 @@ private fun SuggestionModelSettingItem(
                         ) {
                             Text(
                                 text = state.currentModel?.displayName
-                                    ?: stringResource(R.string.model_list_select_model),
+                                    ?: "Auto",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -250,6 +253,7 @@ private fun ModelSettingItem(
     providers: List<ProviderSetting>,
     onSelect: (Model) -> Unit,
     onClear: (() -> Unit)? = null,
+    showAuto: Boolean = false,
 ) {
     val state = rememberModelListState(
         modelId = modelId,
@@ -268,8 +272,12 @@ private fun ModelSettingItem(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Text(
-                            text = state.currentModel?.displayName
-                                ?: stringResource(R.string.model_list_select_model),
+                            text = if (showAuto && state.currentModel == null) {
+                                "Auto"
+                            } else {
+                                state.currentModel?.displayName
+                                    ?: stringResource(R.string.model_list_select_model)
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,

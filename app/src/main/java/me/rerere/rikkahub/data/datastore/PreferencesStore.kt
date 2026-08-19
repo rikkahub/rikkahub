@@ -48,6 +48,7 @@ import me.rerere.rikkahub.ui.theme.PresetThemes
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.toMutableStateFlow
 import me.rerere.search.SearchCommonOptions
+import me.rerere.ai.registry.ModelRegistry
 import me.rerere.search.SearchServiceOptions
 import me.rerere.tts.provider.TTSProviderSetting
 import org.koin.core.component.KoinComponent
@@ -526,7 +527,7 @@ data class Settings(
     val enableSuggestion: Boolean = true,
     val suggestionModelId: Uuid? = null,
     val suggestionPrompt: String = DEFAULT_SUGGESTION_PROMPT,
-    val ocrModelId: Uuid = Uuid.random(),
+    val ocrModelId: Uuid? = null,
     val ocrPrompt: String = DEFAULT_OCR_PROMPT,
     val compressModelId: Uuid = Uuid.random(),
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
@@ -663,6 +664,23 @@ fun List<ProviderSetting>.findModelById(uuid: Uuid): Model? {
 
 fun Settings.getCurrentChatModel(): Model? {
     return findModelById(this.getCurrentAssistant().chatModelId ?: this.chatModelId)
+}
+
+fun Settings.findAutoModel(requireVision: Boolean = false): Model? {
+    val allProviders = this.providers.filter { it.enabled }
+    for (provider in allProviders) {
+        for (model in provider.models) {
+            if (requireVision) {
+                val modalities = ModelRegistry.MODEL_INPUT_MODALITIES.getData(model.modelId)
+                if (modalities.contains(me.rerere.ai.provider.Modality.IMAGE)) {
+                    return model
+                }
+            } else {
+                return model
+            }
+        }
+    }
+    return null
 }
 
 fun Settings.getCurrentAssistant(): Assistant {
