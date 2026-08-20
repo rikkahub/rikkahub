@@ -12,6 +12,7 @@ import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.Modality
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
@@ -207,6 +208,15 @@ val DEFAULT_PROVIDERS = listOf(
                 displayName = "GPT OSS 120B",
                 inputModalities = listOf(Modality.TEXT),
                 outputModalities = listOf(Modality.TEXT),
+                abilities = emptyList(),
+            ),
+            Model(
+                id = Uuid.parse("b8c9d0e1-f2a3-4567-bcde-678901234567"),
+                modelId = "stable-diffusion-xl-base-v10",
+                displayName = "Stable Diffusion XL",
+                type = ModelType.IMAGE,
+                inputModalities = listOf(Modality.TEXT),
+                outputModalities = listOf(Modality.IMAGE),
                 abilities = emptyList(),
             ),
         )
