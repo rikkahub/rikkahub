@@ -519,7 +519,7 @@ data class Settings(
     val chatModelId: Uuid = Uuid.random(),
     val fastModelId: Uuid = Uuid.random(),
     val titleModelId: Uuid? = null,
-    val imageGenerationModelId: Uuid = Uuid.random(),
+    val imageGenerationModelId: Uuid = DEFAULT_IMAGE_GENERATION_MODEL_ID,
     val titlePrompt: String = DEFAULT_TITLE_PROMPT,
     val translateModeId: Uuid = Uuid.random(),
     val translatePrompt: String = DEFAULT_TRANSLATION_PROMPT,
@@ -727,6 +727,7 @@ private fun Model.findModelProviderFromList(providers: List<ProviderSetting>): P
 }
 
 internal val DEFAULT_ASSISTANT_ID = Uuid.parse("0950e2dc-9bd5-4801-afa3-aa887aa36b4e")
+internal val DEFAULT_IMAGE_GENERATION_MODEL_ID = Uuid.parse("b8c9d0e1-f2a3-4567-bcde-678901234567")
 internal val DEFAULT_ASSISTANTS = listOf(
     Assistant(
         id = DEFAULT_ASSISTANT_ID,

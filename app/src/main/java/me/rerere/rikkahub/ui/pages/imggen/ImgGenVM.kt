@@ -68,7 +68,7 @@ class ImgGenVM(
     private val _numberOfImages = MutableStateFlow(1)
     val numberOfImages: StateFlow<Int> = _numberOfImages
 
-    private val _size = MutableStateFlow(ImageGenSize.AUTO.value)
+    private val _size = MutableStateFlow(ImageGenSize.SQUARE_1024.value)
     val size: StateFlow<String> = _size
 
     private val _isGenerating = MutableStateFlow(false)
