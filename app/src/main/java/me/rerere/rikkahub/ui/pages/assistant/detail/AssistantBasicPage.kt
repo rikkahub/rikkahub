@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -21,6 +23,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -29,9 +32,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -376,28 +382,99 @@ internal fun AssistantBasicContent(
                     )
                 }
             ) {
-                Slider(
-                    value = assistant.contextMessageLimit.toFloat(),
-                    onValueChange = { value ->
-                        onUpdate(
-                            assistant.copy(
-                                contextMessageLimit = snapContextMessageLimit(value)
+                var contextMessageLimitInput by remember(
+                    assistant.id,
+                    assistant.contextMessageLimit
+                ) {
+                    mutableStateOf(assistant.contextMessageLimit.toString())
+                }
+                var contextMessageLimitFocused by remember(assistant.id) {
+                    mutableStateOf(false)
+                }
+                var showContextMessageLimitDialog by remember(assistant.id) {
+                    mutableStateOf(false)
+                }
+                val focusManager = LocalFocusManager.current
+
+                fun commitContextMessageLimit() {
+                    val value = contextMessageLimitInput.toIntOrNull()
+                    if (value == null) {
+                        contextMessageLimitInput = assistant.contextMessageLimit.toString()
+                        return
+                    }
+
+                    val normalizedValue = normalizeContextMessageLimit(value)
+                    contextMessageLimitInput = normalizedValue.toString()
+                    if (normalizedValue != assistant.contextMessageLimit) {
+                        onUpdate(assistant.copy(contextMessageLimit = normalizedValue))
+                    }
+                    if (normalizedValue != value) {
+                        showContextMessageLimitDialog = true
+                    }
+                }
+
+                val contextMessageLimitValue = contextMessageLimitInput.toIntOrNull()
+                OutlinedTextField(
+                    value = contextMessageLimitInput,
+                    onValueChange = { input ->
+                        if (input.all(Char::isDigit) &&
+                            (input.isEmpty() || input.toIntOrNull() != null)
+                        ) {
+                            contextMessageLimitInput = input
+                            input.toIntOrNull()
+                                ?.takeIf { it == 0 || it >= MIN_CONTEXT_MESSAGE_LIMIT }
+                                ?.takeIf { it != assistant.contextMessageLimit }
+                                ?.let { onUpdate(assistant.copy(contextMessageLimit = it)) }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focusState ->
+                            if (contextMessageLimitFocused && !focusState.isFocused) {
+                                commitContextMessageLimit()
+                            }
+                            contextMessageLimitFocused = focusState.isFocused
+                        },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Done
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = { focusManager.clearFocus() }
+                    ),
+                    singleLine = true,
+                    isError = contextMessageLimitValue in 1 until MIN_CONTEXT_MESSAGE_LIMIT,
+                    supportingText = {
+                        Text(
+                            stringResource(
+                                R.string.assistant_page_context_message_limit_hint,
+                                MIN_CONTEXT_MESSAGE_LIMIT
                             )
                         )
-                    },
-                    valueRange = 0f..512f,
-                    steps = 0,
-                    modifier = Modifier.fillMaxWidth()
+                    }
                 )
 
-                Text(
-                    text = if (assistant.contextMessageLimit > 0) stringResource(
-                        R.string.assistant_page_context_message_limit_count,
-                        assistant.contextMessageLimit
-                    ) else stringResource(R.string.assistant_page_context_message_limit_unlimited),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
-                )
+                if (showContextMessageLimitDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showContextMessageLimitDialog = false },
+                        title = {
+                            Text(stringResource(R.string.assistant_page_context_message_limit))
+                        },
+                        text = {
+                            Text(
+                                stringResource(
+                                    R.string.assistant_page_context_message_limit_too_small,
+                                    MIN_CONTEXT_MESSAGE_LIMIT
+                                )
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showContextMessageLimitDialog = false }) {
+                                Text(stringResource(R.string.common_confirm))
+                            }
+                        }
+                    )
+                }
 
                 if (assistant.contextMessageLimit > 0) {
                     Text(
@@ -571,14 +648,5 @@ internal fun AssistantBasicContent(
  */
 private const val MIN_CONTEXT_MESSAGE_LIMIT = 20
 
-/**
- * 把滑块取值吸附到 0(不限制) 或不低于 [MIN_CONTEXT_MESSAGE_LIMIT] 的有效档位
- */
-private fun snapContextMessageLimit(value: Float): Int {
-    val raw = value.roundToInt()
-    return when {
-        raw < MIN_CONTEXT_MESSAGE_LIMIT / 2 -> 0
-        raw < MIN_CONTEXT_MESSAGE_LIMIT -> MIN_CONTEXT_MESSAGE_LIMIT
-        else -> raw
-    }
-}
+internal fun normalizeContextMessageLimit(value: Int): Int =
+    if (value in 1 until MIN_CONTEXT_MESSAGE_LIMIT) MIN_CONTEXT_MESSAGE_LIMIT else value
