@@ -147,19 +147,6 @@ val DEFAULT_PROVIDERS = listOf(
         )
     ),
     ProviderSetting.OpenAI(
-        id = Uuid.parse("386e0f29-8228-4512-affe-8fd8add82d88"),
-        name = "Vercel AI Gateway",
-        baseUrl = "https://ai-gateway.vercel.sh/v1",
-        apiKey = "",
-        enabled = false,
-        builtIn = true,
-        balanceOption = BalanceOption(
-            enabled = true,
-            apiPath = "/credits",
-            resultPath = "balance",
-        )
-    ),
-    ProviderSetting.OpenAI(
         id = Uuid.parse("f8e7d6c5-b4a3-4221-9876-543210987654"),
         name = "OVH AI",
         baseUrl = "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
@@ -222,6 +209,19 @@ val DEFAULT_PROVIDERS = listOf(
                 outputModalities = listOf(Modality.TEXT),
                 abilities = emptyList(),
             ),
+        )
+    ),
+    ProviderSetting.OpenAI(
+        id = Uuid.parse("386e0f29-8228-4512-affe-8fd8add82d88"),
+        name = "Vercel AI Gateway",
+        baseUrl = "https://ai-gateway.vercel.sh/v1",
+        apiKey = "",
+        enabled = false,
+        builtIn = true,
+        balanceOption = BalanceOption(
+            enabled = true,
+            apiPath = "/credits",
+            resultPath = "balance",
         )
     ),
     ProviderSetting.OpenAI(
