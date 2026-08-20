@@ -109,7 +109,6 @@ class ChatCompletionsAPI(
         }
 
         val bodyStr = response.body?.string() ?: ""
-        Log.i(TAG, "Response body: ${bodyStr.take(500)}")
         val bodyJson = try {
             json.parseToJsonElement(bodyStr).jsonObject
         } catch (e: Exception) {
