@@ -123,5 +123,13 @@ class ModelRegistryTest {
             reasonerAbilities,
             ModelRegistry.MODEL_ABILITIES.getData("deepseek-v4-pro")
         )
+        assertEquals(
+            listOf(Modality.TEXT, Modality.IMAGE),
+            ModelRegistry.MODEL_INPUT_MODALITIES.getData("deepseek-v4-flash-vision-exp")
+        )
+        assertEquals(
+            reasonerAbilities,
+            ModelRegistry.MODEL_ABILITIES.getData("deepseek-v4-flash-vision-exp")
+        )
     }
 }
