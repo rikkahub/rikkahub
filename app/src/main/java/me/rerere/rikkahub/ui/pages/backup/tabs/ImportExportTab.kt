@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +55,7 @@ fun ImportExportTab(
     val selectedBackupItems by vm.localBackupItems.collectAsStateWithLifecycle()
     var isExporting by remember { mutableStateOf(false) }
     var isRestoring by remember { mutableStateOf(false) }
+    var showImportConfirmDialog by remember { mutableStateOf(false) }
 
     // 导入类型：local 为本地备份，chatbox 为 Chatbox 导入，cherry 为 Cherry Studio 导入
     var importType by remember { mutableStateOf("local") }
@@ -251,8 +254,7 @@ fun ImportExportTab(
                 item(
                     onClick = if (!isRestoring) {
                         {
-                            importType = "local"
-                            openDocumentLauncher.launch(arrayOf("application/zip"))
+                            showImportConfirmDialog = true
                         }
                     } else null,
                     headlineContent = { Text(stringResource(R.string.backup_page_local_backup_import)) },
@@ -321,5 +323,29 @@ fun ImportExportTab(
                 )
             }
         }
+    }
+
+    if (showImportConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportConfirmDialog = false },
+            title = { Text(stringResource(R.string.backup_page_local_backup_import)) },
+            text = { Text(stringResource(R.string.backup_page_import_overwrite_confirm)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showImportConfirmDialog = false
+                        importType = "local"
+                        openDocumentLauncher.launch(arrayOf("application/zip"))
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportConfirmDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
     }
 }

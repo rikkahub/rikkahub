@@ -1293,5 +1293,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_update_reminder_pause_days">%1$d일</string>
   <string name="setting_update_reminder_resume_now">지금 재개</string>
   <string name="reasoning_max">최대</string>
+  <string name="backup_page_import_overwrite_confirm">백업을 가져오면 앱 데이터가 덮어써집니다. 계속하시겠습니까?</string>
 </resources>
 

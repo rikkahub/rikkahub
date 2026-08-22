@@ -1300,4 +1300,6 @@
   <string name="setting_update_reminder_pause_description">Choose how long to pause update reminders. They will resume automatically.</string>
   <string name="setting_update_reminder_pause_days">%1$d days</string>
   <string name="setting_update_reminder_resume_now">Resume now</string>
+  <string name="backup_page_import_overwrite_confirm">Importing a backup will overwrite app data. Continue?</string>
 </resources>
+

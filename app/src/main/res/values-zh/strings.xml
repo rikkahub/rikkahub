@@ -1298,4 +1298,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_update_reminder_pause_days">%1$d 天</string>
   <string name="setting_update_reminder_resume_now">立即恢复</string>
   <string name="reasoning_max">最大</string>
+  <string name="backup_page_import_overwrite_confirm">导入备份会覆盖 App 数据，是否继续</string>
 </resources>
+

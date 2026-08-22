@@ -1293,5 +1293,6 @@
   <string name="setting_update_reminder_pause_days">%1$d дн.</string>
   <string name="setting_update_reminder_resume_now">Возобновить сейчас</string>
   <string name="reasoning_max">Максимум</string>
+  <string name="backup_page_import_overwrite_confirm">Импорт резервной копии перезапишет данные приложения. Продолжить?</string>
 </resources>
 
