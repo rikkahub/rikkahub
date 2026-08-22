@@ -10,6 +10,7 @@ import java.time.ZoneId
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.time.toJavaInstant
+import kotlin.uuid.Uuid
 
 private const val TIME_GAP_THRESHOLD_SECONDS = 3600L // 1 小时
 
@@ -24,33 +25,45 @@ object TimeReminderTransformer : InputMessageTransformer {
         messages: List<UIMessage>,
     ): List<UIMessage> {
         if (!ctx.assistant.enableTimeReminder) return messages
-        return applyTimeReminder(messages)
+        val presetMessageIds = ctx.assistant.presetMessages.map { it.id }.toSet()
+        return applyTimeReminder(messages, presetMessageIds)
     }
 }
 
-internal fun applyTimeReminder(messages: List<UIMessage>): List<UIMessage> {
+internal fun applyTimeReminder(
+    messages: List<UIMessage>,
+    presetMessageIds: Set<Uuid> = emptySet(),
+): List<UIMessage> {
     val result = mutableListOf<UIMessage>()
     val tz = TimeZone.currentSystemDefault()
 
-    var firstUserFound = false
-    for (i in messages.indices) {
-        val current = messages[i]
+    var firstRealUserFound = false
+    var previousRealMessage: UIMessage? = null
+    for (current in messages) {
+        // Preset messages prime the assistant but are not elapsed conversation history.
+        if (current.id in presetMessageIds) {
+            result.add(current)
+            continue
+        }
+
         if (current.role == MessageRole.USER) {
             val currInstant = current.createdAt.toInstant(tz)
-            if (!firstUserFound) {
-                firstUserFound = true
+            if (!firstRealUserFound) {
+                firstRealUserFound = true
                 result.add(buildTimeReminderMessage(null, currInstant))
             } else {
-                val previous = messages[i - 1]
-                val prevInstant = previous.createdAt.toInstant(tz)
-                val gapSeconds = (currInstant - prevInstant).inWholeSeconds
+                previousRealMessage?.let { previous ->
+                    val prevInstant = previous.createdAt.toInstant(tz)
+                    val gapSeconds = (currInstant - prevInstant).inWholeSeconds
 
-                if (gapSeconds > TIME_GAP_THRESHOLD_SECONDS) {
-                    result.add(buildTimeReminderMessage(gapSeconds, currInstant))
+                    if (gapSeconds > TIME_GAP_THRESHOLD_SECONDS) {
+                        result.add(buildTimeReminderMessage(gapSeconds, currInstant))
+                    }
                 }
             }
         }
         result.add(current)
+        previousRealMessage = current
     }
 
     return result
