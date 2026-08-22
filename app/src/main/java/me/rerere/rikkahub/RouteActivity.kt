@@ -2,6 +2,7 @@ package me.rerere.rikkahub
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
@@ -198,13 +199,25 @@ class RouteActivity : ComponentActivity() {
         }
     }
 
+    private fun Intent.shareStreamUri(): Uri? {
+        val uri = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            getParcelableExtra(Intent.EXTRA_STREAM)
+        }
+        if (uri != null) return uri
+        // Some senders deliver the stream via ClipData (e.g. multiple images)
+        return clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+    }
+
     @Composable
     private fun ShareHandler(backStack: MutableList<NavKey>) {
         val shareIntent = remember {
             Intent().apply {
                 action = intent?.action
                 putExtra(Intent.EXTRA_TEXT, intent?.getStringExtra(Intent.EXTRA_TEXT))
-                putExtra(Intent.EXTRA_STREAM, intent?.getStringExtra(Intent.EXTRA_STREAM))
+                putExtra(Intent.EXTRA_STREAM, intent?.shareStreamUri())
                 putExtra(Intent.EXTRA_PROCESS_TEXT, intent?.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT))
             }
         }
@@ -213,7 +226,7 @@ class RouteActivity : ComponentActivity() {
             when (shareIntent.action) {
                 Intent.ACTION_SEND -> {
                     val text = shareIntent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
-                    val imageUri = shareIntent.getStringExtra(Intent.EXTRA_STREAM)
+                    val imageUri = shareIntent.shareStreamUri()?.toString()
                     backStack.add(Screen.ShareHandler(text, imageUri))
                 }
 
