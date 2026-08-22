@@ -314,19 +314,41 @@ private fun StatsGrid(stats: AppStats, modifier: Modifier = Modifier) {
             )
         }
         if (stats.totalCachedTokens > 0) {
-            StatCard(
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth(),
-                icon = HugeIcons.Zap,
-                label = stringResource(R.string.stats_page_cached_tokens),
-                value = formatTokens(stats.totalCachedTokens),
+            ) {
+                StatCard(
+                    modifier = Modifier.weight(1f),
+                    icon = HugeIcons.Zap,
+                    label = stringResource(R.string.stats_page_cached_tokens),
+                    value = formatTokens(stats.totalCachedTokens),
+                )
+                StatCard(
+                    modifier = Modifier.weight(1f),
+                    icon = HugeIcons.Zap,
+                    label = stringResource(R.string.stats_page_cache_hit_rate),
+                    value = formatPercentage(stats.cacheHitRate),
+                )
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            StatCard(
+                modifier = Modifier.weight(1f),
+                icon = HugeIcons.Rocket01,
+                label = stringResource(R.string.stats_page_total_requests),
+                value = formatCount(stats.totalRequests.toLong()),
+            )
+            StatCard(
+                modifier = Modifier.weight(1f),
+                icon = HugeIcons.Rocket01,
+                label = stringResource(R.string.stats_page_launch_count),
+                value = formatCount(stats.launchCount.toLong()),
             )
         }
-        StatCard(
-            modifier = Modifier.fillMaxWidth(),
-            icon = HugeIcons.Rocket01,
-            label = stringResource(R.string.stats_page_launch_count),
-            value = formatCount(stats.launchCount.toLong()),
-        )
     }
 }
 
@@ -372,4 +394,9 @@ private fun formatTokens(count: Long): String = when {
     count >= 1_000_000 -> "%.2fM".format(count / 1_000_000.0)
     count >= 1_000 -> "%.1fK".format(count / 1_000.0)
     else -> count.toString()
+}
+
+private fun formatPercentage(rate: Float): String {
+    val displayRate = (rate * 100).coerceIn(0f, 100f)
+    return "%.1f%%".format(displayRate)
 }
