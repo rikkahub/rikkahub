@@ -82,6 +82,9 @@ class RikkaHubApp : Application() {
         // sync upload files to DB
         syncManagedFiles()
 
+        // auto cleanup old upload images (if enabled in settings)
+        cleanupOldImages()
+
         // Start WebServer if enabled in settings
         startWebServerIfEnabled()
 
@@ -150,6 +153,20 @@ class RikkaHubApp : Application() {
                 get<FilesManager>().syncFolder()
             }.onFailure {
                 Log.e(TAG, "syncManagedFiles failed", it)
+            }
+        }
+    }
+
+    private fun cleanupOldImages() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                val days = get<SettingsStore>().settingsFlowRaw.first().autoCleanupImageDays
+                if (days > 0) {
+                    val (count, freedBytes) = get<FilesManager>().deleteOlderThan(days)
+                    Log.i(TAG, "cleanupOldImages: deleted $count files, freed ${freedBytes / 1024} KB")
+                }
+            }.onFailure {
+                Log.e(TAG, "cleanupOldImages failed", it)
             }
         }
     }
