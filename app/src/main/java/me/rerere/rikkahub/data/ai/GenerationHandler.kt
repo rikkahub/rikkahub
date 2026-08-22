@@ -415,6 +415,7 @@ class GenerationHandler(
                 addAll(model.customBodies)
             }
         )
+        val stepStart = Clock.System.now()
         if (stream) {
             val streamChunkHandler = StreamChunkHandler(model)
             providerImpl.streamText(
@@ -432,8 +433,14 @@ class GenerationHandler(
                 params = params,
             )
             messages = messages.handleTextGenerationResult(result = result, model = model)
-            onUpdateMessages(messages)
         }
+        val stepDurationMillis = (Clock.System.now() - stepStart).inWholeMilliseconds
+        val lastMessage = messages.last()
+        messages = messages.dropLast(1) + lastMessage.copy(
+            generationTimeMillis = lastMessage.generationTimeMillis?.plus(stepDurationMillis)
+                ?: stepDurationMillis
+        )
+        onUpdateMessages(messages)
     }
 
     private fun maybeTruncateToolOutput(
