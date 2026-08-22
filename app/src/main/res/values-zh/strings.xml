@@ -910,6 +910,16 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_advanced_settings">高级设置</string>
   <string name="setting_provider_page_api_base_url">API Base Url</string>
   <string name="setting_provider_page_api_key">API Key</string>
+  <string name="setting_provider_page_auth_method">认证方式</string>
+  <string name="setting_provider_page_chatgpt_subscription">ChatGPT 订阅</string>
+  <string name="setting_provider_page_chatgpt_subscription_desc">使用符合条件的 ChatGPT 订阅所包含的 Codex 用量。登录会在 OpenAI 官方网页中完成，不消耗 API 余额。</string>
+  <string name="setting_provider_page_signed_in">已登录</string>
+  <string name="setting_provider_page_sign_in_chatgpt">使用 ChatGPT 登录</string>
+  <string name="setting_provider_page_signing_in">等待登录…</string>
+  <string name="setting_provider_page_sign_out">退出登录</string>
+  <string name="setting_provider_page_device_code_title">登录 OpenAI Codex</string>
+  <string name="setting_provider_page_device_code_desc">下方的一次性代码已复制到剪贴板，请粘贴到浏览器中打开的 OpenAI 页面。</string>
+  <string name="setting_provider_page_open_browser">打开浏览器</string>
   <string name="setting_provider_page_api_path">API 路径</string>
   <string name="setting_provider_page_avaliable_models">可用模型</string>
   <string name="setting_provider_page_balance_api_path">余额 API 路径</string>
