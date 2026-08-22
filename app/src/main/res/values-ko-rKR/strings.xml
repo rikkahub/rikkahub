@@ -1159,7 +1159,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="workspace_detail_tool_delete_file">파일 삭제</string>
   <string name="workspace_detail_tool_move_file">파일 이동</string>
   <string name="workspace_detail_tool_shell">명령 실행</string>
-  <string name="workspace_detail_install_rootfs_desc">%s의 linux 디렉터리에 tar.gz를 다운로드하여 압축을 풉니다.</string>
+  <string name="workspace_detail_install_rootfs_desc">로컬 아카이브 파일 또는 URL에서 Rootfs를 %s의 linux 디렉터리에 설치합니다.</string>
   <string name="workspace_detail_download_url">tar.gz 다운로드 URL</string>
   <string name="workspace_detail_area_files">파일</string>
   <string name="workspace_detail_area_rootfs">루트 파일 시스템</string>
@@ -1275,6 +1275,10 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_page_delete_folder_generating">이 폴더의 일부 대화가 아직 생성 중입니다. 삭제하기 전에 중지해 주세요.</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 괄호 안 내용 읽지 않기</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">활성화하면 TTS가 괄호 안의 내용을 읽지 않습니다</string>
+  <string name="workspace_detail_uploading">업로드 중 %1$s%2$s</string>
+  <string name="workspace_detail_install_from_local_file">로컬 파일에서 설치</string>
+  <string name="workspace_detail_install_from_url">또는 URL에서 설치</string>
+  <string name="tool_ui_shell_truncated">출력이 잘렸습니다</string>
   <string name="assistant_page_context_message_limit">컨텍스트 메시지 제한</string>
   <string name="assistant_page_context_message_limit_desc">모델로 전송되는 최근 메시지 수를 제한합니다. 제한을 초과하면 한 번에 하나씩 메시지를 삭제하는 대신 컨텍스트가 한 번에 약 절반으로 줄어들어 요청 접두사가 안정적으로 유지되고 프롬프트 캐싱이 여러 턴 동안 계속 작동합니다.</string>
   <string name="assistant_page_context_message_limit_count">컨텍스트 메시지 한도: %d</string>

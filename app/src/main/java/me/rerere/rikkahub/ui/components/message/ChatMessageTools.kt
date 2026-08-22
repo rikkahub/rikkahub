@@ -36,7 +36,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -108,12 +107,14 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         ToolUIContext(
             tool = tool,
             arguments = tool.inputAsJson(),
+            // 输出不是合法 JSON (工具异常输出堆栈等) 时置 null,
+            // 各渲染器据此回退到默认的 "调用工具/调用结果" 展示, 而不是渲染出空壳
             content = if (tool.isExecuted) {
                 runCatching {
                     JsonInstant.parseToJsonElement(
                         tool.output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
                     )
-                }.getOrElse { JsonObject(emptyMap()) }
+                }.getOrNull()
             } else {
                 null
             },
@@ -188,7 +189,9 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         } else {
             null
         },
-        onClick = if (context.content != null || isPending || images.isNotEmpty()) {
+        // 点击开关只看 "是否已执行", 与输出能否解析为 JSON 解耦:
+        // MCP 等工具的纯文本输出/报错 content 为 null, 但详情页渲染的是原始输出, 仍可查看
+        onClick = if (tool.isExecuted || isPending || images.isNotEmpty()) {
             { showResult = true }
         } else {
             null

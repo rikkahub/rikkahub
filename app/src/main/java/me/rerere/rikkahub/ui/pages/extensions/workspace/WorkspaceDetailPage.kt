@@ -31,6 +31,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -121,6 +122,24 @@ fun WorkspaceDetailPage(id: String) {
         if (uri == null) return@rememberLauncherForActivityResult
         val outputStream = context.contentResolver.openOutputStream(uri) ?: return@rememberLauncherForActivityResult
         vm.exportFile(entry, outputStream)
+    }
+    val rootfsArchivePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        var fileName: String? = null
+        var size: Long? = null
+        context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0 && !cursor.isNull(nameIndex)) fileName = cursor.getString(nameIndex)
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) size = cursor.getLong(sizeIndex)
+            }
+        }
+        val resolvedName = fileName ?: uri.lastPathSegment ?: "rootfs.tar.gz"
+        val inputStream = context.contentResolver.openInputStream(uri) ?: return@rememberLauncherForActivityResult
+        vm.installRootfsFromFile(inputStream, resolvedName, size)
     }
 
     BackHandler(enabled = pagerState.currentPage == 1 && state.path.isNotBlank()) {
@@ -261,9 +280,14 @@ fun WorkspaceDetailPage(id: String) {
             InstallRootfsDialog(
                 workspace = workspace,
                 onDismiss = { showInstallDialog = false },
-                onConfirm = { url ->
+                onConfirmUrl = { url ->
                     vm.installRootfs(url)
                     showInstallDialog = false
+                },
+                onPickLocalFile = {
+                    showInstallDialog = false
+                    // tar.gz/tar.xz 的 MIME 类型在各设备上不统一, 用 */* 放开选择, 由安装侧按扩展名识别格式
+                    rootfsArchivePicker.launch(arrayOf("*/*"))
                 },
             )
         }
@@ -504,7 +528,9 @@ private fun RootfsProgress(progress: RootfsInstallProgress) {
         val fraction = progress.totalBytes?.takeIf { it > 0 }?.let {
             (progress.bytesRead.toFloat() / it).coerceIn(0f, 1f)
         }
-        if (fraction != null && progress.stage == RootfsInstallStage.DOWNLOADING) {
+        val hasDeterminateProgress = fraction != null &&
+            (progress.stage == RootfsInstallStage.DOWNLOADING || progress.stage == RootfsInstallStage.UPLOADING)
+        if (hasDeterminateProgress) {
             LinearProgressIndicator(
                 progress = { fraction },
                 modifier = Modifier.fillMaxWidth(),
@@ -514,6 +540,11 @@ private fun RootfsProgress(progress: RootfsInstallProgress) {
         }
         Text(
             text = when (progress.stage) {
+                RootfsInstallStage.UPLOADING -> {
+                    val total = progress.totalBytes?.let { " / ${it.fileSizeToString()}" }.orEmpty()
+                    stringResource(R.string.workspace_detail_uploading, progress.bytesRead.fileSizeToString(), total)
+                }
+
                 RootfsInstallStage.DOWNLOADING -> {
                     val total = progress.totalBytes?.let { " / ${it.fileSizeToString()}" }.orEmpty()
                     stringResource(R.string.workspace_detail_downloading, progress.bytesRead.fileSizeToString(), total)
@@ -538,7 +569,8 @@ private fun RootfsProgress(progress: RootfsInstallProgress) {
 private fun InstallRootfsDialog(
     workspace: WorkspaceEntity,
     onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
+    onConfirmUrl: (String) -> Unit,
+    onPickLocalFile: () -> Unit,
 ) {
     var url by rememberSaveable(workspace.id) { mutableStateOf(DEFAULT_ROOTFS_URL) }
 
@@ -552,6 +584,21 @@ private fun InstallRootfsDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                OutlinedButton(
+                    onClick = onPickLocalFile,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(HugeIcons.FileImport, contentDescription = null)
+                    Text(
+                        text = stringResource(R.string.workspace_detail_install_from_local_file),
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.workspace_detail_install_from_url),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
@@ -563,7 +610,7 @@ private fun InstallRootfsDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(url.trim()) },
+                onClick = { onConfirmUrl(url.trim()) },
                 enabled = url.isNotBlank(),
             ) {
                 Text(stringResource(R.string.common_install))
