@@ -18,6 +18,25 @@ private val supportedTypes = setOf(
     "image/webp",
 )
 
+/**
+ * 图片压缩配置。默认值与原有行为完全一致（最长边 10000px / 1600 万像素以内，JPEG 质量 85，不限制文件大小）。
+ * [maxBytes] 非 null 时，编码结果会循环降质量/缩尺寸，直至文件大小不超过该值（GIF 动图除外）。
+ */
+data class ImageCompressConfig(
+    val maxDimension: Int = 10_000,
+    val maxPixels: Long = 16_000_000L,
+    val maxBytes: Long? = null,
+    val initialQuality: Int = 85,
+    val minQuality: Int = 30,
+    val qualityStep: Int = 15,
+    val scaleFactor: Float = 0.75f,
+    val maxAttempts: Int = 12,
+)
+
+// 当前生效的图片压缩配置，由 app 模块在设置变更时同步（默认不限制文件大小）
+@Volatile
+var currentImageCompressConfig: ImageCompressConfig = ImageCompressConfig()
+
 data class EncodedImage(
     val base64: String,
     val mimeType: String
@@ -115,15 +134,14 @@ fun UIMessagePart.Audio.encodeBase64(withPrefix: Boolean = true): Result<String>
 }
 
 private fun File.compressAndEncode(
-    mimeType: String,
-    maxDimension: Int = 10_000,
-    maxPixels: Long = 16_000_000L,
-    quality: Int = 85
+    mimeType: String
 ): Pair<String, String> {
     // GIF 保持原样（可能是动图）
     if (mimeType == "image/gif") {
         return Pair(encodeToBase64Streaming(), mimeType)
     }
+
+    val config = currentImageCompressConfig
 
     // 读取图片尺寸
     val options = BitmapFactory.Options().apply {
@@ -134,28 +152,63 @@ private fun File.compressAndEncode(
     options.inSampleSize = calculateImageInSampleSize(
         width = options.outWidth,
         height = options.outHeight,
-        maxDimension = maxDimension,
-        maxPixels = maxPixels
+        maxDimension = config.maxDimension,
+        maxPixels = config.maxPixels
     )
     options.inJustDecodeBounds = false
 
     val bitmap = BitmapFactory.decodeFile(absolutePath, options)
         ?: throw IllegalArgumentException("Failed to decode image: $absolutePath")
     val normalizedBitmap = normalizeByExif(bitmap)
+    var working = normalizedBitmap
 
     return try {
-        val byteArrayOutputStream = ByteArrayOutputStream()
-        // 强制使用 JPEG 格式，因为很多提供商不支持 webp
-        Base64OutputStream(byteArrayOutputStream, Base64.NO_WRAP).use { base64Stream ->
-            normalizedBitmap.compress(Bitmap.CompressFormat.JPEG, quality, base64Stream)
+        var quality = config.initialQuality
+        var bytes = encodeJpegBytes(working, quality)
+        var attempts = 0
+        val maxBytes = config.maxBytes
+        // 设置了文件大小上限时：先降 JPEG 质量，质量触底后等比缩小尺寸重试
+        while (maxBytes != null && bytes.size > maxBytes && attempts < config.maxAttempts) {
+            attempts++
+            if (quality > config.minQuality) {
+                quality -= config.qualityStep
+            } else {
+                quality = config.initialQuality
+                val scaled = Bitmap.createScaledBitmap(
+                    working,
+                    (working.width * config.scaleFactor).toInt().coerceAtLeast(1),
+                    (working.height * config.scaleFactor).toInt().coerceAtLeast(1),
+                    true
+                )
+                if (scaled !== working) {
+                    if (working !== normalizedBitmap) {
+                        working.recycle()
+                    }
+                    working = scaled
+                } else {
+                    break // 尺寸已无法再缩小
+                }
+            }
+            bytes = encodeJpegBytes(working, quality)
         }
-        Pair(byteArrayOutputStream.toString(Charsets.ISO_8859_1.name()), "image/jpeg")
+        // 强制使用 JPEG 格式，因为很多提供商不支持 webp
+        val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+        Pair(encoded, "image/jpeg")
     } finally {
+        if (working !== normalizedBitmap) {
+            working.recycle()
+        }
         if (normalizedBitmap !== bitmap) {
             normalizedBitmap.recycle()
         }
         bitmap.recycle()
     }
+}
+
+private fun encodeJpegBytes(bitmap: Bitmap, quality: Int): ByteArray {
+    val byteArrayOutputStream = ByteArrayOutputStream()
+    bitmap.compress(Bitmap.CompressFormat.JPEG, quality, byteArrayOutputStream)
+    return byteArrayOutputStream.toByteArray()
 }
 
 private fun File.normalizeByExif(bitmap: Bitmap): Bitmap {

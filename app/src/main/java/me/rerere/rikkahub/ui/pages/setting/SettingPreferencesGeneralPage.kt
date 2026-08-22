@@ -259,6 +259,48 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
             item {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text(stringResource(R.string.setting_page_image_compress_settings)) },
+                ) {
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_general_page_image_compress_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_general_page_image_compress_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.imageCompressEnabled,
+                                onCheckedChange = {
+                                    vm.updateSettings(settings.copy(imageCompressEnabled = it))
+                                }
+                            )
+                        },
+                    )
+                    if (settings.imageCompressEnabled) {
+                        item(
+                            headlineContent = { Text(stringResource(R.string.setting_general_page_image_compress_max_size_title)) },
+                            supportingContent = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Slider(
+                                        value = settings.imageCompressMaxBytes.toFloat(),
+                                        onValueChange = {
+                                            vm.updateSettings(settings.copy(imageCompressMaxBytes = it.toInt()))
+                                        },
+                                        valueRange = 100f..5000f,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(text = "${settings.imageCompressMaxBytes} KB")
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
                     title = { Text(stringResource(R.string.setting_page_tts_settings)) },
                 ) {
                     item(
