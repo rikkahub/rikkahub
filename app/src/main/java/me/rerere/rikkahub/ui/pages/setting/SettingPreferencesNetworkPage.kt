@@ -31,7 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -88,7 +88,7 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
     val proxyUrlInvalid = proxyUrlDraft.isNotBlank() && proxyUrlDraft.toProxyOrNull() == null
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
+    val resources = LocalResources.current
     val toaster = LocalToaster.current
     var proxyTesting by remember { mutableStateOf(false) }
 
@@ -146,12 +146,12 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
             }
             result.onSuccess {
                 toaster.show(
-                    context.getString(R.string.backup_page_connection_success),
+                    resources.getString(R.string.backup_page_connection_success),
                     type = ToastType.Success,
                 )
             }.onFailure { error ->
                 toaster.show(
-                    context.getString(
+                    resources.getString(
                         R.string.backup_page_connection_failed,
                         error.message.orEmpty(),
                     ),
