@@ -1294,5 +1294,12 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_update_reminder_resume_now">지금 재개</string>
   <string name="reasoning_max">최대</string>
   <string name="backup_page_import_overwrite_confirm">백업을 가져오면 앱 데이터가 덮어써집니다. 계속하시겠습니까?</string>
+  <string name="setting_page_preferences_network">네트워크</string>
+  <string name="setting_page_preferences_network_desc">User-Agent 및 네트워크 요청 설정</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">비워 두면 %1$s(을)를 사용합니다.</string>
+  <string name="setting_page_preferences_network_proxy">프록시</string>
+  <string name="setting_page_preferences_network_proxy_desc">HTTP 및 SOCKS5 프록시 URL을 지원합니다. 비워 두면 시스템 설정을 사용합니다.</string>
+  <string name="setting_page_preferences_network_proxy_invalid">호스트와 포트가 있는 유효한 프록시 URL을 입력하세요.</string>
 </resources>
 

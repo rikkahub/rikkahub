@@ -1294,5 +1294,12 @@
   <string name="setting_update_reminder_resume_now">Возобновить сейчас</string>
   <string name="reasoning_max">Максимум</string>
   <string name="backup_page_import_overwrite_confirm">Импорт резервной копии перезапишет данные приложения. Продолжить?</string>
+  <string name="setting_page_preferences_network">Сеть</string>
+  <string name="setting_page_preferences_network_desc">Настройки User-Agent и сетевых запросов</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">Оставьте пустым, чтобы использовать %1$s</string>
+  <string name="setting_page_preferences_network_proxy">Прокси</string>
+  <string name="setting_page_preferences_network_proxy_desc">Поддерживает HTTP и SOCKS5 прокси-URL. Оставьте пустым для использования системных настроек.</string>
+  <string name="setting_page_preferences_network_proxy_invalid">Введите корректный URL прокси-сервера с хостом и портом.</string>
 </resources>
 

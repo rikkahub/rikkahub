@@ -31,6 +31,9 @@ import me.rerere.rikkahub.data.db.migrations.Migration_13_14
 import me.rerere.rikkahub.data.db.migrations.Migration_14_15
 import me.rerere.rikkahub.data.db.migrations.Migration_15_16
 import me.rerere.rikkahub.data.ai.mcp.McpManager
+import me.rerere.rikkahub.data.network.SettingsProxySelector
+import me.rerere.rikkahub.data.network.SettingsProxyAuthenticator
+import me.rerere.rikkahub.data.network.SettingsSocks5Authenticator
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.search.SearchService
 import me.rerere.rikkahub.data.sync.S3Sync
@@ -42,6 +45,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 val dataSourceModule = module {
     single {
@@ -162,9 +166,22 @@ val dataSourceModule = module {
     }
 
     single<OkHttpClient> {
+        val settingsStore: SettingsStore = get()
         val acceptLang = AcceptLanguageBuilder.fromAndroid(get())
             .build()
-        OkHttpClient.Builder()
+        java.net.Authenticator.setDefault(SettingsSocks5Authenticator(settingsStore))
+        val initialNetworkSetting = settingsStore.settingsFlow.value.networkSetting
+        val appliedProxySetting = AtomicReference(
+            Triple(
+                initialNetworkSetting.proxyUrl,
+                initialNetworkSetting.proxyUsername,
+                initialNetworkSetting.proxyPassword,
+            )
+        )
+        lateinit var client: OkHttpClient
+        client = OkHttpClient.Builder()
+            .proxySelector(SettingsProxySelector(settingsStore))
+            .proxyAuthenticator(SettingsProxyAuthenticator(settingsStore))
             .connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(10, TimeUnit.MINUTES)
             .writeTimeout(120, TimeUnit.SECONDS)
@@ -172,12 +189,25 @@ val dataSourceModule = module {
             .followRedirects(true)
             .retryOnConnectionFailure(true)
             .addInterceptor { chain ->
+                val networkSetting = settingsStore.settingsFlow.value.networkSetting
+                val currentProxySetting = Triple(
+                    networkSetting.proxyUrl,
+                    networkSetting.proxyUsername,
+                    networkSetting.proxyPassword,
+                )
+                if (appliedProxySetting.getAndSet(currentProxySetting) != currentProxySetting) {
+                    client.connectionPool.evictAll()
+                }
+
                 val originalRequest = chain.request()
                 val requestBuilder = originalRequest.newBuilder()
                     .addHeader(HttpHeaders.AcceptLanguage, acceptLang)
 
                 if (originalRequest.header(HttpHeaders.UserAgent) == null) {
-                    requestBuilder.addHeader(HttpHeaders.UserAgent, "RikkaHub-Android/${BuildConfig.VERSION_NAME}")
+                    val userAgent = settingsStore.settingsFlow.value.networkSetting.userAgent
+                        .trim()
+                        .ifEmpty { "RikkaHub-Android/${BuildConfig.VERSION_NAME}" }
+                    requestBuilder.addHeader(HttpHeaders.UserAgent, userAgent)
                 }
 
                 chain.proceed(requestBuilder.build())
@@ -202,9 +232,11 @@ val dataSourceModule = module {
             .addNetworkInterceptor(RequestLoggingInterceptor())
             .addInterceptor(AIRequestInterceptor())
             .addInterceptor(HttpLoggingInterceptor().apply {
+                redactHeader("Proxy-Authorization")
                 level = HttpLoggingInterceptor.Level.HEADERS
             })
-            .build().also { SearchService.init(it, get()) }
+            .build()
+        client.also { SearchService.init(it, get()) }
     }
 
     single {

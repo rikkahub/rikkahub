@@ -1294,5 +1294,12 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_update_reminder_resume_now">今すぐ再開</string>
   <string name="reasoning_max">最大</string>
   <string name="backup_page_import_overwrite_confirm">バックアップをインポートするとアプリデータが上書きされます。続行しますか？</string>
+  <string name="setting_page_preferences_network">ネットワーク</string>
+  <string name="setting_page_preferences_network_desc">User-Agentとネットワークリクエストの設定</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">空欄の場合は%1$sを使用</string>
+  <string name="setting_page_preferences_network_proxy">プロキシ</string>
+  <string name="setting_page_preferences_network_proxy_desc">HTTPおよびSOCKS5プロキシURLをサポートします。空白の場合はシステム設定を使用します。</string>
+  <string name="setting_page_preferences_network_proxy_invalid">ホストとポートを含む有効なプロキシURLを入力してください。</string>
 </resources>
 

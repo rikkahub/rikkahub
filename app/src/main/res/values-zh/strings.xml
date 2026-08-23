@@ -1299,5 +1299,12 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_update_reminder_resume_now">立即恢复</string>
   <string name="reasoning_max">最大</string>
   <string name="backup_page_import_overwrite_confirm">导入备份会覆盖 App 数据，是否继续</string>
+  <string name="setting_page_preferences_network">网络</string>
+  <string name="setting_page_preferences_network_desc">User-Agent 和网络请求设置</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">留空以使用 %1$s</string>
+  <string name="setting_page_preferences_network_proxy">代理</string>
+  <string name="setting_page_preferences_network_proxy_desc">支持 HTTP 和 SOCKS5 代理 URL。留空以使用系统设置。</string>
+  <string name="setting_page_preferences_network_proxy_invalid">请输入包含主机和端口的有效代理 URL。</string>
 </resources>
 

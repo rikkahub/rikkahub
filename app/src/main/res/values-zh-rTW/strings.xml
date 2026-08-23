@@ -1292,5 +1292,12 @@
   <string name="setting_update_reminder_resume_now">立即恢復</string>
   <string name="reasoning_max">最大</string>
   <string name="backup_page_import_overwrite_confirm">匯入備份將覆寫應用程式資料。是否繼續？</string>
+  <string name="setting_page_preferences_network">網路</string>
+  <string name="setting_page_preferences_network_desc">User-Agent 和網路請求設定</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">留空以使用 %1$s</string>
+  <string name="setting_page_preferences_network_proxy">代理</string>
+  <string name="setting_page_preferences_network_proxy_desc">支援 HTTP 和 SOCKS5 代理網址。留空以使用系統設定。</string>
+  <string name="setting_page_preferences_network_proxy_invalid">請輸入包含主機和連接埠的有效代理 URL。</string>
 </resources>
 

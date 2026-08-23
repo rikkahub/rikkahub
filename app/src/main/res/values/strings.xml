@@ -845,6 +845,13 @@
   <string name="setting_page_preferences_general_desc">Interaction behavior, scrolling, input settings</string>
   <string name="setting_page_preferences_ui">UI Preferences</string>
   <string name="setting_page_preferences_ui_desc">Message display, fonts, code blocks</string>
+  <string name="setting_page_preferences_network">Network</string>
+  <string name="setting_page_preferences_network_desc">User-Agent and network request settings</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">Leave blank to use %1$s</string>
+  <string name="setting_page_preferences_network_proxy">Proxy</string>
+  <string name="setting_page_preferences_network_proxy_desc">Supports HTTP and SOCKS5 proxy URLs. Leave blank to use system settings.</string>
+  <string name="setting_page_preferences_network_proxy_invalid">Enter a valid proxy URL with a host and port.</string>
   <string name="setting_page_documentation">Documentation</string>
   <string name="setting_page_documentation_desc">View app usage instructions and help documentation</string>
   <string name="setting_page_donate">Donate</string>
