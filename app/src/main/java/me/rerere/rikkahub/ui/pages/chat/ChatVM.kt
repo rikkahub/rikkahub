@@ -16,7 +16,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -31,6 +36,8 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.event.AppEvent
+import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
@@ -60,10 +67,18 @@ class ChatVM(
     private val analytics: FirebaseAnalytics,
     private val filesManager: FilesManager,
     private val favoriteRepository: FavoriteRepository,
+    private val appEventBus: AppEventBus,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
     var chatListInitialized by mutableStateOf(false) // 聊天列表是否已经滚动到底部
+
+    /**
+     * 当前会话 workspace_shell 工具执行期间的流式输出聚合 (stdout+stderr 顺序拼接)。
+     * 由 [AppEvent.ToolStreamOutput] 驱动, 无运行中工具时清空为 null。
+     */
+    private val _toolStreamOutput = MutableStateFlow<String?>(null)
+    val toolStreamOutput: StateFlow<String?> = _toolStreamOutput.asStateFlow()
 
     // 聊天输入状态 - 保存在 ViewModel 中避免 TransactionTooLargeException
     val inputState = ChatInputState()
@@ -93,6 +108,30 @@ class ChatVM(
 
         // 记住对话ID, 方便下次启动恢复
         context.writeStringPreference("lastConversationId", _conversationId.toString())
+
+        // 聚合当前会话 workspace_shell 的流式输出 (stdout/stderr 顺序拼接)
+        viewModelScope.launch {
+            appEventBus.events
+                .filterIsInstance<AppEvent.ToolStreamOutput>()
+                .filter { it.conversationId == _conversationId }
+                .collect { ev ->
+                    _toolStreamOutput.value = (_toolStreamOutput.value ?: "") + ev.chunk
+                }
+        }
+        // 当会话中没有运行中的工具 (未执行且非待批准) 时, 清空流式输出缓存,
+        // 使下一次工具执行从头开始聚合
+        viewModelScope.launch {
+            conversation.collect { conv ->
+                val hasRunningTool = conv.currentMessages.any { msg ->
+                    msg.parts.any { part ->
+                        part is UIMessagePart.Tool && !part.isExecuted && !part.isPending
+                    }
+                }
+                if (!hasRunningTool) {
+                    _toolStreamOutput.value = null
+                }
+            }
+        }
     }
 
     override fun onCleared() {

@@ -285,6 +285,8 @@ private fun ChatPageContent(
     val hazeState = rememberHazeState()
     val assistant = setting.getCurrentAssistant()
     var showFilesSheet by remember { mutableStateOf(false) }
+    // workspace_shell 工具执行期间的实时流式输出
+    val toolStreamOutput by vm.toolStreamOutput.collectAsStateWithLifecycle()
 
     val completionProviders = remember(assistant.workspaceId, conversation.workspaceCwd, workspaceRepository) {
         assistant.workspaceId?.let { workspaceId ->
@@ -437,6 +439,7 @@ private fun ChatPageContent(
                 settings = setting,
                 hazeState = hazeState,
                 errors = errors,
+                toolStreamOutput = toolStreamOutput,
                 onDismissError = onDismissError,
                 onClearAllErrors = onClearAllErrors,
                 onRegenerate = {

@@ -302,20 +302,46 @@ object ShellToolUI : ToolUIRenderer {
         return stringResource(R.string.tool_ui_shell, truncated)
     }
 
-    override fun hasSummary(context: ToolUIContext): Boolean = context.content != null
+    override fun hasSummary(context: ToolUIContext): Boolean =
+        context.content != null || !context.streamingOutput.isNullOrEmpty()
 
     @Composable
     override fun Summary(context: ToolUIContext) {
-        val content = context.content ?: return
-        val combined = remember(content) {
-            listOf(content.getStringContent("stdout"), content.getStringContent("stderr"))
-                .filterNot { it.isNullOrBlank() }
-                .joinToString("\n")
-                .trim()
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            ShellExitStatus(content, MaterialTheme.typography.labelSmall)
-            if (combined.isNotEmpty()) {
+        val content = context.content
+        if (content != null) {
+            // 已执行完: 退出状态 + 输出首部
+            val combined = remember(content) {
+                listOf(content.getStringContent("stdout"), content.getStringContent("stderr"))
+                    .filterNot { it.isNullOrBlank() }
+                    .joinToString("\n")
+                    .trim()
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                ShellExitStatus(content, MaterialTheme.typography.labelSmall)
+                if (combined.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.small)
+                            .background(MaterialTheme.colorScheme.surfaceContainer)
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                            .shimmer(isLoading = context.loading),
+                    ) {
+                        Text(
+                            text = combined.lineSequence().take(SUMMARY_MAX_LINES).joinToString("\n"),
+                            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                            fontSize = 11.sp,
+                            lineHeight = 14.sp,
+                            maxLines = SUMMARY_MAX_LINES,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        } else {
+            // 运行中: 展示实时流式输出末尾 (类似终端尾部)
+            val streaming = context.streamingOutput.orEmpty()
+            if (streaming.isNotEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -325,7 +351,7 @@ object ShellToolUI : ToolUIRenderer {
                         .shimmer(isLoading = context.loading),
                 ) {
                     Text(
-                        text = combined.lineSequence().take(SUMMARY_MAX_LINES).joinToString("\n"),
+                        text = streaming.lines().takeLast(SUMMARY_MAX_LINES).joinToString("\n"),
                         style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
                         fontSize = 11.sp,
                         lineHeight = 14.sp,
@@ -341,7 +367,49 @@ object ShellToolUI : ToolUIRenderer {
     override fun Preview(context: ToolUIContext, onDismissRequest: () -> Unit) {
         val content = context.content
         if (content == null) {
-            DefaultToolPreview(context = context)
+            // 运行中: 若已有流式输出则展示实时终端视图, 否则显示通用占位
+            val streaming = context.streamingOutput.orEmpty()
+            if (streaming.isEmpty()) {
+                DefaultToolPreview(context = context)
+                return
+            }
+            val command = context.arguments.getStringContent("command").orEmpty()
+            val cwd = context.arguments.getStringContent("cwd")
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight(0.8f)
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.tool_ui_shell_default),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = stringResource(R.string.tool_ui_shell_running),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                HighlightCodeBlock(
+                    code = if (cwd.isNullOrBlank()) command else "# cwd: $cwd\n$command",
+                    language = "bash",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(text = "stdout (live)", style = MaterialTheme.typography.labelMedium)
+                HighlightCodeBlock(
+                    code = streaming,
+                    language = "plaintext",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             return
         }
         val command = context.arguments.getStringContent("command").orEmpty()

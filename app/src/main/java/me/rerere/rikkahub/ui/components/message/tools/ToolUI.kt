@@ -45,6 +45,8 @@ data class ToolUIContext(
     val content: JsonElement?,
     /** 该工具调用是否在生成中 */
     val loading: Boolean,
+    /** 工具执行期间流式输出的聚合文本 (stdout+stderr), 工具未执行/运行中时可为 null */
+    val streamingOutput: String? = null,
 )
 
 /**

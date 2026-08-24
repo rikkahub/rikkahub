@@ -96,6 +96,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     loading: Boolean = false,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
+    streamingOutput: String? = null,
 ) {
     // ask_user 是交互式问答流程, 不走注册式渲染框架
     if (tool.toolName == ASK_USER_TOOL_NAME) {
@@ -104,7 +105,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     }
 
     val renderer = remember(tool.toolName) { ToolUIRegistry.resolve(tool.toolName) }
-    val context = remember(tool, loading) {
+    val context = remember(tool, loading, streamingOutput) {
         ToolUIContext(
             tool = tool,
             arguments = tool.inputAsJson(),
@@ -118,6 +119,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                 null
             },
             loading = loading,
+            streamingOutput = streamingOutput,
         )
     }
 
@@ -129,7 +131,8 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     val images = tool.output.filterIsInstance<UIMessagePart.Image>()
 
     // 摘要由注册的渲染器决定; 图片输出与拒绝原因为所有工具通用
-    val hasExtraContent = renderer.hasSummary(context) || isDenied || images.isNotEmpty()
+    val hasStreaming = !streamingOutput.isNullOrEmpty()
+    val hasExtraContent = renderer.hasSummary(context) || isDenied || images.isNotEmpty() || hasStreaming
 
     ControlledChainOfThoughtStep(
         expanded = expanded,
@@ -188,7 +191,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         } else {
             null
         },
-        onClick = if (context.content != null || isPending || images.isNotEmpty()) {
+        onClick = if (context.content != null || isPending || images.isNotEmpty() || hasStreaming) {
             { showResult = true }
         } else {
             null

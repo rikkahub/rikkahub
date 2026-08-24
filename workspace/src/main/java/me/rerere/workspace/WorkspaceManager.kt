@@ -183,6 +183,7 @@ class WorkspaceManager(
         cwd: String = "",
         timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
         stdin: ByteArray? = null,
+        onOutput: ((kind: String, text: String) -> Unit)? = null,
     ): WorkspaceCommandResult {
         require(command.isNotBlank()) { "Command is required" }
         val workingDir = fileSystem.resolve(filesDir(root), cwd)
@@ -201,6 +202,7 @@ class WorkspaceManager(
                 timeoutMillis = timeoutMillis,
                 stdin = stdin,
                 bindMounts = bindMounts,
+                onOutput = onOutput,
             )
         )
     }

@@ -1249,6 +1249,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="tool_ui_shell_default">Shell</string>
   <string name="tool_ui_shell_timeout">timeout</string>
   <string name="tool_ui_shell_exit">exit %s</string>
+  <string name="tool_ui_shell_running">执行中…</string>
   <string name="tool_ui_speaking">朗读: %s</string>
   <string name="tool_ui_replay">重播</string>
   <string name="tool_ui_delete_memory">删除记忆</string>
@@ -1306,10 +1307,5 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_preferences_network_proxy">代理</string>
   <string name="setting_page_preferences_network_proxy_desc">支持 HTTP 和 SOCKS5 代理 URL。留空以使用系统设置。</string>
   <string name="setting_page_preferences_network_proxy_invalid">请输入包含主机和端口的有效代理 URL。</string>
-  <string name="setting_provider_page_test_non_streaming">非流式</string>
-  <string name="setting_provider_page_test_streaming">流式</string>
-  <string name="setting_provider_page_test_tool_call">工具调用</string>
-  <string name="setting_provider_page_test_tool_called">已调用: %1$s  参数: %2$s</string>
-  <string name="setting_provider_page_test_tool_not_called">未调用工具，响应：%s</string>
 </resources>
 

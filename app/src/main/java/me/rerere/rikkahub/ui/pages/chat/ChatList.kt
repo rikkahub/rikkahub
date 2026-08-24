@@ -120,6 +120,7 @@ fun ChatList(
     settings: Settings,
     hazeState: HazeState,
     errors: List<ChatError> = emptyList(),
+    toolStreamOutput: String? = null,
     onDismissError: (Uuid) -> Unit = {},
     onClearAllErrors: () -> Unit = {},
     onRegenerate: (UIMessage) -> Unit = {},
@@ -162,6 +163,7 @@ fun ChatList(
                 settings = settings,
                 hazeState = hazeState,
                 errors = errors,
+                toolStreamOutput = toolStreamOutput,
                 onDismissError = onDismissError,
                 onClearAllErrors = onClearAllErrors,
                 onRegenerate = onRegenerate,
@@ -192,6 +194,7 @@ private fun ChatListNormal(
     settings: Settings,
     hazeState: HazeState,
     errors: List<ChatError>,
+    toolStreamOutput: String? = null,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
     onRegenerate: (UIMessage) -> Unit,
@@ -334,6 +337,7 @@ private fun ChatListNormal(
                             model = node.currentMessage.modelId?.let(modelById::get),
                             assistant = assistant,
                             loading = loading && index == lastMessageIndex,
+                            streamingOutput = toolStreamOutput,
                             onRegenerate = {
                                 onRegenerate(node.currentMessage)
                             },

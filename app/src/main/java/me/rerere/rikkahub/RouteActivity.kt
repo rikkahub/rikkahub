@@ -250,6 +250,7 @@ class RouteActivity : ComponentActivity() {
                     is AppEvent.McpOAuthCallback -> Unit // 由 McpManager 消费
                     is AppEvent.ChatGenerationUpdate -> Unit // 由 ChatNotificationManager 消费
                     is AppEvent.ChatGenerationEnded -> Unit // 由 ChatNotificationManager 消费
+                    is AppEvent.ToolStreamOutput -> Unit // 由 ChatVM 消费(workspace shell 实时输出)
                 }
             }
         }

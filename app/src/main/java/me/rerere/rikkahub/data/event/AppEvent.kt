@@ -14,6 +14,16 @@ sealed class AppEvent {
         val error: String?,
     ) : AppEvent()
 
+    /**
+     * workspace_shell 工具执行期间的流式输出增量。
+     * kind 为 "stdout" / "stderr"，由 UI 侧按会话聚合渲染实时执行状态。
+     */
+    data class ToolStreamOutput(
+        val conversationId: Uuid,
+        val kind: String,
+        val chunk: String,
+    ) : AppEvent()
+
     /** 聊天生成过程中的流式更新，由 ChatNotificationManager 消费用于 Live Update 通知。 */
     data class ChatGenerationUpdate(
         val conversationId: Uuid,

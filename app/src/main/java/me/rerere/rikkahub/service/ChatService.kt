@@ -536,7 +536,6 @@ class ChatService(
                     }
                 },
                 assistant = assistant,
-                conversationId = conversationId,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
@@ -560,7 +559,7 @@ class ChatService(
                     if (assistant.enableRecentChatsReference) {
                         addAll(createConversationTools(conversationRepo, assistant.id))
                     }
-                    addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
+                    addAll(createWorkspaceToolsIfReady(conversation.id, assistant.workspaceId?.toString(), conversation.workspaceCwd))
                     if (assistant.enabledSkills.isNotEmpty()) {
                         addAll(
                             createSkillTools(
@@ -657,7 +656,11 @@ class ChatService(
         }
     }
 
-    private suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String? = null): List<Tool> {
+    private suspend fun createWorkspaceToolsIfReady(
+        conversationId: Uuid,
+        workspaceId: String?,
+        cwd: String? = null,
+    ): List<Tool> {
         if (workspaceId.isNullOrBlank()) return emptyList()
         val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
         if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
@@ -667,7 +670,15 @@ class ChatService(
             )
             return emptyList()
         }
-        return createWorkspaceTools(workspaceId, workspaceRepository, cwd)
+        // 工具执行期间的 stdout/stderr 增量通过事件总线转发给 UI，用于渲染实时执行状态
+        return createWorkspaceTools(
+            workspaceId,
+            workspaceRepository,
+            cwd,
+            onOutput = { kind, chunk ->
+                appEventBus.tryEmit(AppEvent.ToolStreamOutput(conversationId, kind, chunk))
+            },
+        )
     }
 
     // ---- 检查无效消息 ----

@@ -20,6 +20,8 @@ data class WorkspaceShellContext(
     val timeoutMillis: Long,
     val stdin: ByteArray? = null,
     val bindMounts: List<WorkspaceBindMount> = emptyList(),
+    /** 流式输出回调: kind 为 "stdout" / "stderr", 按读取块增量回调 (调用线程为采集线程, 需自行同步) */
+    val onOutput: ((kind: String, text: String) -> Unit)? = null,
 )
 
 class HostShellRunner : WorkspaceShellRunner {
@@ -28,7 +30,7 @@ class HostShellRunner : WorkspaceShellRunner {
             .directory(context.workingDir)
             .redirectErrorStream(false)
             .start()
-        return process.readResult(context.timeoutMillis, context.stdin)
+        return process.readResult(context.timeoutMillis, context.stdin, context.onOutput)
     }
 
     private fun defaultShell(): String =
@@ -38,9 +40,13 @@ class HostShellRunner : WorkspaceShellRunner {
 // 单个流保留的最大字符数, 防止命令疯狂输出导致 OOM 或撑爆 LLM 上下文
 const val MAX_OUTPUT_CHARS = 128 * 1024
 
-fun Process.readResult(timeoutMillis: Long, stdin: ByteArray? = null): WorkspaceCommandResult {
-    val stdout = StreamCollector(inputStream)
-    val stderr = StreamCollector(errorStream)
+fun Process.readResult(
+    timeoutMillis: Long,
+    stdin: ByteArray? = null,
+    onOutput: ((kind: String, text: String) -> Unit)? = null,
+): WorkspaceCommandResult {
+    val stdout = StreamCollector(inputStream, onChunk = onOutput?.let { cb -> { cb("stdout", it) } })
+    val stderr = StreamCollector(errorStream, onChunk = onOutput?.let { cb -> { cb("stderr", it) } })
     val stdinWriter = stdin?.let { bytes -> StreamWriter(outputStream, bytes) }
     try {
         val finished = waitFor(timeoutMillis, TimeUnit.MILLISECONDS)
@@ -92,6 +98,7 @@ private class StreamWriter(
 private class StreamCollector(
     stream: InputStream,
     private val maxChars: Int = MAX_OUTPUT_CHARS,
+    private val onChunk: ((String) -> Unit)? = null,
 ) {
     private val builder = StringBuilder()
 
@@ -106,6 +113,9 @@ private class StreamCollector(
                 while (true) {
                     val read = reader.read(buffer)
                     if (read < 0) break
+                    if (read > 0) {
+                        onChunk?.invoke(String(buffer, 0, read))
+                    }
                     // 超出上限后继续读到 EOF 并丢弃，否则管道写满会阻塞子进程导致其无法退出
                     synchronized(builder) {
                         val remaining = maxChars - builder.length

@@ -37,6 +37,7 @@ suspend fun createWorkspaceTools(
     workspaceId: String?,
     workspaceRepository: WorkspaceRepository,
     cwd: String? = null,
+    onOutput: ((kind: String, text: String) -> Unit)? = null,
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
     val approvalOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
@@ -48,7 +49,7 @@ suspend fun createWorkspaceTools(
         createReadFileTool(workspaceId, ::needsApproval, workspaceRepository),
         createWriteFileTool(workspaceId, ::needsApproval, workspaceRepository),
         createEditFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
+        createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd, onOutput),
     )
 }
 
@@ -205,6 +206,7 @@ private fun createShellTool(
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
     defaultCwd: String? = null,
+    onOutput: ((kind: String, text: String) -> Unit)? = null,
 ) = Tool(
     name = "workspace_shell",
     description = buildString {
@@ -254,7 +256,13 @@ private fun createShellTool(
             ?.coerceIn(1L, SHELL_TIMEOUT_MAX_SECONDS)
             ?.times(1_000L)
             ?: WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS
-        val result = workspaceRepository.executeCommand(workspaceId, command, cwd, timeoutMillis)
+        val result = workspaceRepository.executeCommand(
+            workspaceId,
+            command,
+            cwd,
+            timeoutMillis,
+            onOutput = onOutput,
+        )
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {

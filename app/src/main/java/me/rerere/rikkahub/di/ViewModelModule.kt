@@ -36,6 +36,7 @@ val viewModelModule = module {
             analytics = get(),
             filesManager = get(),
             favoriteRepository = get(),
+            appEventBus = get(),
         )
     }
     viewModelOf(::ChatDrawerVM)
@@ -71,7 +72,6 @@ val viewModelModule = module {
         WorkspaceDetailVM(
             id = it.get(),
             repository = get(),
-            terminalSessionManager = get(),
         )
     }
     viewModelOf(::FavoriteVM)
