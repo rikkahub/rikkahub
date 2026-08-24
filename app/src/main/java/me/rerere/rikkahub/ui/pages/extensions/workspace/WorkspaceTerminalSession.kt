@@ -18,12 +18,14 @@ import com.termux.view.TerminalViewClient
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.workspace.RootfsPatchOptions
 import me.rerere.workspace.RootfsPatcher
+import me.rerere.workspace.detectRootfsShell
 import java.io.File
 
 internal fun createWorkspaceTerminalSession(
     context: Context,
     root: String,
     client: TerminalSessionClient,
+    shell: String,
 ): TerminalSession {
     val appContext = context.applicationContext
     val workspaceDir = File(File(appContext.filesDir, "workspaces"), root)
@@ -63,8 +65,8 @@ internal fun createWorkspaceTerminalSession(
         "LANG=C.UTF-8",
         "LC_ALL=C.UTF-8",
         "USER=root",
-        "SHELL=/bin/bash",
-        "/bin/bash",
+        "SHELL=$shell",
+        shell,
     )
 
     val env = arrayOf(
@@ -98,9 +100,14 @@ internal fun prepareWorkspaceTerminalSession(context: Context, root: String) {
     )
 }
 
-internal fun workspaceRootfsReady(context: Context, root: String): Boolean {
+/**
+ * 返回该 workspace rootfs 中可用的 shell (rootfs 内绝对路径, 如 "/bin/ash"), 未安装或无 shell 时为 null.
+ * 不能用 File(linuxDir, "bin/sh").isFile 判断: Alpine 等镜像的 /bin/sh 是指向 /bin/busybox 的
+ * 绝对符号链接, isFile 会跟随到宿主机同名路径而误判为未安装
+ */
+internal fun workspaceRootfsShell(context: Context, root: String): String? {
     val linuxDir = File(File(File(context.applicationContext.filesDir, "workspaces"), root), "linux")
-    return linuxDir.isDirectory && File(linuxDir, "bin/sh").isFile
+    return detectRootfsShell(linuxDir)
 }
 
 internal class WorkspaceTerminalSessionClient(

@@ -1159,7 +1159,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_detail_tool_delete_file">ファイルを削除</string>
   <string name="workspace_detail_tool_move_file">ファイルを移動</string>
   <string name="workspace_detail_tool_shell">コマンド実行</string>
-  <string name="workspace_detail_install_rootfs_desc">tar.gzをダウンロードして、%sのLinuxディレクトリに展開します。</string>
+  <string name="workspace_detail_install_rootfs_desc">ローカルのアーカイブファイルまたはURLからRootfsを%sのlinuxディレクトリにインストールします。</string>
   <string name="workspace_detail_download_url">tar.gz ダウンロードURL</string>
   <string name="workspace_detail_area_files">ファイル</string>
   <string name="workspace_detail_area_rootfs">Rootfs</string>
@@ -1275,6 +1275,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_delete_folder_generating">フォルダ内の一部の会話がまだ生成中です。削除する前にそれらを停止してください。</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 括弧内を読み上げない</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">有効にすると、TTS は括弧内の内容を読み上げません</string>
+  <string name="workspace_detail_uploading">アップロード中 %1$s%2$s</string>
+  <string name="workspace_detail_install_from_local_file">ローカルファイルからインストール</string>
+  <string name="workspace_detail_install_from_url">または URL からインストール</string>
+  <string name="tool_ui_shell_truncated">出力は切り詰められました</string>
   <string name="assistant_page_context_message_limit">コンテキストメッセージ上限</string>
   <string name="assistant_page_context_message_limit_desc">モデルに送信する直近のメッセージ数の上限を設定します。上限を超えた場合、ターンごとに1件ずつ削除するのではなく、一度にコンテキストを約半分まで切り詰めます。これによりリクエストのプレフィックスが安定し、プロンプトキャッシュが多くのターンにわたって有効に働きます。</string>
   <string name="assistant_page_context_message_limit_count">コンテキストメッセージ制限: %d</string>
