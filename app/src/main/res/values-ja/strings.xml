@@ -1301,5 +1301,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_page_preferences_network_proxy">プロキシ</string>
   <string name="setting_page_preferences_network_proxy_desc">HTTPおよびSOCKS5プロキシURLをサポートします。空白の場合はシステム設定を使用します。</string>
   <string name="setting_page_preferences_network_proxy_invalid">ホストとポートを含む有効なプロキシURLを入力してください。</string>
+  <string name="setting_provider_page_test_non_streaming">非ストリーミング</string>
+  <string name="setting_provider_page_test_streaming">ストリーミング</string>
+  <string name="setting_provider_page_test_tool_call">ツール呼び出し</string>
+  <string name="setting_provider_page_test_tool_called">呼び出し: %1$s  引数: %2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">ツールが呼び出されませんでした。応答: %s</string>
 </resources>
 
