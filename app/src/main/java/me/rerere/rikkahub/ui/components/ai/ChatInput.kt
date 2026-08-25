@@ -150,6 +150,11 @@ fun ChatInput(
     val density = LocalDensity.current
     // Unlike isImeVisible, the target changes as soon as the IME animation starts.
     val imeTargetVisible = WindowInsets.imeAnimationTarget.getBottom(density) > 0
+    val modelListState = rememberModelListState(
+        modelId = assistant.chatModelId ?: settings.chatModelId,
+        providers = settings.providers,
+        type = ModelType.CHAT,
+    )
 
     fun sendMessage() {
         focusManager.clearFocus(force = true)
@@ -264,13 +269,8 @@ fun ChatInput(
                                 horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 // Model Picker
-                                ModelSelector(
-                                    modelId = assistant.chatModelId ?: settings.chatModelId,
-                                    providers = settings.providers,
-                                    onSelect = {
-                                        onUpdateChatModel(it)
-                                    },
-                                    type = ModelType.CHAT,
+                                ModelSelectorButton(
+                                    state = modelListState,
                                     onlyIcon = true,
                                     modifier = Modifier,
                                 )
@@ -368,6 +368,11 @@ fun ChatInput(
 
         }
     }
+
+    ModelListSheet(
+        state = modelListState,
+        onSelect = onUpdateChatModel,
+    )
 }
 
 @Composable
