@@ -19,7 +19,8 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "me.rerere.rikkahub"
+        // Keep the custom build installable alongside the official RikkaHub app.
+        applicationId = "me.rerere.rikkahub.custom"
         minSdk = 26
         targetSdk = 37
         versionCode = 179

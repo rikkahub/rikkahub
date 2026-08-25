@@ -9,7 +9,7 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:targetClass="me.rerere.rikkahub.ui.activity.ShortcutHandlerActivity"
-            android:data="rikkahub://shortcut" />
+            android:data="rikkahub-custom://shortcut" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
 </shortcuts>
