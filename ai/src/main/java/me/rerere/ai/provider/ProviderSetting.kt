@@ -61,6 +61,9 @@ sealed class ProviderSetting {
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
+        /** New multi-key storage. [apiKey] remains for backwards compatibility. */
+        var apiKeys: List<String> = emptyList(),
+        var selectedApiKeyIndex: Int = 0,
         var baseUrl: String = "https://api.openai.com/v1",
         var chatCompletionsPath: String = "/chat/completions",
         var useResponseApi: Boolean = false,
@@ -123,6 +126,8 @@ sealed class ProviderSetting {
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
+        var apiKeys: List<String> = emptyList(),
+        var selectedApiKeyIndex: Int = 0,
         var baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
         var vertexAI: Boolean = false,
         var useServiceAccount: Boolean = false,
@@ -188,6 +193,8 @@ sealed class ProviderSetting {
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
         var apiKey: String = "",
+        var apiKeys: List<String> = emptyList(),
+        var selectedApiKeyIndex: Int = 0,
         var baseUrl: String = "https://api.anthropic.com/v1",
         var promptCaching: Boolean = false,
         var promptCacheTtl: ClaudePromptCacheTtl = ClaudePromptCacheTtl.FIVE_MINUTES,
@@ -245,5 +252,67 @@ sealed class ProviderSetting {
                 Claude::class,
             )
         }
+    }
+}
+
+private val API_KEY_SPLIT_REGEX = Regex("[\\s,]+")
+
+/**
+ * Normalizes both the new list field and the legacy single-string field.
+ * Older versions accepted multiple keys separated by whitespace or commas.
+ */
+fun normalizeApiKeys(apiKeys: List<String>, legacyApiKey: String): List<String> {
+    val source = if (apiKeys.isNotEmpty()) apiKeys else listOf(legacyApiKey)
+    return source
+        .flatMap { it.split(API_KEY_SPLIT_REGEX) }
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+fun ProviderSetting.apiKeys(): List<String> = when (this) {
+    is ProviderSetting.OpenAI -> normalizeApiKeys(apiKeys = this.apiKeys, legacyApiKey = this.apiKey)
+    is ProviderSetting.Google -> normalizeApiKeys(apiKeys = this.apiKeys, legacyApiKey = this.apiKey)
+    is ProviderSetting.Claude -> normalizeApiKeys(apiKeys = this.apiKeys, legacyApiKey = this.apiKey)
+}
+
+fun ProviderSetting.selectedApiKey(): String {
+    val keys = apiKeys()
+    if (keys.isEmpty()) return ""
+    val rawIndex = when (this) {
+        is ProviderSetting.OpenAI -> selectedApiKeyIndex
+        is ProviderSetting.Google -> selectedApiKeyIndex
+        is ProviderSetting.Claude -> selectedApiKeyIndex
+    }
+    val index = rawIndex.takeIf { it in keys.indices } ?: 0
+    return keys[index]
+}
+
+/** Explicitly named alias for call sites where an empty key is a valid fallback. */
+fun ProviderSetting.selectedApiKeyOrBlank(): String = selectedApiKey()
+
+/** Returns a provider with normalized keys and the legacy field synchronized. */
+fun ProviderSetting.withApiKeys(keys: List<String>, selectedIndex: Int = 0): ProviderSetting {
+    val normalized = normalizeApiKeys(keys, legacyApiKey = "")
+    val index = selectedIndex.takeIf { it in normalized.indices } ?: 0
+    val selected = normalized.getOrNull(index).orEmpty()
+    return when (this) {
+        is ProviderSetting.OpenAI -> copy(
+            apiKey = selected,
+            apiKeys = normalized,
+            selectedApiKeyIndex = index,
+        )
+
+        is ProviderSetting.Google -> copy(
+            apiKey = selected,
+            apiKeys = normalized,
+            selectedApiKeyIndex = index,
+        )
+
+        is ProviderSetting.Claude -> copy(
+            apiKey = selected,
+            apiKeys = normalized,
+            selectedApiKeyIndex = index,
+        )
     }
 }

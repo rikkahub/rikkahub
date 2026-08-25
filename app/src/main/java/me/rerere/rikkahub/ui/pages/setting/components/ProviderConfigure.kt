@@ -11,6 +11,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -31,11 +32,16 @@ import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.apiKeys
+import me.rerere.ai.provider.normalizeApiKeys
+import me.rerere.ai.provider.withApiKeys
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -55,19 +61,17 @@ fun ProviderConfigure(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
     ) {
-        if (!provider.builtIn) {
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                ProviderSetting.Types.forEachIndexed { index, type ->
-                    SegmentedButton(
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = ProviderSetting.Types.size
-                        ),
-                        label = { Text(type.simpleName ?: "") },
-                        selected = provider::class == type,
-                        onClick = { onEdit(provider.convertTo(type)) }
-                    )
-                }
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            ProviderSetting.Types.forEachIndexed { index, type ->
+                SegmentedButton(
+                    shape = SegmentedButtonDefaults.itemShape(
+                        index = index,
+                        count = ProviderSetting.Types.size
+                    ),
+                    label = { Text(type.simpleName ?: "") },
+                    selected = provider::class == type,
+                    onClick = { onEdit(provider.convertTo(type)) }
+                )
             }
         }
 
@@ -82,11 +86,14 @@ fun ProviderConfigure(
 fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSetting {
     if (this::class == type) return this
 
-    val apiKey = when (this) {
-        is ProviderSetting.OpenAI -> this.apiKey
-        is ProviderSetting.Google -> this.apiKey
-        is ProviderSetting.Claude -> this.apiKey
+    val apiKeys = this.apiKeys()
+    val selectedApiKeyIndex = when (this) {
+        is ProviderSetting.OpenAI -> this.selectedApiKeyIndex
+        is ProviderSetting.Google -> this.selectedApiKeyIndex
+        is ProviderSetting.Claude -> this.selectedApiKeyIndex
     }
+    val normalizedSelectedIndex = selectedApiKeyIndex.takeIf { it in apiKeys.indices } ?: 0
+    val apiKey = apiKeys.getOrNull(normalizedSelectedIndex).orEmpty()
     val sourceBaseUrl = when (this) {
         is ProviderSetting.OpenAI -> this.baseUrl
         is ProviderSetting.Google -> this.baseUrl
@@ -105,19 +112,19 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             balanceOption = this.balanceOption, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
-            apiKey = apiKey, baseUrl = convertedBaseUrl
+            apiKey = apiKey, apiKeys = apiKeys, selectedApiKeyIndex = normalizedSelectedIndex, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Google::class -> ProviderSetting.Google(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             balanceOption = this.balanceOption, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
-            apiKey = apiKey, baseUrl = convertedBaseUrl
+            apiKey = apiKey, apiKeys = apiKeys, selectedApiKeyIndex = normalizedSelectedIndex, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Claude::class -> ProviderSetting.Claude(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             balanceOption = this.balanceOption, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
-            apiKey = apiKey, baseUrl = convertedBaseUrl
+            apiKey = apiKey, apiKeys = apiKeys, selectedApiKeyIndex = normalizedSelectedIndex, baseUrl = convertedBaseUrl
         )
         else -> error("Unsupported provider type: $type")
     }
@@ -199,6 +206,97 @@ private val OFFICIAL_PROVIDER_HOSTS = setOf(
 )
 
 @Composable
+private fun ApiKeyEditor(
+    provider: ProviderSetting,
+    onEdit: (ProviderSetting) -> Unit,
+) {
+    val keys = provider.apiKeys()
+    val selectedIndex = when (provider) {
+        is ProviderSetting.OpenAI -> provider.selectedApiKeyIndex
+        is ProviderSetting.Google -> provider.selectedApiKeyIndex
+        is ProviderSetting.Claude -> provider.selectedApiKeyIndex
+    }.coerceIn(0, (keys.size - 1).coerceAtLeast(0))
+    var newKey by remember { mutableStateOf("") }
+    var showKeys by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = stringResource(R.string.setting_provider_page_api_key),
+            style = MaterialTheme.typography.labelLarge,
+        )
+        keys.forEachIndexed { index, key ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                RadioButton(
+                    selected = index == selectedIndex,
+                    onClick = { onEdit(provider.withApiKeys(keys, index)) },
+                )
+                Text(
+                    text = if (showKeys) key else maskApiKey(key),
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                )
+                IconButton(onClick = { showKeys = !showKeys }) {
+                    Icon(
+                        if (showKeys) HugeIcons.ViewOff else HugeIcons.View,
+                        contentDescription = null,
+                    )
+                }
+                IconButton(
+                    onClick = {
+                        val remaining = keys.toMutableList().apply { removeAt(index) }
+                        val nextIndex = when {
+                            remaining.isEmpty() -> 0
+                            index < selectedIndex -> selectedIndex - 1
+                            index == selectedIndex -> index.coerceAtMost(remaining.lastIndex)
+                            else -> selectedIndex
+                        }
+                        onEdit(provider.withApiKeys(remaining, nextIndex))
+                    }
+                ) {
+                    Icon(HugeIcons.Delete01, contentDescription = null)
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = newKey,
+                onValueChange = { newKey = it },
+                modifier = Modifier.weight(1f),
+                label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+            )
+            IconButton(
+                onClick = {
+                    val additions = normalizeApiKeys(listOf(newKey), "")
+                    if (additions.isNotEmpty()) {
+                        val merged = (keys + additions).distinct()
+                        onEdit(provider.withApiKeys(merged, if (keys.isEmpty()) 0 else selectedIndex))
+                        newKey = ""
+                    }
+                },
+                enabled = newKey.isNotBlank(),
+            ) {
+                Icon(HugeIcons.Add01, contentDescription = null)
+            }
+        }
+    }
+}
+
+private fun maskApiKey(key: String): String = when {
+    key.length <= 8 -> "*".repeat(key.length)
+    else -> key.take(4) + "..." + key.takeLast(4)
+}
+
+@Composable
 private fun ProviderConfigureOpenAI(
     provider: ProviderSetting.OpenAI,
     onEdit: (provider: ProviderSetting.OpenAI) -> Unit
@@ -214,20 +312,9 @@ private fun ProviderConfigureOpenAI(
         modifier = Modifier.fillMaxWidth(),
     )
 
-    var keyVisible by remember { mutableStateOf(false) }
-    OutlinedTextField(
-        value = provider.apiKey,
-        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
-        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-        modifier = Modifier.fillMaxWidth(),
-        maxLines = 3,
-        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            IconButton(onClick = { keyVisible = !keyVisible }) {
-                Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-            }
-        },
-    )
+    ApiKeyEditor(provider) { updated ->
+        onEdit(updated as ProviderSetting.OpenAI)
+    }
 
     OutlinedTextField(
         value = provider.baseUrl,
@@ -243,7 +330,7 @@ private fun ProviderConfigureOpenAI(
             onValueChange = { onEdit(provider.copy(chatCompletionsPath = it.trim())) },
             label = { Text(stringResource(R.string.setting_provider_page_api_path)) },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !provider.builtIn,
+            enabled = true,
         )
     }
 
@@ -305,20 +392,9 @@ private fun ProviderConfigureClaude(
         maxLines = 3,
     )
 
-    var keyVisible by remember { mutableStateOf(false) }
-    OutlinedTextField(
-        value = provider.apiKey,
-        onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
-        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-        modifier = Modifier.fillMaxWidth(),
-        maxLines = 3,
-        visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-        trailingIcon = {
-            IconButton(onClick = { keyVisible = !keyVisible }) {
-                Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-            }
-        },
-    )
+    ApiKeyEditor(provider) { updated ->
+        onEdit(updated as ProviderSetting.Claude)
+    }
 
     OutlinedTextField(
         value = provider.baseUrl,
@@ -417,20 +493,9 @@ private fun ProviderConfigureGoogle(
     )
 
     if (!(provider.vertexAI && provider.useServiceAccount)) {
-        var keyVisible by remember { mutableStateOf(false) }
-        OutlinedTextField(
-            value = provider.apiKey,
-            onValueChange = { onEdit(provider.copy(apiKey = it.trim())) },
-            label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-            modifier = Modifier.fillMaxWidth(),
-            maxLines = 3,
-            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
-            trailingIcon = {
-                IconButton(onClick = { keyVisible = !keyVisible }) {
-                    Icon(if (keyVisible) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
-                }
-            },
-        )
+        ApiKeyEditor(provider) { updated ->
+            onEdit(updated as ProviderSetting.Google)
+        }
     }
 
     if (!provider.vertexAI) {

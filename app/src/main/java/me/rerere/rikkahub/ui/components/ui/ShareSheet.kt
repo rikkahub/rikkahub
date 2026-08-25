@@ -25,6 +25,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.apiKeys
+import me.rerere.ai.provider.withApiKeys
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Share03
 import me.rerere.rikkahub.utils.JsonInstant
@@ -91,7 +93,15 @@ fun ProviderSetting.encodeForShare(): String {
         append("ai-provider:")
         append("v1:")
 
-        val value = JsonInstant.encodeToString(this@encodeForShare.copyProvider(models = emptyList()))
+        val normalized = this@encodeForShare.withApiKeys(
+            keys = this@encodeForShare.apiKeys(),
+            selectedIndex = when (val provider = this@encodeForShare) {
+                is ProviderSetting.OpenAI -> provider.selectedApiKeyIndex
+                is ProviderSetting.Google -> provider.selectedApiKeyIndex
+                is ProviderSetting.Claude -> provider.selectedApiKeyIndex
+            }
+        )
+        val value = JsonInstant.encodeToString(normalized.copyProvider(models = emptyList()))
         append(Base64.encode(value.encodeToByteArray()))
     }
 }
@@ -106,7 +116,13 @@ fun decodeProviderSetting(value: String): ProviderSetting {
     val jsonBytes = Base64.decode(base64Str)
     val jsonStr = jsonBytes.decodeToString()
 
-    return JsonInstant.decodeFromString<ProviderSetting>(jsonStr)
+    val provider = JsonInstant.decodeFromString<ProviderSetting>(jsonStr)
+    val selectedIndex = when (provider) {
+        is ProviderSetting.OpenAI -> provider.selectedApiKeyIndex
+        is ProviderSetting.Google -> provider.selectedApiKeyIndex
+        is ProviderSetting.Claude -> provider.selectedApiKeyIndex
+    }
+    return provider.withApiKeys(provider.apiKeys(), selectedIndex)
 }
 
 class ShareSheetState {
