@@ -1301,5 +1301,10 @@
   <string name="setting_page_preferences_network_proxy">Прокси</string>
   <string name="setting_page_preferences_network_proxy_desc">Поддерживает HTTP и SOCKS5 прокси-URL. Оставьте пустым для использования системных настроек.</string>
   <string name="setting_page_preferences_network_proxy_invalid">Введите корректный URL прокси-сервера с хостом и портом.</string>
+  <string name="setting_provider_page_test_non_streaming">Без стриминга</string>
+  <string name="setting_provider_page_test_streaming">Стриминг</string>
+  <string name="setting_provider_page_test_tool_call">Вызов инструмента</string>
+  <string name="setting_provider_page_test_tool_called">Вызвано: %1$s  Аргументы: %2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">Инструмент не вызван, ответ: %s</string>
 </resources>
 

@@ -2122,4 +2122,9 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_terminal_no_tabs">開いている端末タブはありません</string>
   <string name="assistant_page_context_message_limit_hint">無制限にする場合は0、制限する場合は%d以上を入力してください</string>
   <string name="assistant_page_context_message_limit_too_small">コンテキストのメッセージ上限は%1$d未満にできません。%1$dに戻しました。</string>
+  <string name="setting_provider_page_test_non_streaming">非ストリーミング</string>
+  <string name="setting_provider_page_test_streaming">ストリーミング</string>
+  <string name="setting_provider_page_test_tool_call">ツール呼び出し</string>
+  <string name="setting_provider_page_test_tool_called">呼び出し: %1$s  引数: %2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">ツールが呼び出されませんでした。応答: %s</string>
 </resources>

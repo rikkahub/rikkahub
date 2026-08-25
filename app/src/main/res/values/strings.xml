@@ -1312,4 +1312,10 @@
   <string name="setting_update_reminder_pause_days">%1$d days</string>
   <string name="setting_update_reminder_resume_now">Resume now</string>
   <string name="backup_page_import_overwrite_confirm">Importing a backup will overwrite app data. Continue?</string>
+  <string name="setting_provider_page_test_non_streaming">Non-streaming</string>
+  <string name="setting_provider_page_test_streaming">Streaming</string>
+  <string name="setting_provider_page_test_tool_call">Tool Call</string>
+  <string name="setting_provider_page_test_tool_called">Called: %1$s  Args: %2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">Tool not called, response: %s</string>
 </resources>
+

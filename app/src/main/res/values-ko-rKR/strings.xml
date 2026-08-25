@@ -1301,5 +1301,10 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_page_preferences_network_proxy">프록시</string>
   <string name="setting_page_preferences_network_proxy_desc">HTTP 및 SOCKS5 프록시 URL을 지원합니다. 비워 두면 시스템 설정을 사용합니다.</string>
   <string name="setting_page_preferences_network_proxy_invalid">호스트와 포트가 있는 유효한 프록시 URL을 입력하세요.</string>
+  <string name="setting_provider_page_test_non_streaming">비스트리밍</string>
+  <string name="setting_provider_page_test_streaming">스트리밍</string>
+  <string name="setting_provider_page_test_tool_call">도구 호출</string>
+  <string name="setting_provider_page_test_tool_called">호출: %1$s  인수: %2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">도구가 호출되지 않음, 응답: %s</string>
 </resources>
 

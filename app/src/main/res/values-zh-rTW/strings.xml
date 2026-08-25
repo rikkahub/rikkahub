@@ -1299,5 +1299,10 @@
   <string name="setting_page_preferences_network_proxy">代理</string>
   <string name="setting_page_preferences_network_proxy_desc">支援 HTTP 和 SOCKS5 代理網址。留空以使用系統設定。</string>
   <string name="setting_page_preferences_network_proxy_invalid">請輸入包含主機和連接埠的有效代理 URL。</string>
+  <string name="setting_provider_page_test_non_streaming">非串流</string>
+  <string name="setting_provider_page_test_streaming">串流</string>
+  <string name="setting_provider_page_test_tool_call">工具呼叫</string>
+  <string name="setting_provider_page_test_tool_called">已調用：%1$s  參數：%2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">工具未被呼叫，回應：%s</string>
 </resources>
 

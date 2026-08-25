@@ -76,6 +76,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -106,6 +107,20 @@ internal fun backgroundTextGenerationParams(
 internal fun shouldUseExternalWebSearch(assistant: Assistant, model: Model): Boolean {
     return assistant.enableWebSearch && BuiltInTools.Search !in model.tools
 }
+
+internal fun createForkConversation(
+    source: Conversation,
+    messageNodes: List<MessageNode>,
+): Conversation = Conversation(
+    id = Uuid.random(),
+    assistantId = source.assistantId,
+    messageNodes = messageNodes,
+    customSystemPrompt = source.customSystemPrompt,
+    modeInjectionIds = source.modeInjectionIds,
+    lorebookIds = source.lorebookIds,
+    workspaceCwd = source.workspaceCwd,
+    folderId = source.folderId,
+)
 
 data class ChatError(
     val id: Uuid = Uuid.random(),
@@ -521,6 +536,7 @@ class ChatService(
                     }
                 },
                 assistant = assistant,
+                conversationId = conversationId,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
@@ -1131,14 +1147,7 @@ class ChatService(
                 )
             }
 
-        val forkConversation = Conversation(
-            id = Uuid.random(),
-            assistantId = currentConversation.assistantId,
-            messageNodes = copiedNodes,
-            customSystemPrompt = currentConversation.customSystemPrompt,
-            modeInjectionIds = currentConversation.modeInjectionIds,
-            lorebookIds = currentConversation.lorebookIds,
-        )
+        val forkConversation = createForkConversation(currentConversation, copiedNodes)
 
         saveConversation(forkConversation.id, forkConversation)
         return forkConversation
