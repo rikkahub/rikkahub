@@ -5,10 +5,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -17,6 +21,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,13 +33,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ApiKeyInfo
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.apiKeyInfos
-import me.rerere.ai.provider.normalizeApiKeys
 import me.rerere.ai.provider.withApiKeyInfos
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
@@ -43,6 +48,7 @@ import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -218,95 +224,93 @@ private fun ApiKeyEditor(
         is ProviderSetting.Google -> provider.selectedApiKeyIndex
         is ProviderSetting.Claude -> provider.selectedApiKeyIndex
     }.coerceIn(0, (entries.size - 1).coerceAtLeast(0))
-    var newKey by remember { mutableStateOf("") }
-    var newName by remember { mutableStateOf("") }
-    var newMultiplier by remember { mutableStateOf("1.0") }
     var showKeys by remember { mutableStateOf(false) }
+    var showEditor by remember { mutableStateOf(false) }
+    var editingIndex by remember { mutableStateOf<Int?>(null) }
+    var draftKey by remember { mutableStateOf("") }
+    var draftName by remember { mutableStateOf("") }
+    var draftMultiplier by remember { mutableStateOf("1.0") }
+    var draftShowKey by remember { mutableStateOf(false) }
+
+    fun openEditor(index: Int?) {
+        val entry = index?.let { entries.getOrNull(it) }
+        editingIndex = index
+        showEditor = true
+        draftKey = entry?.key.orEmpty()
+        draftName = entry?.name.orEmpty()
+        draftMultiplier = entry?.let { formatMultiplier(it.multiplier) } ?: "1.0"
+        draftShowKey = false
+    }
+
+    val normalizedDraftKey = draftKey.trim()
+    val draftMultiplierValue = draftMultiplier.toFloatOrNull()
+    val duplicateDraftKey = entries.withIndex().any { (index, entry) ->
+        index != editingIndex && entry.key == normalizedDraftKey
+    }
+    val draftValid = normalizedDraftKey.isNotBlank() && !duplicateDraftKey &&
+        draftMultiplierValue != null && draftMultiplierValue > 0f
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(
-            text = stringResource(R.string.setting_provider_page_api_key),
-            style = MaterialTheme.typography.labelLarge,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.setting_provider_page_api_key),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = { showKeys = !showKeys }) {
+                Icon(
+                    if (showKeys) HugeIcons.ViewOff else HugeIcons.View,
+                    contentDescription = stringResource(R.string.setting_provider_page_api_key_visibility),
+                )
+            }
+            IconButton(onClick = { openEditor(null) }) {
+                Icon(
+                    HugeIcons.Add01,
+                    contentDescription = stringResource(R.string.setting_provider_page_api_key_add),
+                )
+            }
+        }
+        if (entries.isEmpty()) {
+            Text(
+                text = stringResource(R.string.setting_provider_page_api_key_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         entries.forEachIndexed { index, entry ->
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onEdit(provider.withApiKeyInfos(entries, index)) },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 RadioButton(
                     selected = index == selectedIndex,
-                    onClick = { onEdit(provider.withApiKeyInfos(entries, index)) },
+                    onClick = null,
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    var keyInput by remember(entry.key) { mutableStateOf(entry.key) }
-                    var nameInput by remember(entry.key) { mutableStateOf(entry.name) }
-                    var multiplierInput by remember(entry.key) { mutableStateOf(formatMultiplier(entry.multiplier)) }
-                    OutlinedTextField(
-                        value = keyInput,
-                        onValueChange = { keyInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-                        singleLine = true,
-                        visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation(),
+                    Text(
+                        text = entry.name.ifBlank { stringResource(R.string.setting_provider_page_api_key_unnamed) },
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedTextField(
-                            value = nameInput,
-                            onValueChange = { value ->
-                                nameInput = value
-                                onEdit(provider.withApiKeyInfos(entries.mapIndexed { i, item ->
-                                    if (i == index) item.copy(name = value) else item
-                                }, selectedIndex))
-                            },
-                            modifier = Modifier.weight(1f),
-                            label = { Text(stringResource(R.string.setting_provider_page_api_key_name)) },
-                            singleLine = true,
-                        )
-                        OutlinedTextField(
-                            value = multiplierInput,
-                            onValueChange = { value ->
-                                multiplierInput = value
-                                val multiplier = value.toFloatOrNull()
-                                if (multiplier != null && multiplier > 0f) {
-                                    onEdit(provider.withApiKeyInfos(entries.mapIndexed { i, item ->
-                                        if (i == index) item.copy(multiplier = multiplier) else item
-                                    }, selectedIndex))
-                                }
-                            },
-                            modifier = Modifier.weight(0.45f),
-                            label = { Text(stringResource(R.string.setting_provider_page_api_key_multiplier)) },
-                            singleLine = true,
-                        )
-                    }
-                    val normalizedKey = keyInput.trim()
-                    val parsedMultiplier = multiplierInput.toFloatOrNull()
-                    val duplicateKey = entries.withIndex().any { (i, item) ->
-                        i != index && item.key == normalizedKey
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            onEdit(provider.withApiKeyInfos(entries.mapIndexed { i, item ->
-                                if (i == index) {
-                                    item.copy(
-                                        key = normalizedKey,
-                                        name = nameInput,
-                                        multiplier = parsedMultiplier ?: item.multiplier,
-                                    )
-                                } else item
-                            }, selectedIndex))
-                        },
-                        enabled = normalizedKey.isNotBlank() && !duplicateKey &&
-                            parsedMultiplier != null && parsedMultiplier > 0f,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(stringResource(R.string.setting_provider_page_api_key_save))
-                    }
+                    Text(
+                        text = "${if (showKeys) entry.key else maskApiKey(entry.key)}  ·  x${formatMultiplier(entry.multiplier)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-                IconButton(onClick = { showKeys = !showKeys }) {
+                IconButton(onClick = { openEditor(index) }) {
                     Icon(
-                        if (showKeys) HugeIcons.ViewOff else HugeIcons.View,
-                        contentDescription = null,
+                        HugeIcons.PencilEdit01,
+                        contentDescription = stringResource(R.string.setting_provider_page_api_key_edit),
                     )
                 }
                 IconButton(
@@ -321,53 +325,75 @@ private fun ApiKeyEditor(
                         onEdit(provider.withApiKeyInfos(remaining, nextIndex))
                     }
                 ) {
-                    Icon(HugeIcons.Delete01, contentDescription = null)
+                    Icon(
+                        HugeIcons.Delete01,
+                        contentDescription = stringResource(R.string.setting_provider_page_api_key_delete),
+                    )
                 }
             }
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(
-                value = newKey,
-                onValueChange = { newKey = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-            )
-            OutlinedTextField(
-                value = newName,
-                onValueChange = { newName = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.setting_provider_page_api_key_name)) },
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = newMultiplier,
-                onValueChange = { newMultiplier = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.setting_provider_page_api_key_multiplier)) },
-                singleLine = true,
-            )
-            OutlinedButton(
-                onClick = {
-                    val additions = normalizeApiKeys(listOf(newKey), "")
-                    val multiplier = newMultiplier.toFloatOrNull()
-                    if (additions.isNotEmpty() && multiplier != null && multiplier > 0f) {
-                        val merged = (entries + additions.map { ApiKeyInfo(it, newName, multiplier) })
-                            .distinctBy { it.key.trim() }
-                        onEdit(provider.withApiKeyInfos(merged, if (entries.isEmpty()) 0 else selectedIndex))
-                        newKey = ""
-                        newName = ""
-                        newMultiplier = "1.0"
-                    }
-                },
-                enabled = newKey.isNotBlank() && (newMultiplier.toFloatOrNull() ?: 0f) > 0f,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(HugeIcons.Add01, contentDescription = null)
-                Text(stringResource(R.string.setting_provider_page_api_key_add))
+            if (index < entries.lastIndex) {
+                HorizontalDivider()
             }
         }
+    }
+
+    if (showEditor) {
+        AlertDialog(
+            onDismissRequest = { showEditor = false },
+            title = {
+                Text(
+                    if (editingIndex == null) stringResource(R.string.setting_provider_page_api_key_add)
+                    else stringResource(R.string.setting_provider_page_api_key_edit),
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = draftKey,
+                        onValueChange = { draftKey = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+                        singleLine = true,
+                        visualTransformation = if (draftShowKey) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { draftShowKey = !draftShowKey }) {
+                                Icon(if (draftShowKey) HugeIcons.ViewOff else HugeIcons.View, contentDescription = null)
+                            }
+                        },
+                    )
+                    OutlinedTextField(
+                        value = draftName,
+                        onValueChange = { draftName = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.setting_provider_page_api_key_name)) },
+                        singleLine = true,
+                    )
+                    OutlinedTextField(
+                        value = draftMultiplier,
+                        onValueChange = { draftMultiplier = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.setting_provider_page_api_key_multiplier)) },
+                        singleLine = true,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val info = ApiKeyInfo(normalizedDraftKey, draftName, draftMultiplierValue ?: 1f)
+                        val updated = if (editingIndex == null) entries + info else entries.mapIndexed { index, entry ->
+                            if (index == editingIndex) info else entry
+                        }
+                        onEdit(provider.withApiKeyInfos(updated, if (editingIndex == null && entries.isEmpty()) 0 else selectedIndex))
+                        showEditor = false
+                    },
+                    enabled = draftValid,
+                ) { Text(stringResource(R.string.common_save)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditor = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
     }
 }
 

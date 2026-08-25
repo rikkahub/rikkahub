@@ -941,7 +941,11 @@
   <string name="setting_provider_page_api_key_name">Key name</string>
   <string name="setting_provider_page_api_key_multiplier">Multiplier</string>
   <string name="setting_provider_page_api_key_add">Add API Key</string>
-  <string name="setting_provider_page_api_key_save">Save Key</string>
+  <string name="setting_provider_page_api_key_edit">Edit API Key</string>
+  <string name="setting_provider_page_api_key_visibility">Show or hide API keys</string>
+  <string name="setting_provider_page_api_key_delete">Delete API key</string>
+  <string name="setting_provider_page_api_key_empty">No API keys added</string>
+  <string name="setting_provider_page_api_key_unnamed">Unnamed key</string>
   <string name="setting_provider_page_api_path">API Path</string>
   <string name="setting_provider_page_avaliable_models">Avaliable Models</string>
   <string name="setting_provider_page_balance_api_path">Balance API Path</string>
