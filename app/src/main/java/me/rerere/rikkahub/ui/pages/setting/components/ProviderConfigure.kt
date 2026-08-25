@@ -239,12 +239,16 @@ private fun ApiKeyEditor(
                     onClick = { onEdit(provider.withApiKeyInfos(entries, index)) },
                 )
                 Column(modifier = Modifier.weight(1f)) {
+                    var keyInput by remember(entry.key) { mutableStateOf(entry.key) }
                     var nameInput by remember(entry.key) { mutableStateOf(entry.name) }
                     var multiplierInput by remember(entry.key) { mutableStateOf(formatMultiplier(entry.multiplier)) }
-                    Text(
-                        text = if (showKeys) entry.key else maskApiKey(entry.key),
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
+                    OutlinedTextField(
+                        value = keyInput,
+                        onValueChange = { keyInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
+                        singleLine = true,
+                        visualTransformation = if (showKeys) VisualTransformation.None else PasswordVisualTransformation(),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedTextField(
@@ -274,6 +278,29 @@ private fun ApiKeyEditor(
                             label = { Text(stringResource(R.string.setting_provider_page_api_key_multiplier)) },
                             singleLine = true,
                         )
+                    }
+                    val normalizedKey = keyInput.trim()
+                    val parsedMultiplier = multiplierInput.toFloatOrNull()
+                    val duplicateKey = entries.withIndex().any { (i, item) ->
+                        i != index && item.key == normalizedKey
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            onEdit(provider.withApiKeyInfos(entries.mapIndexed { i, item ->
+                                if (i == index) {
+                                    item.copy(
+                                        key = normalizedKey,
+                                        name = nameInput,
+                                        multiplier = parsedMultiplier ?: item.multiplier,
+                                    )
+                                } else item
+                            }, selectedIndex))
+                        },
+                        enabled = normalizedKey.isNotBlank() && !duplicateKey &&
+                            parsedMultiplier != null && parsedMultiplier > 0f,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.setting_provider_page_api_key_save))
                     }
                 }
                 IconButton(onClick = { showKeys = !showKeys }) {

@@ -913,6 +913,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_api_key_name">Key 名称</string>
   <string name="setting_provider_page_api_key_multiplier">倍率</string>
   <string name="setting_provider_page_api_key_add">添加 API Key</string>
+  <string name="setting_provider_page_api_key_save">保存 Key</string>
   <string name="setting_provider_page_api_path">API 路径</string>
   <string name="setting_provider_page_avaliable_models">可用模型</string>
   <string name="setting_provider_page_balance_api_path">余额 API 路径</string>
