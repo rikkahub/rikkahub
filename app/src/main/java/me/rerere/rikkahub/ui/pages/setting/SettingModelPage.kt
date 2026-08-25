@@ -117,15 +117,6 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
         }
         item {
             ModelSettingItem(
-                title = stringResource(R.string.setting_model_page_fast_model),
-                description = stringResource(R.string.setting_model_page_fast_model_desc),
-                modelId = settings.fastModelId,
-                providers = settings.providers,
-                onSelect = { vm.updateSettings(settings.copy(fastModelId = it.id)) },
-            )
-        }
-        item {
-            ModelSettingItem(
                 title = stringResource(R.string.setting_model_page_title_model),
                 description = stringResource(R.string.setting_model_page_title_model_desc),
                 modelId = settings.titleModelId,

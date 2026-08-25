@@ -766,7 +766,8 @@ class ChatService(
 
         runCatching {
             val settings = settingsStore.settingsFlow.first()
-            val model = settings.findModelById(settings.titleModelId, fallback = settings.fastModelId)
+            val model = settings.findModelById(settings.titleModelId)
+                ?: settings.getCurrentChatModel()
                 ?: return@runCatching
             val provider = model.findProvider(settings.providers) ?: return@runCatching
 
@@ -811,7 +812,8 @@ class ChatService(
         runCatching {
             val settings = settingsStore.settingsFlow.first()
             if (!settings.enableSuggestion) return@runCatching
-            val model = settings.findModelById(settings.suggestionModelId, fallback = settings.fastModelId)
+            val model = settings.findModelById(settings.suggestionModelId)
+                ?: settings.getCurrentChatModel()
                 ?: return@runCatching
             val provider = model.findProvider(settings.providers) ?: return@runCatching
 

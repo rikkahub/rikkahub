@@ -1117,8 +1117,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_model_page_prompt_compress">컨텍스트 압축</string>
   <string name="setting_display_page_bubble_opacity_title">버블 불투명도</string>
   <string name="setting_provider_page_include_history_reasoning">이전 추론 내용 전송</string>
-  <string name="setting_model_page_fast_model">빠른 모델</string>
-  <string name="setting_model_page_fast_model_desc">빠른 작업 또는 백그라운드 작업을 위한 모델이며, 설정되지 않은 경우 제목 및 제안 모델의 대체로도 사용됩니다.</string>
   <string name="setting_model_page_enable_suggestion">채팅 제안 활성화</string>
   <string name="assistant_page_gradient_background">그라데이션 배경</string>
   <string name="assistant_page_gradient_background_desc">채팅 페이지에서 동적 그라데이션 배경 사용</string>

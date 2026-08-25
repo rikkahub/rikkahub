@@ -25,6 +25,9 @@ object SettingsJsonMigrator {
         return runCatching {
             val root = JsonInstant.parseToJsonElement(settingsJson).jsonObject.toMutableMap()
 
+            // V0: 移除已废弃的 fastModelId 字段(快速模型已移除)
+            root.remove("fastModelId")
+
             // V1: 修复 mcpServers 中全限定类名的 type 字段
             root["mcpServers"]?.let { element ->
                 val migrated = migrateMcpServersJson(JsonInstant.encodeToString(element))
