@@ -13,6 +13,14 @@ data class BalanceOption(
     val resultPath: String = "data.total_usage", // 余额获取JSON路径
 )
 
+/** Metadata for one manually selectable provider API key. */
+@Serializable
+data class ApiKeyInfo(
+    val key: String = "",
+    val name: String = "",
+    val multiplier: Float = 1f,
+)
+
 @Serializable
 enum class ClaudePromptCacheTtl(val apiValue: String?) {
     @SerialName("5m")
@@ -64,6 +72,7 @@ sealed class ProviderSetting {
         /** New multi-key storage. [apiKey] remains for backwards compatibility. */
         var apiKeys: List<String> = emptyList(),
         var selectedApiKeyIndex: Int = 0,
+        var apiKeyInfos: List<ApiKeyInfo> = emptyList(),
         var baseUrl: String = "https://api.openai.com/v1",
         var chatCompletionsPath: String = "/chat/completions",
         var useResponseApi: Boolean = false,
@@ -128,6 +137,7 @@ sealed class ProviderSetting {
         var apiKey: String = "",
         var apiKeys: List<String> = emptyList(),
         var selectedApiKeyIndex: Int = 0,
+        var apiKeyInfos: List<ApiKeyInfo> = emptyList(),
         var baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
         var vertexAI: Boolean = false,
         var useServiceAccount: Boolean = false,
@@ -195,6 +205,7 @@ sealed class ProviderSetting {
         var apiKey: String = "",
         var apiKeys: List<String> = emptyList(),
         var selectedApiKeyIndex: Int = 0,
+        var apiKeyInfos: List<ApiKeyInfo> = emptyList(),
         var baseUrl: String = "https://api.anthropic.com/v1",
         var promptCaching: Boolean = false,
         var promptCacheTtl: ClaudePromptCacheTtl = ClaudePromptCacheTtl.FIVE_MINUTES,
@@ -276,6 +287,27 @@ fun ProviderSetting.apiKeys(): List<String> = when (this) {
     is ProviderSetting.Claude -> normalizeApiKeys(apiKeys = this.apiKeys, legacyApiKey = this.apiKey)
 }
 
+/**
+ * Returns normalized key metadata while retaining compatibility with the legacy key fields.
+ * Metadata is matched by key value, so old exports can be upgraded without losing entries.
+ */
+fun ProviderSetting.apiKeyInfos(): List<ApiKeyInfo> {
+    val keys = apiKeys()
+    val stored = when (this) {
+        is ProviderSetting.OpenAI -> apiKeyInfos
+        is ProviderSetting.Google -> apiKeyInfos
+        is ProviderSetting.Claude -> apiKeyInfos
+    }
+    return keys.mapIndexed { index, key ->
+        val info = stored.firstOrNull { it.key.trim() == key }
+        ApiKeyInfo(
+            key = key,
+            name = info?.name?.trim().orEmpty().ifBlank { "Key ${index + 1}" },
+            multiplier = info?.multiplier?.takeIf { it.isFinite() && it > 0f } ?: 1f,
+        )
+    }
+}
+
 fun ProviderSetting.selectedApiKey(): String {
     val keys = apiKeys()
     if (keys.isEmpty()) return ""
@@ -293,26 +325,55 @@ fun ProviderSetting.selectedApiKeyOrBlank(): String = selectedApiKey()
 
 /** Returns a provider with normalized keys and the legacy field synchronized. */
 fun ProviderSetting.withApiKeys(keys: List<String>, selectedIndex: Int = 0): ProviderSetting {
-    val normalized = normalizeApiKeys(keys, legacyApiKey = "")
-    val index = selectedIndex.takeIf { it in normalized.indices } ?: 0
-    val selected = normalized.getOrNull(index).orEmpty()
+    return withApiKeyInfos(
+        entries = normalizeApiKeys(keys, legacyApiKey = "").map { ApiKeyInfo(key = it) },
+        selectedIndex = selectedIndex,
+    )
+}
+
+/** Replaces key values and metadata, synchronizing the legacy apiKey field. */
+fun ProviderSetting.withApiKeyInfos(
+    entries: List<ApiKeyInfo>,
+    selectedIndex: Int = 0,
+): ProviderSetting {
+    val normalized = entries
+        .map { info ->
+            val key = info.key.trim()
+            key to ApiKeyInfo(
+                key = key,
+                name = info.name.trim(),
+                multiplier = info.multiplier.takeIf { it.isFinite() && it > 0f } ?: 1f,
+            )
+        }
+        .filter { it.first.isNotBlank() }
+        .distinctBy { it.first }
+        .mapIndexed { index, (_, info) ->
+            info.copy(name = info.name.ifBlank { "Key ${index + 1}" })
+        }
+    val keys = normalized.map { it.key }
+    val index = selectedIndex.takeIf { it in keys.indices } ?: 0
+    val selected = keys.getOrNull(index).orEmpty()
+    val metadata = normalized.map { it.copy(key = it.key) }
     return when (this) {
         is ProviderSetting.OpenAI -> copy(
             apiKey = selected,
-            apiKeys = normalized,
+            apiKeys = keys,
             selectedApiKeyIndex = index,
+            apiKeyInfos = metadata,
         )
 
         is ProviderSetting.Google -> copy(
             apiKey = selected,
-            apiKeys = normalized,
+            apiKeys = keys,
             selectedApiKeyIndex = index,
+            apiKeyInfos = metadata,
         )
 
         is ProviderSetting.Claude -> copy(
             apiKey = selected,
-            apiKeys = normalized,
+            apiKeys = keys,
             selectedApiKeyIndex = index,
+            apiKeyInfos = metadata,
         )
     }
 }

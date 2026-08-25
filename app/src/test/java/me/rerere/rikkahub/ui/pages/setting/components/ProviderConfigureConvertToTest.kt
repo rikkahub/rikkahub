@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.setting.components
 
 import me.rerere.ai.provider.BalanceOption
+import me.rerere.ai.provider.ApiKeyInfo
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -30,6 +31,12 @@ class ProviderConfigureConvertToTest {
             models = listOf(model),
             balanceOption = balanceOption,
             apiKey = "sk-test",
+            apiKeys = listOf("sk-test", "sk-backup"),
+            selectedApiKeyIndex = 1,
+            apiKeyInfos = listOf(
+                ApiKeyInfo("sk-test", "Primary", 2f),
+                ApiKeyInfo("sk-backup", "Backup", 0.5f),
+            ),
             baseUrl = "https://api.openai.com/v1"
         )
 
@@ -42,7 +49,9 @@ class ProviderConfigureConvertToTest {
         assertEquals(original.name, google.name)
         assertEquals(original.models, google.models)
         assertEquals(original.balanceOption, google.balanceOption)
-        assertEquals(original.apiKey, google.apiKey)
+        assertEquals("sk-backup", google.apiKey)
+        assertEquals(original.apiKeyInfos, google.apiKeyInfos)
+        assertEquals(1, google.selectedApiKeyIndex)
         assertEquals("https://generativelanguage.googleapis.com/v1beta", google.baseUrl)
     }
 

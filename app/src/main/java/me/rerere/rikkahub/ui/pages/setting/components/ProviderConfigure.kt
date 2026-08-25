@@ -31,10 +31,11 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.dokar.sonner.ToastType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
+import me.rerere.ai.provider.ApiKeyInfo
 import me.rerere.ai.provider.ProviderSetting
-import me.rerere.ai.provider.apiKeys
+import me.rerere.ai.provider.apiKeyInfos
 import me.rerere.ai.provider.normalizeApiKeys
-import me.rerere.ai.provider.withApiKeys
+import me.rerere.ai.provider.withApiKeyInfos
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
 import me.rerere.hugeicons.HugeIcons
@@ -86,7 +87,8 @@ fun ProviderConfigure(
 fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSetting {
     if (this::class == type) return this
 
-    val apiKeys = this.apiKeys()
+    val apiKeyInfos = this.apiKeyInfos()
+    val apiKeys = apiKeyInfos.map { it.key }
     val selectedApiKeyIndex = when (this) {
         is ProviderSetting.OpenAI -> this.selectedApiKeyIndex
         is ProviderSetting.Google -> this.selectedApiKeyIndex
@@ -112,19 +114,19 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             balanceOption = this.balanceOption, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
-            apiKey = apiKey, apiKeys = apiKeys, selectedApiKeyIndex = normalizedSelectedIndex, baseUrl = convertedBaseUrl
+            apiKey = apiKey, apiKeys = apiKeys, selectedApiKeyIndex = normalizedSelectedIndex, apiKeyInfos = apiKeyInfos, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Google::class -> ProviderSetting.Google(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             balanceOption = this.balanceOption, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
-            apiKey = apiKey, apiKeys = apiKeys, selectedApiKeyIndex = normalizedSelectedIndex, baseUrl = convertedBaseUrl
+            apiKey = apiKey, apiKeys = apiKeys, selectedApiKeyIndex = normalizedSelectedIndex, apiKeyInfos = apiKeyInfos, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Claude::class -> ProviderSetting.Claude(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             balanceOption = this.balanceOption, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
-            apiKey = apiKey, apiKeys = apiKeys, selectedApiKeyIndex = normalizedSelectedIndex, baseUrl = convertedBaseUrl
+            apiKey = apiKey, apiKeys = apiKeys, selectedApiKeyIndex = normalizedSelectedIndex, apiKeyInfos = apiKeyInfos, baseUrl = convertedBaseUrl
         )
         else -> error("Unsupported provider type: $type")
     }
@@ -210,13 +212,15 @@ private fun ApiKeyEditor(
     provider: ProviderSetting,
     onEdit: (ProviderSetting) -> Unit,
 ) {
-    val keys = provider.apiKeys()
+    val entries = provider.apiKeyInfos()
     val selectedIndex = when (provider) {
         is ProviderSetting.OpenAI -> provider.selectedApiKeyIndex
         is ProviderSetting.Google -> provider.selectedApiKeyIndex
         is ProviderSetting.Claude -> provider.selectedApiKeyIndex
-    }.coerceIn(0, (keys.size - 1).coerceAtLeast(0))
+    }.coerceIn(0, (entries.size - 1).coerceAtLeast(0))
     var newKey by remember { mutableStateOf("") }
+    var newName by remember { mutableStateOf("") }
+    var newMultiplier by remember { mutableStateOf("1.0") }
     var showKeys by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -224,7 +228,7 @@ private fun ApiKeyEditor(
             text = stringResource(R.string.setting_provider_page_api_key),
             style = MaterialTheme.typography.labelLarge,
         )
-        keys.forEachIndexed { index, key ->
+        entries.forEachIndexed { index, entry ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -232,13 +236,46 @@ private fun ApiKeyEditor(
             ) {
                 RadioButton(
                     selected = index == selectedIndex,
-                    onClick = { onEdit(provider.withApiKeys(keys, index)) },
+                    onClick = { onEdit(provider.withApiKeyInfos(entries, index)) },
                 )
-                Text(
-                    text = if (showKeys) key else maskApiKey(key),
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    var nameInput by remember(entry.key) { mutableStateOf(entry.name) }
+                    var multiplierInput by remember(entry.key) { mutableStateOf(formatMultiplier(entry.multiplier)) }
+                    Text(
+                        text = if (showKeys) entry.key else maskApiKey(entry.key),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            value = nameInput,
+                            onValueChange = { value ->
+                                nameInput = value
+                                onEdit(provider.withApiKeyInfos(entries.mapIndexed { i, item ->
+                                    if (i == index) item.copy(name = value) else item
+                                }, selectedIndex))
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text(stringResource(R.string.setting_provider_page_api_key_name)) },
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = multiplierInput,
+                            onValueChange = { value ->
+                                multiplierInput = value
+                                val multiplier = value.toFloatOrNull()
+                                if (multiplier != null && multiplier > 0f) {
+                                    onEdit(provider.withApiKeyInfos(entries.mapIndexed { i, item ->
+                                        if (i == index) item.copy(multiplier = multiplier) else item
+                                    }, selectedIndex))
+                                }
+                            },
+                            modifier = Modifier.weight(0.45f),
+                            label = { Text(stringResource(R.string.setting_provider_page_api_key_multiplier)) },
+                            singleLine = true,
+                        )
+                    }
+                }
                 IconButton(onClick = { showKeys = !showKeys }) {
                     Icon(
                         if (showKeys) HugeIcons.ViewOff else HugeIcons.View,
@@ -247,49 +284,68 @@ private fun ApiKeyEditor(
                 }
                 IconButton(
                     onClick = {
-                        val remaining = keys.toMutableList().apply { removeAt(index) }
+                        val remaining = entries.toMutableList().apply { removeAt(index) }
                         val nextIndex = when {
                             remaining.isEmpty() -> 0
                             index < selectedIndex -> selectedIndex - 1
                             index == selectedIndex -> index.coerceAtMost(remaining.lastIndex)
                             else -> selectedIndex
                         }
-                        onEdit(provider.withApiKeys(remaining, nextIndex))
+                        onEdit(provider.withApiKeyInfos(remaining, nextIndex))
                     }
                 ) {
                     Icon(HugeIcons.Delete01, contentDescription = null)
                 }
             }
         }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(
                 value = newKey,
                 onValueChange = { newKey = it },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.setting_provider_page_api_key)) },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
             )
-            IconButton(
+            OutlinedTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.setting_provider_page_api_key_name)) },
+                singleLine = true,
+            )
+            OutlinedTextField(
+                value = newMultiplier,
+                onValueChange = { newMultiplier = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.setting_provider_page_api_key_multiplier)) },
+                singleLine = true,
+            )
+            OutlinedButton(
                 onClick = {
                     val additions = normalizeApiKeys(listOf(newKey), "")
-                    if (additions.isNotEmpty()) {
-                        val merged = (keys + additions).distinct()
-                        onEdit(provider.withApiKeys(merged, if (keys.isEmpty()) 0 else selectedIndex))
+                    val multiplier = newMultiplier.toFloatOrNull()
+                    if (additions.isNotEmpty() && multiplier != null && multiplier > 0f) {
+                        val merged = (entries + additions.map { ApiKeyInfo(it, newName, multiplier) })
+                            .distinctBy { it.key.trim() }
+                        onEdit(provider.withApiKeyInfos(merged, if (entries.isEmpty()) 0 else selectedIndex))
                         newKey = ""
+                        newName = ""
+                        newMultiplier = "1.0"
                     }
                 },
-                enabled = newKey.isNotBlank(),
+                enabled = newKey.isNotBlank() && (newMultiplier.toFloatOrNull() ?: 0f) > 0f,
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(HugeIcons.Add01, contentDescription = null)
+                Text(stringResource(R.string.setting_provider_page_api_key_add))
             }
         }
     }
 }
+
+private fun formatMultiplier(value: Float): String =
+    if (value % 1f == 0f) value.toInt().toString() else value.toString()
 
 private fun maskApiKey(key: String): String = when {
     key.length <= 8 -> "*".repeat(key.length)

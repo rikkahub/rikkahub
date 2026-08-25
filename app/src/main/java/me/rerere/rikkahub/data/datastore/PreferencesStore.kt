@@ -23,8 +23,8 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
-import me.rerere.ai.provider.apiKeys
-import me.rerere.ai.provider.withApiKeys
+import me.rerere.ai.provider.apiKeyInfos
+import me.rerere.ai.provider.withApiKeyInfos
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_COMPRESS_PROMPT
@@ -279,13 +279,12 @@ class SettingsStore(
             val asrProviders = settings.asrProviders.distinctBy { it.id }
             settings.copy(
                 providers = settings.providers.distinctBy { it.id }.map { provider ->
-                    val keys = provider.apiKeys()
                     val selectedIndex = when (provider) {
                         is ProviderSetting.OpenAI -> provider.selectedApiKeyIndex
                         is ProviderSetting.Google -> provider.selectedApiKeyIndex
                         is ProviderSetting.Claude -> provider.selectedApiKeyIndex
                     }
-                    provider.withApiKeys(keys, selectedIndex).let { normalized ->
+                    provider.withApiKeyInfos(provider.apiKeyInfos(), selectedIndex).let { normalized ->
                         when (normalized) {
                             is ProviderSetting.OpenAI -> normalized.copy(
                                 models = normalized.models.distinctBy { model -> model.id }
