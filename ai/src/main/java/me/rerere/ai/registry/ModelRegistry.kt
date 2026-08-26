@@ -537,6 +537,12 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val HY4 = defineModel {
+        tokens("hy", "4")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val LONGCAT_2 = defineModel {
         tokens("longcat", "2", "0")
         toolReasoningAbility()
@@ -644,6 +650,7 @@ object ModelRegistry {
         XIAOMI_MIMO_V3,
         XIAOMI_MIMO_V3_PRO,
         HY3,
+        HY4,
         LONGCAT_2,
         MUSE_SPARK,
         MUSE_GLIMMER,
