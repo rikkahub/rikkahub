@@ -153,7 +153,8 @@ internal fun applyInjections(
             }
 
             result[systemIndex] = systemMessage.copy(
-                parts = listOf(UIMessagePart.Text(newText))
+                parts = listOf(UIMessagePart.Text(newText)),
+                isSynthetic = true,
             )
         }
     } else {
@@ -174,7 +175,7 @@ internal fun applyInjections(
         }
 
         if (combinedContent.isNotEmpty()) {
-            result.add(0, UIMessage.system(combinedContent))
+            result.add(0, UIMessage.system(combinedContent).copy(isSynthetic = true))
         }
     }
 
@@ -235,7 +236,9 @@ private fun createMergedInjectionMessages(injections: List<PromptInjection>): Li
             when (role) {
                 MessageRole.ASSISTANT -> UIMessage.assistant(mergedContent)
                 else -> UIMessage.user(mergedContent)
-            }
+            }.copy(
+                isSynthetic = true,
+            )
         }
 }
 
