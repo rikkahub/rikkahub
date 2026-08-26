@@ -89,6 +89,10 @@
   <string name="assistant_page_local_tools_time_info_title">时间信息</string>
   <string name="assistant_page_local_tools_tts_desc">让AI使用您所选的TTS服务为您朗读文本</string>
   <string name="assistant_page_local_tools_tts_title">文字转语音</string>
+  <string name="assistant_page_local_tools_external_storage_title">手机存储</string>
+  <string name="assistant_page_local_tools_external_storage_desc">允许 AI 访问你在系统选择器中明确授权的目录</string>
+  <string name="assistant_page_local_tools_termux_title">Termux 终端</string>
+  <string name="assistant_page_local_tools_termux_desc">授权后允许 AI 在 Termux 中执行命令并控制持久终端会话</string>
   <string name="assistant_page_manage_memory_title">管理记忆</string>
   <string name="assistant_page_max_tokens">最大Token数</string>
   <string name="assistant_page_max_tokens_desc">最大生成Token数量。留空表示无限制。</string>
@@ -816,8 +820,6 @@
   <string name="setting_page_color_mode_light">浅色</string>
   <string name="setting_page_color_mode_system">跟随系统</string>
   <string name="setting_page_config">配置</string>
-  <string name="setting_page_config_api_desc">你还没有配置API和模型，请先配置</string>
-  <string name="setting_page_config_api_title">请配置API和模型</string>
   <string name="setting_page_data_backup">数据备份</string>
   <string name="setting_page_data_backup_desc">备份和恢复应用数据</string>
   <string name="setting_page_data_settings">数据设置</string>
@@ -1201,6 +1203,15 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_detail_tool_delete_file">删除文件</string>
   <string name="workspace_detail_tool_move_file">移动文件</string>
   <string name="workspace_detail_tool_shell">执行命令</string>
+  <string name="workspace_detail_tool_terminal_start">打开终端会话</string>
+  <string name="workspace_detail_tool_terminal_send">发送终端输入</string>
+  <string name="workspace_detail_tool_terminal_read">读取终端画面</string>
+  <string name="workspace_detail_tool_terminal_kill">关闭终端会话</string>
+  <string name="workspace_detail_tool_terminal_list">列出终端会话</string>
+  <string name="workspace_detail_tool_run_background">运行后台任务</string>
+  <string name="workspace_detail_tool_background_status">读取后台任务状态</string>
+  <string name="workspace_detail_tool_background_kill">停止后台任务</string>
+  <string name="workspace_detail_tool_export_file_to_phone">导出文件到手机</string>
   <string name="workspace_detail_install_rootfs_desc">将下载 tar.gz 并解压到 %s 的 Linux 目录。</string>
   <string name="workspace_detail_download_url">tar.gz 下载链接</string>
   <string name="workspace_detail_area_files">文件</string>

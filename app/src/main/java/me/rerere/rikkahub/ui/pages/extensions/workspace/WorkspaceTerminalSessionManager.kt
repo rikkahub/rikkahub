@@ -10,11 +10,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.AppScope
 import java.util.concurrent.atomic.AtomicLong
@@ -47,6 +50,78 @@ class WorkspaceTerminalSessionManager internal constructor(
     internal fun createTab(root: String) {
         launchCreateTab(root = root, onlyIfEmpty = false)
     }
+
+    /**
+     * Returns an existing UI tab, or creates one through the same path used by the terminal page.
+     * Agent calls therefore operate on the exact PTY already visible to the user.
+     */
+    internal suspend fun ensureAgentSession(
+        root: String,
+        tabId: Long? = null,
+        createNewTab: Boolean = false,
+    ): WorkspaceTerminalAgentSession = withContext(Dispatchers.Main.immediate) {
+        val current = currentState(root)
+        val existing = if (tabId != null) {
+            current.tabs.firstOrNull { it.id == tabId }
+                ?: error("Terminal session not found: $tabId")
+        } else {
+            current.tabs.firstOrNull { it.id == current.selectedTabId }
+                ?: current.tabs.firstOrNull()
+        }
+        if (existing != null && !createNewTab) return@withContext existing.toAgentSession()
+
+        val previousIds = current.tabs.mapTo(mutableSetOf()) { it.id }
+        launchCreateTab(root = root, onlyIfEmpty = false)
+        val result = withTimeout(AGENT_SESSION_CREATE_TIMEOUT_MS) {
+            workspaceStates
+                .map { states -> states[root] ?: WorkspaceTerminalTabsState() }
+                .first { state ->
+                    state.tabs.any { it.id !in previousIds } ||
+                        state.readiness == WorkspaceTerminalReadiness.NotInstalled ||
+                        (!state.isCreating && !state.isCreating && state.tabs.isEmpty())
+                }
+        }
+        result.tabs.firstOrNull { it.id !in previousIds }?.toAgentSession()
+            ?: error("Workspace terminal is not ready")
+    }
+
+    internal suspend fun listAgentSessions(root: String): List<WorkspaceTerminalAgentSession> =
+        withContext(Dispatchers.Main.immediate) {
+            currentState(root).tabs.map { it.toAgentSession() }
+        }
+
+    internal suspend fun sendAgentInput(
+        root: String,
+        tabId: Long,
+        input: String?,
+        keys: List<String>,
+        pressEnter: Boolean,
+        waitFor: String? = null,
+        timeoutMillis: Long = DEFAULT_AGENT_WAIT_TIMEOUT_MS,
+    ): WorkspaceTerminalScreen = withContext(Dispatchers.Main.immediate) {
+        val tab = findTab(root, tabId)
+        check(tab.session.isRunning) { "Terminal session has exited: $tabId" }
+        input?.takeIf { it.isNotEmpty() }?.let { tab.session.writeAgentText(it) }
+        keys.forEach { key -> tab.session.writeAgentText(key.toTerminalInput()) }
+        if (pressEnter) tab.session.writeAgentText("\r")
+        awaitAgentScreen(tab, waitFor, timeoutMillis)
+    }
+
+    internal suspend fun readAgentScreen(
+        root: String,
+        tabId: Long,
+        waitFor: String? = null,
+        timeoutMillis: Long = DEFAULT_AGENT_WAIT_TIMEOUT_MS,
+    ): WorkspaceTerminalScreen = withContext(Dispatchers.Main.immediate) {
+        awaitAgentScreen(findTab(root, tabId), waitFor, timeoutMillis)
+    }
+
+    internal suspend fun killAgentSession(root: String, tabId: Long): Boolean =
+        withContext(Dispatchers.Main.immediate) {
+            if (currentState(root).tabs.none { it.id == tabId }) return@withContext false
+            closeTab(root, tabId)
+            true
+        }
 
     internal fun selectTab(root: String, tabId: Long) {
         updateState(root) { state ->
@@ -170,6 +245,13 @@ class WorkspaceTerminalSessionManager internal constructor(
             return@withContext
         }
 
+        // Agent calls can arrive before TerminalView has attached and supplied a size.
+        // Give the emulator a stable initial buffer; TerminalView will resize it later.
+        runCatching { session.initializeEmulator(DEFAULT_AGENT_COLUMNS, DEFAULT_AGENT_ROWS) }
+            .onFailure { error ->
+                Log.w(TAG, "Failed to initialize terminal emulator for workspace $root", error)
+            }
+
         val tab = WorkspaceTerminalTab(
             id = tabId,
             number = tabNumber,
@@ -203,6 +285,26 @@ class WorkspaceTerminalSessionManager internal constructor(
     private fun currentState(root: String): WorkspaceTerminalTabsState =
         workspaceStates.value[root] ?: WorkspaceTerminalTabsState()
 
+    private fun findTab(root: String, tabId: Long): WorkspaceTerminalTab =
+        currentState(root).tabs.firstOrNull { it.id == tabId }
+            ?: error("Terminal session not found: $tabId")
+
+    private suspend fun awaitAgentScreen(
+        tab: WorkspaceTerminalTab,
+        waitFor: String?,
+        timeoutMillis: Long,
+    ): WorkspaceTerminalScreen {
+        val timeout = timeoutMillis.coerceIn(0L, MAX_AGENT_WAIT_TIMEOUT_MS)
+        var screen = tab.toAgentScreen()
+        if (waitFor.isNullOrBlank()) return screen
+        val deadline = System.currentTimeMillis() + timeout
+        while (waitFor !in screen.screen && System.currentTimeMillis() < deadline) {
+            delay(50)
+            screen = tab.toAgentScreen()
+        }
+        return screen
+    }
+
     private inline fun updateState(
         root: String,
         transform: (WorkspaceTerminalTabsState) -> WorkspaceTerminalTabsState,
@@ -214,8 +316,79 @@ class WorkspaceTerminalSessionManager internal constructor(
 
     private companion object {
         const val TAG = "WorkspaceTerminalManager"
+        const val DEFAULT_AGENT_COLUMNS = 120
+        const val DEFAULT_AGENT_ROWS = 32
     }
 }
+
+internal data class WorkspaceTerminalAgentSession(
+    val id: Long,
+    val number: Int,
+    val cwd: String,
+    val running: Boolean,
+    val finished: Boolean,
+)
+
+internal data class WorkspaceTerminalScreen(
+    val session: WorkspaceTerminalAgentSession,
+    val screen: String,
+    val columns: Int,
+    val rows: Int,
+    val cursorRow: Int,
+    val cursorColumn: Int,
+)
+
+private fun WorkspaceTerminalTab.toAgentSession() = WorkspaceTerminalAgentSession(
+    id = id,
+    number = number,
+    cwd = session.getCwd().orEmpty(),
+    running = session.isRunning,
+    finished = finished,
+)
+
+private fun WorkspaceTerminalTab.toAgentScreen(): WorkspaceTerminalScreen {
+    val emulator = session.getEmulator()
+    val buffer = emulator.getScreen()
+    return WorkspaceTerminalScreen(
+        session = toAgentSession(),
+        screen = buffer.getTranscriptTextWithFullLinesJoined().takeLast(MAX_AGENT_SCREEN_CHARS),
+        columns = emulator.mColumns,
+        rows = emulator.mRows,
+        cursorRow = emulator.getCursorRow(),
+        cursorColumn = emulator.getCursorCol(),
+    )
+}
+
+private fun TerminalSession.writeAgentText(text: String) {
+    val bytes = text.toByteArray(Charsets.UTF_8)
+    write(bytes, 0, bytes.size)
+}
+
+private fun String.toTerminalInput(): String = when (trim().lowercase()) {
+    "enter", "return" -> "\r"
+    "tab" -> "\t"
+    "esc", "escape" -> "\u001B"
+    "backspace" -> "\u007F"
+    "up" -> "\u001B[A"
+    "down" -> "\u001B[B"
+    "right" -> "\u001B[C"
+    "left" -> "\u001B[D"
+    "home" -> "\u001B[H"
+    "end" -> "\u001B[F"
+    "c-c" -> "\u0003"
+    "c-d" -> "\u0004"
+    "c-z" -> "\u001A"
+    else -> if (startsWith("c-") && length == 3) {
+        (this[2].uppercaseChar().code and 0x1F).toChar().toString()
+    } else {
+        this
+    }
+}
+
+private const val MAX_AGENT_SCREEN_CHARS = 64 * 1024
+private const val DEFAULT_AGENT_WAIT_TIMEOUT_MS = 10_000L
+private const val MAX_AGENT_WAIT_TIMEOUT_MS = 120_000L
+private const val AGENT_SESSION_CREATE_TIMEOUT_MS = 15_000L
 
 internal data class WorkspaceTerminalTabsState(
     val tabs: List<WorkspaceTerminalTab> = emptyList(),

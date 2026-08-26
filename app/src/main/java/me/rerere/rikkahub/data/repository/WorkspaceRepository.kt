@@ -13,6 +13,7 @@ import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstaller
+import me.rerere.workspace.BackgroundStatus
 import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
@@ -285,6 +286,39 @@ class WorkspaceRepository(
         return runInterruptible(Dispatchers.IO) {
             manager.ensureWorkspace(workspace.root)
             manager.executeCommand(workspace.root, command, cwd, timeoutMillis, stdin)
+        }
+    }
+
+    suspend fun startBackground(
+        id: String,
+        command: String,
+        cwd: String = "",
+    ): BackgroundStatus {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        return withContext(NonCancellable + Dispatchers.IO) {
+            manager.ensureWorkspace(workspace.root)
+            manager.startBackground(workspace.root, command, cwd)
+        }
+    }
+
+    suspend fun backgroundStatus(id: String, taskId: String): BackgroundStatus? {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        return withContext(Dispatchers.IO) {
+            manager.backgroundStatus(workspace.root, taskId)
+        }
+    }
+
+    suspend fun listBackground(id: String): List<BackgroundStatus> {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        return withContext(Dispatchers.IO) {
+            manager.listBackground(workspace.root)
+        }
+    }
+
+    suspend fun killBackground(id: String, taskId: String): Boolean {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        return withContext(Dispatchers.IO) {
+            manager.killBackground(workspace.root, taskId)
         }
     }
 

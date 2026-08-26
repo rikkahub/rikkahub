@@ -778,8 +778,6 @@
   <string name="setting_page_color_mode_light">ライト</string>
   <string name="setting_page_color_mode_system">システム設定に従う</string>
   <string name="setting_page_config">設定</string>
-  <string name="setting_page_config_api_desc">APIとモデルを設定してください</string>
-  <string name="setting_page_config_api_title">APIとモデルを設定してください</string>
   <string name="setting_page_data_backup">データバックアップ</string>
   <string name="setting_page_data_backup_desc">アプリデータのバックアップと復元</string>
   <string name="setting_page_data_settings">データ設定</string>

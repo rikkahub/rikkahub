@@ -778,8 +778,6 @@
   <string name="setting_page_color_mode_light">Светлая</string>
   <string name="setting_page_color_mode_system">Системная</string>
   <string name="setting_page_config">Настроить</string>
-  <string name="setting_page_config_api_desc">Вы ещё не настроили API и модель, пожалуйста, сначала выполните настройку</string>
-  <string name="setting_page_config_api_title">Настройте API и модель</string>
   <string name="setting_page_data_backup">Резервное копирование данных</string>
   <string name="setting_page_data_backup_desc">Резервное копирование и восстановление данных приложения</string>
   <string name="setting_page_data_settings">Настройки данных</string>

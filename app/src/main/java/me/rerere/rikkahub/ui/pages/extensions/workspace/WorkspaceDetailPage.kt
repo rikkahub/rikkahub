@@ -465,6 +465,15 @@ private fun workspaceToolApprovalItems() = listOf(
     "workspace_write_file" to stringResource(R.string.workspace_detail_tool_write_file),
     "workspace_edit_file" to stringResource(R.string.workspace_detail_tool_edit_file),
     "workspace_shell" to stringResource(R.string.workspace_detail_tool_shell),
+    "workspace_terminal_start" to stringResource(R.string.workspace_detail_tool_terminal_start),
+    "workspace_terminal_send" to stringResource(R.string.workspace_detail_tool_terminal_send),
+    "workspace_terminal_read" to stringResource(R.string.workspace_detail_tool_terminal_read),
+    "workspace_terminal_kill" to stringResource(R.string.workspace_detail_tool_terminal_kill),
+    "workspace_terminal_list" to stringResource(R.string.workspace_detail_tool_terminal_list),
+    "workspace_run_background" to stringResource(R.string.workspace_detail_tool_run_background),
+    "workspace_background_status" to stringResource(R.string.workspace_detail_tool_background_status),
+    "workspace_background_kill" to stringResource(R.string.workspace_detail_tool_background_kill),
+    "workspace_export_file_to_phone" to stringResource(R.string.workspace_detail_tool_export_file_to_phone),
 )
 
 @Composable

@@ -778,8 +778,6 @@
   <string name="setting_page_color_mode_light">淺色</string>
   <string name="setting_page_color_mode_system">跟隨系統</string>
   <string name="setting_page_config">配置</string>
-  <string name="setting_page_config_api_desc">你還沒有配置API和模型，請先配置</string>
-  <string name="setting_page_config_api_title">請配置API和模型</string>
   <string name="setting_page_data_backup">資料備份</string>
   <string name="setting_page_data_backup_desc">備份和恢復應用資料</string>
   <string name="setting_page_data_settings">資料設定</string>

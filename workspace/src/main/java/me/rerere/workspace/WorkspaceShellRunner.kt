@@ -7,6 +7,13 @@ import java.util.concurrent.TimeUnit
 
 interface WorkspaceShellRunner {
     fun execute(context: WorkspaceShellContext): WorkspaceCommandResult
+
+    /**
+     * Start a long-lived shell process. Implementations that do not support background
+     * processes may keep the default behavior; the Android PRoot runner overrides it.
+     */
+    fun start(context: WorkspaceShellContext): Process =
+        throw UnsupportedOperationException("Background shell processes are not supported")
 }
 
 data class WorkspaceShellContext(

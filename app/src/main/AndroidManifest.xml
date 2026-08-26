@@ -3,6 +3,8 @@
   xmlns:tools="http://schemas.android.com/tools">
 
   <uses-permission android:name="android.permission.INTERNET" />
+  <!-- Termux's RunCommandService checks this custom permission before accepting agent calls. -->
+  <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-permission android:name="android.permission.RECORD_AUDIO" />
   <uses-permission
@@ -29,6 +31,7 @@
     android:required="false" />
 
   <queries>
+    <package android:name="com.termux" />
     <intent>
       <action android:name="android.intent.action.TTS_SERVICE" />
     </intent>
@@ -63,6 +66,10 @@
       android:exported="false"
       android:label="@string/title_activity_safe_mode"
       android:theme="@style/Theme.Rikkahub" />
+    <activity
+      android:name=".data.ai.tools.local.ToolHostActivity"
+      android:exported="false"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     <activity
       android:name=".RouteActivity"
       android:configChanges="keyboardHidden|orientation|screenSize"

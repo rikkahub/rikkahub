@@ -1,33 +1,56 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import android.content.Context
+import android.webkit.MimeTypeMap
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.longOrNull
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.DiffMetadata
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.toMetadata
+import me.rerere.rikkahub.data.ai.tools.local.ContentUriResolver
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalSessionManager
+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalAgentSession
+import me.rerere.rikkahub.ui.pages.extensions.workspace.WorkspaceTerminalScreen
+import me.rerere.workspace.BackgroundStatus
 import me.rerere.rikkahub.utils.generateUnifiedDiff
 import me.rerere.workspace.WorkspaceCommandResult
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceManager
 import org.koin.java.KoinJavaComponent.getKoin
 import java.io.ByteArrayOutputStream
+import java.util.Locale
 
 private const val SHELL_TIMEOUT_MAX_SECONDS = 600L
 private const val MAX_READ_FILE_BYTES = 8L * 1024 * 1024
+private const val MAX_PHONE_EXPORT_BYTES = 64L * 1024 * 1024
 
 val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
     "workspace_read_file" to false,
     "workspace_write_file" to false,
     "workspace_edit_file" to false,
     "workspace_shell" to true,
+    "workspace_terminal_start" to true,
+    "workspace_terminal_send" to true,
+    "workspace_terminal_read" to false,
+    "workspace_terminal_kill" to true,
+    "workspace_terminal_list" to false,
+    "workspace_run_background" to true,
+    "workspace_background_status" to false,
+    "workspace_background_kill" to false,
+    "workspace_export_file_to_phone" to true,
 )
 
 fun resolveWorkspaceToolApproval(name: String, overrides: Map<String, Boolean>): Boolean =
@@ -43,12 +66,24 @@ suspend fun createWorkspaceTools(
     fun needsApproval(name: String) = resolveWorkspaceToolApproval(name, approvalOverrides)
 
     val shellCwd = cwd?.removePrefix("/workspace/")?.removePrefix("/workspace")
+    val terminalSessionManager = getKoin().get<WorkspaceTerminalSessionManager>()
+    val workspaceRoot = workspaceRepository.getById(workspaceId)?.root
+        ?: error("Workspace not found: $workspaceId")
 
     return listOf(
         createReadFileTool(workspaceId, ::needsApproval, workspaceRepository),
         createWriteFileTool(workspaceId, ::needsApproval, workspaceRepository),
         createEditFileTool(workspaceId, ::needsApproval, workspaceRepository),
         createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
+        createTerminalStartTool(workspaceRoot, ::needsApproval, terminalSessionManager),
+        createTerminalSendTool(workspaceRoot, ::needsApproval, terminalSessionManager),
+        createTerminalReadTool(workspaceRoot, ::needsApproval, terminalSessionManager),
+        createTerminalKillTool(workspaceRoot, ::needsApproval, terminalSessionManager),
+        createTerminalListTool(workspaceRoot, ::needsApproval, terminalSessionManager),
+        createRunBackgroundTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
+        createBackgroundStatusTool(workspaceId, ::needsApproval, workspaceRepository),
+        createBackgroundKillTool(workspaceId, ::needsApproval, workspaceRepository),
+        createPhoneExportTool(workspaceId, ::needsApproval, workspaceRepository),
     )
 }
 
@@ -268,6 +303,430 @@ private fun createShellTool(
         )
     },
 )
+
+private fun createTerminalStartTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    terminalSessionManager: WorkspaceTerminalSessionManager,
+) = Tool(
+    name = "workspace_terminal_start",
+    description = "Open or reuse a persistent terminal tab from the bound workspace. This is the same PTY shown by the built-in Workspace Terminal, not a second shell. Set create_new_tab=true when an isolated tab is needed.",
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("session_id", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Optional existing workspace terminal session id to select")
+                })
+                put("create_new_tab", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "Create a new tab instead of reusing the selected tab. Defaults to false.")
+                })
+            },
+        )
+    },
+    needsApproval = { needsApproval("workspace_terminal_start") },
+    execute = {
+        val params = it.jsonObject
+        val session = terminalSessionManager.ensureAgentSession(
+            root = workspaceId,
+            tabId = params["session_id"]?.jsonPrimitive?.longOrNull,
+            createNewTab = params["create_new_tab"]?.jsonPrimitive?.booleanOrNull ?: false,
+        )
+        listOf(UIMessagePart.Text(session.toJson().toString()))
+    },
+)
+
+private fun createTerminalSendTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    terminalSessionManager: WorkspaceTerminalSessionManager,
+) = Tool(
+    name = "workspace_terminal_send",
+    description = "Send text and/or control keys to a persistent built-in workspace terminal session, then return its screen. Use wait_for to wait for a prompt or other text. Control keys use names such as C-c, C-d, Enter, Up, Down, Tab, and Esc.",
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("session_id", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Session id from workspace_terminal_start")
+                })
+                put("input", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Text to type. Optional when keys is supplied.")
+                })
+                put("enter", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "Press Enter after input and keys. Defaults to true.")
+                })
+                put("keys", buildJsonObject {
+                    put("type", "array")
+                    put("description", "Control key names to send")
+                    put("items", buildJsonObject { put("type", "string") })
+                })
+                put("wait_for", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional text to wait for on the terminal screen")
+                })
+                put("timeout_seconds", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Wait timeout in seconds, max 120. Defaults to 10.")
+                })
+            },
+            required = listOf("session_id"),
+        )
+    },
+    needsApproval = { needsApproval("workspace_terminal_send") },
+    execute = {
+        val params = it.jsonObject
+        val sessionId = params["session_id"]?.jsonPrimitive?.longOrNull
+            ?: error("session_id is required")
+        val waitFor = params.string("wait_for")
+        val timeoutMillis = params["timeout_seconds"]?.jsonPrimitive?.intOrNull
+            ?.coerceIn(0, 120)?.times(1_000L)
+            ?: 10_000L
+        val keys = params["keys"]?.jsonArray?.mapNotNull { key ->
+            key.jsonPrimitive.contentOrNull
+        }.orEmpty()
+        val screen = terminalSessionManager.sendAgentInput(
+            root = workspaceId,
+            tabId = sessionId,
+            input = params.string("input"),
+            keys = keys,
+            pressEnter = params["enter"]?.jsonPrimitive?.booleanOrNull ?: true,
+            waitFor = waitFor,
+            timeoutMillis = timeoutMillis,
+        )
+        listOf(UIMessagePart.Text(screen.toJson().toString()))
+    },
+)
+
+private fun createTerminalReadTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    terminalSessionManager: WorkspaceTerminalSessionManager,
+) = Tool(
+    name = "workspace_terminal_read",
+    description = "Read the current screen of a persistent built-in workspace terminal session without sending input. Use wait_for and timeout_seconds when waiting for a long-running command or prompt.",
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("session_id", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Session id from workspace_terminal_start")
+                })
+                put("wait_for", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional text to wait for on the terminal screen")
+                })
+                put("timeout_seconds", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Wait timeout in seconds, max 120. Defaults to 10.")
+                })
+            },
+            required = listOf("session_id"),
+        )
+    },
+    needsApproval = { needsApproval("workspace_terminal_read") },
+    execute = {
+        val params = it.jsonObject
+        val sessionId = params["session_id"]?.jsonPrimitive?.longOrNull
+            ?: error("session_id is required")
+        val timeoutMillis = params["timeout_seconds"]?.jsonPrimitive?.intOrNull
+            ?.coerceIn(0, 120)?.times(1_000L)
+            ?: 10_000L
+        val screen = terminalSessionManager.readAgentScreen(
+            root = workspaceId,
+            tabId = sessionId,
+            waitFor = params.string("wait_for"),
+            timeoutMillis = timeoutMillis,
+        )
+        listOf(UIMessagePart.Text(screen.toJson().toString()))
+    },
+)
+
+private fun createTerminalKillTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    terminalSessionManager: WorkspaceTerminalSessionManager,
+) = Tool(
+    name = "workspace_terminal_kill",
+    description = "Close a persistent built-in workspace terminal tab and end its shell session.",
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("session_id", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Session id to close")
+                })
+            },
+            required = listOf("session_id"),
+        )
+    },
+    needsApproval = { needsApproval("workspace_terminal_kill") },
+    execute = {
+        val sessionId = it.jsonObject["session_id"]?.jsonPrimitive?.longOrNull
+            ?: error("session_id is required")
+        val killed = terminalSessionManager.killAgentSession(workspaceId, sessionId)
+        listOf(
+            UIMessagePart.Text(
+                buildJsonObject {
+                    put("session_id", sessionId)
+                    put("killed", killed)
+                }.toString()
+            )
+        )
+    },
+)
+
+private fun createTerminalListTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    terminalSessionManager: WorkspaceTerminalSessionManager,
+) = Tool(
+    name = "workspace_terminal_list",
+    description = "List persistent terminal tabs currently owned by the bound workspace.",
+    parameters = { InputSchema.Obj(properties = buildJsonObject {}) },
+    needsApproval = { needsApproval("workspace_terminal_list") },
+    execute = {
+        val sessions = terminalSessionManager.listAgentSessions(workspaceId)
+        listOf(
+            UIMessagePart.Text(
+                buildJsonObject {
+                    put("sessions", buildJsonArray {
+                        sessions.forEach { add(it.toJson()) }
+                    })
+                }.toString()
+            )
+        )
+    },
+)
+
+private fun WorkspaceTerminalAgentSession.toJson() = buildJsonObject {
+    put("session_id", id)
+    put("tab_number", number)
+    put("cwd", cwd)
+    put("running", running)
+    put("finished", finished)
+}
+
+private fun WorkspaceTerminalScreen.toJson() = buildJsonObject {
+    put("session", session.toJson())
+    put("screen", screen)
+    put("columns", columns)
+    put("rows", rows)
+    put("cursor_row", cursorRow)
+    put("cursor_column", cursorColumn)
+}
+
+private fun createRunBackgroundTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+    defaultCwd: String? = null,
+) = Tool(
+    name = "workspace_run_background",
+    description = buildString {
+        append("Run a shell command persistently in the background in the bound workspace Rootfs. ")
+        append("Use it for dev servers, long-running installs, or file watchers. The command runs in the foreground of its own process; do not append '&'. ")
+        append("Returns a task id. Poll it with workspace_background_status and stop it with workspace_background_kill. ")
+        append("Use cwd relative to /workspace.")
+        if (!defaultCwd.isNullOrBlank()) append(" Defaults to '$defaultCwd'.")
+    },
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("command", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Shell command to run persistently")
+                })
+                put("cwd", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Working directory relative to /workspace")
+                })
+            },
+            required = listOf("command"),
+        )
+    },
+    needsApproval = { needsApproval("workspace_run_background") },
+    execute = {
+        val params = it.jsonObject
+        val command = params.string("command") ?: error("command is required")
+        val cwd = (params.string("cwd") ?: defaultCwd.orEmpty())
+            .removePrefix("/workspace/").removePrefix("/workspace")
+        val status = workspaceRepository.startBackground(workspaceId, command, cwd)
+        listOf(UIMessagePart.Text(buildJsonObject {
+            put("id", status.id)
+            put("status", "running")
+            put("command", status.command)
+            put("cwd", status.cwd)
+        }.toString()))
+    },
+)
+
+private fun createBackgroundStatusTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+) = Tool(
+    name = "workspace_background_status",
+    description = "Check the status and captured output of background processes started with workspace_run_background. Omit id to list all processes for this workspace.",
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("id", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Task id returned by workspace_run_background. Omit to list all.")
+                })
+            },
+        )
+    },
+    needsApproval = { needsApproval("workspace_background_status") },
+    execute = {
+        val taskId = it.jsonObject.string("id")
+        val statuses = if (taskId == null) {
+            workspaceRepository.listBackground(workspaceId)
+        } else {
+            listOfNotNull(workspaceRepository.backgroundStatus(workspaceId, taskId))
+        }
+        listOf(UIMessagePart.Text(buildJsonObject {
+            put("processes", buildJsonArray {
+                statuses.forEach { add(it.toJson()) }
+            })
+        }.toString()))
+    },
+)
+
+private fun createBackgroundKillTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+) = Tool(
+    name = "workspace_background_kill",
+    description = "Stop a background process started with workspace_run_background.",
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("id", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Task id returned by workspace_run_background")
+                })
+            },
+            required = listOf("id"),
+        )
+    },
+    needsApproval = { needsApproval("workspace_background_kill") },
+    execute = {
+        val taskId = it.jsonObject.string("id") ?: error("id is required")
+        val killed = workspaceRepository.killBackground(workspaceId, taskId)
+        listOf(UIMessagePart.Text(buildJsonObject {
+            put("id", taskId)
+            put("killed", killed)
+        }.toString()))
+    },
+)
+
+private fun createPhoneExportTool(
+    workspaceId: String,
+    needsApproval: (String) -> Boolean,
+    workspaceRepository: WorkspaceRepository,
+) = Tool(
+    name = "workspace_export_file_to_phone",
+    description = "Copy a file from the bound workspace Rootfs to a directory the user has explicitly granted through Android's system picker. Use /workspace for workspace files. The target directory must be a persisted content:// URI.",
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("path", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Absolute file path inside Rootfs, such as /workspace/image.png")
+                })
+                put("destination", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Granted content:// directory URI returned by list_files or grant_directory_access")
+                })
+                put("filename", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional output filename; defaults to the source filename")
+                })
+                put("overwrite", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "Replace an existing file with the same name")
+                })
+            },
+            required = listOf("path", "destination"),
+        )
+    },
+    needsApproval = { needsApproval("workspace_export_file_to_phone") },
+    execute = { input ->
+        val params = input.jsonObject
+        val sourcePath = params.string("path")?.trim()?.takeIf { it.startsWith("/") }
+            ?: error("path must be an absolute Rootfs path")
+        val destinationUri = params.string("destination")?.trim()
+            ?: error("destination is required")
+        val context = getKoin().get<Context>()
+        val destination = ContentUriResolver.resolve(context, destinationUri)
+            ?: return@Tool listOf(UIMessagePart.Text(buildJsonObject {
+                put("error", "directory_not_granted")
+                put("detail", "Call grant_directory_access first and pass its content_uri.")
+            }.toString()))
+        if (!destination.isDirectory) error("destination must be a directory")
+
+        val size = workspaceRepository.rootfsFileSize(workspaceId, sourcePath)
+        require(size <= MAX_PHONE_EXPORT_BYTES) {
+            "File is too large to export (${size / 1024 / 1024}MB, max ${MAX_PHONE_EXPORT_BYTES / 1024 / 1024}MB)."
+        }
+        val filename = params.string("filename")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: sourcePath.substringAfterLast('/').ifBlank { error("source filename is empty") }
+        require(filename != "." && filename != ".." && !filename.contains('/')) {
+            "filename must be a single file name"
+        }
+        val overwrite = params["overwrite"]?.jsonPrimitive?.booleanOrNull ?: false
+        val existing = destination.listFiles().firstOrNull { it.name == filename }
+        if (existing != null && !overwrite) {
+            return@Tool listOf(UIMessagePart.Text(buildJsonObject {
+                put("error", "file_exists")
+                put("detail", "A file with that name already exists. Set overwrite=true to replace it.")
+                put("path", existing.uri.toString())
+            }.toString()))
+        }
+        if (existing?.isDirectory == true) error("destination filename points to a directory")
+        if (existing != null && !existing.delete()) error("Unable to replace existing destination file")
+
+        val mime = MimeTypeMap.getSingleton()
+            .getMimeTypeFromExtension(filename.substringAfterLast('.', "").lowercase(Locale.ROOT))
+            ?: "application/octet-stream"
+        val target = destination.createFile(mime, filename)
+            ?: error("The phone storage provider refused file creation")
+        try {
+            val output = context.contentResolver.openOutputStream(target.uri)
+                ?: error("The phone storage provider refused file writing")
+            workspaceRepository.exportRootfsFile(workspaceId, sourcePath, output)
+        } catch (error: Throwable) {
+            target.delete()
+            throw error
+        }
+        listOf(UIMessagePart.Text(buildJsonObject {
+            put("success", true)
+            put("source", sourcePath)
+            put("destination", target.uri.toString())
+            put("filename", filename)
+            put("bytes_written", size)
+        }.toString()))
+    },
+)
+
+private fun BackgroundStatus.toJson() = buildJsonObject {
+    put("id", id)
+    put("command", command)
+    put("cwd", cwd)
+    put("status", if (running) "running" else "exited")
+    if (!running) put("exitCode", exitCode)
+    put("startedAt", startedAtMillis)
+    put("stdout", stdout)
+    put("stderr", stderr)
+    if (droppedStdout > 0) put("droppedStdout", droppedStdout)
+    if (droppedStderr > 0) put("droppedStderr", droppedStderr)
+}
 
 private fun kotlinx.serialization.json.JsonObject.string(name: String): String? =
     this[name]?.jsonPrimitive?.contentOrNull

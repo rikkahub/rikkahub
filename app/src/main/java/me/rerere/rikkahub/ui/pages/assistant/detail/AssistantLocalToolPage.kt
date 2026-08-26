@@ -226,6 +226,34 @@ private fun AssistantLocalToolContent(
                     )
                 }
             )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_external_storage_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_external_storage_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.ExternalStorage),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.ExternalStorage, it) }
+                    )
+                }
+            )
+            item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_termux_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_termux_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.Termux),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Termux, it) }
+                    )
+                }
+            )
         }
     }
 }

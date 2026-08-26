@@ -89,6 +89,10 @@
   <string name="assistant_page_local_tools_time_info_title">Time Info</string>
   <string name="assistant_page_local_tools_tts_desc">Let the AI read text aloud to you using your selected TTS service</string>
   <string name="assistant_page_local_tools_tts_title">Text to Speech</string>
+  <string name="assistant_page_local_tools_external_storage_title">Phone Storage</string>
+  <string name="assistant_page_local_tools_external_storage_desc">Let the AI access directories you explicitly approve in the system picker</string>
+  <string name="assistant_page_local_tools_termux_title">Termux Terminal</string>
+  <string name="assistant_page_local_tools_termux_desc">Let the AI run commands and control persistent sessions in Termux after you grant access</string>
   <string name="assistant_page_manage_memory_title">Manage Memory</string>
   <string name="assistant_page_max_tokens">Max Tokens</string>
   <string name="assistant_page_max_tokens_desc">Maximum number of tokens to generate. Leave empty for no limit.</string>
@@ -826,8 +830,6 @@
   <string name="setting_page_color_mode_light">Light</string>
   <string name="setting_page_color_mode_system">System</string>
   <string name="setting_page_config">Configure</string>
-  <string name="setting_page_config_api_desc">You haven\'t configured API and model yet, please configure first</string>
-  <string name="setting_page_config_api_title">Please configure API and model</string>
   <string name="setting_page_data_backup">Data Backup</string>
   <string name="setting_page_data_backup_desc">Backup and restore app data</string>
   <string name="setting_page_data_settings">Data Settings</string>
@@ -1216,6 +1218,15 @@
   <string name="workspace_detail_tool_delete_file">Delete File</string>
   <string name="workspace_detail_tool_move_file">Move File</string>
   <string name="workspace_detail_tool_shell">Execute Command</string>
+  <string name="workspace_detail_tool_terminal_start">Open Terminal Session</string>
+  <string name="workspace_detail_tool_terminal_send">Send Terminal Input</string>
+  <string name="workspace_detail_tool_terminal_read">Read Terminal Screen</string>
+  <string name="workspace_detail_tool_terminal_kill">Close Terminal Session</string>
+  <string name="workspace_detail_tool_terminal_list">List Terminal Sessions</string>
+  <string name="workspace_detail_tool_run_background">Run Background Task</string>
+  <string name="workspace_detail_tool_background_status">Read Background Task Status</string>
+  <string name="workspace_detail_tool_background_kill">Stop Background Task</string>
+  <string name="workspace_detail_tool_export_file_to_phone">Export File to Phone</string>
   <string name="workspace_detail_install_rootfs_desc">Will download tar.gz and extract to the linux directory of %s.</string>
   <string name="workspace_detail_download_url">tar.gz download URL</string>
   <string name="workspace_detail_area_files">Files</string>

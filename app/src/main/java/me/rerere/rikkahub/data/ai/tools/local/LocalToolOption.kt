@@ -32,4 +32,12 @@ sealed class LocalToolOption {
     @Serializable
     @SerialName("calendar")
     data object Calendar : LocalToolOption()
+
+    @Serializable
+    @SerialName("external_storage")
+    data object ExternalStorage : LocalToolOption()
+
+    @Serializable
+    @SerialName("termux")
+    data object Termux : LocalToolOption()
 }

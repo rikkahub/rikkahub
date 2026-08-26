@@ -2,23 +2,27 @@ package me.rerere.rikkahub.ui.pages.setting.components
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,6 +47,7 @@ import me.rerere.ai.provider.apiKeyInfos
 import me.rerere.ai.provider.withApiKeyInfos
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
+import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
@@ -68,19 +73,17 @@ fun ProviderConfigure(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
     ) {
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            ProviderSetting.Types.forEachIndexed { index, type ->
-                SegmentedButton(
-                    shape = SegmentedButtonDefaults.itemShape(
-                        index = index,
-                        count = ProviderSetting.Types.size
-                    ),
-                    label = { Text(type.simpleName ?: "") },
-                    selected = provider::class == type,
-                    onClick = { onEdit(provider.convertTo(type)) }
-                )
-            }
-        }
+        Text(
+            text = stringResource(R.string.setting_asr_configure_provider_type),
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Select(
+            options = ProviderSetting.Types,
+            selectedOption = provider::class,
+            onOptionSelected = { onEdit(provider.convertTo(it)) },
+            modifier = Modifier.fillMaxWidth(),
+            optionToString = { it.simpleName.orEmpty() },
+        )
 
         when (provider) {
             is ProviderSetting.OpenAI -> ProviderConfigureOpenAI(provider, onEdit)
@@ -250,7 +253,7 @@ private fun ApiKeyEditor(
     val draftValid = normalizedDraftKey.isNotBlank() && !duplicateDraftKey &&
         draftMultiplierValue != null && draftMultiplierValue > 0f
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -274,65 +277,44 @@ private fun ApiKeyEditor(
             }
         }
         if (entries.isEmpty()) {
-            Text(
-                text = stringResource(R.string.setting_provider_page_api_key_empty),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        entries.forEachIndexed { index, entry ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onEdit(provider.withApiKeyInfos(entries, index)) },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                RadioButton(
-                    selected = index == selectedIndex,
-                    onClick = null,
+                Text(
+                    text = stringResource(R.string.setting_provider_page_api_key_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(12.dp),
                 )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = entry.name.ifBlank { stringResource(R.string.setting_provider_page_api_key_unnamed) },
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "${if (showKeys) entry.key else maskApiKey(entry.key)}  ·  x${formatMultiplier(entry.multiplier)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                IconButton(onClick = { openEditor(index) }) {
-                    Icon(
-                        HugeIcons.PencilEdit01,
-                        contentDescription = stringResource(R.string.setting_provider_page_api_key_edit),
-                    )
-                }
-                IconButton(
-                    onClick = {
-                        val remaining = entries.toMutableList().apply { removeAt(index) }
-                        val nextIndex = when {
-                            remaining.isEmpty() -> 0
-                            index < selectedIndex -> selectedIndex - 1
-                            index == selectedIndex -> index.coerceAtMost(remaining.lastIndex)
-                            else -> selectedIndex
-                        }
-                        onEdit(provider.withApiKeyInfos(remaining, nextIndex))
-                    }
-                ) {
-                    Icon(
-                        HugeIcons.Delete01,
-                        contentDescription = stringResource(R.string.setting_provider_page_api_key_delete),
-                    )
-                }
             }
-            if (index < entries.lastIndex) {
-                HorizontalDivider()
+        } else {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val columns = if (maxWidth >= 720.dp) 2 else 1
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    entries.chunked(columns).forEach { rowEntries ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            rowEntries.forEach { entry ->
+                                val index = entries.indexOf(entry)
+                                ApiKeyEntry(
+                                    entry = entry,
+                                    selected = index == selectedIndex,
+                                    showKey = showKeys,
+                                    modifier = Modifier.weight(1f),
+                                    onSelect = { onEdit(provider.withApiKeyInfos(entries, index)) },
+                                    onEdit = { openEditor(index) },
+                                )
+                            }
+                            repeat(columns - rowEntries.size) {
+                                Spacer(Modifier.weight(1f))
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -341,10 +323,40 @@ private fun ApiKeyEditor(
         AlertDialog(
             onDismissRequest = { showEditor = false },
             title = {
-                Text(
-                    if (editingIndex == null) stringResource(R.string.setting_provider_page_api_key_add)
-                    else stringResource(R.string.setting_provider_page_api_key_edit),
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (editingIndex == null) {
+                            stringResource(R.string.setting_provider_page_api_key_add)
+                        } else {
+                            stringResource(R.string.setting_provider_page_api_key_edit)
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    editingIndex?.let { index ->
+                        IconButton(
+                            onClick = {
+                                val remaining = entries.toMutableList().apply { removeAt(index) }
+                                val nextIndex = when {
+                                    remaining.isEmpty() -> 0
+                                    index < selectedIndex -> selectedIndex - 1
+                                    index == selectedIndex -> index.coerceAtMost(remaining.lastIndex)
+                                    else -> selectedIndex
+                                }
+                                onEdit(provider.withApiKeyInfos(remaining, nextIndex))
+                                showEditor = false
+                            },
+                        ) {
+                            Icon(
+                                HugeIcons.Delete01,
+                                contentDescription = stringResource(R.string.setting_provider_page_api_key_delete),
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -394,6 +406,59 @@ private fun ApiKeyEditor(
                 TextButton(onClick = { showEditor = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
+    }
+}
+
+@Composable
+private fun ApiKeyEntry(
+    entry: ApiKeyInfo,
+    selected: Boolean,
+    showKey: Boolean,
+    modifier: Modifier = Modifier,
+    onSelect: () -> Unit,
+    onEdit: () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        color = if (selected) colors.secondaryContainer else colors.surface,
+        contentColor = if (selected) colors.onSecondaryContainer else colors.onSurface,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (selected) colors.secondary else colors.outlineVariant,
+        ),
+        modifier = modifier
+            .heightIn(min = 84.dp)
+            .clickable(onClick = onSelect),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 8.dp, top = 8.dp, end = 4.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            RadioButton(selected = selected, onClick = onSelect)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = entry.name.ifBlank { stringResource(R.string.setting_provider_page_api_key_unnamed) },
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${if (showKey) entry.key else maskApiKey(entry.key)}  ·  x${formatMultiplier(entry.multiplier)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (selected) colors.onSecondaryContainer else colors.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            IconButton(onClick = onEdit) {
+                Icon(
+                    HugeIcons.PencilEdit01,
+                    contentDescription = stringResource(R.string.setting_provider_page_api_key_edit),
+                )
+            }
+        }
     }
 }
 

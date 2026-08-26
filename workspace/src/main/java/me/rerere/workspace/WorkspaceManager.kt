@@ -13,6 +13,8 @@ class WorkspaceManager(
     private val bindMounts: List<WorkspaceBindMount> = emptyList(),
 ) {
     private val fileSystem = WorkspaceFileSystem(config)
+    private val background = WorkspaceBackgroundProcesses()
+    private val backgroundLifecycleLock = Any()
 
     // 按 target 长度降序, 保证 /a/b 优先于 /a 匹配
     private val sortedBindMounts = bindMounts.sortedByDescending { it.target.trimEnd('/').length }
@@ -42,7 +44,10 @@ class WorkspaceManager(
 
     fun hasRootfs(root: String): Boolean = File(linuxDir(root), "bin/sh").isFile
 
-    fun deleteWorkspace(root: String): Boolean = workspaceDir(root).deleteRecursively()
+    fun deleteWorkspace(root: String): Boolean {
+        background.killAll(root)
+        return workspaceDir(root).deleteRecursively()
+    }
 
     fun listFiles(
         root: String,
@@ -203,6 +208,51 @@ class WorkspaceManager(
                 bindMounts = bindMounts,
             )
         )
+    }
+
+    /**
+     * Starts [command] as a long-lived background process for [root]. The process stays alive
+     * after this call returns and is controlled through the status/kill methods below.
+     */
+    fun startBackground(root: String, command: String, cwd: String = ""): BackgroundStatus =
+        synchronized(backgroundLifecycleLock) {
+            require(command.isNotBlank()) { "Command is required" }
+            val workingDir = resolveCommandWorkingDir(root, cwd)
+            val process = try {
+                shellRunner.start(
+                    WorkspaceShellContext(
+                        root = root,
+                        command = command,
+                        cwd = cwd,
+                        filesDir = filesDir(root),
+                        linuxDir = linuxDir(root),
+                        tempDir = tempDir(root),
+                        workingDir = workingDir,
+                        timeoutMillis = 0L,
+                    )
+                )
+            } catch (error: UnsupportedOperationException) {
+                throw IllegalStateException(error.message ?: "Background shell processes are not supported", error)
+            }
+            background.start(root, process, command, cwd)
+        }
+
+    fun backgroundStatus(root: String, id: String): BackgroundStatus? =
+        background.status(root, id)
+
+    fun listBackground(root: String): List<BackgroundStatus> =
+        background.list(root)
+
+    fun killBackground(root: String, id: String): Boolean =
+        background.kill(root, id)
+
+    fun killAllBackground(root: String) = background.killAll(root)
+
+    private fun resolveCommandWorkingDir(root: String, cwd: String): File {
+        val workingDir = fileSystem.resolve(filesDir(root), cwd)
+        require(workingDir.exists()) { "Working directory does not exist: $cwd" }
+        require(workingDir.isDirectory) { "Working path is not a directory: $cwd" }
+        return workingDir
     }
 
     private fun requireValidRoot(root: String) {

@@ -26,8 +26,18 @@ val appModule = module {
         AppEventBus()
     }
 
+    single { me.rerere.rikkahub.data.ai.tools.local.SafPickerResultBuffer() }
+    single { me.rerere.rikkahub.data.storage.StorageVolumeGrantStore(get()) }
+
     single {
-        LocalTools(get(), get(), get(), get())
+        LocalTools(
+            context = get(),
+            eventBus = get(),
+            ttsManager = get(),
+            settingsStore = get(),
+            grantStore = get(),
+            safPickerBuffer = get(),
+        )
     }
 
     single {
