@@ -25,6 +25,7 @@ class TimeReminderTransformerTest {
         val messages = listOf(userMessage("Hello", LocalDateTime(2026, 2, 22, 10, 0, 0)))
         val result = applyTimeReminder(messages)
         assertEquals(2, result.size)
+        assertTrue(result[0].isSynthetic)
         assertTrue(getMessageText(result[0]).contains("<time_reminder>"))
         assertFalse(getMessageText(result[0]).contains("since last message"))
         assertEquals("Hello", getMessageText(result[1]))

@@ -387,7 +387,9 @@ class GenerationHandler(
                     append(tool.systemPrompt(model, messages))
                 }
             }
-            if (system.isNotBlank()) add(UIMessage.system(prompt = system))
+            if (system.isNotBlank()) {
+                add(UIMessage.system(prompt = system).copy(isSynthetic = true))
+            }
             addAll(messages.limitContext(assistant.contextMessageLimit))
         }.transforms(
             transformers = transformers,
