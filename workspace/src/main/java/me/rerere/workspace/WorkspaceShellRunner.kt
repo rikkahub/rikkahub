@@ -42,6 +42,15 @@ fun Process.readResult(timeoutMillis: Long, stdin: ByteArray? = null): Workspace
     val stdout = StreamCollector(inputStream)
     val stderr = StreamCollector(errorStream)
     val stdinWriter = stdin?.let { bytes -> StreamWriter(outputStream, bytes) }
+    if (stdinWriter == null) {
+        // 没有 stdin 输入时立即关闭管道, 让子进程读到 EOF;
+        // 否则 cat/gh/kubectl 等按 isatty 判断的工具会把这根永不写入的管道当成待输入流而永久阻塞
+        try {
+            outputStream.close()
+        } catch (_: IOException) {
+            // 子进程已提前退出导致管道关闭, 忽略
+        }
+    }
     try {
         val finished = waitFor(timeoutMillis, TimeUnit.MILLISECONDS)
         if (!finished) {
