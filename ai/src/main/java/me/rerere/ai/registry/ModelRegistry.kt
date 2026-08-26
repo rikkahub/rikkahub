@@ -478,6 +478,17 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val GLM_5_3 = defineModel {
+        tokens("glm", "5", "3")
+        toolReasoningAbility()
+    }
+
+    private val GLM_5_3_FLASH = defineModel {
+        tokens("glm", "5", "3", "flash")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val MINIMAX_M2 = defineModel {
         tokens("minimax", "m", "2")
         toolReasoningAbility()
@@ -639,6 +650,8 @@ object ModelRegistry {
         GLM_5,
         GLM_5_1,
         GLM_5_2,
+        GLM_5_3,
+        GLM_5_3_FLASH,
         MINIMAX_M2,
         MINIMAX_M2_5,
         MINIMAX_M2_7,
