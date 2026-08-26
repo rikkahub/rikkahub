@@ -1309,5 +1309,10 @@
   <string name="workspace_terminal_close_confirm_title">Закрыть терминал %1$d?</string>
   <string name="workspace_terminal_close_confirm_message">Закрытие этой вкладки приведет к завершению всех процессов, которые все еще в ней выполняются.</string>
   <string name="workspace_terminal_close">Закрыть</string>
+    <string name="chat_generation_network_retrying">%1$s. Повторная попытка (%2$d/%3$d)…</string>
+    <string name="chat_generation_network_unknown_host">Не удалось разрешить адрес сервера</string>
+    <string name="chat_generation_network_timeout">Тайм-аут соединения</string>
+    <string name="chat_generation_network_unreachable">Не удается подключиться к серверу</string>
+    <string name="chat_generation_network_disconnected">Сетевое соединение потеряно</string>
 </resources>
 

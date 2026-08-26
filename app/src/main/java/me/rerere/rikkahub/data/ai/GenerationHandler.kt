@@ -4,6 +4,9 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
@@ -31,11 +34,11 @@ import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.handleTextGenerationResult
 import me.rerere.ai.ui.limitContext
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.files.FileFolders
-import java.io.File
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
@@ -47,6 +50,12 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.utils.applyPlaceholders
+import java.io.File
+import java.io.IOException
+import java.net.ConnectException
+import java.net.NoRouteToHostException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.Locale
 import kotlin.time.Clock
 import kotlin.uuid.Uuid
@@ -54,6 +63,10 @@ import kotlin.uuid.Uuid
 private const val TAG = "GenerationHandler"
 private const val MAX_TOOL_OUTPUT_CHARS = 32 * 1024
 private const val TOOL_OUTPUT_PREVIEW_CHARS = 4 * 1024
+private const val MAX_PROVIDER_NETWORK_RETRIES = 3
+private const val INITIAL_PROVIDER_RETRY_DELAY_MS = 1_000L
+
+private class StreamChunkHandlingException(cause: Throwable) : RuntimeException(cause)
 
 @Serializable
 sealed interface GenerationChunk {
@@ -421,25 +434,130 @@ class GenerationHandler(
             },
             sessionId = conversationId?.toString(),
         )
-        if (stream) {
-            val streamChunkHandler = StreamChunkHandler(model)
-            providerImpl.streamText(
-                providerSetting = provider,
-                messages = internalMessages,
-                params = params
-            ).collect {
-                messages = streamChunkHandler.handle(messages, it)
+        try {
+            if (stream) {
+                // 每次重试都从本次模型调用开始前的消息快照重新合并，避免将重试响应
+                // 追加到已经展示的半截回复后面。预先创建助手消息可让所有尝试复用同一 ID，
+                // ChatService 因而会覆盖当前分支，而不是创建新的候选消息。
+                val responseBaseMessages =
+                    if (messages.lastOrNull()?.role == MessageRole.ASSISTANT) {
+                        messages
+                    } else {
+                        messages + UIMessage(
+                            role = MessageRole.ASSISTANT,
+                            parts = emptyList(),
+                            modelId = model.id,
+                        )
+                    }
+                var retryCount = 0
+
+                while (true) {
+                    val streamChunkHandler = StreamChunkHandler(model)
+                    var attemptMessages = responseBaseMessages
+                    try {
+                        providerImpl.streamText(
+                            providerSetting = provider,
+                            messages = internalMessages,
+                            params = params
+                        ).collect { chunk ->
+                            try {
+                                if (retryCount > 0) {
+                                    processingStatus.value = null
+                                }
+                                attemptMessages = streamChunkHandler.handle(attemptMessages, chunk)
+                                onUpdateMessages(attemptMessages)
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (error: Throwable) {
+                                // 下游消息转换或 UI 更新失败不属于网络故障，不能重放模型请求。
+                                throw StreamChunkHandlingException(error)
+                            }
+                        }
+                        messages = attemptMessages
+                        break
+                    } catch (error: Throwable) {
+                        if (error is StreamChunkHandlingException) {
+                            throw error.cause ?: error
+                        }
+                        retryCount = awaitNetworkRetryOrThrow(
+                            error = error,
+                            retryCount = retryCount,
+                            processingStatus = processingStatus,
+                        )
+                    }
+                }
+            } else {
+                val result = executeProviderRequestWithRetry(processingStatus) {
+                    providerImpl.generateText(
+                        providerSetting = provider,
+                        messages = internalMessages,
+                        params = params,
+                    )
+                }
+                messages = messages.handleTextGenerationResult(result = result, model = model)
                 onUpdateMessages(messages)
             }
-        } else {
-            val result = providerImpl.generateText(
-                providerSetting = provider,
-                messages = internalMessages,
-                params = params,
-            )
-            messages = messages.handleTextGenerationResult(result = result, model = model)
-            onUpdateMessages(messages)
+        } finally {
+            processingStatus.value = null
         }
+    }
+
+    private suspend fun <T> executeProviderRequestWithRetry(
+        processingStatus: MutableStateFlow<String?>,
+        block: suspend () -> T,
+    ): T {
+        var retryCount = 0
+        while (true) {
+            try {
+                return block()
+            } catch (error: Throwable) {
+                retryCount = awaitNetworkRetryOrThrow(
+                    error = error,
+                    retryCount = retryCount,
+                    processingStatus = processingStatus,
+                )
+            }
+        }
+    }
+
+    private suspend fun awaitNetworkRetryOrThrow(
+        error: Throwable,
+        retryCount: Int,
+        processingStatus: MutableStateFlow<String?>,
+    ): Int {
+        // 用户主动停止生成时，底层连接也可能以 IOException("canceled") 收尾；
+        // 先检查协程状态，确保取消不会被当作网络波动重新拉起。
+        currentCoroutineContext().ensureActive()
+        if (error !is IOException || retryCount >= MAX_PROVIDER_NETWORK_RETRIES) {
+            throw error
+        }
+
+        val nextRetryCount = retryCount + 1
+        val retryDelay = INITIAL_PROVIDER_RETRY_DELAY_MS shl retryCount
+        processingStatus.value = context.getString(
+            R.string.chat_generation_network_retrying,
+            getNetworkErrorMessage(error),
+            nextRetryCount,
+            MAX_PROVIDER_NETWORK_RETRIES,
+        )
+        Log.w(
+            TAG,
+            "Provider connection failed, retrying in ${retryDelay}ms " +
+                    "($nextRetryCount/$MAX_PROVIDER_NETWORK_RETRIES)",
+            error,
+        )
+        delay(retryDelay)
+        return nextRetryCount
+    }
+
+    private fun getNetworkErrorMessage(error: IOException): String {
+        val messageRes = when (error) {
+            is UnknownHostException -> R.string.chat_generation_network_unknown_host
+            is SocketTimeoutException -> R.string.chat_generation_network_timeout
+            is ConnectException, is NoRouteToHostException -> R.string.chat_generation_network_unreachable
+            else -> R.string.chat_generation_network_disconnected
+        }
+        return context.getString(messageRes)
     }
 
     private fun maybeTruncateToolOutput(

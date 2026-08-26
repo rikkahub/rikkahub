@@ -1307,5 +1307,10 @@
   <string name="workspace_terminal_close_confirm_title">關閉終端機 %1$d？</string>
   <string name="workspace_terminal_close_confirm_message">關閉此分頁將終止仍在其中執行的任何程序。</string>
   <string name="workspace_terminal_close">關閉</string>
+    <string name="chat_generation_network_retrying">%1$s，正在重試（%2$d/%3$d）…</string>
+    <string name="chat_generation_network_unknown_host">無法解析伺服器位址</string>
+    <string name="chat_generation_network_timeout">連線逾時</string>
+    <string name="chat_generation_network_unreachable">無法連線到伺服器</string>
+    <string name="chat_generation_network_disconnected">網路連線已中斷</string>
 </resources>
 

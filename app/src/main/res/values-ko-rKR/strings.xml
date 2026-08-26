@@ -1309,5 +1309,10 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="workspace_terminal_close_confirm_title">터미널 %1$d번을 닫으시겠습니까?</string>
   <string name="workspace_terminal_close_confirm_message">이 탭을 닫으면 실행 중인 프로세스가 종료됩니다.</string>
   <string name="workspace_terminal_close">닫기</string>
+    <string name="chat_generation_network_retrying">%1$s. 재시도 중 (%2$d/%3$d)…</string>
+    <string name="chat_generation_network_unknown_host">서버 주소를 확인할 수 없습니다</string>
+    <string name="chat_generation_network_timeout">연결 시간이 초과되었습니다</string>
+    <string name="chat_generation_network_unreachable">서버에 연결할 수 없습니다</string>
+    <string name="chat_generation_network_disconnected">네트워크 연결이 끊어졌습니다</string>
 </resources>
 

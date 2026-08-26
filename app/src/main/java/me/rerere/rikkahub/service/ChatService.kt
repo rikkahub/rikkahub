@@ -277,8 +277,7 @@ class ChatService(
     }
 
     fun getProcessingStatusFlow(conversationId: Uuid): StateFlow<String?> {
-        val session = sessions[conversationId] ?: return MutableStateFlow(null)
-        return session.processingStatus
+        return getOrCreateSession(conversationId).processingStatus
     }
 
     fun getConversationJobs(): Flow<Map<Uuid, Job?>> {
