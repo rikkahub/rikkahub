@@ -559,7 +559,7 @@ private fun QwenTTSConfiguration(
 
     // Voice
     val voices = listOf(
-        "Cherry", "Serene", "Ethan", "Chelsie",
+        "Cherry", "Serena", "Ethan", "Chelsie",
         "Momo", "Vivian", "Moon", "Maia", "Kai",
         "Nofish", "Bella", "Jennifer", "Ryan",
         "Katerina", "Aiden", "Eldric Sage", "Mia",
