@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.web
 
 import android.content.Context
+import android.util.Log
 import com.auth0.jwt.JWT
 import com.auth0.jwt.JWTVerifier
 import com.auth0.jwt.algorithms.Algorithm
@@ -20,11 +21,14 @@ import io.ktor.server.response.respond
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import kotlinx.coroutines.CancellationException
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
-import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
-import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.ChatCommandException
+import me.rerere.rikkahub.service.ChatFailureCode
+import me.rerere.rikkahub.service.ConversationCommands
+import me.rerere.rikkahub.service.ConversationQueries
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.web.dto.ErrorResponse
 import me.rerere.rikkahub.web.dto.WebAuthTokenRequest
@@ -46,6 +50,7 @@ private const val WEB_JWT_SUBJECT = "web-access"
 private const val WEB_JWT_TTL_MILLIS = 30L * 24 * 60 * 60 * 1000
 private const val WEB_ACCESS_TOKEN_QUERY_KEY = "access_token"
 private const val WEB_AUTH_REALM = "rikkahub-web-api"
+private const val WEB_API_TAG = "WebApi"
 
 /**
  * Configure Web API for the Ktor application.
@@ -54,14 +59,14 @@ private const val WEB_AUTH_REALM = "rikkahub-web-api"
  * Example usage:
  * ```
  * startWebServer(port = 8080) {
- *     configureWebApi(context, chatService, conversationRepo, settingsStore, filesManager)
+ *     configureWebApi(context, conversationCommands, conversationQueries, settingsStore, filesManager)
  * }
  * ```
  */
 fun Application.configureWebApi(
     context: Context,
-    chatService: ChatService,
-    conversationRepo: ConversationRepository,
+    conversationCommands: ConversationCommands,
+    conversationQueries: ConversationQueries,
     folderRepo: FolderRepository,
     settingsStore: SettingsStore,
     filesManager: FilesManager
@@ -79,10 +84,32 @@ fun Application.configureWebApi(
         exception<ApiException> { call, cause ->
             call.respond(cause.status, ErrorResponse(cause.message, cause.status.value))
         }
+        exception<ChatCommandException> { call, cause ->
+            val status = when (cause.failure.code) {
+                ChatFailureCode.InvalidRequest,
+                ChatFailureCode.Configuration -> HttpStatusCode.BadRequest
+                ChatFailureCode.NotFound -> HttpStatusCode.NotFound
+                ChatFailureCode.Conflict -> HttpStatusCode.Conflict
+                else -> HttpStatusCode.InternalServerError
+            }
+            call.respond(
+                status,
+                ErrorResponse(
+                    error = cause.failure.message,
+                    code = status.value,
+                    failureCode = cause.failure.code.name,
+                    retryable = cause.failure.retryable,
+                    conversationId = cause.failure.conversationId?.toString(),
+                    generationId = cause.failure.generationId?.toString(),
+                )
+            )
+        }
         exception<Throwable> { call, cause ->
+            if (cause is CancellationException) throw cause
+            Log.e(WEB_API_TAG, "Unhandled Web API error", cause)
             call.respond(
                 HttpStatusCode.InternalServerError,
-                ErrorResponse(cause.message ?: "Internal server error", 500)
+                ErrorResponse("Internal server error", 500)
             )
         }
     }
@@ -169,17 +196,17 @@ fun Application.configureWebApi(
 
             if (jwtEnabled) {
                 authenticate("auth-jwt") {
-                    conversationRoutes(chatService, conversationRepo, folderRepo, settingsStore)
-                    folderRoutes(chatService, folderRepo, settingsStore)
-                    eventsRoutes(chatService, conversationRepo, folderRepo, settingsStore)
+                    conversationRoutes(conversationCommands, conversationQueries)
+                    folderRoutes(conversationCommands, conversationQueries, folderRepo, settingsStore)
+                    eventsRoutes(conversationQueries, folderRepo, settingsStore)
                     settingsRoutes(settingsStore)
                     filesRoutes(filesManager, context)
                     assetsRoutes(context)
                 }
             } else {
-                conversationRoutes(chatService, conversationRepo, folderRepo, settingsStore)
-                folderRoutes(chatService, folderRepo, settingsStore)
-                eventsRoutes(chatService, conversationRepo, folderRepo, settingsStore)
+                conversationRoutes(conversationCommands, conversationQueries)
+                folderRoutes(conversationCommands, conversationQueries, folderRepo, settingsStore)
+                eventsRoutes(conversationQueries, folderRepo, settingsStore)
                 settingsRoutes(settingsStore)
                 filesRoutes(filesManager, context)
                 assetsRoutes(context)

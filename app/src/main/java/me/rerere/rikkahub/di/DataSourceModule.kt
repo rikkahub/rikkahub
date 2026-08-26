@@ -17,8 +17,13 @@ import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
-import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.GenerationEngine
+import me.rerere.rikkahub.data.ai.TranslationService
+import me.rerere.rikkahub.data.ai.ProviderExecutor
+import me.rerere.rikkahub.data.ai.ToolCallExecutor
+import me.rerere.rikkahub.data.ai.ToolOutputStore
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
+import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.api.RikkaHubAPI
 import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -156,14 +161,30 @@ val dataSourceModule = module {
 
     single { McpManager(settingsStore = get(), appScope = get(), filesManager = get(), appEventBus = get()) }
 
+    single { OcrTransformer(context = get(), settingsStore = get(), providerManager = get()) }
+
     single {
-        GenerationHandler(
+        ProviderExecutor(context = get())
+    }
+
+    single {
+        ToolOutputStore(context = get())
+    }
+
+    single {
+        ToolCallExecutor(json = get(), outputStore = get())
+    }
+
+    single {
+        GenerationEngine(
             context = get(),
             providerManager = get(),
-            json = get(),
-            memoryRepo = get()
+            providerExecutor = get(),
+            toolCallExecutor = get(),
         )
     }
+
+    single { TranslationService(providerManager = get()) }
 
     single<OkHttpClient> {
         val settingsStore: SettingsStore = get()

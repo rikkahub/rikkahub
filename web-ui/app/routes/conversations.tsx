@@ -42,10 +42,13 @@ import {
   type MessageDto,
   type ConversationNodeUpdateEventDto,
   type ConversationErrorEventDto,
+  type ConversationGenerationStateEventDto,
   type ConversationSnapshotEventDto,
+  type GenerationHandleDto,
   type ProviderModel,
   type Settings,
   type UIMessagePart,
+  isGenerationBusy,
 } from "~/types";
 import { MessageSquare } from "lucide-react";
 import Logo from "~/components/logo";
@@ -58,6 +61,7 @@ import i18n from "~/i18n";
 type ConversationStreamEvent =
   | ConversationSnapshotEventDto
   | ConversationNodeUpdateEventDto
+  | ConversationGenerationStateEventDto
   | ConversationErrorEventDto;
 
 interface SelectedNodeMessage {
@@ -305,7 +309,6 @@ function applyNodeUpdate(
     ...conversation,
     messages: nextNodes,
     updateAt: event.updateAt,
-    isGenerating: event.isGenerating,
   };
 }
 
@@ -370,6 +373,16 @@ function useConversationDetail(activeId: string | null, updateSummary: Conversat
             return;
           }
 
+          if (event === "generation_state" && data.type === "generation_state") {
+            setDetail((prev) => {
+              if (!prev || prev.id !== data.conversationId) return prev;
+              const next = { ...prev, generation: data.generation };
+              updateSummary(toConversationSummaryUpdate(next));
+              return next;
+            });
+            return;
+          }
+
           if (event !== "node_update" || data.type !== "node_update") return;
 
           useAppStore.getState().setClockOffset(data.serverTime);
@@ -377,9 +390,6 @@ function useConversationDetail(activeId: string | null, updateSummary: Conversat
             if (!prev) return prev;
             const next = applyNodeUpdate(prev, data);
             if (next === prev) return prev;
-            if (prev.isGenerating !== next.isGenerating) {
-              updateSummary(toConversationSummaryUpdate(next));
-            }
             return next;
           });
           setDetailError(null);
@@ -422,6 +432,7 @@ function useDraftInputController({
   homeDraftId,
   setHomeDraftId,
   useConversationPromptInjection,
+  assistantId,
   navigate,
   refreshList,
 }: {
@@ -430,6 +441,7 @@ function useDraftInputController({
   homeDraftId: string;
   setHomeDraftId: React.Dispatch<React.SetStateAction<string>>;
   useConversationPromptInjection: boolean;
+  assistantId: string | null;
   navigate: ReturnType<typeof useNavigate>;
   refreshList: () => void;
 }) {
@@ -479,7 +491,10 @@ function useDraftInputController({
     if (parts.length === 0) return;
 
     if (activeId) {
-      await api.post<{ status: string }>(`conversations/${activeId}/messages`, { parts });
+      await api.post<GenerationHandleDto>(`conversations/${activeId}/messages`, {
+        parts,
+        assistantId,
+      });
       clearDraft(draftKey);
       return;
     }
@@ -488,8 +503,10 @@ function useDraftInputController({
     setHomeDraftId(createHomeDraftId());
     const promptInjectionIds = getPromptInjectionIds(draftKey);
 
-    await api.post<{ status: string }>(`conversations/${conversationId}/messages`, {
+    if (!assistantId) return;
+    await api.post<GenerationHandleDto>(`conversations/${conversationId}/messages`, {
       parts,
+      assistantId,
       ...(useConversationPromptInjection
         ? {
             modeInjectionIds: promptInjectionIds.modeInjectionIds,
@@ -503,6 +520,7 @@ function useDraftInputController({
     refreshList();
   }, [
     activeId,
+    assistantId,
     clearDraft,
     draftKey,
     getPromptInjectionIds,
@@ -770,6 +788,7 @@ function ConversationsPageInner() {
     homeDraftId,
     setHomeDraftId,
     useConversationPromptInjection: currentAssistant?.allowConversationPromptInjection === true,
+    assistantId: currentAssistantId,
     navigate,
     refreshList,
   });
@@ -819,20 +838,25 @@ function ConversationsPageInner() {
   const handleToolApproval = React.useCallback(
     async (toolCallId: string, approved: boolean, reason: string, answer?: string) => {
       if (!activeId) return;
-      await api.post<{ status: string }>(`conversations/${activeId}/tool-approval`, {
+      const generationId = detail?.generation?.generationId;
+      if (!generationId) return;
+      await api.post<GenerationHandleDto>(
+        `conversations/${activeId}/generations/${generationId}/tool-approval`,
+        {
         toolCallId,
         approved,
         reason,
         ...(answer != null ? { answer } : {}),
-      });
+        },
+      );
     },
-    [activeId],
+    [activeId, detail?.generation?.generationId],
   );
 
   const handleRegenerate = React.useCallback(
     async (messageId: string) => {
       if (!activeId) return;
-      await api.post<{ status: string }>(`conversations/${activeId}/regenerate`, {
+      await api.post<GenerationHandleDto>(`conversations/${activeId}/regenerate`, {
         messageId,
       });
     },
@@ -1034,9 +1058,12 @@ function ConversationsPageInner() {
   }, [closePanel, navigate, resetDetail, routeId, setActiveId]);
 
   const handleStop = React.useCallback(async () => {
-    if (!activeId) return;
-    await api.post<{ status: string }>(`conversations/${activeId}/stop`);
-  }, [activeId]);
+    const generationId = detail?.generation?.generationId;
+    if (!activeId || !generationId) return;
+    await api.post<{ status: string }>(
+      `conversations/${activeId}/generations/${generationId}/stop`,
+    );
+  }, [activeId, detail?.generation?.generationId]);
 
   const hasWorkbenchPanel = Boolean(panel);
   const workbenchPanelRef = React.useRef<PanelImperativeHandle | null>(null);
@@ -1066,7 +1093,7 @@ function ConversationsPageInner() {
             detailLoading={detailLoading}
             detailError={detailError}
             selectedNodeMessages={selectedNodeMessages}
-            isGenerating={detail?.isGenerating ?? false}
+            isGenerating={isGenerationBusy(detail?.generation)}
             settings={settings}
             conversationAssistantId={detail?.assistantId ?? null}
             onEdit={handleStartEdit}
@@ -1096,7 +1123,7 @@ function ConversationsPageInner() {
           conversation={detail}
           draftKey={draftKey}
           ready={draftKey !== null}
-          isGenerating={detail?.isGenerating ?? false}
+          isGenerating={isGenerationBusy(detail?.generation)}
           disabled={detailLoading || Boolean(detailError)}
           onValueChange={handleInputTextChange}
           onAddParts={handleAddInputParts}

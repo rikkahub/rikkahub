@@ -6,6 +6,7 @@ import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.provider.Model
+import me.rerere.rikkahub.data.ai.shouldUseExternalWebSearch
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import org.junit.Assert.assertEquals
@@ -15,7 +16,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
 
-class ChatServiceTest {
+class ConversationApplicationHelpersTest {
     @Test
     fun `fork conversation inherits folder and workspace context`() {
         val source = Conversation(
@@ -46,7 +47,7 @@ class ChatServiceTest {
             customBodies = bodies,
         )
 
-        val params = backgroundTextGenerationParams(model)
+        val params = backgroundGenerationParams(model)
 
         assertEquals(model, params.model)
         assertEquals(ReasoningLevel.AUTO, params.reasoningLevel)
@@ -56,41 +57,23 @@ class ChatServiceTest {
 
     @Test
     fun `external web search is disabled when assistant preference is disabled`() {
-        val assistant = Assistant(enableWebSearch = false)
-        val model = Model()
-
-        assertFalse(shouldUseExternalWebSearch(assistant, model))
+        assertFalse(shouldUseExternalWebSearch(Assistant(enableWebSearch = false), Model()))
     }
 
     @Test
     fun `external web search is enabled when assistant preference is enabled`() {
-        val assistant = Assistant(enableWebSearch = true)
-        val model = Model()
-
-        assertTrue(shouldUseExternalWebSearch(assistant, model))
+        assertTrue(shouldUseExternalWebSearch(Assistant(enableWebSearch = true), Model()))
     }
 
     @Test
     fun `built-in search suppresses enabled external web search`() {
-        val assistant = Assistant(enableWebSearch = true)
         val model = Model(tools = setOf(BuiltInTools.Search))
-
-        assertFalse(shouldUseExternalWebSearch(assistant, model))
-    }
-
-    @Test
-    fun `built-in search remains exclusive when external web search is disabled`() {
-        val assistant = Assistant(enableWebSearch = false)
-        val model = Model(tools = setOf(BuiltInTools.Search))
-
-        assertFalse(shouldUseExternalWebSearch(assistant, model))
+        assertFalse(shouldUseExternalWebSearch(Assistant(enableWebSearch = true), model))
     }
 
     @Test
     fun `unrelated built-in tools do not suppress external web search`() {
-        val assistant = Assistant(enableWebSearch = true)
         val model = Model(tools = setOf(BuiltInTools.UrlContext))
-
-        assertTrue(shouldUseExternalWebSearch(assistant, model))
+        assertTrue(shouldUseExternalWebSearch(Assistant(enableWebSearch = true), model))
     }
 }

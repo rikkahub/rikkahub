@@ -14,9 +14,9 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
-import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
-import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.ConversationCommands
+import me.rerere.rikkahub.service.ConversationQueries
 import me.rerere.rikkahub.web.startWebServer
 import java.net.ServerSocket
 
@@ -38,8 +38,8 @@ data class WebServerState(
 class WebServerManager(
     private val context: Context,
     private val appScope: AppScope,
-    private val chatService: ChatService,
-    private val conversationRepo: ConversationRepository,
+    private val conversationCommands: ConversationCommands,
+    private val conversationQueries: ConversationQueries,
     private val folderRepo: FolderRepository,
     private val settingsStore: SettingsStore,
     private val filesManager: FilesManager
@@ -77,7 +77,14 @@ class WebServerManager(
                     return@launch
                 }
                 server = startWebServer(port = port, host = host) {
-                    configureWebApi(context, chatService, conversationRepo, folderRepo, settingsStore, filesManager)
+                    configureWebApi(
+                        context,
+                        conversationCommands,
+                        conversationQueries,
+                        folderRepo,
+                        settingsStore,
+                        filesManager,
+                    )
                 }.start(wait = false)
 
                 _state.value = baseState.copy(isRunning = true)

@@ -8,12 +8,17 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.service.ChatFailure
+import me.rerere.rikkahub.service.GenerationProgress
+import me.rerere.rikkahub.service.GenerationState
+import me.rerere.rikkahub.service.generationIdOrNull
 
 // ========== Request DTOs ==========
 
 @Serializable
 data class SendMessageRequest(
     val parts: List<UIMessagePart>,
+    val assistantId: String? = null,
     val modeInjectionIds: List<String>? = null,
     val lorebookIds: List<String>? = null,
 )
@@ -148,7 +153,7 @@ data class ConversationListDto(
     val folderId: String? = null,
     val createAt: Long,
     val updateAt: Long,
-    val isGenerating: Boolean = false
+    val generation: GenerationSummaryDto? = null,
 )
 
 @Serializable
@@ -196,7 +201,39 @@ data class ConversationDto(
     val folderId: String? = null,
     val createAt: Long,
     val updateAt: Long,
-    val isGenerating: Boolean = false
+    val generation: GenerationSummaryDto? = null,
+)
+
+@Serializable
+data class GenerationProgressDto(
+    val type: String,
+    val kind: String? = null,
+    val attempt: Int? = null,
+    val maxAttempts: Int? = null,
+)
+
+@Serializable
+data class ChatFailureDto(
+    val code: String,
+    val message: String,
+    val retryable: Boolean,
+    val generationId: String? = null,
+)
+
+@Serializable
+data class GenerationSummaryDto(
+    val state: String,
+    val generationId: String,
+    val progress: GenerationProgressDto? = null,
+    val toolCallIds: List<String> = emptyList(),
+    val failure: ChatFailureDto? = null,
+)
+
+@Serializable
+data class GenerationHandleDto(
+    val conversationId: String,
+    val generationId: String,
+    val state: GenerationSummaryDto,
 )
 
 @Serializable
@@ -245,7 +282,11 @@ data class WebAuthTokenResponse(
 @Serializable
 data class ErrorResponse(
     val error: String,
-    val code: Int
+    val code: Int,
+    val failureCode: String? = null,
+    val retryable: Boolean = false,
+    val conversationId: String? = null,
+    val generationId: String? = null,
 )
 
 // ========== SSE Event DTOs ==========
@@ -259,7 +300,7 @@ data class ConversationUpdateEvent(
 @Serializable
 data class ConversationSnapshotEvent(
     val type: String = "snapshot",
-    val seq: Long,
+    val revision: Long,
     val conversation: ConversationDto,
     val serverTime: Long = System.currentTimeMillis()
 )
@@ -267,13 +308,12 @@ data class ConversationSnapshotEvent(
 @Serializable
 data class ConversationNodeUpdateEvent(
     val type: String = "node_update",
-    val seq: Long,
+    val revision: Long,
     val conversationId: String,
     val nodeId: String,
     val nodeIndex: Int,
     val node: MessageNodeDto,
     val updateAt: Long,
-    val isGenerating: Boolean,
     val serverTime: Long = System.currentTimeMillis()
 )
 
@@ -286,7 +326,19 @@ data class GenerationDoneEvent(
 @Serializable
 data class ErrorEvent(
     val type: String = "error",
-    val message: String
+    val revision: Long,
+    val code: String,
+    val message: String,
+    val retryable: Boolean,
+    val generationId: String? = null,
+)
+
+@Serializable
+data class GenerationStateEvent(
+    val type: String = "generation_state",
+    val revision: Long,
+    val conversationId: String,
+    val generation: GenerationSummaryDto?,
 )
 
 @Serializable
@@ -304,7 +356,7 @@ data class FolderListEvent(
 
 // ========== Conversion Extensions ==========
 
-fun Conversation.toListDto(isGenerating: Boolean = false) = ConversationListDto(
+fun Conversation.toListDto(generation: GenerationState? = null) = ConversationListDto(
     id = id.toString(),
     assistantId = assistantId.toString(),
     title = title,
@@ -312,7 +364,7 @@ fun Conversation.toListDto(isGenerating: Boolean = false) = ConversationListDto(
     folderId = folderId?.toString(),
     createAt = createAt.toEpochMilli(),
     updateAt = updateAt.toEpochMilli(),
-    isGenerating = isGenerating
+    generation = generation?.toDto(),
 )
 
 fun me.rerere.rikkahub.data.model.Folder.toDto() = FolderDto(
@@ -323,7 +375,7 @@ fun me.rerere.rikkahub.data.model.Folder.toDto() = FolderDto(
     createAt = createAt.toEpochMilli(),
 )
 
-fun Conversation.toDto(isGenerating: Boolean = false) = ConversationDto(
+fun Conversation.toDto(generation: GenerationState? = null) = ConversationDto(
     id = id.toString(),
     assistantId = assistantId.toString(),
     title = title,
@@ -337,7 +389,43 @@ fun Conversation.toDto(isGenerating: Boolean = false) = ConversationDto(
     folderId = folderId?.toString(),
     createAt = createAt.toEpochMilli(),
     updateAt = updateAt.toEpochMilli(),
-    isGenerating = isGenerating
+    generation = generation?.toDto(),
+)
+
+fun GenerationState.toDto(): GenerationSummaryDto? {
+    val generationId = generationIdOrNull ?: return null
+    return GenerationSummaryDto(
+        state = when (this) {
+            GenerationState.Idle -> return null
+            is GenerationState.Queued -> "queued"
+            is GenerationState.Running -> "running"
+            is GenerationState.AwaitingApproval -> "awaiting_approval"
+            is GenerationState.Completed -> "completed"
+            is GenerationState.Failed -> "failed"
+            is GenerationState.Cancelled -> "cancelled"
+        },
+        generationId = generationId.toString(),
+        progress = (this as? GenerationState.Running)?.progress?.toDto(),
+        toolCallIds = (this as? GenerationState.AwaitingApproval)?.toolCallIds.orEmpty(),
+        failure = (this as? GenerationState.Failed)?.failure?.toDto(),
+    )
+}
+
+fun GenerationProgress.toDto() = when (this) {
+    GenerationProgress.RecognizingImages -> GenerationProgressDto(type = "recognizing_images")
+    is GenerationProgress.NetworkRetry -> GenerationProgressDto(
+        type = "network_retry",
+        kind = kind.name,
+        attempt = attempt,
+        maxAttempts = maxAttempts,
+    )
+}
+
+fun ChatFailure.toDto() = ChatFailureDto(
+    code = code.name,
+    message = message,
+    retryable = retryable,
+    generationId = generationId?.toString(),
 )
 
 fun MessageNode.toDto() = MessageNodeDto(

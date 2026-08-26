@@ -1,11 +1,11 @@
 package me.rerere.rikkahub.data.ai.transformers
 
 import android.content.Context
-import kotlinx.coroutines.flow.MutableStateFlow
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.service.GenerationProgress
 import kotlin.uuid.Uuid
 
 class TransformerContext(
@@ -15,7 +15,7 @@ class TransformerContext(
     val settings: Settings,
     val conversationModeInjectionIds: Set<Uuid> = emptySet(),
     val conversationLorebookIds: Set<Uuid> = emptySet(),
-    val processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+    val reportProgress: suspend (GenerationProgress?) -> Unit = {},
     val workspaceCwd: String? = null,
 )
 
@@ -69,7 +69,7 @@ suspend fun List<UIMessage>.transforms(
     settings: Settings,
     conversationModeInjectionIds: Set<Uuid> = emptySet(),
     conversationLorebookIds: Set<Uuid> = emptySet(),
-    processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
+    reportProgress: suspend (GenerationProgress?) -> Unit = {},
     workspaceCwd: String? = null,
 ): List<UIMessage> {
     val ctx = TransformerContext(
@@ -79,7 +79,7 @@ suspend fun List<UIMessage>.transforms(
         settings = settings,
         conversationModeInjectionIds = conversationModeInjectionIds,
         conversationLorebookIds = conversationLorebookIds,
-        processingStatus = processingStatus,
+        reportProgress = reportProgress,
         workspaceCwd = workspaceCwd,
     )
     return transformers.fold(this) { acc, transformer ->

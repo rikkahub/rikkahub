@@ -10,7 +10,7 @@ export interface ConversationListDto {
   folderId?: string | null;
   createAt: number;
   updateAt: number;
-  isGenerating: boolean;
+  generation?: GenerationSummaryDto | null;
 }
 
 /**
@@ -94,31 +94,85 @@ export interface ConversationDto {
   folderId?: string | null;
   createAt: number;
   updateAt: number;
-  isGenerating: boolean;
+  generation?: GenerationSummaryDto | null;
+}
+
+export type GenerationStateType =
+  | "queued"
+  | "running"
+  | "awaiting_approval"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface GenerationProgressDto {
+  type: "recognizing_images" | "network_retry";
+  kind?: string | null;
+  attempt?: number | null;
+  maxAttempts?: number | null;
+}
+
+export interface ChatFailureDto {
+  code: string;
+  message: string;
+  retryable: boolean;
+  generationId?: string | null;
+}
+
+export interface GenerationSummaryDto {
+  state: GenerationStateType;
+  generationId: string;
+  progress?: GenerationProgressDto | null;
+  toolCallIds: string[];
+  failure?: ChatFailureDto | null;
+}
+
+export interface GenerationHandleDto {
+  conversationId: string;
+  generationId: string;
+  state: GenerationSummaryDto;
 }
 
 export interface ConversationSnapshotEventDto {
   type: "snapshot";
-  seq: number;
+  revision: number;
   conversation: ConversationDto;
   serverTime: number;
 }
 
 export interface ConversationNodeUpdateEventDto {
   type: "node_update";
-  seq: number;
+  revision: number;
   conversationId: string;
   nodeId: string;
   nodeIndex: number;
   node: MessageNodeDto;
   updateAt: number;
-  isGenerating: boolean;
   serverTime: number;
+}
+
+export interface ConversationGenerationStateEventDto {
+  type: "generation_state";
+  revision: number;
+  conversationId: string;
+  generation?: GenerationSummaryDto | null;
 }
 
 export interface ConversationErrorEventDto {
   type: "error";
+  revision: number;
+  code: string;
   message: string;
+  retryable: boolean;
+  generationId?: string | null;
+}
+
+export function isGenerationBusy(generation?: GenerationSummaryDto | null): boolean {
+  return (
+    generation?.state === "queued" ||
+    generation?.state === "running" ||
+    generation?.state === "awaiting_approval"
+  );
 }
 
 export interface MessageSearchResultDto {

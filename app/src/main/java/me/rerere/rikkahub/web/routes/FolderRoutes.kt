@@ -11,7 +11,9 @@ import io.ktor.server.routing.route
 import kotlinx.coroutines.flow.first
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.repository.FolderRepository
-import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.ConversationCommands
+import me.rerere.rikkahub.service.ConversationQueries
+import me.rerere.rikkahub.service.isBusy
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.ConflictException
 import me.rerere.rikkahub.web.NotFoundException
@@ -20,7 +22,8 @@ import me.rerere.rikkahub.web.dto.RenameFolderRequest
 import me.rerere.rikkahub.web.dto.toDto
 
 fun Route.folderRoutes(
-    chatService: ChatService,
+    commands: ConversationCommands,
+    queries: ConversationQueries,
     folderRepo: FolderRepository,
     settingsStore: SettingsStore,
 ) {
@@ -65,11 +68,14 @@ fun Route.folderRoutes(
             folderRepo.getFolderById(uuid) ?: throw NotFoundException("Folder not found")
 
             // Refuse to delete while a conversation inside is still generating
-            if (chatService.hasGeneratingConversationInFolder(uuid)) {
+            if (queries.observeActiveConversations().first().values.any {
+                    it.conversation.folderId == uuid && it.generation.isBusy
+                }
+            ) {
                 throw ConflictException("Folder has a generating conversation")
             }
 
-            chatService.deleteFolder(uuid)
+            commands.deleteFolder(uuid)
             call.respond(HttpStatusCode.NoContent)
         }
     }

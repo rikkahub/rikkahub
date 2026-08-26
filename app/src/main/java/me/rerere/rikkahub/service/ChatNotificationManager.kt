@@ -75,15 +75,15 @@ class ChatNotificationManager(
         if (!displaySetting.enableLiveUpdateNotification) return
 
         val now = SystemClock.elapsedRealtime()
-        val lastSentAt = liveUpdateLastSentAt[event.conversationId]
+        val lastSentAt = liveUpdateLastSentAt[event.generationId]
         if (lastSentAt != null && now - lastSentAt < LIVE_UPDATE_NOTIFICATION_THROTTLE_MS) return
-        liveUpdateLastSentAt[event.conversationId] = now
+        liveUpdateLastSentAt[event.generationId] = now
 
         sendLiveUpdateNotification(event.conversationId, event.lastMessage, event.senderName)
     }
 
     private fun handleGenerationEnded(event: AppEvent.ChatGenerationEnded) {
-        cancelLiveUpdateNotification(event.conversationId)
+        cancelLiveUpdateNotification(event.generationId)
 
         val contentPreview = event.contentPreview ?: return
         if (isForeground.value) return
@@ -178,8 +178,8 @@ class ChatNotificationManager(
         }
     }
 
-    private fun cancelLiveUpdateNotification(conversationId: Uuid) {
-        liveUpdateLastSentAt.remove(conversationId)
+    private fun cancelLiveUpdateNotification(generationId: Uuid) {
+        liveUpdateLastSentAt.remove(generationId)
         // 前台服务持有通知时系统会保留它；启动失败时则清理普通 ongoing 通知。
         context.cancelNotification(ChatGenerationForegroundService.NOTIFICATION_ID)
     }

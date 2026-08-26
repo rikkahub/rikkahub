@@ -26,7 +26,9 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Folder
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
-import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.ConversationCommands
+import me.rerere.rikkahub.service.ConversationQueries
+import me.rerere.rikkahub.service.isBusy
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
 import java.time.ZoneId
@@ -37,9 +39,12 @@ class ChatDrawerVM(
     private val settingsStore: SettingsStore,
     conversationRepo: ConversationRepository,
     private val folderRepo: FolderRepository,
-    private val chatService: ChatService,
+    private val commands: ConversationCommands,
+    queries: ConversationQueries,
     private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
+    private val activeConversations = queries.observeActiveConversations()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     private val assistantIdFlow = settingsStore.settingsFlow
         .map { it.assistantId }
@@ -163,12 +168,14 @@ class ChatDrawerVM(
      * 删除文件夹。若文件夹内有正在生成回复的会话，拒绝删除并返回 false（UI 层据此提示用户）。
      */
     fun deleteFolder(folderId: Uuid): Boolean {
-        if (chatService.hasGeneratingConversationInFolder(folderId)) {
+        if (activeConversations.value.values.any {
+                it.conversation.folderId == folderId && it.generation.isBusy
+            }
+        ) {
             return false
         }
         viewModelScope.launch {
-            // 经 ChatService 删除：会同步清空活跃 session 内存态的 folderId，避免整对象保存写回已删文件夹
-            chatService.deleteFolder(folderId)
+            commands.deleteFolder(folderId)
             if (_selectedFolderId.value == folderId) {
                 _selectedFolderId.value = null
             }
@@ -178,8 +185,7 @@ class ChatDrawerVM(
 
     fun moveConversationToFolder(conversationId: Uuid, folderId: Uuid?) {
         viewModelScope.launch {
-            // 经 ChatService 移动：活跃会话会先同步内存态，避免后续整对象保存覆盖 folder_id
-            chatService.moveConversationToFolder(conversationId, folderId)
+            commands.moveToFolder(conversationId, folderId)
         }
     }
 

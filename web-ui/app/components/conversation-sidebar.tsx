@@ -79,6 +79,7 @@ import type {
   ConversationListDto,
   FolderDto,
 } from "~/types";
+import { isGenerationBusy } from "~/types";
 
 const THEME_OPTIONS: Array<{
   value: Theme;
@@ -303,7 +304,7 @@ const ConversationListRow = React.memo(
                 {conversation.title || t("conversation_sidebar.unnamed_conversation")}
               </span>
               {conversation.isPinned && <Pin className="size-3 text-primary" aria-hidden />}
-              {conversation.isGenerating && (
+              {isGenerationBusy(conversation.generation) && (
                 <span
                   className="inline-block size-2 rounded-full bg-emerald-500"
                   aria-label={t("conversation_sidebar.generating")}

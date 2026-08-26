@@ -30,12 +30,13 @@ val viewModelModule = module {
             id = params.get(),
             context = get(),
             settingsStore = get(),
-            conversationRepo = get(),
-            chatService = get(),
+            commands = get(),
+            queries = get(),
             updateChecker = get(),
             analytics = get(),
             filesManager = get(),
             favoriteRepository = get(),
+            mcpManager = get(),
         )
     }
     viewModelOf(::ChatDrawerVM)

@@ -24,7 +24,7 @@ private const val TAG = "ChatGenerationFgs"
 /**
  * Keeps the app process in the foreground while one or more chat generations are active.
  *
- * Generation itself remains owned by [ChatService]. This service only provides the Android
+ * Generation itself remains owned by [ConversationCommands]. This service only provides the Android
  * foreground-service lifetime required for streaming to continue after the activity is hidden.
  */
 class ChatGenerationForegroundService : Service() {
@@ -66,7 +66,7 @@ class ChatGenerationForegroundService : Service() {
     private val activeGenerations = linkedMapOf<String, String>()
     private var isForeground = false
     private val appScope: AppScope by inject()
-    private val chatService: ChatService by inject()
+    private val conversationCommands: ConversationCommands by inject()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -90,14 +90,15 @@ class ChatGenerationForegroundService : Service() {
 
     override fun onTimeout(startId: Int, fgsType: Int) {
         Log.e(TAG, "Foreground service timed out (type=$fgsType)")
-        activeGenerations.values
-            .mapNotNull { runCatching { Uuid.parse(it) }.getOrNull() }
-            .distinct()
-            .forEach { conversationId ->
+        activeGenerations.forEach { (generationIdValue, conversationIdValue) ->
+            val generationId = runCatching { Uuid.parse(generationIdValue) }.getOrNull()
+                ?: return@forEach
+            val conversationId = runCatching { Uuid.parse(conversationIdValue) }.getOrNull()
+                ?: return@forEach
                 appScope.launch {
-                    chatService.stopGeneration(conversationId)
+                    runCatching { conversationCommands.stop(conversationId, generationId) }
                 }
-            }
+        }
         // Android only allows a few seconds after onTimeout before raising RemoteServiceException.
         stopService()
     }

@@ -6,6 +6,7 @@ import type {
   ConversationDto,
   ConversationListDto,
   ConversationListInvalidateEventDto,
+  GenerationSummaryDto,
   PagedResult,
 } from "~/types";
 
@@ -33,7 +34,7 @@ interface ConversationSummaryUpdate {
   isPinned: boolean;
   createAt: number;
   updateAt: number;
-  isGenerating: boolean;
+  generation?: GenerationSummaryDto | null;
 }
 
 export interface UseConversationListResult {
@@ -124,7 +125,7 @@ export function useConversationList({
                   isPinned: update.isPinned,
                   createAt: update.createAt,
                   updateAt: update.updateAt,
-                  isGenerating: update.isGenerating,
+                  generation: update.generation,
                 }
               : item,
           ),
@@ -186,9 +187,20 @@ export function useConversationList({
 
     setError(null);
 
+    if (!currentAssistantId) {
+      setLoading(false);
+      setConversations([]);
+      return;
+    }
+
     api
       .get<PagedResult<ConversationListDto>>("conversations/paged", {
-        searchParams: { offset: 0, limit, folderId: toFolderQueryValue(folderId) },
+        searchParams: {
+          assistantId: currentAssistantId,
+          offset: 0,
+          limit,
+          folderId: toFolderQueryValue(folderId),
+        },
       })
       .then((data) => {
         if (!active || requestEpoch !== listRequestEpochRef.current) return;
@@ -239,7 +251,8 @@ export function useConversationList({
 
   const loadMore = React.useCallback(() => {
     const offset = nextOffsetRef.current;
-    if (offset === null) return;
+    const assistantId = currentAssistantIdRef.current;
+    if (offset === null || !assistantId) return;
 
     const requestEpoch = listRequestEpochRef.current;
 
@@ -248,6 +261,7 @@ export function useConversationList({
         searchParams: {
           offset,
           limit: pageSize,
+          assistantId,
           folderId: toFolderQueryValue(folderIdRef.current),
         },
       })
@@ -296,6 +310,6 @@ export function toConversationSummaryUpdate(
     isPinned: conversation.isPinned,
     createAt: conversation.createAt,
     updateAt: conversation.updateAt,
-    isGenerating: conversation.isGenerating,
+    generation: conversation.generation,
   };
 }

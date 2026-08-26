@@ -42,8 +42,8 @@ import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.service.ChatError
-import me.rerere.rikkahub.service.ChatErrorSolution
+import me.rerere.rikkahub.ui.pages.chat.ChatError
+import me.rerere.rikkahub.ui.pages.chat.ChatErrorSolution
 import me.rerere.rikkahub.ui.context.LocalNavController
 import kotlin.uuid.Uuid
 

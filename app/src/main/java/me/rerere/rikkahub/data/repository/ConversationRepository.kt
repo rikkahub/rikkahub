@@ -305,6 +305,21 @@ class ConversationRepository(
         messageFtsManager.indexConversation(conversation)
     }
 
+    /**
+     * Atomically inserts or replaces a complete conversation aggregate.
+     *
+     * Runtime conversation updates are serialized by ConversationRuntimeStore; using a Room
+     * upsert here also removes the previous check-then-insert race between independent adapters.
+     */
+    suspend fun upsertConversation(conversation: Conversation) {
+        database.withTransaction {
+            conversationDAO.upsert(conversationToConversationEntity(conversation))
+            messageNodeDAO.deleteByConversation(conversation.id.toString())
+            saveMessageNodes(conversation.id.toString(), conversation.messageNodes)
+        }
+        messageFtsManager.indexConversation(conversation)
+    }
+
     suspend fun deleteConversation(conversation: Conversation) {
         // 获取完整的 Conversation（包含 messageNodes）以正确清理文件
         val fullConversation = if (conversation.messageNodes.isEmpty()) {

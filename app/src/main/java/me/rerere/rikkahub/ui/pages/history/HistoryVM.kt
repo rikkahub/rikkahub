@@ -13,54 +13,63 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.service.ChatCommandException
+import me.rerere.rikkahub.service.ChatFailureCode
+import me.rerere.rikkahub.service.ConversationCommands
+import me.rerere.rikkahub.service.ConversationQueries
 import kotlin.uuid.Uuid
 
 private const val TAG = "HistoryVM"
 
 class HistoryVM(
-    private val conversationRepo: ConversationRepository,
     private val settingsStore: SettingsStore,
+    private val commands: ConversationCommands,
+    private val queries: ConversationQueries,
 ) : ViewModel() {
     val assistant = settingsStore.settingsFlow
         .map { it.getCurrentAssistant() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val conversations = assistant.flatMapLatest { assistant ->
-        conversationRepo.getConversationsOfAssistant(assistant?.id ?: Uuid.random())
+        queries.listConversations(assistant?.id ?: Uuid.random())
     }.catch {
         Log.e(TAG, "Error: ${it.message}")
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun deleteConversation(conversation: Conversation) {
         viewModelScope.launch {
-            conversationRepo.deleteConversation(conversation)
+            commands.deleteConversation(conversation.id)
         }
     }
 
     fun deleteAllConversations() {
         val assistant = assistant.value ?: return
         viewModelScope.launch {
-            conversationRepo.deleteConversationOfAssistant(assistant.id)
+            commands.deleteConversations(assistant.id)
         }
     }
 
     fun togglePinStatus(conversationId: Uuid) {
         viewModelScope.launch {
-            conversationRepo.togglePinStatus(conversationId)
+            val snapshot = queries.getConversation(conversationId)
+            commands.updatePinned(conversationId, !snapshot.conversation.isPinned)
         }
     }
 
     fun getPinnedConversations(): Flow<List<Conversation>> =
-        conversationRepo.getPinnedConversations()
+        queries.listPinnedConversations()
 
     fun restoreConversation(conversation: Conversation) {
         viewModelScope.launch {
-            conversationRepo.insertConversation(conversation)
+            commands.restoreConversation(conversation)
         }
     }
 
     suspend fun getFullConversation(conversationId: Uuid): Conversation? {
-        return conversationRepo.getConversationById(conversationId)
+        return try {
+            queries.getConversation(conversationId).conversation
+        } catch (error: ChatCommandException) {
+            if (error.failure.code == ChatFailureCode.NotFound) null else throw error
+        }
     }
 }

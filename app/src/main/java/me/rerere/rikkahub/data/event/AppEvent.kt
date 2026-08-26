@@ -17,6 +17,7 @@ sealed class AppEvent {
     /** 聊天生成过程中的流式更新，由 ChatNotificationManager 消费用于 Live Update 通知。 */
     data class ChatGenerationUpdate(
         val conversationId: Uuid,
+        val generationId: Uuid,
         val lastMessage: UIMessage,
         val senderName: String,
     ) : AppEvent()
@@ -27,6 +28,7 @@ sealed class AppEvent {
      */
     data class ChatGenerationEnded(
         val conversationId: Uuid,
+        val generationId: Uuid,
         val senderName: String,
         val contentPreview: String?,
     ) : AppEvent()

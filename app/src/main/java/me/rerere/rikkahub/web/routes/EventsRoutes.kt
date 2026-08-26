@@ -9,9 +9,9 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
-import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.ConversationQueries
+import me.rerere.rikkahub.service.isBusy
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.web.dto.ConversationListInvalidateEvent
 import me.rerere.rikkahub.web.dto.FolderListEvent
@@ -31,8 +31,7 @@ import kotlin.time.Duration.Companion.seconds
  * at `/api/conversations/{id}/stream`.
  */
 fun Route.eventsRoutes(
-    chatService: ChatService,
-    conversationRepo: ConversationRepository,
+    conversationQueries: ConversationQueries,
     folderRepo: FolderRepository,
     settingsStore: SettingsStore,
 ) {
@@ -52,9 +51,9 @@ fun Route.eventsRoutes(
             .distinctUntilChanged()
             .flatMapLatest { assistantId ->
                 combine(
-                    conversationRepo.getConversationsOfAssistant(assistantId),
-                    chatService.getConversationJobs()
-                ) { conversations, generationJobs ->
+                    conversationQueries.listConversations(assistantId),
+                    conversationQueries.observeActiveConversations()
+                ) { conversations, runtimes ->
                     // Key per conversation folds in generation state (so start/stop invalidates the
                     // sidebar even when content isn't persisted) and folderId (so moving a
                     // conversation between folders invalidates other clients' folder views).
@@ -64,7 +63,7 @@ fun Route.eventsRoutes(
                             append('|')
                             append(conversation.updateAt.toEpochMilli())
                             append('|')
-                            append(generationJobs[conversation.id] != null)
+                            append(runtimes[conversation.id]?.generation?.isBusy == true)
                             append('|')
                             append(conversation.folderId?.toString().orEmpty())
                         }

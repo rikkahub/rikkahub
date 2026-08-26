@@ -22,7 +22,7 @@ class WorkspaceReminderTransformer(
     ): List<UIMessage> {
         val workspaceId = ctx.assistant.workspaceId?.toString() ?: return messages
         val workspace = workspaceRepository.getById(workspaceId) ?: return messages
-        // 与 ChatService.createWorkspaceToolsIfReady 保持一致: 仅在 shell 就绪时注入
+        // 与 GenerationPlanFactory 的 workspace tools 判定保持一致：仅在 shell 就绪时注入。
         if (workspace.shellStatus != WorkspaceShellStatus.READY.name) return messages
 
         val prompt = buildWorkspacePrompt(workspace, ctx.workspaceCwd)

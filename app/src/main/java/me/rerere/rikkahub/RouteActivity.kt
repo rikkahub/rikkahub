@@ -63,6 +63,9 @@ import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
 import me.rerere.rikkahub.data.db.MigrationState
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
+import me.rerere.rikkahub.service.ChatCommandException
+import me.rerere.rikkahub.service.ChatFailureCode
+import me.rerere.rikkahub.service.ConversationQueries
 import me.rerere.rikkahub.ui.activity.SafeModeActivity
 import me.rerere.rikkahub.ui.components.ui.TTSController
 import me.rerere.rikkahub.ui.context.LocalASRState
@@ -242,6 +245,7 @@ class RouteActivity : ComponentActivity() {
         val tts = rememberCustomTtsState()
         val asr = rememberCustomAsrState()
         val eventBus = koinInject<AppEventBus>()
+        val conversationQueries = koinInject<ConversationQueries>()
         LaunchedEffect(tts) {
             eventBus.events.collect { event ->
                 when (event) {
@@ -322,8 +326,22 @@ class RouteActivity : ComponentActivity() {
                                 metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
                                     + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
                             ) { key ->
+                                val chatId = remember(key.id) { Uuid.parse(key.id) }
+                                LaunchedEffect(chatId) {
+                                    try {
+                                        val assistantId = conversationQueries
+                                            .getConversation(chatId)
+                                            .conversation
+                                            .assistantId
+                                        if (settingsStore.settingsFlow.value.assistantId != assistantId) {
+                                            settingsStore.updateAssistant(assistantId)
+                                        }
+                                    } catch (error: ChatCommandException) {
+                                        if (error.failure.code != ChatFailureCode.NotFound) throw error
+                                    }
+                                }
                                 ChatPage(
-                                    id = Uuid.parse(key.id),
+                                    id = chatId,
                                     text = key.text,
                                     files = key.files.map { it.toUri() },
                                     nodeId = key.nodeId?.let { Uuid.parse(it) }

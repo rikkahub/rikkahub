@@ -6,6 +6,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.repository.LightConversationEntity
@@ -62,6 +63,9 @@ interface ConversationDAO {
 
     @Update
     suspend fun update(conversation: ConversationEntity)
+
+    @Upsert
+    suspend fun upsert(conversation: ConversationEntity)
 
     @Delete
     suspend fun delete(conversation: ConversationEntity)
