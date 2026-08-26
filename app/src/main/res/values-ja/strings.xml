@@ -1306,5 +1306,8 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_provider_page_test_tool_call">ツール呼び出し</string>
   <string name="setting_provider_page_test_tool_called">呼び出し: %1$s  引数: %2$s</string>
   <string name="setting_provider_page_test_tool_not_called">ツールが呼び出されませんでした。応答: %s</string>
+  <string name="workspace_terminal_close_confirm_title">ターミナル %1$d を閉じますか？</string>
+  <string name="workspace_terminal_close_confirm_message">このタブを閉じると、実行中のプロセスは終了します。</string>
+  <string name="workspace_terminal_close">閉じる</string>
 </resources>
 

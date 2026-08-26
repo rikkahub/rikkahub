@@ -1306,5 +1306,8 @@
   <string name="setting_provider_page_test_tool_call">Вызов инструмента</string>
   <string name="setting_provider_page_test_tool_called">Вызвано: %1$s  Аргументы: %2$s</string>
   <string name="setting_provider_page_test_tool_not_called">Инструмент не вызван, ответ: %s</string>
+  <string name="workspace_terminal_close_confirm_title">Закрыть терминал %1$d?</string>
+  <string name="workspace_terminal_close_confirm_message">Закрытие этой вкладки приведет к завершению всех процессов, которые все еще в ней выполняются.</string>
+  <string name="workspace_terminal_close">Закрыть</string>
 </resources>
 

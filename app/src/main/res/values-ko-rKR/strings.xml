@@ -1306,5 +1306,8 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_provider_page_test_tool_call">도구 호출</string>
   <string name="setting_provider_page_test_tool_called">호출: %1$s  인수: %2$s</string>
   <string name="setting_provider_page_test_tool_not_called">도구가 호출되지 않음, 응답: %s</string>
+  <string name="workspace_terminal_close_confirm_title">터미널 %1$d번을 닫으시겠습니까?</string>
+  <string name="workspace_terminal_close_confirm_message">이 탭을 닫으면 실행 중인 프로세스가 종료됩니다.</string>
+  <string name="workspace_terminal_close">닫기</string>
 </resources>
 

@@ -1311,5 +1311,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_test_tool_call">工具调用</string>
   <string name="setting_provider_page_test_tool_called">已调用: %1$s  参数: %2$s</string>
   <string name="setting_provider_page_test_tool_not_called">未调用工具，响应：%s</string>
+  <string name="workspace_terminal_close_confirm_title">关闭终端 %1$d？</string>
+  <string name="workspace_terminal_close_confirm_message">关闭此标签页将终止其中仍在运行的任何进程。</string>
+  <string name="workspace_terminal_close">关闭</string>
 </resources>
 
