@@ -103,10 +103,11 @@ sealed class TTSProviderSetting {
         override var id: Uuid = Uuid.random(),
         override var name: String = "Qwen TTS",
         val apiKey: String = "",
-        val baseUrl: String = "https://dashscope.aliyuncs.com/api/v1",
-        val model: String = "qwen3-tts-flash",
-        val voice: String = "Cherry",
-        val languageType: String = "Auto"
+        val baseUrl: String = "https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api/v1",
+        val model: String = "qwen-audio-3.0-tts-flash",
+        val voice: String = "longanhuan_v3.6",
+        val format: String = "wav",
+        val sampleRate: Int = 24000,
     ) : TTSProviderSetting() {
         override fun copyProvider(
             id: Uuid,
