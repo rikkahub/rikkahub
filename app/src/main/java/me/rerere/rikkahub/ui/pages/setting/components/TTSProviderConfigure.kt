@@ -287,14 +287,30 @@ private fun MiMoTTSConfiguration(
     }
 
     // Voice
+    val voices = listOf(
+        "mimo_default",
+        "冰糖",
+        "茉莉",
+        "苏打",
+        "白桦",
+        "Mia",
+        "Chloe",
+        "Milo",
+        "Dean"
+    )
+
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_voice)) },
         description = { Text(stringResource(R.string.setting_tts_page_voice_description)) }
     ) {
-        OutlinedTextField(
+        SelectTextField(
             value = setting.voice,
+            options = voices,
             onValueChange = { newVoice ->
                 onValueChange(setting.copy(voice = newVoice))
+            },
+            onOptionSelected = { voice ->
+                onValueChange(setting.copy(voice = voice))
             },
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("mimo_default") }
