@@ -125,21 +125,21 @@ fun ImportExportTab(
                         }
 
                         "chatbox" -> {
-                            // Chatbox导入：处理json文件
+                            // Chatbox Backup v2：处理 ZIP 文件
                             val tempFile =
-                                File(context.cacheDir, "temp_chatbox_${System.currentTimeMillis()}.json")
+                                File(context.cacheDir, "temp_chatbox_${System.currentTimeMillis()}.zip")
 
-                            context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
-                                FileOutputStream(tempFile).use { outputStream ->
-                                    inputStream.copyTo(outputStream)
+                            try {
+                                context.contentResolver.openInputStream(sourceUri)?.use { inputStream ->
+                                    FileOutputStream(tempFile).use { outputStream ->
+                                        inputStream.copyTo(outputStream)
+                                    }
                                 }
+
+                                vm.restoreFromChatBox(tempFile)
+                            } finally {
+                                tempFile.delete()
                             }
-
-                            // 从Chatbox文件恢复
-                            vm.restoreFromChatBox(tempFile)
-
-                            // 清理临时文件
-                            tempFile.delete()
                         }
 
                         "cherry" -> {
@@ -290,7 +290,7 @@ fun ImportExportTab(
                     onClick = if (!isRestoring) {
                         {
                             importType = "chatbox"
-                            openDocumentLauncher.launch(arrayOf("application/json"))
+                            openDocumentLauncher.launch(arrayOf("application/zip"))
                         }
                     } else null,
                     headlineContent = { Text(stringResource(R.string.backup_page_import_from_chatbox)) },
