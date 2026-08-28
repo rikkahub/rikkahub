@@ -422,12 +422,6 @@ private fun ChatPageContent(
                     onMoreClick = {
                         showFilesSheet = true
                     },
-                    allowAudioVideoAttachments = allowAudioVideoAttachments,
-                    onTakePicture = attachmentPickerActions.onTakePicture,
-                    onPickImage = attachmentPickerActions.onPickImage,
-                    onPickVideo = attachmentPickerActions.onPickVideo,
-                    onPickAudio = attachmentPickerActions.onPickAudio,
-                    onPickFile = attachmentPickerActions.onPickFile,
                 )
             },
             containerColor = Color.Transparent,
