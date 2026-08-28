@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import java.util.Locale
@@ -18,7 +18,7 @@ private const val TAG = "TranslatorVM"
 
 class TranslatorVM(
     private val settingsStore: SettingsStore,
-    private val generationHandler: GenerationHandler,
+    private val translationHandler: TranslationHandler,
 ) : ViewModel() {
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, Settings.dummy())
@@ -72,7 +72,7 @@ class TranslatorVM(
 
         currentJob = viewModelScope.launch {
             runCatching {
-                generationHandler.translateText(
+                translationHandler.translateText(
                     settings = settings.value,
                     sourceText = inputText,
                     targetLanguage = targetLanguage.value

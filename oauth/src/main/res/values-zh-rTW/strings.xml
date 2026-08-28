@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="oauth_notification_channel_name">OAuth 授權</string>
+  <string name="oauth_notification_title">OAuth 授權進行中</string>
+  <string name="oauth_notification_text">正在等待瀏覽器授權回呼…</string>
+  <string name="oauth_callback_success_title">授權完成</string>
+  <string name="oauth_callback_success_message">帳戶已成功連結。</string>
+  <string name="oauth_callback_success_hint">您可以關閉此分頁並返回 RikkaHub。</string>
+  <string name="oauth_callback_error_title">授權失敗</string>
+  <string name="oauth_callback_error_message">授權提供者未核准此請求。</string>
+  <string name="oauth_callback_error_hint">關閉此分頁，然後從 RikkaHub 重新嘗試。</string>
+  <string name="oauth_callback_invalid_title">無效的授權回呼</string>
+  <string name="oauth_callback_invalid_message">授權回呼缺少資訊或已過期。</string>
+  <string name="oauth_callback_invalid_hint">返回 RikkaHub 並重新開始授權。</string>
+  <string name="oauth_callback_handled_title">授權已處理</string>
+  <string name="oauth_callback_handled_message">此授權回呼已處理。</string>
+  <string name="oauth_callback_handled_hint">您可以安全地關閉此分頁並返回 RikkaHub。</string>
+</resources>
+

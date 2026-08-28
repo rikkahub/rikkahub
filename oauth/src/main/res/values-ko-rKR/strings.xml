@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="oauth_notification_channel_name">OAuth 인증</string>
+  <string name="oauth_notification_title">OAuth 인증 진행 중</string>
+  <string name="oauth_notification_text">브라우저 인증 콜백을 기다리는 중…</string>
+  <string name="oauth_callback_success_title">인증 완료</string>
+  <string name="oauth_callback_success_message">계정이 성공적으로 연결되었습니다.</string>
+  <string name="oauth_callback_success_hint">이 탭을 닫고 RikkaHub로 돌아가시면 됩니다.</string>
+  <string name="oauth_callback_error_title">인증 실패</string>
+  <string name="oauth_callback_error_message">인증 제공자가 이 요청을 승인하지 않았습니다.</string>
+  <string name="oauth_callback_error_hint">이 탭을 닫고 RikkaHub에서 다시 시도하세요.</string>
+  <string name="oauth_callback_invalid_title">잘못된 인증 콜백</string>
+  <string name="oauth_callback_invalid_message">인증 콜백에 정보가 없거나 만료되었습니다.</string>
+  <string name="oauth_callback_invalid_hint">RikkaHub로 돌아가서 인증을 다시 시작하세요.</string>
+  <string name="oauth_callback_handled_title">인증 처리 완료</string>
+  <string name="oauth_callback_handled_message">인증 콜백이 이미 처리되었습니다.</string>
+  <string name="oauth_callback_handled_hint">이 탭을 안전하게 닫고 RikkaHub로 돌아가도 됩니다.</string>
+</resources>
+

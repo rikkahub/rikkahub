@@ -15,6 +15,7 @@ import me.rerere.workspace.RootfsInstallProgress
 
 class WorkspaceVM(
     private val repository: WorkspaceRepository,
+    private val terminalSessionManager: WorkspaceTerminalSessionManager,
 ) : ViewModel() {
     val workspaces = repository.listFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -33,6 +34,7 @@ class WorkspaceVM(
 
     fun delete(workspace: WorkspaceEntity) {
         viewModelScope.launch {
+            terminalSessionManager.closeWorkspace(workspace.root)
             repository.delete(workspace.id)
         }
     }

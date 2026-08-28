@@ -26,6 +26,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
+import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
@@ -254,6 +255,7 @@ class ChatCompletionsAPI(
 
             // open router适配
             if(isOpenRouter) {
+                params.sessionId?.let { put("session_id", it) }
                 if(params.model.outputModalities.contains(Modality.IMAGE)) {
                     put("modalities", buildJsonArray {
                         add("image")
@@ -345,6 +347,14 @@ class ChatCompletionsAPI(
                         })
                     }
 
+                    "api.xiaomimimo.com", "token-plan-cn.xiaomimimo.com" -> {
+                        // 小米 MiMo
+                        // https://mimo.mi.com/docs/zh-CN/api/chat/openai-api
+                        put("thinking", buildJsonObject {
+                            put("type", if (!level.isEnabled) "disabled" else "enabled")
+                        })
+                    }
+
                     "api.moonshot.cn" -> {
                         put("thinking", buildJsonObject {
                             put("type", if (!level.isEnabled) "disabled" else "enabled")
@@ -415,6 +425,7 @@ class ChatCompletionsAPI(
                                     "parameters",
                                     json.encodeToJsonElement(
                                         tool.parameters()
+                                            ?: InputSchema.Obj(properties = JsonObject(emptyMap()))
                                     )
                                 )
                             })
@@ -430,8 +441,8 @@ class ChatCompletionsAPI(
                 ModelRegistry.KIMI_K2_6.match(model.modelId) ||
                 ModelRegistry.KIMI_K3.match(model.modelId) ||
                 ModelRegistry.KIMI_K3_ALIAS.match(model.modelId)
-        return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) && 
-               !ModelRegistry.GPT_5.match(model.modelId) && 
+        return !ModelRegistry.OPENAI_O_MODELS.match(model.modelId) &&
+               !ModelRegistry.GPT_5.match(model.modelId) &&
                !isMoonshotRestricted
     }
 

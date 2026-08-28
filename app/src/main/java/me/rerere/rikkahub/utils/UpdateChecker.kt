@@ -7,22 +7,35 @@ import android.widget.Toast
 import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import me.rerere.common.http.await
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
 private const val API_URL = "https://updates.rikka-ai.com/"
 
-class UpdateChecker(private val client: OkHttpClient) {
+class UpdateChecker(
+    private val client: OkHttpClient,
+    appScope: AppScope,
+) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun checkUpdate(): Flow<UiState<UpdateInfo>> = flow {
+    val updateState: StateFlow<UiState<UpdateInfo>> = checkUpdate().stateIn(
+        scope = appScope,
+        started = SharingStarted.Lazily,
+        initialValue = UiState.Loading,
+    )
+
+    private fun checkUpdate(): Flow<UiState<UpdateInfo>> = flow {
         emit(UiState.Loading)
         emit(
             UiState.Success(

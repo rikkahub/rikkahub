@@ -730,9 +730,12 @@
   <string name="setting_display_page_volume_key_scroll_title">音量键翻页</string>
   <string name="setting_files_page_cancel_action">取消</string>
   <string name="setting_files_page_clean_action">清理</string>
+  <string name="setting_files_page_clean_all">全部文件</string>
   <string name="setting_files_page_clean_confirmation">将永久删除此分类中的全部文件，此操作无法撤销。</string>
   <string name="setting_files_page_clean_content_description">清理文件</string>
   <string name="setting_files_page_clean_failed_toast">部分文件清理失败</string>
+  <string name="setting_files_page_clean_older_than_days">%1$d 天前</string>
+  <string name="setting_files_page_clean_range_description">选择要永久删除的文件。此操作无法撤销。</string>
   <string name="setting_files_page_clean_title">清理文件？</string>
   <string name="setting_files_page_cleaned_toast">文件已清理</string>
   <string name="setting_files_page_delete_action">删除</string>
@@ -808,7 +811,7 @@
   <string name="setting_page_built_in_tools_search_desc">启用 Google 搜索集成</string>
   <string name="setting_page_built_in_tools_url_context">URL 上下文</string>
   <string name="setting_page_built_in_tools_url_context_desc">启用 URL 内容处理</string>
-  <string name="setting_page_chat_storage">聊天记录存储</string>
+  <string name="setting_page_chat_storage">存储管理</string>
   <string name="setting_page_chat_storage_desc">%1$d 个文件，%2$.2f MB</string>
   <string name="setting_page_code_display_settings">代码显示</string>
   <string name="setting_page_color_mode">颜色模式</string>
@@ -1288,6 +1291,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_context_message_limit_desc">限制发送给模型的最近消息数量。超出限制时，上下文会一次性缩减至约一半，而非每轮丢弃一条消息，从而保持请求前缀稳定，并使提示词缓存在多轮对话中持续生效。</string>
   <string name="assistant_page_context_message_limit_count">上下文消息限制: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">无限上下文消息</string>
+  <string name="assistant_page_context_message_limit_hint">输入 0 表示不限制，其他值不能小于 %d</string>
+  <string name="assistant_page_context_message_limit_too_small">上下文消息限制不能小于 %1$d，已自动重置为 %1$d。</string>
   <string name="assistant_page_context_message_limit_warning">限制上下文会在每次上下文被修剪时使提示词缓存失效。更大的限制修剪频率更低；无限制则从不修剪，并保持缓存完全完好。</string>
   <string name="setting_update_reminder_enabled">更新提醒已启用</string>
   <string name="setting_update_reminder_paused_until">已暂停至 %1$s</string>
@@ -1296,5 +1301,25 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_update_reminder_pause_days">%1$d 天</string>
   <string name="setting_update_reminder_resume_now">立即恢复</string>
   <string name="reasoning_max">最大</string>
+  <string name="backup_page_import_overwrite_confirm">导入备份会覆盖 App 数据，是否继续</string>
+  <string name="setting_page_preferences_network">网络</string>
+  <string name="setting_page_preferences_network_desc">User-Agent 和网络请求设置</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">留空以使用 %1$s</string>
+  <string name="setting_page_preferences_network_proxy">代理</string>
+  <string name="setting_page_preferences_network_proxy_desc">支持 HTTP 和 SOCKS5 代理 URL。留空以使用系统设置。</string>
+  <string name="setting_page_preferences_network_proxy_invalid">请输入包含主机和端口的有效代理 URL。</string>
+  <string name="setting_provider_page_test_non_streaming">非流式</string>
+  <string name="setting_provider_page_test_streaming">流式</string>
+  <string name="setting_provider_page_test_tool_call">工具调用</string>
+  <string name="setting_provider_page_test_tool_called">已调用: %1$s  参数: %2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">未调用工具，响应：%s</string>
+  <string name="workspace_terminal_close_confirm_title">关闭终端 %1$d？</string>
+  <string name="workspace_terminal_close_confirm_message">关闭此标签页将终止其中仍在运行的任何进程。</string>
+  <string name="workspace_terminal_close">关闭</string>
+    <string name="chat_generation_network_retrying">%1$s，正在重试（%2$d/%3$d）…</string>
+    <string name="chat_generation_network_unknown_host">无法解析服务器地址</string>
+    <string name="chat_generation_network_timeout">连接超时</string>
+    <string name="chat_generation_network_unreachable">无法连接到服务器</string>
+    <string name="chat_generation_network_disconnected">网络连接已断开</string>
 </resources>
-

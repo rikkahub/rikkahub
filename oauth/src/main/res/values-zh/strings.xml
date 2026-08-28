@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="oauth_notification_channel_name">OAuth 授权</string>
+  <string name="oauth_notification_title">OAuth 授权正在进行中</string>
+  <string name="oauth_notification_text">正在等待浏览器授权回调…</string>
+  <string name="oauth_callback_success_title">授权完成</string>
+  <string name="oauth_callback_success_message">账户已成功连接。</string>
+  <string name="oauth_callback_success_hint">你可以关闭此标签页并返回 RikkaHub。</string>
+  <string name="oauth_callback_error_title">授权失败</string>
+  <string name="oauth_callback_error_message">授权提供方未批准此请求。</string>
+  <string name="oauth_callback_error_hint">关闭此标签页，然后从 RikkaHub 重试。</string>
+  <string name="oauth_callback_invalid_title">无效的授权回调</string>
+  <string name="oauth_callback_invalid_message">授权回调缺少信息或已过期。</string>
+  <string name="oauth_callback_invalid_hint">返回 RikkaHub 并重新开始授权。</string>
+  <string name="oauth_callback_handled_title">授权已处理</string>
+  <string name="oauth_callback_handled_message">此授权回调已被处理。</string>
+  <string name="oauth_callback_handled_hint">你可以安全地关闭此标签页并返回 RikkaHub。</string>
+</resources>
+

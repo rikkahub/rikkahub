@@ -737,9 +737,12 @@
   <string name="setting_display_page_volume_key_scroll_title">Volume Key Page Scroll</string>
   <string name="setting_files_page_cancel_action">Cancel</string>
   <string name="setting_files_page_clean_action">Clean</string>
+  <string name="setting_files_page_clean_all">All files</string>
   <string name="setting_files_page_clean_confirmation">All files in this category will be permanently deleted. This action cannot be undone.</string>
   <string name="setting_files_page_clean_content_description">Clean files</string>
   <string name="setting_files_page_clean_failed_toast">Some files could not be cleaned</string>
+  <string name="setting_files_page_clean_older_than_days">Older than %1$d days</string>
+  <string name="setting_files_page_clean_range_description">Select files to permanently delete. This action cannot be undone.</string>
   <string name="setting_files_page_clean_title">Clean files?</string>
   <string name="setting_files_page_cleaned_toast">Files cleaned</string>
   <string name="setting_files_page_delete_action">Delete</string>
@@ -818,7 +821,7 @@
   <string name="setting_page_built_in_tools_search_desc">Enable Google Search integration</string>
   <string name="setting_page_built_in_tools_url_context">URL Context</string>
   <string name="setting_page_built_in_tools_url_context_desc">Enable URL content processing</string>
-  <string name="setting_page_chat_storage">Chat Storage</string>
+  <string name="setting_page_chat_storage">Storage Management</string>
   <string name="setting_page_chat_storage_desc">%1$d files, %2$.2f MB</string>
   <string name="setting_page_code_display_settings">Code Display</string>
   <string name="setting_page_color_mode">Color Mode</string>
@@ -845,6 +848,13 @@
   <string name="setting_page_preferences_general_desc">Interaction behavior, scrolling, input settings</string>
   <string name="setting_page_preferences_ui">UI Preferences</string>
   <string name="setting_page_preferences_ui_desc">Message display, fonts, code blocks</string>
+  <string name="setting_page_preferences_network">Network</string>
+  <string name="setting_page_preferences_network_desc">User-Agent and network request settings</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">Leave blank to use %1$s</string>
+  <string name="setting_page_preferences_network_proxy">Proxy</string>
+  <string name="setting_page_preferences_network_proxy_desc">Supports HTTP and SOCKS5 proxy URLs. Leave blank to use system settings.</string>
+  <string name="setting_page_preferences_network_proxy_invalid">Enter a valid proxy URL with a host and port.</string>
   <string name="setting_page_documentation">Documentation</string>
   <string name="setting_page_documentation_desc">View app usage instructions and help documentation</string>
   <string name="setting_page_donate">Donate</string>
@@ -1218,6 +1228,13 @@
   <string name="workspace_terminal_not_installed">Please install Rootfs first</string>
   <string name="workspace_terminal_loading">Loading workspace…</string>
   <string name="workspace_terminal_exited">Terminal exited</string>
+  <string name="workspace_terminal_tab">Terminal %1$d</string>
+  <string name="workspace_terminal_new_tab">New terminal tab</string>
+  <string name="workspace_terminal_close_tab">Close terminal %1$d</string>
+  <string name="workspace_terminal_close_confirm_title">Close terminal %1$d?</string>
+  <string name="workspace_terminal_close_confirm_message">Closing this tab will terminate any process still running in it.</string>
+  <string name="workspace_terminal_close">Close</string>
+  <string name="workspace_terminal_no_tabs">No open terminal tabs</string>
   <string name="extensions_page_workspace">Workspace</string>
   <string name="extensions_page_workspace_desc">Manage local working directories accessible by Agent</string>
   <string name="workspace_select">Select Workspace</string>
@@ -1291,6 +1308,8 @@
   <string name="assistant_page_context_message_limit_desc">Caps how many recent messages are sent to the model. When the limit is exceeded, the context is trimmed down to about half in one step instead of dropping one message per turn, so the request prefix stays stable and prompt caching keeps working for many turns.</string>
   <string name="assistant_page_context_message_limit_count">Context message limit: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">Unlimited context messages</string>
+  <string name="assistant_page_context_message_limit_hint">Enter 0 for unlimited, or a value of at least %d</string>
+  <string name="assistant_page_context_message_limit_too_small">The context message limit cannot be less than %1$d. It has been reset to %1$d.</string>
   <string name="assistant_page_context_message_limit_warning">Limiting context invalidates the prompt cache each time the context is trimmed. A larger limit trims less often; unlimited never trims and keeps the cache fully intact.</string>
   <string name="setting_update_reminder_enabled">Update reminders are enabled</string>
   <string name="setting_update_reminder_paused_until">Paused until %1$s</string>
@@ -1298,4 +1317,16 @@
   <string name="setting_update_reminder_pause_description">Choose how long to pause update reminders. They will resume automatically.</string>
   <string name="setting_update_reminder_pause_days">%1$d days</string>
   <string name="setting_update_reminder_resume_now">Resume now</string>
+  <string name="backup_page_import_overwrite_confirm">Importing a backup will overwrite app data. Continue?</string>
+  <string name="setting_provider_page_test_non_streaming">Non-streaming</string>
+  <string name="setting_provider_page_test_streaming">Streaming</string>
+  <string name="setting_provider_page_test_tool_call">Tool Call</string>
+  <string name="setting_provider_page_test_tool_called">Called: %1$s  Args: %2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">Tool not called, response: %s</string>
+  <string name="chat_generation_network_retrying">%1$s. Retrying (%2$d/%3$d)…</string>
+  <string name="chat_generation_network_unknown_host">Unable to resolve server address</string>
+  <string name="chat_generation_network_timeout">Connection timed out</string>
+  <string name="chat_generation_network_unreachable">Unable to connect to server</string>
+  <string name="chat_generation_network_disconnected">Network connection lost</string>
 </resources>
+

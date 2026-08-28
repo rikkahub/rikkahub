@@ -770,7 +770,7 @@
   <string name="setting_page_built_in_tools_search_desc">啟用 Google 搜尋整合</string>
   <string name="setting_page_built_in_tools_url_context">URL 上下文</string>
   <string name="setting_page_built_in_tools_url_context_desc">啟用 URL 內容處理</string>
-  <string name="setting_page_chat_storage">聊天記錄儲存</string>
+  <string name="setting_page_chat_storage">儲存空間管理</string>
   <string name="setting_page_chat_storage_desc">%1$d 個檔案，%2$.2f MB</string>
   <string name="setting_page_code_display_settings">程式碼顯示</string>
   <string name="setting_page_color_mode">顏色模式</string>
@@ -1291,5 +1291,28 @@
   <string name="setting_update_reminder_pause_days">%1$d 天</string>
   <string name="setting_update_reminder_resume_now">立即恢復</string>
   <string name="reasoning_max">最大</string>
+  <string name="backup_page_import_overwrite_confirm">匯入備份將覆寫應用程式資料。是否繼續？</string>
+  <string name="setting_page_preferences_network">網路</string>
+  <string name="setting_page_preferences_network_desc">User-Agent 和網路請求設定</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">留空以使用 %1$s</string>
+  <string name="setting_page_preferences_network_proxy">代理</string>
+  <string name="setting_page_preferences_network_proxy_desc">支援 HTTP 和 SOCKS5 代理網址。留空以使用系統設定。</string>
+  <string name="setting_page_preferences_network_proxy_invalid">請輸入包含主機和連接埠的有效代理 URL。</string>
+  <string name="setting_provider_page_test_non_streaming">非串流</string>
+  <string name="setting_provider_page_test_streaming">串流</string>
+  <string name="setting_provider_page_test_tool_call">工具呼叫</string>
+  <string name="setting_provider_page_test_tool_called">已調用：%1$s  參數：%2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">工具未被呼叫，回應：%s</string>
+  <string name="workspace_terminal_close_confirm_title">關閉終端機 %1$d？</string>
+  <string name="workspace_terminal_close_confirm_message">關閉此分頁將終止仍在其中執行的任何程序。</string>
+  <string name="workspace_terminal_close">關閉</string>
+    <string name="chat_generation_network_retrying">%1$s，正在重試（%2$d/%3$d）…</string>
+    <string name="chat_generation_network_unknown_host">無法解析伺服器位址</string>
+    <string name="chat_generation_network_timeout">連線逾時</string>
+    <string name="chat_generation_network_unreachable">無法連線到伺服器</string>
+    <string name="chat_generation_network_disconnected">網路連線已中斷</string>
+  <string name="setting_files_page_clean_all">所有檔案</string>
+  <string name="setting_files_page_clean_older_than_days">%1$d 天前</string>
+  <string name="setting_files_page_clean_range_description">選擇要永久刪除的檔案。此操作無法復原。</string>
 </resources>
-

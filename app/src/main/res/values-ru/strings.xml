@@ -770,7 +770,7 @@
   <string name="setting_page_built_in_tools_search_desc">Включить интеграцию с Google Поиском</string>
   <string name="setting_page_built_in_tools_url_context">Контекст URL</string>
   <string name="setting_page_built_in_tools_url_context_desc">Включить обработку содержимого по URL</string>
-  <string name="setting_page_chat_storage">Хранилище чатов</string>
+  <string name="setting_page_chat_storage">Управление хранилищем</string>
   <string name="setting_page_chat_storage_desc">%1$d файлов, %2$.2f МБ</string>
   <string name="setting_page_code_display_settings">Отображение кода</string>
   <string name="setting_page_color_mode">Цветовая схема</string>
@@ -1293,5 +1293,28 @@
   <string name="setting_update_reminder_pause_days">%1$d дн.</string>
   <string name="setting_update_reminder_resume_now">Возобновить сейчас</string>
   <string name="reasoning_max">Максимум</string>
+  <string name="backup_page_import_overwrite_confirm">Импорт резервной копии перезапишет данные приложения. Продолжить?</string>
+  <string name="setting_page_preferences_network">Сеть</string>
+  <string name="setting_page_preferences_network_desc">Настройки User-Agent и сетевых запросов</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">Оставьте пустым, чтобы использовать %1$s</string>
+  <string name="setting_page_preferences_network_proxy">Прокси</string>
+  <string name="setting_page_preferences_network_proxy_desc">Поддерживает HTTP и SOCKS5 прокси-URL. Оставьте пустым для использования системных настроек.</string>
+  <string name="setting_page_preferences_network_proxy_invalid">Введите корректный URL прокси-сервера с хостом и портом.</string>
+  <string name="setting_provider_page_test_non_streaming">Без стриминга</string>
+  <string name="setting_provider_page_test_streaming">Стриминг</string>
+  <string name="setting_provider_page_test_tool_call">Вызов инструмента</string>
+  <string name="setting_provider_page_test_tool_called">Вызвано: %1$s  Аргументы: %2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">Инструмент не вызван, ответ: %s</string>
+  <string name="workspace_terminal_close_confirm_title">Закрыть терминал %1$d?</string>
+  <string name="workspace_terminal_close_confirm_message">Закрытие этой вкладки приведет к завершению всех процессов, которые все еще в ней выполняются.</string>
+  <string name="workspace_terminal_close">Закрыть</string>
+    <string name="chat_generation_network_retrying">%1$s. Повторная попытка (%2$d/%3$d)…</string>
+    <string name="chat_generation_network_unknown_host">Не удалось разрешить адрес сервера</string>
+    <string name="chat_generation_network_timeout">Тайм-аут соединения</string>
+    <string name="chat_generation_network_unreachable">Не удается подключиться к серверу</string>
+    <string name="chat_generation_network_disconnected">Сетевое соединение потеряно</string>
+  <string name="setting_files_page_clean_all">Все файлы</string>
+  <string name="setting_files_page_clean_older_than_days">Старше %1$d дней</string>
+  <string name="setting_files_page_clean_range_description">Выберите файлы для окончательного удаления. Это действие нельзя отменить.</string>
 </resources>
-

@@ -4,6 +4,7 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.util.json
@@ -24,7 +25,10 @@ data class UIMessage(
     val generationTimeMillis: Long? = null,
     val modelId: Uuid? = null,
     val usage: TokenUsage? = null,
-    val translation: String? = null
+    val translation: String? = null,
+    // 请求期间生成的内部消息；该标记仅在内存中使用
+    @Transient
+    val isSynthetic: Boolean = false,
 ) {
     fun summaryAsText(maxLength: Int = Int.MAX_VALUE): String {
         val text = "[${role.name}]: " + parts.joinToString(separator = "\n") { part ->
@@ -117,6 +121,9 @@ fun List<UIMessagePart>.isEmptyUIMessage(): Boolean {
             is UIMessagePart.Reasoning -> message.reasoning.isBlank()
             is UIMessagePart.Video -> message.url.isBlank()
             is UIMessagePart.Audio -> message.url.isBlank()
+            is UIMessagePart.Tool,
+            is UIMessagePart.ServerTool,
+                -> false
             else -> true
         }
     }

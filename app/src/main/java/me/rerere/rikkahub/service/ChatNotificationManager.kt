@@ -109,10 +109,6 @@ class ChatNotificationManager(
         }
     }
 
-    private fun getLiveUpdateNotificationId(conversationId: Uuid): Int {
-        return conversationId.hashCode() + 10000
-    }
-
     private fun sendLiveUpdateNotification(
         conversationId: Uuid,
         lastMessage: UIMessage,
@@ -123,7 +119,8 @@ class ChatNotificationManager(
 
         context.sendNotification(
             channelId = CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID,
-            notificationId = getLiveUpdateNotificationId(conversationId)
+            // 更新前台服务正在使用的同一条通知，避免重复显示生成进度。
+            notificationId = ChatGenerationForegroundService.NOTIFICATION_ID
         ) {
             title = senderName
             content = contentText
@@ -183,7 +180,8 @@ class ChatNotificationManager(
 
     private fun cancelLiveUpdateNotification(conversationId: Uuid) {
         liveUpdateLastSentAt.remove(conversationId)
-        context.cancelNotification(getLiveUpdateNotificationId(conversationId))
+        // 前台服务持有通知时系统会保留它；启动失败时则清理普通 ongoing 通知。
+        context.cancelNotification(ChatGenerationForegroundService.NOTIFICATION_ID)
     }
 
     private fun getPendingIntent(context: Context, conversationId: Uuid): PendingIntent {

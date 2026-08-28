@@ -13,6 +13,7 @@
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
   <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
   <uses-permission
@@ -109,25 +110,13 @@
       </intent-filter>
     </activity>
     <activity
-      android:name=".ui.activity.McpOAuthCallbackActivity"
-      android:exported="true"
-      android:launchMode="singleTask"
-      android:theme="@android:style/Theme.Translucent.NoTitleBar">
-      <intent-filter>
-        <action android:name="android.intent.action.VIEW" />
-
-        <category android:name="android.intent.category.DEFAULT" />
-        <category android:name="android.intent.category.BROWSABLE" />
-
-        <data
-          android:host="mcp-oauth-callback"
-          android:scheme="rikkahub" />
-      </intent-filter>
-    </activity>
-    <activity
       android:name="com.yalantis.ucrop.UCropActivity"
       android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
 
+    <service
+      android:name=".service.ChatGenerationForegroundService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
     <service
       android:name=".service.WebServerService"
       android:exported="false"

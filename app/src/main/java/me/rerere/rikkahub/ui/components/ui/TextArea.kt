@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.FileImport
-import me.rerere.hugeicons.stroke.FullScreen
+import me.rerere.hugeicons.stroke.Fullscreen
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.modifier.onClick
@@ -133,7 +133,7 @@ fun TextArea(
                 ) {
                     if (enableFullscreen) {
                         Icon(
-                            imageVector = HugeIcons.FullScreen,
+                            imageVector = HugeIcons.Fullscreen,
                             contentDescription = stringResource(R.string.text_area_fullscreen_edit),
                             modifier = Modifier
                                 .onClick(onClick = {

@@ -1,9 +1,9 @@
 name: Daily Build
 
 on:
-  # 每天 UTC 18:00 触发（北京时间次日 02:00），可按需修改
+  # 每天 UTC 09:00、18:00 触发（北京时间 17:00、次日 02:00）
   schedule:
-    - cron: '0 18 * * *'
+    - cron: '0 9,18 * * *'
   # 也支持手动触发
   workflow_dispatch:
 

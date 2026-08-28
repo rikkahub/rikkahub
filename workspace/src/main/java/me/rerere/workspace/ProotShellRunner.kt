@@ -95,6 +95,10 @@ class ProotShellRunner(
             "TERM=xterm-256color",
             "LANG=C.UTF-8",
             "LC_ALL=C.UTF-8",
+            // 非交互执行约定, 抑制各类 CLI 的交互行为 (确认提示/分页器/颜色转义)
+            "CI=true",
+            "NO_COLOR=1",
+            "PAGER=cat",
             "/bin/bash",
             "-l",
             "-c",

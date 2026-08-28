@@ -770,7 +770,7 @@
   <string name="setting_page_built_in_tools_search_desc">Google検索連携を有効化</string>
   <string name="setting_page_built_in_tools_url_context">URLコンテキスト</string>
   <string name="setting_page_built_in_tools_url_context_desc">URLコンテンツ処理を有効化</string>
-  <string name="setting_page_chat_storage">チャット保存</string>
+  <string name="setting_page_chat_storage">ストレージ管理</string>
   <string name="setting_page_chat_storage_desc">%1$d ファイル、%2$.2f MB</string>
   <string name="setting_page_code_display_settings">コード表示</string>
   <string name="setting_page_color_mode">カラーモード</string>
@@ -1293,5 +1293,29 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_update_reminder_pause_days">%1$d日間</string>
   <string name="setting_update_reminder_resume_now">今すぐ再開</string>
   <string name="reasoning_max">最大</string>
+  <string name="backup_page_import_overwrite_confirm">バックアップをインポートするとアプリデータが上書きされます。続行しますか？</string>
+  <string name="setting_page_preferences_network">ネットワーク</string>
+  <string name="setting_page_preferences_network_desc">User-Agentとネットワークリクエストの設定</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">空欄の場合は%1$sを使用</string>
+  <string name="setting_page_preferences_network_proxy">プロキシ</string>
+  <string name="setting_page_preferences_network_proxy_desc">HTTPおよびSOCKS5プロキシURLをサポートします。空白の場合はシステム設定を使用します。</string>
+  <string name="setting_page_preferences_network_proxy_invalid">ホストとポートを含む有効なプロキシURLを入力してください。</string>
+  <string name="setting_provider_page_test_non_streaming">非ストリーミング</string>
+  <string name="setting_provider_page_test_streaming">ストリーミング</string>
+  <string name="setting_provider_page_test_tool_call">ツール呼び出し</string>
+  <string name="setting_provider_page_test_tool_called">呼び出し: %1$s  引数: %2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">ツールが呼び出されませんでした。応答: %s</string>
+  <string name="workspace_terminal_close_confirm_title">ターミナル %1$d を閉じますか？</string>
+  <string name="workspace_terminal_close_confirm_message">このタブを閉じると、実行中のプロセスは終了します。</string>
+  <string name="workspace_terminal_close">閉じる</string>
+  <string name="chat_generation_network_retrying">%1$s。再試行中（%2$d/%3$d）…</string>
+  <string name="chat_generation_network_unknown_host">サーバーアドレスを解決できません</string>
+  <string name="chat_generation_network_timeout">接続がタイムアウトしました</string>
+  <string name="chat_generation_network_unreachable">サーバーに接続できません</string>
+  <string name="chat_generation_network_disconnected">ネットワーク接続が切断されました</string>
+  <string name="setting_files_page_clean_all">すべてのファイル</string>
+  <string name="setting_files_page_clean_older_than_days">%1$d日以上前</string>
+  <string name="setting_files_page_clean_range_description">完全に削除するファイルを選択してください。この操作は元に戻せません。</string>
 </resources>
 

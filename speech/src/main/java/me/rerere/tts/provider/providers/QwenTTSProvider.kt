@@ -29,75 +29,71 @@ class QwenTTSProvider : TTSProvider<TTSProviderSetting.Qwen> {
         providerSetting: TTSProviderSetting.Qwen,
         request: TTSRequest
     ): Flow<AudioChunk> = flow {
+        require(!providerSetting.model.startsWith("qwen3-tts")) {
+            "旧版 Qwen3 TTS 模型已不再支持，请在 TTS 设置中改用 qwen-audio-3.0-tts-plus 或 qwen-audio-3.0-tts-flash"
+        }
+        require(!providerSetting.baseUrl.contains("{WorkspaceId}")) {
+            "请在 Base URL 中将 {WorkspaceId} 替换为阿里云百炼业务空间 ID"
+        }
+
         val requestBody = JSONObject().apply {
             put("model", providerSetting.model)
             put("input", JSONObject().apply {
                 put("text", request.text)
                 put("voice", providerSetting.voice)
-                put("language_type", providerSetting.languageType)
+                put("format", providerSetting.format)
+                put("sample_rate", providerSetting.sampleRate)
             })
         }
 
         Log.i(TAG, "generateSpeech: $requestBody")
 
         val httpRequest = Request.Builder()
-            .url("${providerSetting.baseUrl}/services/aigc/multimodal-generation/generation")
+            .url("${providerSetting.baseUrl.trimEnd('/')}/services/audio/tts/SpeechSynthesizer")
             .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
             .addHeader("Content-Type", "application/json")
             .addHeader("X-DashScope-SSE", "enable")
             .post(requestBody.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        val response = httpClient.newCall(httpRequest).execute()
+        httpClient.newCall(httpRequest).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errorBody = response.body.string()
+                Log.e(
+                    TAG,
+                    "Qwen TTS request failed: ${response.code} ${response.message}, body: $errorBody"
+                )
+                throw Exception("Qwen TTS request failed: ${response.code} ${response.message}")
+            }
 
-        if (!response.isSuccessful) {
-            val errorBody = response.body.string()
-            Log.e(TAG, "Qwen TTS request failed: ${response.code} ${response.message}, body: $errorBody")
-            throw Exception("Qwen TTS request failed: ${response.code} ${response.message}")
-        }
+            response.body.byteStream().bufferedReader().use { reader ->
+                var currentData = StringBuilder()
 
-        val reader = response.body.byteStream().bufferedReader()
-
-        try {
-            var currentData = StringBuilder()
-
-            reader.lineSequence().forEach { line ->
-                when {
-                    line.startsWith("data:") -> {
-                        currentData.append(line.removePrefix("data:"))
-                    }
-
-                    line.isEmpty() && currentData.isNotEmpty() -> {
-                        val result = parseSSEData(currentData.toString())
-                        if (result != null) {
-                            val (audioData, isLast) = result
-                            emit(
-                                AudioChunk(
-                                    data = audioData,
-                                    format = AudioFormat.PCM,
-                                    sampleRate = 24000,
-                                    isLast = isLast,
-                                    metadata = mapOf(
-                                        "provider" to "qwen",
-                                        "model" to providerSetting.model,
-                                        "voice" to providerSetting.voice,
-                                        "sampleRate" to "24000",
-                                        "channels" to "1",
-                                        "bitDepth" to "16"
-                                    )
-                                )
-                            )
+                reader.lineSequence().forEach { line ->
+                    when {
+                        line.startsWith("data:") -> {
+                            currentData.append(line.removePrefix("data:").trimStart())
                         }
-                        currentData = StringBuilder()
+
+                        line.isEmpty() && currentData.isNotEmpty() -> {
+                            parseSSEData(currentData.toString(), providerSetting)?.let { emit(it) }
+                            currentData = StringBuilder()
+                        }
                     }
                 }
+
+                // 兼容最后一个 SSE event 后没有空行、直接 EOF 的响应。
+                if (currentData.isNotEmpty()) {
+                    parseSSEData(currentData.toString(), providerSetting)?.let { emit(it) }
+                }
             }
-        } finally {
-            reader.close()
         }
     }
 
-    private fun parseSSEData(data: String): Pair<ByteArray, Boolean>? {
+    private fun parseSSEData(
+        data: String,
+        providerSetting: TTSProviderSetting.Qwen,
+    ): AudioChunk? {
         return try {
             val json = JSONObject(data)
             val output = json.optJSONObject("output") ?: return null
@@ -108,7 +104,24 @@ class QwenTTSProvider : TTSProvider<TTSProviderSetting.Qwen> {
             if (audioBase64.isNotEmpty()) {
                 val audioData = Base64.decode(audioBase64, Base64.DEFAULT)
                 val isLast = finishReason == "stop"
-                Pair(audioData, isLast)
+                AudioChunk(
+                    data = audioData,
+                    format = when (providerSetting.format.lowercase()) {
+                        "mp3" -> AudioFormat.MP3
+                        "pcm" -> AudioFormat.PCM
+                        "opus" -> AudioFormat.OPUS
+                        else -> AudioFormat.WAV
+                    },
+                    sampleRate = providerSetting.sampleRate,
+                    isLast = isLast,
+                    metadata = mapOf(
+                        "provider" to "qwen",
+                        "model" to providerSetting.model,
+                        "voice" to providerSetting.voice,
+                        "format" to providerSetting.format,
+                        "sampleRate" to providerSetting.sampleRate.toString(),
+                    )
+                )
             } else {
                 null
             }

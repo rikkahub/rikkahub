@@ -770,7 +770,7 @@
   <string name="setting_page_built_in_tools_search_desc">Google 검색 통합 활성화</string>
   <string name="setting_page_built_in_tools_url_context">URL 컨텍스트</string>
   <string name="setting_page_built_in_tools_url_context_desc">URL 콘텐츠 처리 활성화</string>
-  <string name="setting_page_chat_storage">채팅 저장 공간</string>
+  <string name="setting_page_chat_storage">저장 공간 관리</string>
   <string name="setting_page_chat_storage_desc">%1$d개 파일, %2$.2f MB</string>
   <string name="setting_page_code_display_settings">코드 표시</string>
   <string name="setting_page_color_mode">색상 모드</string>
@@ -1293,5 +1293,28 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_update_reminder_pause_days">%1$d일</string>
   <string name="setting_update_reminder_resume_now">지금 재개</string>
   <string name="reasoning_max">최대</string>
+  <string name="backup_page_import_overwrite_confirm">백업을 가져오면 앱 데이터가 덮어써집니다. 계속하시겠습니까?</string>
+  <string name="setting_page_preferences_network">네트워크</string>
+  <string name="setting_page_preferences_network_desc">User-Agent 및 네트워크 요청 설정</string>
+  <string name="setting_page_preferences_network_user_agent">User-Agent</string>
+  <string name="setting_page_preferences_network_user_agent_desc">비워 두면 %1$s(을)를 사용합니다.</string>
+  <string name="setting_page_preferences_network_proxy">프록시</string>
+  <string name="setting_page_preferences_network_proxy_desc">HTTP 및 SOCKS5 프록시 URL을 지원합니다. 비워 두면 시스템 설정을 사용합니다.</string>
+  <string name="setting_page_preferences_network_proxy_invalid">호스트와 포트가 있는 유효한 프록시 URL을 입력하세요.</string>
+  <string name="setting_provider_page_test_non_streaming">비스트리밍</string>
+  <string name="setting_provider_page_test_streaming">스트리밍</string>
+  <string name="setting_provider_page_test_tool_call">도구 호출</string>
+  <string name="setting_provider_page_test_tool_called">호출: %1$s  인수: %2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">도구가 호출되지 않음, 응답: %s</string>
+  <string name="workspace_terminal_close_confirm_title">터미널 %1$d번을 닫으시겠습니까?</string>
+  <string name="workspace_terminal_close_confirm_message">이 탭을 닫으면 실행 중인 프로세스가 종료됩니다.</string>
+  <string name="workspace_terminal_close">닫기</string>
+    <string name="chat_generation_network_retrying">%1$s. 재시도 중 (%2$d/%3$d)…</string>
+    <string name="chat_generation_network_unknown_host">서버 주소를 확인할 수 없습니다</string>
+    <string name="chat_generation_network_timeout">연결 시간이 초과되었습니다</string>
+    <string name="chat_generation_network_unreachable">서버에 연결할 수 없습니다</string>
+    <string name="chat_generation_network_disconnected">네트워크 연결이 끊어졌습니다</string>
+  <string name="setting_files_page_clean_all">모든 파일</string>
+  <string name="setting_files_page_clean_older_than_days">%1$d일 이상 지난 파일</string>
+  <string name="setting_files_page_clean_range_description">영구적으로 삭제할 파일을 선택하세요. 이 작업은 되돌릴 수 없습니다.</string>
 </resources>
-

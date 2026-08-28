@@ -404,6 +404,30 @@ class FilesManager(
         false
     }
 
+    suspend fun deleteOlderThan(
+        folder: String = FileFolders.UPLOAD,
+        cutoffMillis: Long,
+    ): Boolean = withContext(Dispatchers.IO) {
+        var allDeleted = true
+        repository.listByFolder(folder).first()
+            .filter { it.createdAt < cutoffMillis }
+            .forEach { entity ->
+                val file = getFile(entity)
+                val deletedFromDisk = !file.exists() || runCatching {
+                    file.deleteRecursively()
+                }.getOrDefault(false)
+
+                if (deletedFromDisk) {
+                    if (repository.deleteById(entity.id) == 0) {
+                        allDeleted = false
+                    }
+                } else {
+                    allDeleted = false
+                }
+            }
+        allDeleted
+    }
+
     private fun createTargetFile(folder: String, displayName: String, mimeType: String?): File {
         val dir = File(context.filesDir, folder)
         if (!dir.exists()) {

@@ -47,6 +47,7 @@ import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.createConversationTools
 import me.rerere.rikkahub.data.ai.tools.local.LocalTools
@@ -76,6 +77,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -106,6 +108,20 @@ internal fun backgroundTextGenerationParams(
 internal fun shouldUseExternalWebSearch(assistant: Assistant, model: Model): Boolean {
     return assistant.enableWebSearch && BuiltInTools.Search !in model.tools
 }
+
+internal fun createForkConversation(
+    source: Conversation,
+    messageNodes: List<MessageNode>,
+): Conversation = Conversation(
+    id = Uuid.random(),
+    assistantId = source.assistantId,
+    messageNodes = messageNodes,
+    customSystemPrompt = source.customSystemPrompt,
+    modeInjectionIds = source.modeInjectionIds,
+    lorebookIds = source.lorebookIds,
+    workspaceCwd = source.workspaceCwd,
+    folderId = source.folderId,
+)
 
 data class ChatError(
     val id: Uuid = Uuid.random(),
@@ -146,6 +162,7 @@ class ChatService(
     private val conversationRepo: ConversationRepository,
     private val memoryRepository: MemoryRepository,
     private val generationHandler: GenerationHandler,
+    private val translationHandler: TranslationHandler,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
     private val localTools: LocalTools,
@@ -262,8 +279,7 @@ class ChatService(
     }
 
     fun getProcessingStatusFlow(conversationId: Uuid): StateFlow<String?> {
-        val session = sessions[conversationId] ?: return MutableStateFlow(null)
-        return session.processingStatus
+        return getOrCreateSession(conversationId).processingStatus
     }
 
     fun getConversationJobs(): Flow<Map<Uuid, Job?>> {
@@ -276,6 +292,30 @@ class ChatService(
                     s.generationJob.map { job -> s.id to job }
                 }) { pairs ->
                     pairs.filter { it.second != null }.toMap()
+                }
+            }
+        }
+    }
+
+    private fun launchGenerationJob(
+        conversationId: Uuid,
+        keepAliveInBackground: Boolean = true,
+        block: suspend () -> Unit,
+    ): Job {
+        if (!keepAliveInBackground) return appScope.launch { block() }
+
+        val generationId = Uuid.random()
+        val foregroundStarted = ChatGenerationForegroundService.acquire(
+            context = context,
+            generationId = generationId,
+            conversationId = conversationId,
+        )
+        return appScope.launch {
+            try {
+                block()
+            } finally {
+                if (foregroundStarted) {
+                    ChatGenerationForegroundService.release(context, generationId)
                 }
             }
         }
@@ -311,7 +351,10 @@ class ChatService(
         val previousJob = session.getJob()
         previousJob?.cancel()
 
-        val job = appScope.launch {
+        val job = launchGenerationJob(
+            conversationId = conversationId,
+            keepAliveInBackground = answer,
+        ) {
             try {
                 runCatching { previousJob?.join() }
                 finishInterruptedPendingTools(conversationId)
@@ -373,7 +416,10 @@ class ChatService(
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
 
-        val job = appScope.launch {
+        val job = launchGenerationJob(
+            conversationId = conversationId,
+            keepAliveInBackground = message.role == MessageRole.USER || regenerateAssistantMsg,
+        ) {
             try {
                 val conversation = session.state.value
 
@@ -417,7 +463,16 @@ class ChatService(
         val session = getOrCreateSession(conversationId)
         session.getJob()?.cancel()
 
-        val job = appScope.launch {
+        val hasOtherPendingTools = session.state.value.messageNodes.any { node ->
+            node.currentMessage.parts.any { part ->
+                part is UIMessagePart.Tool && part.isPending && part.toolCallId != toolCallId
+            }
+        }
+
+        val job = launchGenerationJob(
+            conversationId = conversationId,
+            keepAliveInBackground = !hasOtherPendingTools,
+        ) {
             try {
                 val conversation = session.state.value
                 val newApprovalState = when {
@@ -521,6 +576,7 @@ class ChatService(
                     }
                 },
                 assistant = assistant,
+                conversationId = conversationId,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 conversationModeInjectionIds = conversation.modeInjectionIds,
                 conversationLorebookIds = conversation.lorebookIds,
@@ -1025,7 +1081,7 @@ class ChatService(
                 val loadingText = context.getString(R.string.translating)
                 updateTranslationField(conversationId, message.id, loadingText)
 
-                generationHandler.translateText(
+                translationHandler.translateText(
                     settings = settings,
                     sourceText = messageText,
                     targetLanguage = targetLanguage
@@ -1131,14 +1187,7 @@ class ChatService(
                 )
             }
 
-        val forkConversation = Conversation(
-            id = Uuid.random(),
-            assistantId = currentConversation.assistantId,
-            messageNodes = copiedNodes,
-            customSystemPrompt = currentConversation.customSystemPrompt,
-            modeInjectionIds = currentConversation.modeInjectionIds,
-            lorebookIds = currentConversation.lorebookIds,
-        )
+        val forkConversation = createForkConversation(currentConversation, copiedNodes)
 
         saveConversation(forkConversation.id, forkConversation)
         return forkConversation

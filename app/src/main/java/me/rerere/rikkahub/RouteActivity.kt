@@ -108,6 +108,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNotificationPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesGeneralPage
+import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesNetworkPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesUIPage
 import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
@@ -246,7 +247,6 @@ class RouteActivity : ComponentActivity() {
                 when (event) {
                     is AppEvent.Speak -> tts.speak(event.text)
                     is AppEvent.OpenUsageAccessSettings -> this@RouteActivity.openUsageAccessSettings()
-                    is AppEvent.McpOAuthCallback -> Unit // 由 McpManager 消费
                     is AppEvent.ChatGenerationUpdate -> Unit // 由 ChatNotificationManager 消费
                     is AppEvent.ChatGenerationEnded -> Unit // 由 ChatNotificationManager 消费
                 }
@@ -422,6 +422,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.SettingPreferencesUI> {
                                 SettingPreferencesUIPage()
+                            }
+
+                            entry<Screen.SettingPreferencesNetwork> {
+                                SettingPreferencesNetworkPage()
                             }
 
                             entry<Screen.SettingProvider> {
@@ -652,6 +656,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingPreferencesUI : Screen
+
+    @Serializable
+    data object SettingPreferencesNetwork : Screen
 
     @Serializable
     data object SettingProvider : Screen
