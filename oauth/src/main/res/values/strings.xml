@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="oauth_notification_channel_name">OAuth authorization</string>
+  <string name="oauth_notification_title">OAuth authorization in progress</string>
+  <string name="oauth_notification_text">Waiting for the browser authorization callback…</string>
+  <string name="oauth_callback_success_title">Authorization complete</string>
+  <string name="oauth_callback_success_message">The account has been connected successfully.</string>
+  <string name="oauth_callback_success_hint">You can close this tab and return to RikkaHub.</string>
+  <string name="oauth_callback_error_title">Authorization failed</string>
+  <string name="oauth_callback_error_message">The authorization provider did not approve this request.</string>
+  <string name="oauth_callback_error_hint">Close this tab and try again from RikkaHub.</string>
+  <string name="oauth_callback_invalid_title">Invalid authorization callback</string>
+  <string name="oauth_callback_invalid_message">The authorization callback is missing information or has expired.</string>
+  <string name="oauth_callback_invalid_hint">Return to RikkaHub and start the authorization again.</string>
+  <string name="oauth_callback_handled_title">Authorization already handled</string>
+  <string name="oauth_callback_handled_message">This authorization callback has already been handled.</string>
+  <string name="oauth_callback_handled_hint">You can safely close this tab and return to RikkaHub.</string>
+</resources>

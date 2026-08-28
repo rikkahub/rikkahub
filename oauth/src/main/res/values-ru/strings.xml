@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="oauth_notification_channel_name">Авторизация OAuth</string>
+  <string name="oauth_notification_title">Выполняется авторизация OAuth</string>
+  <string name="oauth_notification_text">Ожидание обратного вызова авторизации браузера…</string>
+  <string name="oauth_callback_success_title">Авторизация завершена</string>
+  <string name="oauth_callback_success_message">Аккаунт успешно подключен.</string>
+  <string name="oauth_callback_success_hint">Можно закрыть эту вкладку и вернуться в RikkaHub.</string>
+  <string name="oauth_callback_error_title">Ошибка авторизации</string>
+  <string name="oauth_callback_error_message">Провайдер авторизации не одобрил этот запрос.</string>
+  <string name="oauth_callback_error_hint">Закройте эту вкладку и повторите попытку в RikkaHub.</string>
+  <string name="oauth_callback_invalid_title">Недопустимый обратный вызов авторизации</string>
+  <string name="oauth_callback_invalid_message">В обратном вызове авторизации отсутствует информация, или срок его действия истёк.</string>
+  <string name="oauth_callback_invalid_hint">Вернитесь в RikkaHub и начните авторизацию заново.</string>
+  <string name="oauth_callback_handled_title">Авторизация уже обработана</string>
+  <string name="oauth_callback_handled_message">Этот обратный вызов авторизации уже был обработан.</string>
+  <string name="oauth_callback_handled_hint">Вы можете безопасно закрыть эту вкладку и вернуться в RikkaHub.</string>
+</resources>
+

@@ -29,6 +29,11 @@ modules:
       - "search/src/main/java/**/*.kt"
       - "search/src/main/java/**/*.java"
       - "search/src/main/AndroidManifest.xml"
+  - name: "oauth"
+    res_path: "oauth/src/main/res"
+    source_patterns:
+      - "oauth/src/main/java/**/*.kt"
+      - "oauth/src/main/AndroidManifest.xml"
   - name: "rag"
     res_path: "rag/src/main/res"
     source_patterns:

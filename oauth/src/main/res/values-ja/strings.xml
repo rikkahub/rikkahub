@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="oauth_notification_channel_name">OAuth認可</string>
+  <string name="oauth_notification_title">OAuth認可を実行中</string>
+  <string name="oauth_notification_text">ブラウザの認証コールバックを待っています…</string>
+  <string name="oauth_callback_success_title">認可完了</string>
+  <string name="oauth_callback_success_message">アカウントが正常に接続されました。</string>
+  <string name="oauth_callback_success_hint">このタブを閉じて、RikkaHubに戻ることができます。</string>
+  <string name="oauth_callback_error_title">認可に失敗しました</string>
+  <string name="oauth_callback_error_message">認可プロバイダーはこのリクエストを承認しませんでした。</string>
+  <string name="oauth_callback_error_hint">このタブを閉じて、RikkaHubからもう一度お試しください。</string>
+  <string name="oauth_callback_invalid_title">無効な認証コールバック</string>
+  <string name="oauth_callback_invalid_message">認可コールバックの情報が不足しているか、期限が切れています。</string>
+  <string name="oauth_callback_invalid_hint">RikkaHubに戻り、再び認証を開始してください。</string>
+  <string name="oauth_callback_handled_title">認可処理済み</string>
+  <string name="oauth_callback_handled_message">この認可コールバックは既に処理されています。</string>
+  <string name="oauth_callback_handled_hint">このタブは安全に閉じて、RikkaHubに戻ることができます。</string>
+</resources>
+
