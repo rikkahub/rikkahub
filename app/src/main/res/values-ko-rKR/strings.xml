@@ -770,7 +770,7 @@
   <string name="setting_page_built_in_tools_search_desc">Google 검색 통합 활성화</string>
   <string name="setting_page_built_in_tools_url_context">URL 컨텍스트</string>
   <string name="setting_page_built_in_tools_url_context_desc">URL 콘텐츠 처리 활성화</string>
-  <string name="setting_page_chat_storage">채팅 저장 공간</string>
+  <string name="setting_page_chat_storage">저장 공간 관리</string>
   <string name="setting_page_chat_storage_desc">%1$d개 파일, %2$.2f MB</string>
   <string name="setting_page_code_display_settings">코드 표시</string>
   <string name="setting_page_color_mode">색상 모드</string>
@@ -1314,5 +1314,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
     <string name="chat_generation_network_timeout">연결 시간이 초과되었습니다</string>
     <string name="chat_generation_network_unreachable">서버에 연결할 수 없습니다</string>
     <string name="chat_generation_network_disconnected">네트워크 연결이 끊어졌습니다</string>
+  <string name="setting_files_page_clean_all">모든 파일</string>
+  <string name="setting_files_page_clean_older_than_days">%1$d일 이상 지난 파일</string>
+  <string name="setting_files_page_clean_range_description">영구적으로 삭제할 파일을 선택하세요. 이 작업은 되돌릴 수 없습니다.</string>
 </resources>
-

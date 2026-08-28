@@ -770,7 +770,7 @@
   <string name="setting_page_built_in_tools_search_desc">Включить интеграцию с Google Поиском</string>
   <string name="setting_page_built_in_tools_url_context">Контекст URL</string>
   <string name="setting_page_built_in_tools_url_context_desc">Включить обработку содержимого по URL</string>
-  <string name="setting_page_chat_storage">Хранилище чатов</string>
+  <string name="setting_page_chat_storage">Управление хранилищем</string>
   <string name="setting_page_chat_storage_desc">%1$d файлов, %2$.2f МБ</string>
   <string name="setting_page_code_display_settings">Отображение кода</string>
   <string name="setting_page_color_mode">Цветовая схема</string>
@@ -1314,5 +1314,7 @@
     <string name="chat_generation_network_timeout">Тайм-аут соединения</string>
     <string name="chat_generation_network_unreachable">Не удается подключиться к серверу</string>
     <string name="chat_generation_network_disconnected">Сетевое соединение потеряно</string>
+  <string name="setting_files_page_clean_all">Все файлы</string>
+  <string name="setting_files_page_clean_older_than_days">Старше %1$d дней</string>
+  <string name="setting_files_page_clean_range_description">Выберите файлы для окончательного удаления. Это действие нельзя отменить.</string>
 </resources>
-
