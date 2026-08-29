@@ -21,7 +21,9 @@ import me.rerere.tts.model.PlaybackState
 import me.rerere.tts.model.PlaybackStatus
 import me.rerere.tts.model.TTSResponse
 import me.rerere.tts.provider.TTSManager
+import me.rerere.tts.provider.TTSProviderException
 import me.rerere.tts.provider.TTSProviderSetting
+import java.io.IOException
 import java.util.UUID
 
 private const val TAG = "TtsController"
@@ -325,13 +327,13 @@ class TtsController(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (attempt >= MAX_SYNTHESIS_ATTEMPTS) throw e
+                if (!e.isRetryableSynthesisError() || attempt >= MAX_SYNTHESIS_ATTEMPTS) throw e
 
                 val retryDelayMs = SYNTHESIS_RETRY_BASE_DELAY_MS * (1L shl (attempt - 1))
                 Log.w(
                     TAG,
                     "Synthesis attempt $attempt/$MAX_SYNTHESIS_ATTEMPTS failed for chunk ${chunk.index}; " +
-                            "retrying in ${retryDelayMs}ms",
+                        "retrying in ${retryDelayMs}ms",
                     e
                 )
                 delay(retryDelayMs)
@@ -340,4 +342,8 @@ class TtsController(
         }
     }
     // endregion
+}
+
+private fun Exception.isRetryableSynthesisError(): Boolean {
+    return this is IOException || this is TTSProviderException && isRetryable
 }
