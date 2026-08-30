@@ -16,11 +16,18 @@ import me.rerere.ai.core.TokenUsage
 sealed class StreamChunk {
     @Serializable
     @SerialName("text_start")
-    data class TextStart(val id: String) : StreamChunk()
+    data class TextStart(
+        val id: String,
+        val metadata: JsonObject? = null,
+    ) : StreamChunk()
 
     @Serializable
     @SerialName("text_delta")
-    data class TextDelta(val id: String, val text: String) : StreamChunk()
+    data class TextDelta(
+        val id: String,
+        val text: String,
+        val metadata: JsonObject? = null,
+    ) : StreamChunk()
 
     @Serializable
     @SerialName("text_end")
