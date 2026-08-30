@@ -58,6 +58,7 @@ import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import java.io.File
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
@@ -168,7 +169,7 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                                     steps = 8,
                                     modifier = Modifier.weight(1f)
                                 )
-                                Text(text = "${(displaySetting.bubbleOpacity * 100).toInt()}%")
+                                Text(text = "${(displaySetting.bubbleOpacity * 100).roundToInt()}%")
                             }
                         }
                     )
