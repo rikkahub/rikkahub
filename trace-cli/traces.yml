@@ -235,7 +235,7 @@ traces:
             additionalProperties: false
   # Gemini 官方：Generate Content SSE 协议。
   - name: gemini-tool
-    provider: google
+    provider: google-generateContent
     apiKeyEnv: GEMINI_API_KEY
     model: gemini-3.1-pro-preview
     body:
@@ -258,20 +258,9 @@ traces:
                     type: string
                     description: A focused search query for one topic.
                 required: [query]
-      safetySettings:
-        - category: HARM_CATEGORY_HARASSMENT
-          threshold: OFF
-        - category: HARM_CATEGORY_HATE_SPEECH
-          threshold: OFF
-        - category: HARM_CATEGORY_SEXUALLY_EXPLICIT
-          threshold: OFF
-        - category: HARM_CATEGORY_DANGEROUS_CONTENT
-          threshold: OFF
-        - category: HARM_CATEGORY_CIVIC_INTEGRITY
-          threshold: OFF
   # Gemini 官方：原生图像生成 SSE 协议。
   - name: gemini-image
-    provider: google
+    provider: google-generateContent
     baseUrl: https://generativelanguage.googleapis.com/v1
     apiKeyEnv: GEMINI_API_KEY
     model: gemini-3.1-flash-image
@@ -285,3 +274,25 @@ traces:
         - role: user
           parts:
             - text: "Create a picture of a nano banana dish in a fancy restaurant with a Gemini theme"
+  # Gemini 官方：Interactions SSE 协议。
+  - name: gemini-interactions-tool
+    provider: google-interactions
+    apiKeyEnv: GEMINI_API_KEY
+    model: gemini-3.1-pro-preview
+    body:
+      store: false
+      input: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."
+      generation_config:
+        thinking_level: high
+        thinking_summaries: auto
+      tools:
+        - type: function
+          name: search_web
+          description: Search the web for current information and return relevant sources.
+          parameters:
+            type: object
+            properties:
+              query:
+                type: string
+                description: A focused search query for one topic.
+            required: [query]

@@ -7,7 +7,8 @@ describe("buildProviderRequest", () => {
     ["openai-responses", "https://api.openai.com/v1/responses"],
     ["openai-chat", "https://api.openai.com/v1/chat/completions"],
     ["claude", "https://api.anthropic.com/v1/messages"],
-    ["google", "https://generativelanguage.googleapis.com/v1beta/models/test-model:streamGenerateContent?alt=sse"],
+    ["google-generateContent", "https://generativelanguage.googleapis.com/v1beta/models/test-model:streamGenerateContent?alt=sse"],
+    ["google-interactions", "https://generativelanguage.googleapis.com/v1beta/interactions"],
   ] as const)("builds %s endpoint", (provider, expectedUrl) => {
     const request = buildProviderRequest(trace(provider), "secret");
     expect(request.url).toBe(expectedUrl);
@@ -28,6 +29,26 @@ describe("buildProviderRequest", () => {
     expect(request.headers.Authorization).toBe("Bearer secret");
     expect(request.headers["x-api-key"]).toBeUndefined();
   });
+
+  test("puts the model in Google Interactions request body and enables streaming", () => {
+    const request = buildProviderRequest(trace("google-interactions"), "secret");
+
+    expect(request.body.model).toBe("test-model");
+    expect(request.body.stream).toBe(true);
+    expect(request.headers["x-goog-api-key"]).toBe("secret");
+  });
+
+  test("supports agent-based Google Interactions requests without a model", () => {
+    const input = trace("google-interactions");
+    delete input.model;
+    input.body = { agent: "test-agent", input: "hello" };
+
+    const request = buildProviderRequest(input, "secret");
+
+    expect(request.body.agent).toBe("test-agent");
+    expect(request.body.model).toBeUndefined();
+    expect(request.body.stream).toBe(true);
+  });
 });
 
 function trace(provider: Provider): LoadedTraceCase {
@@ -36,7 +57,7 @@ function trace(provider: Provider): LoadedTraceCase {
     provider,
     model: "test-model",
     headers: {},
-    body: provider === "google" ? { contents: [] } : { input: [] },
+    body: provider === "google-generateContent" ? { contents: [] } : { input: [] },
     outputPath: "/tmp/events.jsonl",
     timeoutMs: 1_000,
   };

@@ -54,7 +54,7 @@ class StreamTraceReplayTest {
     @Test
     fun `replay Gemini protocol trace`() {
         assertTrace(
-            "generated/google/gemini-tool",
+            "generated/google-generateContent/gemini-tool",
             GoogleStreamDecoder(responseId = "google-trace", model = "gemini-trace-model"),
         )
     }
@@ -62,7 +62,7 @@ class StreamTraceReplayTest {
     @Test
     fun `replay Gemini image generation trace`() {
         assertTrace(
-            "generated/google/gemini-image",
+            "generated/google-generateContent/gemini-image",
             GoogleStreamDecoder(responseId = "google-image-trace", model = "gemini-3.1-flash-image"),
             ::assertImageTraceSemantics,
         )

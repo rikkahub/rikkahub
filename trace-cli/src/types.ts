@@ -2,7 +2,8 @@ export const PROVIDERS = [
   "openai-responses",
   "openai-chat",
   "claude",
-  "google",
+  "google-generateContent",
+  "google-interactions",
 ] as const;
 
 export type Provider = (typeof PROVIDERS)[number];
