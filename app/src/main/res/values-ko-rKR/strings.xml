@@ -254,7 +254,7 @@
   <string name="chat_message_tool_search_web">웹 검색: %1$s</string>
   <string name="chat_message_tool_submit">제출</string>
   <string name="chat_page_cancel">취소</string>
-  <string name="chat_page_check_title_model_settings">제목 모델 설정 확인</string>
+    <string name="chat_page_check_fast_model_settings">빠른 모델 설정 확인</string>
   <string name="chat_page_clear_all_errors">모두 지우기</string>
   <string name="chat_page_compress_additional_prompt">추가 지침(선택 사항)</string>
   <string name="chat_page_compress_additional_prompt_hint">보존하거나 집중할 내용을 지정하세요</string>
@@ -1118,7 +1118,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_display_page_bubble_opacity_title">버블 불투명도</string>
   <string name="setting_provider_page_include_history_reasoning">이전 추론 내용 전송</string>
   <string name="setting_model_page_fast_model">빠른 모델</string>
-  <string name="setting_model_page_fast_model_desc">빠른 작업 또는 백그라운드 작업을 위한 모델이며, 설정되지 않은 경우 제목 및 제안 모델의 대체로도 사용됩니다.</string>
+    <string name="setting_model_page_fast_model_desc">제목, 채팅 제안 및 기타 빠른 작업이나 백그라운드 작업에 사용하는 모델</string>
   <string name="setting_model_page_enable_suggestion">채팅 제안 활성화</string>
   <string name="assistant_page_gradient_background">그라데이션 배경</string>
   <string name="assistant_page_gradient_background_desc">채팅 페이지에서 동적 그라데이션 배경 사용</string>

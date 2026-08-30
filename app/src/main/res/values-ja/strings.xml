@@ -254,7 +254,7 @@
   <string name="chat_message_tool_search_web">ウェブ検索: %1$s</string>
   <string name="chat_message_tool_submit">送信</string>
   <string name="chat_page_cancel">キャンセル</string>
-  <string name="chat_page_check_title_model_settings">タイトルモデル設定を確認</string>
+    <string name="chat_page_check_fast_model_settings">高速モデル設定を確認</string>
   <string name="chat_page_clear_all_errors">すべてクリア</string>
   <string name="chat_page_compress_additional_prompt">追加指示（オプション）</string>
   <string name="chat_page_compress_additional_prompt_hint">保持または重点的に扱う内容を指定</string>
@@ -1118,7 +1118,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_display_page_bubble_opacity_title">吹き出しの不透明度</string>
   <string name="setting_provider_page_include_history_reasoning">履歴の思考過程を送信</string>
   <string name="setting_model_page_fast_model">高速モデル</string>
-  <string name="setting_model_page_fast_model_desc">高速タスクまたはバックグラウンドタスク用のモデル。タイトルモデルとサジェストモデルが設定されていない場合のフォールバックとしても使用されます。</string>
+    <string name="setting_model_page_fast_model_desc">タイトル、チャット候補、その他の高速タスクやバックグラウンドタスクに使用するモデル</string>
   <string name="setting_model_page_enable_suggestion">チャット提案を有効にする</string>
   <string name="assistant_page_gradient_background">グラデーション背景</string>
   <string name="assistant_page_gradient_background_desc">チャットページで動的なグラデーション背景を使用します</string>
@@ -1318,4 +1318,3 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_files_page_clean_older_than_days">%1$d日以上前</string>
   <string name="setting_files_page_clean_range_description">完全に削除するファイルを選択してください。この操作は元に戻せません。</string>
 </resources>
-
