@@ -331,12 +331,7 @@ private fun MemoryItem(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = "#${memory.id}",
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                )
-                Text(
                     text = memory.content,
-
                     maxLines = 5,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall,
