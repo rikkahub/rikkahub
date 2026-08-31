@@ -1317,4 +1317,6 @@
   <string name="setting_files_page_clean_all">Все файлы</string>
   <string name="setting_files_page_clean_older_than_days">Старше %1$d дней</string>
   <string name="setting_files_page_clean_range_description">Выберите файлы для окончательного удаления. Это действие нельзя отменить.</string>
+  <string name="setting_page_preferences_network_auto_retry">Автоповтор</string>
+  <string name="setting_page_preferences_network_auto_retry_desc">Повторять запросы модели до 3 раз при сетевых ошибках.</string>
 </resources>

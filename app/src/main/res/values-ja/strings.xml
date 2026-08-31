@@ -1317,4 +1317,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_files_page_clean_all">すべてのファイル</string>
   <string name="setting_files_page_clean_older_than_days">%1$d日以上前</string>
   <string name="setting_files_page_clean_range_description">完全に削除するファイルを選択してください。この操作は元に戻せません。</string>
+  <string name="setting_page_preferences_network_auto_retry">自動再試行</string>
+  <string name="setting_page_preferences_network_auto_retry_desc">ネットワークエラー時、モデルリクエストを最大3回再試行します。</string>
 </resources>

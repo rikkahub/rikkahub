@@ -1317,4 +1317,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_files_page_clean_all">모든 파일</string>
   <string name="setting_files_page_clean_older_than_days">%1$d일 이상 지난 파일</string>
   <string name="setting_files_page_clean_range_description">영구적으로 삭제할 파일을 선택하세요. 이 작업은 되돌릴 수 없습니다.</string>
+  <string name="setting_page_preferences_network_auto_retry">자동 재시도</string>
+  <string name="setting_page_preferences_network_auto_retry_desc">네트워크 오류 발생 시 모델 요청을 최대 3회 재시도합니다.</string>
 </resources>
