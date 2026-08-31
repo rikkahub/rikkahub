@@ -13,7 +13,11 @@ const PROVIDER_DEFAULTS: Record<Provider, { baseUrl: string; apiKeyEnv: string }
     baseUrl: "https://api.anthropic.com/v1",
     apiKeyEnv: "ANTHROPIC_API_KEY",
   },
-  google: {
+  "google-generateContent": {
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    apiKeyEnv: "GEMINI_API_KEY",
+  },
+  "google-interactions": {
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     apiKeyEnv: "GEMINI_API_KEY",
   },
@@ -57,14 +61,23 @@ export function buildProviderRequest(trace: LoadedTraceCase, apiKey: string): Pr
       headers["anthropic-version"] ??= "2023-06-01";
       defaultEndpoint = "/messages";
       break;
-    case "google": {
+    case "google-generateContent": {
       const model = endpointModel;
-      if (!model) throw new Error(`${trace.name}: Google trace requires model`);
+      if (!model) throw new Error(`${trace.name}: Google Generate Content trace requires model`);
       delete body.model;
       defaultAuth = { header: "x-goog-api-key" };
       defaultEndpoint = `/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
       break;
     }
+    case "google-interactions":
+      if (endpointModel) body.model = endpointModel;
+      if (!endpointModel && !asNonEmptyString(body.agent)) {
+        throw new Error(`${trace.name}: Google Interactions trace requires model or agent`);
+      }
+      body.stream = true;
+      defaultAuth = { header: "x-goog-api-key" };
+      defaultEndpoint = "/interactions";
+      break;
   }
 
   const auth = trace.auth ?? defaultAuth;

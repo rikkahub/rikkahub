@@ -79,11 +79,6 @@ val DEFAULT_PROVIDERS = listOf(
                 """.trimIndent()
             )
         },
-        balanceOption = BalanceOption(
-            enabled = true,
-            apiPath = "/user/info",
-            resultPath = "data.totalBalance",
-        ),
     ),
     ProviderSetting.OpenAI(
         id = Uuid.parse("f099ad5b-ef03-446d-8e78-7e36787f780b"),

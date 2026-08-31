@@ -8,7 +8,8 @@
 - `openai-responses`
 - `openai-chat`
 - `claude`
-- `google`
+- `google-generateContent`
+- `google-interactions`
 
 ## 安装
 
@@ -104,7 +105,10 @@ traces:
             additionalProperties: false
 ```
 
-CLI 会自动添加各 Provider 所需的认证 Header，并为 OpenAI/Claude 请求强制设置 `stream: true`。
-Google 使用 `:streamGenerateContent?alt=sse`，其模型名只用于 URL，不会写入请求体。
+CLI 会自动添加各 Provider 所需的认证 Header，并为 OpenAI、Claude 和 Google Interactions
+请求强制设置 `stream: true`。`google-generateContent` 使用
+`:streamGenerateContent?alt=sse`，其模型名只用于 URL；`google-interactions` 使用
+`/interactions`，模型名会写入请求体。Interactions 也支持省略 `model`，直接在 `body.agent`
+中指定 Agent。
 
 生成后仍需人工创建对应的 `expected.json`，再把目录加入 `StreamTraceReplayTest`。

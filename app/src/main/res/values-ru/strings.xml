@@ -254,7 +254,7 @@
   <string name="chat_message_tool_search_web">Поиск в интернете: %1$s</string>
   <string name="chat_message_tool_submit">Отправить</string>
   <string name="chat_page_cancel">Отмена</string>
-  <string name="chat_page_check_title_model_settings">Проверьте настройки модели заголовков</string>
+    <string name="chat_page_check_fast_model_settings">Проверьте настройки быстрой модели</string>
   <string name="chat_page_clear_all_errors">Очистить всё</string>
   <string name="chat_page_compress_additional_prompt">Дополнительные инструкции (по желанию)</string>
   <string name="chat_page_compress_additional_prompt_hint">Укажите, что сохранить или на чём сосредоточиться</string>
@@ -1118,7 +1118,7 @@
   <string name="setting_display_page_bubble_opacity_title">Прозрачность пузырьков</string>
   <string name="setting_provider_page_include_history_reasoning">Отправлять историю рассуждений</string>
   <string name="setting_model_page_fast_model">Быстрая модель</string>
-  <string name="setting_model_page_fast_model_desc">Модель для быстрых или фоновых задач, также используется как резервная для моделей заголовков и предложений, если не задана</string>
+    <string name="setting_model_page_fast_model_desc">Модель для заголовков, подсказок в чате и других быстрых или фоновых задач</string>
   <string name="setting_model_page_enable_suggestion">Включить подсказки чата</string>
   <string name="assistant_page_gradient_background">Градиентный фон</string>
   <string name="assistant_page_gradient_background_desc">Использовать динамический градиентный фон на странице чата</string>
@@ -1317,4 +1317,8 @@
   <string name="setting_files_page_clean_all">Все файлы</string>
   <string name="setting_files_page_clean_older_than_days">Старше %1$d дней</string>
   <string name="setting_files_page_clean_range_description">Выберите файлы для окончательного удаления. Это действие нельзя отменить.</string>
+  <string name="setting_page_preferences_network_auto_retry">Автоповтор</string>
+  <string name="setting_page_preferences_network_auto_retry_desc">Повторять запросы модели до 3 раз при сетевых ошибках.</string>
+  <string name="setting_tts_page_default_playback_speed">Скорость воспроизведения по умолчанию</string>
+  <string name="setting_tts_page_default_playback_speed_description">Применяется локально к каждому TTS-провайдеру без изменения его настроек синтеза.</string>
 </resources>

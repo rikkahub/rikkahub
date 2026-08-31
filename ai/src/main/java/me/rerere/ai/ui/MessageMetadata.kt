@@ -50,6 +50,9 @@ enum class ServerToolProtocol {
 
     @SerialName("anthropic_messages")
     ANTHROPIC_MESSAGES,
+
+    @SerialName("google_generate_content")
+    GOOGLE_GENERATE_CONTENT,
 }
 
 /**
@@ -82,7 +85,7 @@ data class OpenRouterReasoningMetadata(
 ) : PartMetadata
 
 /**
- * Google Gemini 部件(functionCall/inlineData)的 thoughtSignature, 回传时需要携带
+ * Google Gemini 部件的 thoughtSignature，回传时需要携带
  */
 @Serializable
 data class GoogleThoughtMetadata(
