@@ -1319,4 +1319,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_files_page_clean_range_description">完全に削除するファイルを選択してください。この操作は元に戻せません。</string>
   <string name="setting_page_preferences_network_auto_retry">自動再試行</string>
   <string name="setting_page_preferences_network_auto_retry_desc">ネットワークエラー時、モデルリクエストを最大3回再試行します。</string>
+  <string name="setting_tts_page_default_playback_speed">デフォルトの再生速度</string>
+  <string name="setting_tts_page_default_playback_speed_description">すべてのTTSプロバイダーにローカルで適用され、合成設定は変更されません。</string>
 </resources>

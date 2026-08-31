@@ -1324,4 +1324,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
     <string name="chat_generation_network_timeout">连接超时</string>
     <string name="chat_generation_network_unreachable">无法连接到服务器</string>
     <string name="chat_generation_network_disconnected">网络连接已断开</string>
+  <string name="setting_tts_page_default_playback_speed">默认播放速度</string>
+  <string name="setting_tts_page_default_playback_speed_description">本地应用于每个TTS提供商，不会更改其合成设置。</string>
 </resources>
