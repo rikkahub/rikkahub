@@ -1104,6 +1104,10 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_page_preferences_notification_desc">업데이트 알림, 메시지 생성 알림</string>
   <string name="setting_page_preferences_general">일반</string>
   <string name="setting_page_preferences_general_desc">상호작용 방식, 스크롤, 입력 설정</string>
+  <string name="setting_page_image_compress_settings">이미지 압축</string>
+  <string name="setting_general_page_image_compress_title">지정된 크기로 압축</string>
+  <string name="setting_general_page_image_compress_desc">전송 전 이미지를 지정된 크기(KB) 이하로 압축합니다. 업로드가 작아지고 응답이 빨라집니다.</string>
+  <string name="setting_general_page_image_compress_max_size_title">크기 상한(KB)</string>
   <string name="setting_page_preferences_ui">UI 환경설정</string>
   <string name="setting_page_preferences_ui_desc">메시지 표시, 글꼴, 코드 블록</string>
   <string name="skills_page_import_from_file">파일에서 가져오기</string>

@@ -1102,6 +1102,10 @@
   <string name="setting_page_preferences_notification_desc">更新提醒、訊息產生通知</string>
   <string name="setting_page_preferences_general">一般</string>
   <string name="setting_page_preferences_general_desc">互動行為、捲動、輸入設定</string>
+  <string name="setting_page_image_compress_settings">傳送圖片壓縮</string>
+  <string name="setting_general_page_image_compress_title">壓縮到指定大小</string>
+  <string name="setting_general_page_image_compress_desc">傳送前將圖片壓縮到指定大小（KB）以內。上傳更小、回覆更快，也能避免部分上游拒絕大圖。</string>
+  <string name="setting_general_page_image_compress_max_size_title">大小上限（KB）</string>
   <string name="setting_page_preferences_ui">UI 偏好設定</string>
   <string name="setting_page_preferences_ui_desc">訊息顯示、字型、程式碼區塊</string>
   <string name="skills_page_import_from_file">從檔案匯入</string>

@@ -1104,6 +1104,10 @@
   <string name="setting_page_preferences_notification_desc">Уведомления об обновлениях и генерации сообщений</string>
   <string name="setting_page_preferences_general">Общие</string>
   <string name="setting_page_preferences_general_desc">Поведение взаимодействия, прокрутка, настройки ввода</string>
+  <string name="setting_page_image_compress_settings">Сжатие изображений</string>
+  <string name="setting_general_page_image_compress_title">Сжимать до указанного размера</string>
+  <string name="setting_general_page_image_compress_desc">Сжимать изображения до указанного размера (КБ) перед отправкой модели. Меньший размер ускоряет ответы и снижает риск отклонения запроса.</string>
+  <string name="setting_general_page_image_compress_max_size_title">Лимит размера (КБ)</string>
   <string name="setting_page_preferences_ui">Настройки интерфейса</string>
   <string name="setting_page_preferences_ui_desc">Отображение сообщений, шрифты, блоки кода</string>
   <string name="skills_page_import_from_file">Импортировать из файла</string>
