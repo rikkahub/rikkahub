@@ -1321,4 +1321,6 @@
   <string name="setting_page_preferences_network_auto_retry_desc">Повторять запросы модели до 3 раз при сетевых ошибках.</string>
   <string name="setting_tts_page_default_playback_speed">Скорость воспроизведения по умолчанию</string>
   <string name="setting_tts_page_default_playback_speed_description">Применяется локально к каждому TTS-провайдеру без изменения его настроек синтеза.</string>
+  <string name="search_page_scope_current_assistant">Текущий ассистент</string>
+  <string name="search_page_scope_all_assistants">Все ассистенты</string>
 </resources>

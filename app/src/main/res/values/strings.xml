@@ -1330,4 +1330,6 @@
   <string name="chat_generation_network_timeout">Connection timed out</string>
   <string name="chat_generation_network_unreachable">Unable to connect to server</string>
   <string name="chat_generation_network_disconnected">Network connection lost</string>
+  <string name="search_page_scope_current_assistant">Current Assistant</string>
+  <string name="search_page_scope_all_assistants">All Assistants</string>
 </resources>

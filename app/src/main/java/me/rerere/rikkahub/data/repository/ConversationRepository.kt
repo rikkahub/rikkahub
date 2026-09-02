@@ -325,7 +325,8 @@ class ConversationRepository(
     suspend fun searchMessages(
         keyword: String,
         sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
-    ) = messageFtsManager.search(keyword, sort)
+        assistantId: Uuid? = null,
+    ) = messageFtsManager.search(keyword, sort, assistantId?.toString())
 
     suspend fun rebuildAllIndexes(onProgress: (current: Int, total: Int) -> Unit = { _, _ -> }) {
         messageFtsManager.deleteAll()
