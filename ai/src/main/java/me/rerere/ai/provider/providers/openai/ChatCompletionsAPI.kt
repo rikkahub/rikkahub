@@ -94,6 +94,11 @@ class ChatCompletionsAPI(
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
             .configureReferHeaders(providerSetting.baseUrl)
+            .apply {
+                if (providerSetting.baseUrl.toHttpUrl().host == "opencode.ai") {
+                    params.sessionId?.let { header("x-opencode-session", it) }
+                }
+            }
             .build()
 
         Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
@@ -146,6 +151,11 @@ class ChatCompletionsAPI(
             .addHeader("Authorization", "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}")
             .addHeader("Content-Type", "application/json")
             .configureReferHeaders(providerSetting.baseUrl)
+            .apply {
+                if (providerSetting.baseUrl.toHttpUrl().host == "opencode.ai") {
+                    params.sessionId?.let { header("x-opencode-session", it) }
+                }
+            }
             .build()
 
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
