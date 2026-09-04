@@ -177,29 +177,6 @@ Pending ──── 用户操作 ────► Approved → 执行工具
 
 ---
 
-### Current-Info Evidence（Phase 1）
-
-`search_web` 仍然是由模型决定是否调用的普通客户端工具；Phase 1 不引入强制搜索、第二次工具调用或 Search Agent。
-
-Exa 结果在传递给模型前保留以下证据字段：
-
-- `title`、`url`、`index` 和 citation `id`
-- Provider 提供的 `publishedDate`（缺失时不生成）
-- Provider 提供的 `highlights`（缺失时为空）
-- 工具输出级别的 `retrievedAt`，表示本地实际获取时间，不表示发布时间
-
-在 `search_web` 参数中，以下字段是可选的：
-
-- `startPublishedDate` / `endPublishedDate`
-- `includeDomains` / `excludeDomains`
-- `maxAgeHours`，用于 Exa Contents 的内容新鲜度
-
-设置 Evidence 参数时，Exa 会请求有界的文本和 highlights，避免把无界网页全文直接放入模型上下文。没有这些可选参数的普通搜索保留原有请求形状，以保持兼容性。
-
-这些字段和描述帮助模型核对来源，但不保证模型一定调用工具，也不把搜索结果顺序当作新鲜度证明。应用级 Current-Info 强制路径属于后续阶段。
-
----
-
 ## 阶段五：会话生命周期管理
 
 `ConversationSession` 使用**原子引用计数**管理内存生命周期：
