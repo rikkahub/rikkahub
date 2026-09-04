@@ -218,6 +218,16 @@ class WorkspaceRepository(
         manager.fileSize(workspace.root, path, area)
     }
 
+    suspend fun resolveFile(
+        id: String,
+        area: WorkspaceStorageArea,
+        path: String,
+    ) = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        manager.ensureWorkspace(workspace.root)
+        manager.resolveFile(workspace.root, path, area)
+    }
+
     suspend fun exportFile(
         id: String,
         area: WorkspaceStorageArea,
