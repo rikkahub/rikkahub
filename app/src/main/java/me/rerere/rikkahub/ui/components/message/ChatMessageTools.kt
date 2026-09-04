@@ -268,19 +268,44 @@ private fun ChainOfThoughtScope.AskUserToolStep(
     val arguments = tool.inputAsJson()
 
     // Parse questions from arguments
+    // Fault-tolerant parsing: models/proxies may emit double-encoded arrays
+    // ("[{...}]" instead of [{...}]) or object-shaped options ({"text": ...}).
+    // A single malformed question must not discard the whole list, and a
+    // parse failure must be visible instead of rendering a blank card.
     val questions = remember(arguments) {
         runCatching {
-            arguments.jsonObject["questions"]?.jsonArray?.map { q ->
-                val obj = q.jsonObject
-                AskUserQuestion(
-                    id = obj["id"]?.jsonPrimitive?.contentOrNull ?: "",
-                    question = obj["question"]?.jsonPrimitive?.contentOrNull ?: "",
-                    options = obj["options"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList(),
-                    selectionType = obj["selection_type"]?.jsonPrimitive?.contentOrNull ?: "text"
-                )
-            } ?: emptyList()
+            val raw = arguments.jsonObject["questions"]
+            val arr: kotlinx.serialization.json.JsonArray? = raw as? kotlinx.serialization.json.JsonArray
+                ?: (raw as? kotlinx.serialization.json.JsonPrimitive)?.let {
+                    runCatching { JsonInstant.parseToJsonElement(it.content).jsonArray }.getOrNull()
+                }
+            arr?.mapNotNull { q ->
+                val obj = runCatching { q.jsonObject }.getOrNull() ?: return@mapNotNull null
+                runCatching {
+                    AskUserQuestion(
+                        id = obj["id"]?.jsonPrimitive?.contentOrNull ?: "",
+                        question = obj["question"]?.jsonPrimitive?.contentOrNull ?: "",
+                        options = (obj["options"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { o ->
+                            when (o) {
+                                is kotlinx.serialization.json.JsonPrimitive -> o.contentOrNull
+                                is kotlinx.serialization.json.JsonObject ->
+                                    ((o["text"] ?: o["label"] ?: o["option"]) as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+                                else -> null
+                            }
+                        } ?: emptyList(),
+                        selectionType = obj["selection_type"]?.jsonPrimitive?.contentOrNull ?: "text"
+                    )
+                }.getOrNull()
+            }?.filter { it.question.isNotBlank() || it.options.isNotEmpty() } ?: emptyList()
         }.getOrElse { emptyList() }
     }
+
+    // True when the tool call carried questions but none could be parsed
+    val parseFailed = questions.isEmpty() &&
+        runCatching { arguments.jsonObject.containsKey("questions") }.getOrDefault(false)
+
+    // Fallback free-text answer used when parsing failed
+    var rawAnswer by remember { mutableStateOf("") }
 
     // Track answers for text/single questions
     val answers = remember { mutableStateMapOf<String, String>() }
@@ -324,6 +349,23 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
+                if (parseFailed && isPending) {
+                    // Fallback UI: never leave the user with an unusable blank card
+                    Text(
+                        text = "Failed to parse question arguments / 问题参数解析失败，请直接文字回答：",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    OutlinedTextField(
+                        value = rawAnswer,
+                        onValueChange = { rawAnswer = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        singleLine = false,
+                        minLines = 1,
+                        maxLines = 4,
+                    )
+                }
                 questions.forEach { q ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
@@ -442,6 +484,9 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                         onClick = {
                             val answerPayload = buildJsonObject {
                                 put("answers", buildJsonObject {
+                                    if (questions.isEmpty()) {
+                                        put("_raw", JsonPrimitive(rawAnswer))
+                                    }
                                     questions.forEach { q ->
                                         when (q.selectionType) {
                                             "multi" -> put(q.id, JsonPrimitive(multiAnswers[q.id]?.joinToString(", ") ?: ""))
@@ -452,10 +497,15 @@ private fun ChainOfThoughtScope.AskUserToolStep(
                             }
                             onToolAnswer(tool.toolCallId, answerPayload.toString())
                         },
-                        enabled = questions.all { q ->
-                            when (q.selectionType) {
-                                "multi" -> !multiAnswers[q.id].isNullOrEmpty()
-                                else -> !answers[q.id].isNullOrBlank()
+                        enabled = if (questions.isEmpty()) {
+                            // Guard against the vacuous-truth submit of an empty list (#1848)
+                            rawAnswer.isNotBlank()
+                        } else {
+                            questions.all { q ->
+                                when (q.selectionType) {
+                                    "multi" -> !multiAnswers[q.id].isNullOrEmpty()
+                                    else -> !answers[q.id].isNullOrBlank()
+                                }
                             }
                         },
                         modifier = Modifier.align(Alignment.End),
