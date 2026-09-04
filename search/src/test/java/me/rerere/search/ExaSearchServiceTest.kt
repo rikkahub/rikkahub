@@ -4,6 +4,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -107,6 +108,48 @@ class ExaSearchServiceTest {
             schema.properties["endPublishedDate"]!!.jsonObject["description"]!!.jsonPrimitive.content
                 .contains("before this date")
         )
+        assertEquals(-1, schema.properties["maxAgeHours"]!!.jsonObject["minimum"]!!.jsonPrimitive.int)
+        assertEquals(720, schema.properties["maxAgeHours"]!!.jsonObject["maximum"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun `empty and null optional values keep legacy request shape`() {
+        val body = ExaSearchService.buildSearchRequestBody(
+            params = buildJsonObject {
+                put("query", "stable knowledge")
+                put("startPublishedDate", "")
+                put("endPublishedDate", JsonNull)
+                put("includeDomains", buildJsonArray { add(JsonPrimitive("")) })
+                put("excludeDomains", buildJsonArray {})
+                put("maxAgeHours", JsonPrimitive("not-an-integer"))
+            },
+            resultSize = 10,
+        )
+
+        val contents = body["contents"]!!.jsonObject
+        assertEquals(true, contents["text"]!!.jsonPrimitive.boolean)
+        assertTrue("empty start date should be absent", "startPublishedDate" !in body)
+        assertTrue("null end date should be absent", "endPublishedDate" !in body)
+        assertTrue("empty include domains should be absent", "includeDomains" !in body)
+        assertTrue("empty exclude domains should be absent", "excludeDomains" !in body)
+        assertTrue("invalid max age should be absent", "maxAgeHours" !in contents)
+        assertTrue("legacy request should not request highlights", "highlights" !in contents)
+    }
+
+    @Test
+    fun `out of range max age is omitted`() {
+        val body = ExaSearchService.buildSearchRequestBody(
+            params = buildJsonObject {
+                put("query", "latest release")
+                put("maxAgeHours", 721)
+            },
+            resultSize = 10,
+        )
+
+        val contents = body["contents"]!!.jsonObject
+        assertTrue("out of range max age should be absent", "maxAgeHours" !in contents)
+        assertEquals(true, contents["text"]!!.jsonPrimitive.boolean)
+        assertTrue("out of range max age should not enable evidence mode", "highlights" !in contents)
     }
 
     @Test

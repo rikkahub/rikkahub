@@ -15,6 +15,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -30,6 +31,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
     private const val MAX_EVIDENCE_TEXT_CHARACTERS = 8_000
     private const val MAX_EVIDENCE_HIGHLIGHT_CHARACTERS = 1_200
+    private const val MIN_MAX_AGE_HOURS = -1
+    private const val MAX_MAX_AGE_HOURS = 720
 
     override val name: String = "Exa"
 
@@ -74,6 +77,8 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                 put("maxAgeHours", buildJsonObject {
                     put("type", "integer")
                     put("description", "Optional maximum age in hours for fetched page content; use only when content freshness matters")
+                    put("minimum", MIN_MAX_AGE_HOURS)
+                    put("maximum", MAX_MAX_AGE_HOURS)
                 })
             },
             required = listOf("query")
@@ -89,6 +94,8 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                 put("maxAgeHours", buildJsonObject {
                     put("type", "integer")
                     put("description", "Optional maximum age in hours for fetched page content")
+                    put("minimum", MIN_MAX_AGE_HOURS)
+                    put("maximum", MAX_MAX_AGE_HOURS)
                 })
             },
             required = listOf("url")
@@ -227,13 +234,12 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
         resultSize: Int,
     ) = buildJsonObject {
         val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
-        val hasEvidenceOptions = listOf(
-            "startPublishedDate",
-            "endPublishedDate",
-            "includeDomains",
-            "excludeDomains",
-            "maxAgeHours",
-        ).any(params::containsKey)
+        val maxAgeHours = optionalMaxAgeHours(params)
+        val hasEvidenceOptions = hasOptionalString(params, "startPublishedDate") ||
+            hasOptionalString(params, "endPublishedDate") ||
+            hasOptionalStringArray(params, "includeDomains") ||
+            hasOptionalStringArray(params, "excludeDomains") ||
+            maxAgeHours != null
 
         put("query", JsonPrimitive(query))
         put("numResults", JsonPrimitive(resultSize))
@@ -253,7 +259,7 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
             } else {
                 put("text", JsonPrimitive(true))
             }
-            params["maxAgeHours"]?.let { put("maxAgeHours", it) }
+            maxAgeHours?.let { put("maxAgeHours", it) }
         })
     }
 
@@ -265,7 +271,7 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
         put("text", buildJsonObject {
             put("maxCharacters", JsonPrimitive(MAX_EVIDENCE_TEXT_CHARACTERS))
         })
-        params["maxAgeHours"]?.let { put("maxAgeHours", it) }
+        optionalMaxAgeHours(params)?.let { put("maxAgeHours", it) }
     }
 
     internal fun mapSearchResult(data: ExaData): SearchResult = SearchResult(
@@ -324,4 +330,21 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
             ?: return
         builder.put(name, buildJsonArray { values.forEach { add(it) } })
     }
+
+    private fun hasOptionalString(params: JsonObject, name: String): Boolean =
+        runCatching {
+            params[name]?.jsonPrimitive?.contentOrNull?.isNotBlank() == true
+        }.getOrDefault(false)
+
+    private fun hasOptionalStringArray(params: JsonObject, name: String): Boolean =
+        runCatching {
+            params[name]?.jsonArray?.any {
+                it.jsonPrimitive.contentOrNull?.isNotBlank() == true
+            } == true
+        }.getOrDefault(false)
+
+    private fun optionalMaxAgeHours(params: JsonObject): Int? =
+        runCatching { params["maxAgeHours"]?.jsonPrimitive?.intOrNull }
+            .getOrNull()
+            ?.takeIf { it in MIN_MAX_AGE_HOURS..MAX_MAX_AGE_HOURS }
 }
