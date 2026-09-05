@@ -87,20 +87,31 @@ fun ChatMessageNerdLine(
                             message.createdAt.toJavaLocalDateTime(),
                             message.finishedAt!!.toJavaLocalDateTime()
                         )
-                        val tps = usage.completionTokens.toFloat() / duration.toMillis() * 1000
+                        val generationTimeMs = message.generationTimeMillis
+                        val tps = when {
+                            generationTimeMs != null && generationTimeMs > 0 ->
+                                usage.completionTokens.toFloat() / generationTimeMs * 1000
+
+                            duration.toMillis() > 0 ->
+                                usage.completionTokens.toFloat() / duration.toMillis() * 1000
+
+                            else -> null
+                        }
                         val seconds = (duration.toMillis() / 1000f).toFixed(1)
-                        StatsItem(
-                            icon = {
-                                Icon(
-                                    imageVector = HugeIcons.Zap,
-                                    contentDescription = "Speed",
-                                    modifier = Modifier.size(12.dp)
-                                )
-                            },
-                            content = {
-                                Text(text = "${tps.toFixed(1)} tok/s")
-                            }
-                        )
+                        if (tps != null) {
+                            StatsItem(
+                                icon = {
+                                    Icon(
+                                        imageVector = HugeIcons.Zap,
+                                        contentDescription = "Speed",
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                },
+                                content = {
+                                    Text(text = "${tps.toFixed(1)} tok/s")
+                                }
+                            )
+                        }
 
                         StatsItem(
                             icon = {

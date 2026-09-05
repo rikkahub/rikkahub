@@ -22,6 +22,7 @@ data class UIMessage(
     val createdAt: LocalDateTime = Clock.System.now()
         .toLocalDateTime(TimeZone.currentSystemDefault()),
     val finishedAt: LocalDateTime? = null,
+    val generationTimeMillis: Long? = null,
     val modelId: Uuid? = null,
     val usage: TokenUsage? = null,
     val translation: String? = null,
