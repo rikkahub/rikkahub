@@ -1027,6 +1027,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="speech_tab_asr">音声認識</string>
   <string name="speech_tab_tts">テキスト読み上げ</string>
   <string name="stats_page_cached_tokens">キャッシュされたトークン</string>
+  <string name="stats_page_cache_hit_rate">キャッシュヒット率</string>
   <string name="stats_page_dow_fri">金</string>
   <string name="stats_page_dow_mon">月</string>
   <string name="stats_page_dow_wed">水</string>
@@ -1039,6 +1040,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="stats_page_title">統計</string>
   <string name="stats_page_total_conversations">総会話数</string>
   <string name="stats_page_total_messages">メッセージ総数</string>
+  <string name="stats_page_total_requests">総リクエスト数</string>
   <string name="stop">停止</string>
   <string name="tag_input_dialog_create_new">新しいタグを作成</string>
   <string name="tag_input_dialog_existing_tags">既存のタグ</string>
