@@ -57,6 +57,81 @@ class ExaSearchServiceTest {
     }
 
     @Test
+    fun `current query adds conservative freshness and official domain defaults`() {
+        val params = buildJsonObject {
+            put("query", "What is the current stable RikkaHub version?")
+        }
+
+        val prepared = ExaSearchService.prepareCurrentInfoParams(params)
+
+        assertEquals("github.com", prepared["includeDomains"]!!.jsonArray.single().jsonPrimitive.content)
+        assertEquals(0, prepared["maxAgeHours"]!!.jsonPrimitive.int)
+        assertEquals("current query must preserve the user's exact wording", params["query"], prepared["query"])
+    }
+
+    @Test
+    fun `current query chooses known provider domains without overriding explicit filters`() {
+        val scaleway = ExaSearchService.prepareCurrentInfoParams(
+            buildJsonObject { put("query", "Is qwen currently available at Scaleway?") }
+        )
+        val berget = ExaSearchService.prepareCurrentInfoParams(
+            buildJsonObject { put("query", "Is Kimi K3 currently available through Berget or Opper?") }
+        )
+        val explicit = ExaSearchService.prepareCurrentInfoParams(
+            buildJsonObject {
+                put("query", "What is the current RikkaHub version?")
+                put("includeDomains", buildJsonArray { add(JsonPrimitive("example.com")) })
+                put("maxAgeHours", 12)
+            }
+        )
+
+        assertEquals("scaleway.com", scaleway["includeDomains"]!!.jsonArray.single().jsonPrimitive.content)
+        assertEquals(
+            listOf("berget.ai", "opper.ai"),
+            berget["includeDomains"]!!.jsonArray.map { it.jsonPrimitive.content },
+        )
+        assertEquals("example.com", explicit["includeDomains"]!!.jsonArray.single().jsonPrimitive.content)
+        assertEquals(12, explicit["maxAgeHours"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun `ordinary query keeps legacy parameters unchanged`() {
+        val params = buildJsonObject {
+            put("query", "How does version control work?")
+        }
+
+        assertEquals(params, ExaSearchService.prepareCurrentInfoParams(params))
+    }
+
+    @Test
+    fun `explicit empty or invalid freshness options are not overwritten`() {
+        val params = buildJsonObject {
+            put("query", "What is the current RikkaHub version?")
+            put("includeDomains", buildJsonArray {})
+            put("maxAgeHours", JsonPrimitive("invalid"))
+        }
+
+        assertEquals(params, ExaSearchService.prepareCurrentInfoParams(params))
+    }
+
+    @Test
+    fun `current result ordering prefers newest dated evidence and leaves undated last`() {
+        val result = ExaSearchService.mapSearchResult(
+            ExaSearchService.ExaData(
+                results = listOf(
+                    ExaSearchService.ExaResult("old", "Old", "https://example.com/old", "2026-01-01T00:00:00Z"),
+                    ExaSearchService.ExaResult("undated", "Undated", "https://example.com/undated"),
+                    ExaSearchService.ExaResult("new", "New", "https://example.com/new", "2026-09-01T00:00:00Z"),
+                )
+            )
+        )
+
+        val prioritized = ExaSearchService.prioritizeCurrentResults(result)
+
+        assertEquals(listOf("new", "old", "undated"), prioritized.items.map { it.url.substringAfterLast('/') })
+    }
+
+    @Test
     fun `normal search request keeps legacy contents shape`() {
         val body = ExaSearchService.buildSearchRequestBody(
             params = buildJsonObject {

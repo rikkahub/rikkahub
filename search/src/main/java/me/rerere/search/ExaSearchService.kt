@@ -27,12 +27,19 @@ import me.rerere.search.SearchService.Companion.keyRoulette
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.time.Instant
+import java.util.Locale
 
 object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
     private const val MAX_EVIDENCE_TEXT_CHARACTERS = 8_000
     private const val MAX_EVIDENCE_HIGHLIGHT_CHARACTERS = 1_200
     private const val MIN_MAX_AGE_HOURS = -1
     private const val MAX_MAX_AGE_HOURS = 720
+    private const val CURRENT_QUERY_MAX_AGE_HOURS = 0
+    private val temporalQueryPattern = Regex(
+        "\\b(latest|newest|current|currently|today|now|recent|recently|aktuell(?:ste|er|e|en)?|neueste|heute|derzeit)\\b",
+        RegexOption.IGNORE_CASE,
+    )
 
     override val name: String = "Exa"
 
@@ -107,7 +114,8 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
         serviceOptions: SearchServiceOptions.ExaOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
-            val body = buildSearchRequestBody(params, commonOptions.resultSize)
+            val effectiveParams = prepareCurrentInfoParams(params)
+            val body = buildSearchRequestBody(effectiveParams, commonOptions.resultSize)
             val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
 
             val request = Request.Builder()
@@ -127,7 +135,10 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                     error("Failed to decode response: $bodyRaw")
                 }.getOrThrow()
 
-                return@withContext Result.success(mapSearchResult(response))
+                val result = mapSearchResult(response)
+                return@withContext Result.success(
+                    if (isCurrentInfoQuery(effectiveParams)) prioritizeCurrentResults(result) else result
+                )
             } else {
                 println(response.body.string())
                 error("response failed #${response.code}")
@@ -262,6 +273,58 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
             maxAgeHours?.let { put("maxAgeHours", it) }
         })
     }
+
+    /**
+     * Adds only conservative defaults for clearly time-sensitive queries. Explicit tool-call
+     * filters remain authoritative; ordinary queries keep the legacy request unchanged.
+     */
+    internal fun prepareCurrentInfoParams(params: JsonObject): JsonObject {
+        if (!isCurrentInfoQuery(params)) return params
+
+        val query = params["query"]?.jsonPrimitive?.contentOrNull ?: return params
+        val preferredDomains = preferredDomains(query)
+        val hasExplicitDomains = "includeDomains" in params
+
+        return buildJsonObject {
+            params.forEach { (name, value) -> put(name, value) }
+            if (!hasExplicitDomains && preferredDomains.isNotEmpty()) {
+                put("includeDomains", buildJsonArray { preferredDomains.forEach(::add) })
+            }
+            if ("maxAgeHours" !in params) {
+                put("maxAgeHours", CURRENT_QUERY_MAX_AGE_HOURS)
+            }
+        }
+    }
+
+    internal fun isCurrentInfoQuery(params: JsonObject): Boolean =
+        params["query"]?.jsonPrimitive?.contentOrNull?.let(::isCurrentInfoQuery) == true
+
+    internal fun isCurrentInfoQuery(query: String): Boolean =
+        temporalQueryPattern.containsMatchIn(query)
+
+    private fun preferredDomains(query: String): List<String> {
+        val normalized = query.lowercase(Locale.ROOT)
+        return buildList {
+            if ("rikkahub" in normalized) add("github.com")
+            if ("scaleway" in normalized) add("scaleway.com")
+            if ("berget" in normalized) add("berget.ai")
+            if ("opper" in normalized) add("opper.ai")
+        }.distinct()
+    }
+
+    internal fun prioritizeCurrentResults(result: SearchResult): SearchResult {
+        val items = result.items.withIndex()
+            .sortedWith(
+                compareBy<IndexedValue<SearchResultItem>> {
+                    publishedEpoch(it.value.publishedDate) == null
+                }.thenByDescending { publishedEpoch(it.value.publishedDate) ?: Long.MIN_VALUE }
+            )
+            .map { it.value }
+        return result.copy(items = items)
+    }
+
+    private fun publishedEpoch(value: String?): Long? =
+        value?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
 
     internal fun buildScrapeRequestBody(params: JsonObject) = buildJsonObject {
         val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
