@@ -14,6 +14,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
@@ -26,6 +29,11 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
+    private const val MAX_EVIDENCE_TEXT_CHARACTERS = 8_000
+    private const val MAX_EVIDENCE_HIGHLIGHT_CHARACTERS = 1_200
+    private const val MIN_MAX_AGE_HOURS = -1
+    private const val MAX_MAX_AGE_HOURS = 720
+
     override val name: String = "Exa"
 
     @Composable
@@ -56,6 +64,22 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                         add("deep")
                     })
                 })
+                put("startPublishedDate", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional ISO-8601 publication date lower bound; results are published after this date")
+                })
+                put("endPublishedDate", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional ISO-8601 publication date upper bound; results are published before this date")
+                })
+                put("includeDomains", domainArraySchema("Optional domains to include"))
+                put("excludeDomains", domainArraySchema("Optional domains to exclude"))
+                put("maxAgeHours", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Optional maximum age in hours for fetched page content; use only when content freshness matters")
+                    put("minimum", MIN_MAX_AGE_HOURS)
+                    put("maximum", MAX_MAX_AGE_HOURS)
+                })
             },
             required = listOf("query")
         )
@@ -67,6 +91,12 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                     put("type", "string")
                     put("description", "url to scrape")
                 })
+                put("maxAgeHours", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Optional maximum age in hours for fetched page content")
+                    put("minimum", MIN_MAX_AGE_HOURS)
+                    put("maximum", MAX_MAX_AGE_HOURS)
+                })
             },
             required = listOf("url")
         )
@@ -77,15 +107,7 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
         serviceOptions: SearchServiceOptions.ExaOptions
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
-            val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
-            val body = buildJsonObject {
-                put("query", JsonPrimitive(query))
-                put("numResults", JsonPrimitive(commonOptions.resultSize))
-                put("type", JsonPrimitive(params["type"]?.jsonPrimitive?.content ?: "auto"))
-                put("contents", buildJsonObject {
-                    put("text", JsonPrimitive(true))
-                })
-            }
+            val body = buildSearchRequestBody(params, commonOptions.resultSize)
             val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
 
             val request = Request.Builder()
@@ -105,18 +127,7 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                     error("Failed to decode response: $bodyRaw")
                 }.getOrThrow()
 
-                return@withContext Result.success(
-                    SearchResult(
-                        answer = response.output?.content,
-                        items = response.results.map {
-                            SearchResultItem(
-                                title = it.title,
-                                url = it.url,
-                                text = it.text ?: ""
-                            )
-                        },
-                        images = response.results.mapNotNull { it.image?.takeIf { url -> url.isNotBlank() } },
-                    ))
+                return@withContext Result.success(mapSearchResult(response))
             } else {
                 println(response.body.string())
                 error("response failed #${response.code}")
@@ -130,13 +141,7 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
         serviceOptions: SearchServiceOptions.ExaOptions
     ): Result<ScrapedResult> = withContext(Dispatchers.IO) {
         runCatching {
-            val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
-            val body = buildJsonObject {
-                put("urls", buildJsonArray {
-                    add(JsonPrimitive(url))
-                })
-                put("text", JsonPrimitive(true))
-            }
+            val body = buildScrapeRequestBody(params)
             val apiKey = keyRoulette.next(serviceOptions.apiKey, serviceOptions.id.toString())
 
             val request = Request.Builder()
@@ -156,19 +161,7 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
                     error("Failed to decode response: $bodyRaw")
                 }.getOrThrow()
 
-                return@withContext Result.success(
-                    ScrapedResult(
-                        urls = data.results.map {
-                            ScrapedResultUrl(
-                                url = it.url,
-                                content = it.text ?: "",
-                                metadata = ScrapedResultMetadata(
-                                    title = it.title,
-                                )
-                            )
-                        }
-                    )
-                )
+                return@withContext Result.success(mapScrapedResult(data))
             } else {
                 println(response.body.string())
                 error("response failed #${response.code}")
@@ -225,12 +218,133 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
         @SerialName("url")
         val url: String,
         @SerialName("publishedDate")
-        val publishedDate: String?,
+        val publishedDate: String? = null,
         @SerialName("author")
-        val author: String?,
+        val author: String? = null,
         @SerialName("text")
         val text: String? = null,
         @SerialName("image")
         val image: String? = null,
+        @SerialName("highlights")
+        val highlights: List<String>? = null,
     )
+
+    internal fun buildSearchRequestBody(
+        params: JsonObject,
+        resultSize: Int,
+    ) = buildJsonObject {
+        val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
+        val maxAgeHours = optionalMaxAgeHours(params)
+        val hasEvidenceOptions = hasOptionalString(params, "startPublishedDate") ||
+            hasOptionalString(params, "endPublishedDate") ||
+            hasOptionalStringArray(params, "includeDomains") ||
+            hasOptionalStringArray(params, "excludeDomains") ||
+            maxAgeHours != null
+
+        put("query", JsonPrimitive(query))
+        put("numResults", JsonPrimitive(resultSize))
+        put("type", JsonPrimitive(params["type"]?.jsonPrimitive?.content ?: "auto"))
+        putOptionalString(this, params, "startPublishedDate")
+        putOptionalString(this, params, "endPublishedDate")
+        putOptionalStringArray(this, params, "includeDomains")
+        putOptionalStringArray(this, params, "excludeDomains")
+        put("contents", buildJsonObject {
+            if (hasEvidenceOptions) {
+                put("text", buildJsonObject {
+                    put("maxCharacters", JsonPrimitive(MAX_EVIDENCE_TEXT_CHARACTERS))
+                })
+                put("highlights", buildJsonObject {
+                    put("maxCharacters", JsonPrimitive(MAX_EVIDENCE_HIGHLIGHT_CHARACTERS))
+                })
+            } else {
+                put("text", JsonPrimitive(true))
+            }
+            maxAgeHours?.let { put("maxAgeHours", it) }
+        })
+    }
+
+    internal fun buildScrapeRequestBody(params: JsonObject) = buildJsonObject {
+        val url = params["url"]?.jsonPrimitive?.content ?: error("url is required")
+        put("urls", buildJsonArray {
+            add(JsonPrimitive(url))
+        })
+        put("text", buildJsonObject {
+            put("maxCharacters", JsonPrimitive(MAX_EVIDENCE_TEXT_CHARACTERS))
+        })
+        optionalMaxAgeHours(params)?.let { put("maxAgeHours", it) }
+    }
+
+    internal fun mapSearchResult(data: ExaData): SearchResult = SearchResult(
+        answer = data.output?.content,
+        items = data.results.map {
+            SearchResultItem(
+                title = it.title,
+                url = it.url,
+                text = it.text ?: "",
+                publishedDate = it.publishedDate,
+                highlights = it.highlights.orEmpty(),
+            )
+        },
+        images = data.results.mapNotNull { it.image?.takeIf { url -> url.isNotBlank() } },
+    )
+
+    internal fun mapScrapedResult(data: ExaData): ScrapedResult = ScrapedResult(
+        urls = data.results.map {
+            ScrapedResultUrl(
+                url = it.url,
+                content = it.text ?: "",
+                metadata = ScrapedResultMetadata(
+                    title = it.title,
+                    publishedDate = it.publishedDate,
+                )
+            )
+        },
+    )
+
+    private fun domainArraySchema(description: String) = buildJsonObject {
+        put("type", "array")
+        put("description", description)
+        put("items", buildJsonObject {
+            put("type", "string")
+        })
+    }
+
+    private fun putOptionalString(
+        builder: kotlinx.serialization.json.JsonObjectBuilder,
+        params: JsonObject,
+        name: String,
+    ) {
+        params[name]?.jsonPrimitive?.contentOrNull
+            ?.takeIf { it.isNotBlank() }
+            ?.let { builder.put(name, it) }
+    }
+
+    private fun putOptionalStringArray(
+        builder: kotlinx.serialization.json.JsonObjectBuilder,
+        params: JsonObject,
+        name: String,
+    ) {
+        val values = params[name]?.jsonArray
+            ?.mapNotNull { it.jsonPrimitive.contentOrNull?.takeIf(String::isNotBlank) }
+            ?.takeIf { it.isNotEmpty() }
+            ?: return
+        builder.put(name, buildJsonArray { values.forEach { add(it) } })
+    }
+
+    private fun hasOptionalString(params: JsonObject, name: String): Boolean =
+        runCatching {
+            params[name]?.jsonPrimitive?.contentOrNull?.isNotBlank() == true
+        }.getOrDefault(false)
+
+    private fun hasOptionalStringArray(params: JsonObject, name: String): Boolean =
+        runCatching {
+            params[name]?.jsonArray?.any {
+                it.jsonPrimitive.contentOrNull?.isNotBlank() == true
+            } == true
+        }.getOrDefault(false)
+
+    private fun optionalMaxAgeHours(params: JsonObject): Int? =
+        runCatching { params["maxAgeHours"]?.jsonPrimitive?.intOrNull }
+            .getOrNull()
+            ?.takeIf { it in MIN_MAX_AGE_HOURS..MAX_MAX_AGE_HOURS }
 }
