@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.components.message.tools
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,7 +23,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,7 +76,9 @@ import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.utils.JsonInstantPretty
 import me.rerere.rikkahub.utils.jsonPrimitiveOrNull
 import me.rerere.rikkahub.utils.openUrl
+import me.rerere.rikkahub.utils.toLocalString
 import org.koin.compose.koinInject
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZonedDateTime
@@ -674,6 +679,7 @@ private fun SearchWebPreview(
     val items = content.jsonObject["items"]?.jsonArray ?: emptyList()
     val answer = content.getStringContent("answer")
     val query = arguments.getStringContent("query") ?: ""
+    val parameters = arguments.jsonObjectOrNull?.entries?.filter { it.key != "query" }.orEmpty()
     val images = content.jsonObject["images"]?.jsonArray
         ?.mapNotNull { it.jsonPrimitive.contentOrNull }
         ?.filter { it.isNotBlank() }
@@ -687,6 +693,35 @@ private fun SearchWebPreview(
     ) {
         item {
             Text(stringResource(R.string.chat_message_tool_search_prefix, query))
+        }
+
+        if (parameters.isNotEmpty()) {
+            item {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    parameters.forEach { (name, value) ->
+                        val displayValue = when (value) {
+                            is JsonArray -> value.joinToString(", ") {
+                                it.jsonPrimitiveOrNull?.contentOrNull ?: it.toString()
+                            }
+                            else -> value.jsonPrimitiveOrNull?.contentOrNull ?: value.toString()
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ) {
+                            Text(
+                                text = "$name: $displayValue",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         if (answer != null) {
@@ -734,6 +769,16 @@ private fun SearchWebPreview(
                 val url = item.getStringContent("url") ?: return@items
                 val title = item.getStringContent("title") ?: return@items
                 val text = item.getStringContent("text") ?: return@items
+                val publishedDate = item.getStringContent("publishedDate")?.takeIf { it.isNotBlank() }
+                val dateLabel = remember(publishedDate) {
+                    publishedDate?.let { value ->
+                        runCatching {
+                            LocalDate.parse(value, DateTimeFormatter.ISO_DATE_TIME)
+                        }.recoverCatching {
+                            LocalDate.parse(value, DateTimeFormatter.ISO_DATE)
+                        }.getOrNull()?.toLocalString(includeYear = true) ?: value
+                    }
+                }
 
                 Card(
                     onClick = { context.openUrl(url) },
@@ -754,6 +799,15 @@ private fun SearchWebPreview(
                         )
                         Column {
                             Text(text = title, maxLines = 1)
+                            if (dateLabel != null) {
+                                Text(
+                                    text = dateLabel,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             Text(
                                 text = text,
                                 maxLines = 2,
