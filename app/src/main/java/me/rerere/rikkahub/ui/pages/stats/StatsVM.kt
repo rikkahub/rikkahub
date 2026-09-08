@@ -24,6 +24,11 @@ data class AppStats(
     val totalPromptTokens: Long = 0L,
     val totalCompletionTokens: Long = 0L,
     val totalCachedTokens: Long = 0L,
+    // 缓存命中率 = cachedTokens / promptTokens
+    // 注意: promptTokens 已包含 cachedTokens, 所以分母直接用 promptTokens, 不要再相加
+    val cacheHitRate: Float = 0f,
+    // 用户发起并完成的请求次数 (角色为 assistant 且 usage 非空的消息数)
+    val totalRequests: Int = 0,
     val conversationsPerDay: Map<LocalDate, Int> = emptyMap(),
     val launchCount: Int = 0,
 )
@@ -67,6 +72,17 @@ class StatsVM(
         // json_each() + json_extract() 在 SQLite 侧聚合，不再加载完整 JSON 到 Kotlin
         val tokenStats = messageNodeDAO.getTokenStats()
 
+        // 缓存命中率计算:
+        // promptTokens 已包含 cachedTokens (所有 Provider 都是这样返回的),
+        // 所以分母直接用 promptTokens, 不要写成 (promptTokens + cachedTokens), 否则会重复计算
+        val cacheHitRate = if (tokenStats.promptTokens > 0) {
+            (tokenStats.cachedTokens.toDouble() / tokenStats.promptTokens)
+                .coerceIn(0.0, 1.0)
+                .toFloat()
+        } else {
+            0f
+        }
+
         val launchCount = settingsStore.settingsFlow.value.launchCount
 
         _stats.value = AppStats(
@@ -76,6 +92,8 @@ class StatsVM(
             totalPromptTokens = tokenStats.promptTokens,
             totalCompletionTokens = tokenStats.completionTokens,
             totalCachedTokens = tokenStats.cachedTokens,
+            cacheHitRate = cacheHitRate,
+            totalRequests = tokenStats.requestCount,
             conversationsPerDay = conversationsPerDay,
             launchCount = launchCount,
         )

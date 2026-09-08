@@ -1071,6 +1071,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="speech_tab_asr">语音识别</string>
   <string name="speech_tab_tts">文字转语音</string>
   <string name="stats_page_cached_tokens">缓存节省 Token</string>
+  <string name="stats_page_cache_hit_rate">缓存命中率</string>
   <string name="stats_page_dow_fri">五</string>
   <string name="stats_page_dow_mon">一</string>
   <string name="stats_page_dow_wed">三</string>
@@ -1083,6 +1084,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="stats_page_title">统计</string>
   <string name="stats_page_total_conversations">总对话数</string>
   <string name="stats_page_total_messages">总消息数</string>
+  <string name="stats_page_total_requests">总请求次数</string>
   <string name="stop">停止</string>
   <string name="tag_input_dialog_create_new">创建新标签</string>
   <string name="tag_input_dialog_existing_tags">现有标签</string>
