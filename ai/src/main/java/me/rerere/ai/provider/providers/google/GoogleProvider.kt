@@ -56,6 +56,7 @@ import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
 import me.rerere.ai.util.configureReferHeaders
+import me.rerere.ai.util.configureSessionHeaders
 import me.rerere.ai.util.encodeBase64
 import me.rerere.ai.util.json
 import me.rerere.ai.util.mergeCustomBody
@@ -182,6 +183,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             request = Request.Builder()
                 .url(url)
                 .headers(params.customHeaders.toHeaders())
+                .configureSessionHeaders(url.toString(), params.sessionId)
                 .post(
                     json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
                 )
@@ -229,6 +231,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
             request = Request.Builder()
                 .url(url)
                 .headers(params.customHeaders.toHeaders())
+                .configureSessionHeaders(url.toString(), params.sessionId)
                 .post(
                     json.encodeToString(requestBody).toRequestBody("application/json".toMediaType())
                 )
