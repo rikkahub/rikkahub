@@ -18,12 +18,9 @@ import { Checkbox } from "~/components/ui/checkbox";
 import {
   Popover,
   PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
   PopoverTitle,
   PopoverTrigger,
 } from "~/components/ui/popover";
-import { ScrollArea } from "~/components/ui/scroll-area";
 
 import { PickerErrorAlert } from "./picker-error-alert";
 
@@ -368,6 +365,8 @@ export function ExtensionPickerButton({
       <PopoverTrigger asChild>
         <Button
           type="button"
+          aria-label={t("injection.title")}
+          title={t("injection.title")}
           variant="ghost"
           size="sm"
           disabled={!canUse || isUpdating}
@@ -390,16 +389,13 @@ export function ExtensionPickerButton({
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent align="end" className="w-[min(92vw,26rem)] gap-0 p-0">
-        <PopoverHeader className="border-b px-6 py-4">
-          <PopoverTitle>{t("injection.title")}</PopoverTitle>
-          <PopoverDescription>{t("injection.description")}</PopoverDescription>
-        </PopoverHeader>
+      <PopoverContent side="top" align="end" sideOffset={8} className="w-[min(92vw,20rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto space-y-3 p-4">
+        <PopoverTitle className="text-sm">{t("injection.title")}</PopoverTitle>
 
-        <div className="space-y-4 px-4 py-4">
+        <div className="space-y-3">
           <PickerErrorAlert error={error} />
 
-          <div className="bg-muted inline-flex rounded-full p-1">
+          <div className="bg-muted flex flex-wrap rounded-xl p-1">
             {quickMessages.length > 0 && (
               <button
                 type="button"
@@ -448,7 +444,7 @@ export function ExtensionPickerButton({
             </button>
           </div>
 
-          <ScrollArea className="h-[16rem] pr-3">
+          <div className="max-h-64 overflow-y-auto">
             {activeTab === "quickmessages" ? (
               quickMessages.length > 0 ? (
                 <div className="space-y-2">
@@ -463,8 +459,8 @@ export function ExtensionPickerButton({
                       <label
                         key={item.id}
                         className={cn(
-                          "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 transition",
-                          checked && "border-primary bg-primary/5",
+                          "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 transition hover:bg-muted",
+                          checked && "bg-primary/5",
                         )}
                       >
                         {switching ? (
@@ -482,7 +478,7 @@ export function ExtensionPickerButton({
                           <div className="truncate text-sm font-medium">
                             {getDisplayName(item.title, t("injection.unnamed_quickmessage"))}
                           </div>
-                          <div className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
+                          <div className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
                             {item.content}
                           </div>
                         </div>
@@ -491,7 +487,7 @@ export function ExtensionPickerButton({
                   })}
                 </div>
               ) : (
-                <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+                <div className="px-2 py-4 text-center text-sm text-muted-foreground">
                   {t("injection.empty_quickmessages")}
                 </div>
               )
@@ -511,8 +507,8 @@ export function ExtensionPickerButton({
                       <label
                         key={item.id}
                         className={cn(
-                          "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 transition",
-                          checked && "border-primary bg-primary/5",
+                          "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 transition hover:bg-muted",
+                          checked && "bg-primary/5",
                         )}
                       >
                         {switching ? (
@@ -541,7 +537,7 @@ export function ExtensionPickerButton({
                   })}
                 </div>
               ) : (
-                <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+                <div className="px-2 py-4 text-center text-sm text-muted-foreground">
                   {t("injection.empty_mode")}
                 </div>
               )
@@ -561,8 +557,8 @@ export function ExtensionPickerButton({
                     <label
                       key={item.id}
                       className={cn(
-                        "flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 transition",
-                        checked && "border-primary bg-primary/5",
+                        "flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 transition hover:bg-muted",
+                        checked && "bg-primary/5",
                       )}
                     >
                       {switching ? (
@@ -582,7 +578,7 @@ export function ExtensionPickerButton({
                         </div>
                         {typeof item.description === "string" &&
                         item.description.trim().length > 0 ? (
-                          <div className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">
+                          <div className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
                             {item.description}
                           </div>
                         ) : null}
@@ -597,11 +593,11 @@ export function ExtensionPickerButton({
                 })}
               </div>
             ) : (
-              <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+              <div className="px-2 py-4 text-center text-sm text-muted-foreground">
                 {t("injection.empty_lorebook")}
               </div>
             )}
-          </ScrollArea>
+          </div>
         </div>
       </PopoverContent>
     </Popover>

@@ -64,4 +64,31 @@ val RECOMMENDED_PROVIDERS: List<ProviderSetting> = listOf(
             )
         },
     ),
+    ProviderSetting.OpenAI(
+        id = Uuid.parse("afbc54ad-807e-4455-9594-7d7a546356ad"),
+        name = "MaruCode",
+        baseUrl = "https://api.muteki.site/v1",
+        apiKey = "",
+        enabled = true,
+        description = {
+            Text(
+                text = buildAnnotatedString {
+                    append("MaruCode 是一家偶尔做做慈善的小破站 API，自营号池，主要提供 Codex、Claude Code、GPT Image 等主流模型，支持 Websocket 协议，明码标价(Codex 0.25x, CC 1.5x)，透明汇率(1:1)。")
+                    appendLine()
+                    withLink(LinkAnnotation.Url("https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub")) {
+                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
+                            append("新用户注册送 2 刀")
+                        }
+                    }
+                    appendLine()
+                    withLink(LinkAnnotation.Url("https://images-2.muteki.site")) {
+                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
+                            append("生图工作台🖼️")
+                        }
+                    }
+                }
+            )
+        },
+        useResponseApi = true,
+    ),
 )

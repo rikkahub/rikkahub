@@ -1,21 +1,26 @@
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
 import android.graphics.Typeface
-import android.view.MotionEvent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.imeAnimationTarget
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -27,7 +32,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -79,40 +83,12 @@ fun WorkspaceTerminalPage(id: String) {
     }
 
     RikkahubTheme(colorMode = ColorMode.DARK) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            text = state.workspace?.name?.let { stringResource(R.string.workspace_terminal_title_with_name, it) } ?: stringResource(R.string.workspace_terminal_title),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                    navigationIcon = { BackButton() },
-                    actions = {
-                        val newTabDescription = stringResource(R.string.workspace_terminal_new_tab)
-                        IconButton(
-                            onClick = {
-                                root?.let { currentRoot ->
-                                    sessionManager.createTab(currentRoot)
-                                }
-                            },
-                            enabled = root != null && !terminalState.isCreating,
-                            modifier = Modifier.semantics {
-                                contentDescription = newTabDescription
-                            },
-                        ) {
-                            Text(text = "+", fontSize = 24.sp)
-                        }
-                    },
-                )
-            },
-        ) { innerPadding ->
+        Scaffold { innerPadding ->
             WorkspaceTerminalContent(
                 root = root,
                 state = terminalState,
                 contentPadding = innerPadding,
+                onCreateTab = { root?.let(sessionManager::createTab) },
                 onSelectTab = { tabId ->
                     root?.let { sessionManager.selectTab(it, tabId) }
                 },
@@ -158,103 +134,146 @@ fun WorkspaceTerminalPage(id: String) {
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun WorkspaceTerminalContent(
     root: String?,
     state: WorkspaceTerminalTabsState,
     contentPadding: PaddingValues,
+    onCreateTab: () -> Unit,
     onSelectTab: (Long) -> Unit,
     onCloseTab: (Long) -> Unit,
 ) {
-    if (root == null || state.tabs.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(contentPadding)
-                .padding(16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = when {
-                    root == null || state.isCreating || state.readiness == WorkspaceTerminalReadiness.Loading -> {
-                        stringResource(R.string.workspace_terminal_loading)
-                    }
-                    state.readiness == WorkspaceTerminalReadiness.NotInstalled -> {
-                        stringResource(R.string.workspace_terminal_not_installed)
-                    }
-                    else -> stringResource(R.string.workspace_terminal_no_tabs)
-                },
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-            )
-        }
-        return
-    }
     val selectedIndex = state.tabs.indexOfFirst { it.id == state.selectedTabId }
         .takeIf { it >= 0 }
         ?: 0
-    val selectedTab = state.tabs[selectedIndex]
+    val selectedTab = state.tabs.getOrNull(selectedIndex)
 
     Surface(
         modifier = Modifier
             .fillMaxSize()
             .padding(contentPadding)
-            .imePadding(),
+            .consumeWindowInsets(contentPadding)
+            // Resize to the final IME height at animation start so the toolbar moves immediately
+            // and terminal rows stay stable instead of sending a SIGWINCH for every frame.
+            .windowInsetsPadding(WindowInsets.imeAnimationTarget),
         color = Color.Black,
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            SecondaryScrollableTabRow(
-                selectedTabIndex = selectedIndex,
-                edgePadding = 0.dp,
-                minTabWidth = 64.dp,
-                containerColor = MaterialTheme.colorScheme.surface,
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .background(MaterialTheme.colorScheme.surface),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                state.tabs.forEach { tab ->
-                    val tabDescription = stringResource(
-                        R.string.workspace_terminal_tab,
-                        tab.number,
-                    )
-                    Tab(
-                        selected = selectedTab.id == tab.id,
-                        onClick = { onSelectTab(tab.id) },
-                        modifier = Modifier
-                            .height(40.dp)
-                            .semantics {
-                                contentDescription = tabDescription
-                            },
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(0.dp),
+                BackButton()
+                Box(modifier = Modifier.weight(1f)) {
+                    if (selectedTab != null) {
+                        SecondaryScrollableTabRow(
+                            selectedTabIndex = selectedIndex,
+                            modifier = Modifier.fillMaxWidth(),
+                            edgePadding = 0.dp,
+                            minTabWidth = 160.dp,
+                            containerColor = MaterialTheme.colorScheme.surface,
                         ) {
-                            Text(
-                                text = tab.number.toString(),
-                                maxLines = 1,
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                            val closeDescription = stringResource(
-                                R.string.workspace_terminal_close_tab,
-                                tab.number,
-                            )
-                            IconButton(
-                                onClick = { onCloseTab(tab.id) },
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .semantics {
-                                        contentDescription = closeDescription
-                                    },
-                            ) {
-                                Text(text = "×", fontSize = 18.sp)
+                            state.tabs.forEach { tab ->
+                                val tabDescription = stringResource(
+                                    R.string.workspace_terminal_tab,
+                                    tab.number,
+                                )
+                                val tabTitle = tab.title ?: tabDescription
+                                val isSelected = selectedTab.id == tab.id
+                                Tab(
+                                    selected = isSelected,
+                                    onClick = { onSelectTab(tab.id) },
+                                    modifier = Modifier
+                                        .height(48.dp)
+                                        .widthIn(min = 160.dp, max = 240.dp)
+                                        .semantics {
+                                            contentDescription = tabTitle
+                                        },
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 16.dp, end = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Text(
+                                            text = tabTitle,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .then(
+                                                    if (isSelected) Modifier.basicMarquee(iterations = Int.MAX_VALUE)
+                                                    else Modifier,
+                                                ),
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = if (isSelected) TextOverflow.Clip else TextOverflow.Ellipsis,
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                        val closeDescription = stringResource(
+                                            R.string.workspace_terminal_close_tab,
+                                            tab.number,
+                                        )
+                                        IconButton(
+                                            onClick = { onCloseTab(tab.id) },
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .semantics {
+                                                    contentDescription = closeDescription
+                                                },
+                                        ) {
+                                            Text(text = "×", fontSize = 18.sp)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
+                val newTabDescription = stringResource(R.string.workspace_terminal_new_tab)
+                IconButton(
+                    onClick = onCreateTab,
+                    enabled = root != null && !state.isCreating,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .semantics { contentDescription = newTabDescription },
+                ) {
+                    Text(text = "+", fontSize = 24.sp)
+                }
             }
-            WorkspaceTerminalTabContent(
-                tab = selectedTab,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-            )
+            if (selectedTab != null) {
+                WorkspaceTerminalTabContent(
+                    tab = selectedTab,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = when {
+                            root == null || state.isCreating || state.readiness == WorkspaceTerminalReadiness.Loading -> {
+                                stringResource(R.string.workspace_terminal_loading)
+                            }
+                            state.readiness == WorkspaceTerminalReadiness.NotInstalled -> {
+                                stringResource(R.string.workspace_terminal_not_installed)
+                            }
+                            else -> stringResource(R.string.workspace_terminal_no_tabs)
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                    )
+                }
+            }
         }
     }
 }
@@ -304,12 +323,6 @@ private fun WorkspaceTerminalTabContent(
                         attachSession(tab.session)
                         tab.client.terminalView = this
                         viewClient.terminalView = this
-                        setOnTouchListener { _, event ->
-                            if (event.action == MotionEvent.ACTION_UP) {
-                                viewClient.focusAndShowKeyboard()
-                            }
-                            false
-                        }
                         post {
                             viewClient.focusAndShowKeyboard()
                         }
@@ -323,12 +336,6 @@ private fun WorkspaceTerminalTabContent(
                     terminalView.setTerminalViewClient(viewClient)
                     tab.client.terminalView = terminalView
                     viewClient.terminalView = terminalView
-                    terminalView.setOnTouchListener { _, event ->
-                        if (event.action == MotionEvent.ACTION_UP) {
-                            viewClient.focusAndShowKeyboard()
-                        }
-                        false
-                    }
                     terminalView.attachSession(tab.session)
                     terminalView.onScreenUpdated()
                 },

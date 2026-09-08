@@ -38,6 +38,15 @@ fun Request.Builder.configureReferHeaders(url: String): Request.Builder {
     }
 }
 
+fun Request.Builder.configureSessionHeaders(url: String, sessionId: String?): Request.Builder = apply {
+    if (sessionId != null) {
+        header("X-Session-ID", sessionId)
+        if (url.toHttpUrl().host == "opencode.ai") {
+            header("x-opencode-session", sessionId)
+        }
+    }
+}
+
 fun ResponseBody.stringSafe(): String? {
     return when (this) {
         is RealResponseBody -> string()

@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -119,10 +120,10 @@ fun HighlightCodeBlock(
         contract = ActivityResultContracts.CreateDocument("*/*")
     ) { uri: Uri? ->
         uri?.let {
-            scope.launch {
+            scope.launch(Dispatchers.IO) {
                 try {
-                    context.contentResolver.openOutputStream(it)?.use { outputStream ->
-                        outputStream.write(code.toByteArray())
+                    context.contentResolver.openOutputStream(it, "wt")?.use { outputStream ->
+                        outputStream.write(code.toByteArray(Charsets.UTF_8))
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()

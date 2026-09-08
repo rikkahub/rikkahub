@@ -9,7 +9,6 @@ import {
   LoaderCircle,
   Mic,
   Plus,
-  Send,
   Square,
   Video,
   X,
@@ -502,7 +501,7 @@ function ChatInputInner({
       <div className="mx-auto w-full max-w-3xl px-4 py-4">
         <div
           className={cn(
-            "relative flex flex-col gap-2 rounded-lg border bg-muted/50 p-2 shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-ring",
+            "relative flex flex-col gap-2 rounded-3xl border border-border/60 bg-muted/50 p-2.5 transition-colors focus-within:border-border",
             dragActive &&
               "border-primary/40 bg-primary/5 ring-2 ring-primary/30",
           )}
@@ -514,7 +513,7 @@ function ChatInputInner({
           }}
         >
           {dragActive ? (
-            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary/50 bg-background/80 px-4 text-center text-sm font-medium text-primary">
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-3xl border-2 border-dashed border-primary/50 bg-background/80 px-4 text-center text-sm font-medium text-primary">
               {t("chat.drop_to_upload")}
             </div>
           ) : null}
@@ -620,11 +619,11 @@ function ChatInputInner({
               }}
             placeholder={placeholder}
             disabled={!ready || disabled}
-            className="min-h-[60px] max-h-[200px] resize-none border-0 bg-transparent dark:bg-transparent p-2 text-sm shadow-none focus-visible:ring-0"
+            className="min-h-[64px] max-h-[200px] resize-none border-0 bg-transparent dark:bg-transparent p-2 text-sm shadow-none focus-visible:ring-0"
             rows={2}
           />
           <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-0.5">
               <DropdownMenu
                 open={uploadMenuOpen}
                 onOpenChange={setUploadMenuOpen}
@@ -702,9 +701,7 @@ function ChatInputInner({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <ModelList disabled={!canSwitchModel} className="max-w-64" />
               <SearchPickerButton disabled={!canSwitchModel} />
-              <ReasoningPickerButton disabled={!canSwitchModel} />
               <McpPickerButton disabled={!canSwitchModel} />
               <ExtensionPickerButton
                 conversation={conversation}
@@ -717,30 +714,36 @@ function ChatInputInner({
                 onSelect={handleQuickMessageSelect}
               />
             </div>
-            <Button
-              onClick={() => {
-                void handlePrimaryAction();
-              }}
-              disabled={actionDisabled}
-              size="icon"
-              className={cn(
-                "size-9 rounded-full shadow-sm",
-                isGenerating && !submitting
-                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  : "bg-primary text-primary-foreground hover:bg-primary/90",
-              )}
-            >
-              {submitting || uploading ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : isGenerating ? (
-                <Square className="size-4" />
-              ) : (
-                <ArrowUp className="size-4" />
-              )}
-            </Button>
+            <div className="flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1">
+              <ModelList disabled={!canSwitchModel} className="max-w-[120px] sm:max-w-56" />
+              <ReasoningPickerButton disabled={!canSwitchModel} />
+              <Button
+                aria-label={canStop ? "停止生成" : "发送消息"}
+                title={sendHint}
+                onClick={() => {
+                  void handlePrimaryAction();
+                }}
+                disabled={actionDisabled}
+                size="icon"
+                className={cn(
+                  "size-9 shrink-0 rounded-full",
+                  isGenerating && !submitting
+                    ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90",
+                )}
+              >
+                {submitting || uploading ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : isGenerating ? (
+                  <Square className="size-4" />
+                ) : (
+                  <ArrowUp className="size-4" />
+                )}
+              </Button>
+            </div>
           </div>
         </div>
-        <p className="mt-2 text-center text-xs text-muted-foreground">
+        <p className="sr-only">
           {sendHint}
         </p>
         {error ? (
@@ -787,7 +790,7 @@ function QuickMessageButton({
           <Zap className="size-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-72" side="top" align="start">
+      <DropdownMenuContent className="w-[min(92vw,20rem)] max-h-64 overflow-y-auto" side="top" align="start">
         {quickMessages.map((quickMessage, index) => {
           const key = `${quickMessage.title}-${index}`;
           return (

@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import me.rerere.ai.provider.ImageEditParams
@@ -340,6 +342,23 @@ class ImgGenVM(
             }
         }
     }
+
+    suspend fun deleteImages(images: List<GeneratedImage>): List<GeneratedImage> =
+        withContext(Dispatchers.IO) {
+            images.filter { image ->
+                try {
+                    val file = File(image.filePath)
+                    check(!file.exists() || file.delete()) { "Failed to delete image file" }
+                    genMediaRepository.deleteMedia(image.id)
+                    false
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to delete image ${image.id}", e)
+                    true
+                }
+            }
+        }
 
     private fun deleteReferenceFiles(paths: List<String>) {
         viewModelScope.launch {

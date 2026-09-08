@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { useMutation } from "@tanstack/react-query";
 import type { TFunction } from "i18next";
-import { ChevronDown, Earth, LoaderCircle, Search } from "lucide-react";
+import { Check, Earth, LoaderCircle, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useCurrentAssistant } from "~/hooks/use-current-assistant";
@@ -17,12 +17,9 @@ import { Button } from "~/components/ui/button";
 import {
   Popover,
   PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
   PopoverTitle,
   PopoverTrigger,
 } from "~/components/ui/popover";
-import { ScrollArea } from "~/components/ui/scroll-area";
 import { Switch } from "~/components/ui/switch";
 
 import { PickerErrorAlert } from "./picker-error-alert";
@@ -165,6 +162,8 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
       <PopoverTrigger asChild>
         <Button
           type="button"
+          aria-label={t("search.title")}
+          title={t("search.title")}
           variant="ghost"
           size="sm"
           disabled={!canUse || loading}
@@ -188,23 +187,17 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
           ) : (
             <Earth className="size-4" />
           )}
-          <span className="hidden sm:block">
-            <ChevronDown className="size-3.5" />
-          </span>
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent align="end" className="w-[min(92vw,28rem)] gap-0 p-0">
-        <PopoverHeader className="border-b px-6 py-4">
-          <PopoverTitle>{t("search.title")}</PopoverTitle>
-          <PopoverDescription>{t("search.description")}</PopoverDescription>
-        </PopoverHeader>
+      <PopoverContent side="top" align="end" sideOffset={8} className="w-[min(92vw,20rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto space-y-3 p-4">
+        <PopoverTitle className="text-sm">{t("search.title")}</PopoverTitle>
 
-        <div className="space-y-4 px-4 py-4">
+        <div className="space-y-3">
           <PickerErrorAlert error={error} />
 
           {isGeminiModel(currentModel) ? (
-            <div className="flex items-center gap-3 rounded-lg border px-3 py-3">
+            <div className="flex items-center gap-3 py-1">
               <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
                 <Search className="size-4" />
               </div>
@@ -225,7 +218,7 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
 
           {!builtInSearchEnabled ? (
             <>
-              <div className="flex items-center gap-3 rounded-lg border px-3 py-3">
+              <div className="flex items-center gap-3 py-1">
                 <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
                   <Earth className="size-4" />
                 </div>
@@ -245,9 +238,9 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                 />
               </div>
 
-              <ScrollArea className="h-[16rem] pr-3">
+              <div className="max-h-64 overflow-y-auto">
                 {settings?.searchServices?.length ? (
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="space-y-1">
                     {settings.searchServices.map((service, index) => {
                       const selected = index === settings.searchServiceSelected;
                       const switching =
@@ -259,8 +252,8 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                           key={service.id}
                           type="button"
                           className={cn(
-                            "hover:bg-muted flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition",
-                            selected && "border-primary bg-primary/5",
+                            "hover:bg-muted flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition",
+                            selected && "bg-primary/5",
                           )}
                           disabled={disabled || loading}
                           onClick={() => {
@@ -283,17 +276,17 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
                               {getServiceType(service) ?? t("search.unknown")}
                             </div>
                           </div>
-                          {switching ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
+                          {switching ? <LoaderCircle className="size-3.5 animate-spin" /> : selected ? <Check className="size-3.5 text-primary" /> : null}
                         </button>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
+                  <div className="px-2 py-4 text-center text-sm text-muted-foreground">
                     {t("search.empty")}
                   </div>
                 )}
-              </ScrollArea>
+              </div>
             </>
           ) : (
             <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-primary">

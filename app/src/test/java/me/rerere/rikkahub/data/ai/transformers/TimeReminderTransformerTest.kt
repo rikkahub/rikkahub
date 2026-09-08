@@ -110,6 +110,28 @@ class TimeReminderTransformerTest {
     }
 
     @Test
+    fun `custom interval should use strict threshold and format minutes`() {
+        val messages = listOf(
+            userMessage("Hello", LocalDateTime(2026, 2, 22, 10, 0, 0)),
+            userMessage("World", LocalDateTime(2026, 2, 22, 10, 30, 0)),
+        )
+        assertEquals(3, applyTimeReminder(messages, intervalMinutes = 30).size)
+        val result = applyTimeReminder(messages, intervalMinutes = 15)
+        assertEquals(4, result.size)
+        assertTrue(getMessageText(result[2]).contains("30 min since last message"))
+    }
+
+    @Test
+    fun `large interval should not overflow or inject prematurely`() {
+        val messages = listOf(
+            userMessage("Hello", LocalDateTime(2026, 2, 22, 10, 0, 0)),
+            userMessage("World", LocalDateTime(2026, 2, 22, 12, 0, 0)),
+        )
+        assertEquals(3, applyTimeReminder(messages, intervalMinutes = 180).size)
+        assertEquals(3, applyTimeReminder(messages, intervalMinutes = Int.MAX_VALUE).size)
+    }
+
+    @Test
     fun `empty messages should return empty`() {
         val result = applyTimeReminder(emptyList())
         assertEquals(0, result.size)

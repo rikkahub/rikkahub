@@ -1,5 +1,6 @@
 package me.rerere.highlight
 
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -71,6 +72,7 @@ fun CodeHighlightText(
     Text(
         modifier = modifier,
         text = annotatedString,
+        style = LocalTextStyle.current.copy(fontFeatureSettings = "'calt' 0, 'liga' 0, 'clig' 0"),
         fontSize = fontSize,
         fontFamily = fontFamily,
         fontStyle = fontStyle,

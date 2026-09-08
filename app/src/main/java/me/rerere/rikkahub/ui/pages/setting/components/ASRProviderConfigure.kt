@@ -292,7 +292,7 @@ private fun VolcengineASRConfiguration(
             value = setting.websocketUrl,
             onValueChange = { onValueChange(setting.copy(websocketUrl = it)) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("wss://openspeech.bytedance.com/api/v3/sauc/bigmodel") }
+            placeholder = { Text("wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async") }
         )
     }
 
@@ -304,7 +304,7 @@ private fun VolcengineASRConfiguration(
             value = setting.resourceId,
             onValueChange = { onValueChange(setting.copy(resourceId = it)) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("volc.bigasr.sauc.duration") }
+            placeholder = { Text("volc.seedasr.sauc.duration") }
         )
     }
 
@@ -319,6 +319,20 @@ private fun VolcengineASRConfiguration(
             placeholder = { Text("auto") }
         )
     }
+    FormItem(
+        label = { Text(stringResource(R.string.setting_page_asr_silence_duration)) },
+        description = { Text(stringResource(R.string.setting_page_asr_silence_duration_desc)) },
+    ) {
+        OutlinedNumberInput(
+            value = setting.silenceDurationMs,
+            onValueChange = { value ->
+                if (value in 300..5000) onValueChange(setting.copy(silenceDurationMs = value))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = stringResource(R.string.setting_page_asr_milliseconds),
+        )
+    }
+
 }
 
 @Composable

@@ -92,7 +92,12 @@ function ReasoningSlider({
       className="relative flex h-7 w-full touch-none items-center select-none data-[disabled]:opacity-50"
     >
       <SliderPrimitive.Track className="relative h-7 w-full grow overflow-hidden rounded-full bg-muted">
-        <SliderPrimitive.Range className="absolute h-full bg-primary/75" />
+        {/* Match the thumb's right edge, including its inset at both ends. */}
+        <span
+          aria-hidden="true"
+          className="absolute left-0 h-full rounded-r-lg bg-primary/75"
+          style={{ width: `calc(${THUMB_SIZE}px + (100% - ${THUMB_SIZE}px) * ${value / max})` }}
+        />
         {/* Tick dots inside the track, aligned with thumb travel positions */}
         {REASONING_LEVELS.map((level, i) => (
           <span
@@ -232,7 +237,7 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent align="end" className="w-[min(92vw,20rem)] space-y-3 px-4 py-4">
+      <PopoverContent side="top" sideOffset={8} align="end" className="w-[min(92vw,20rem)] space-y-3 px-4 py-4">
         <PickerErrorAlert error={error} />
 
         {/* Faster / Smarter labels */}

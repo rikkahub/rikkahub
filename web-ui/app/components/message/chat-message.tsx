@@ -337,7 +337,7 @@ const ChatMessageActionsRow = React.memo(({
   return (
     <div
       className={cn(
-        "flex w-full items-center gap-1 px-1",
+        "flex w-full items-center gap-1",
         alignRight ? "justify-end" : "justify-start",
       )}
     >
@@ -508,7 +508,7 @@ const ChatMessageNerdLineRow = React.memo(({
   return (
     <div
       className={cn(
-        "flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[11px] text-muted-foreground/50",
+        "flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/50",
         alignRight ? "justify-end" : "justify-start",
       )}
     >
@@ -583,7 +583,8 @@ export const ChatMessage = React.memo(({
       </div>
 
       {showActions && (
-        <div data-message-actions>
+        // Offset half the difference between the 24px button and its 14px icon.
+        <div data-message-actions className={isUser ? "-mr-1.25" : "-ml-1.25"}>
           <ChatMessageActionsRow
             node={node}
             message={message}

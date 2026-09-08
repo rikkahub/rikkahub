@@ -152,9 +152,11 @@ class WorkspaceTerminalSessionManager internal constructor(
 
         val tabId = nextTabId.getAndIncrement()
         val tabNumber = currentState(root).nextTabNumber
-        val client = WorkspaceTerminalSessionClient(appContext) {
-            markFinished(root = root, tabId = tabId)
-        }
+        val client = WorkspaceTerminalSessionClient(
+            context = appContext,
+            onTitleUpdated = { title -> updateTitle(root, tabId, title) },
+            onFinished = { markFinished(root = root, tabId = tabId) },
+        )
         val session = runCatching {
             createWorkspaceTerminalSession(
                 context = appContext,
@@ -184,6 +186,20 @@ class WorkspaceTerminalSessionManager internal constructor(
                 isCreating = false,
                 nextTabNumber = tabNumber + 1,
             )
+        }
+    }
+
+    private fun updateTitle(root: String, tabId: Long, title: String?) {
+        val normalizedTitle = title?.trim()?.takeIf { it.isNotEmpty() }
+        workspaceStates.update { states ->
+            val state = states[root] ?: return@update states
+            if (state.tabs.none { it.id == tabId }) return@update states
+
+            states + (root to state.copy(
+                tabs = state.tabs.map { tab ->
+                    if (tab.id == tabId) tab.copy(title = normalizedTitle) else tab
+                },
+            ))
         }
     }
 
@@ -230,6 +246,7 @@ internal data class WorkspaceTerminalTab(
     val number: Int,
     val session: TerminalSession,
     val client: WorkspaceTerminalSessionClient,
+    val title: String? = null,
     val finished: Boolean = false,
 )
 

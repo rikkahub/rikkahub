@@ -49,7 +49,7 @@ export function ChatMessageAvatarRow({
       t("page:conversations.user.default_name", { defaultValue: "User" });
 
     return (
-      <div className="flex w-full justify-end px-1">
+      <div className="flex w-full justify-end">
         <div className="flex items-center gap-2">
           <div className="min-w-0 text-right">
             <div className="truncate text-sm font-medium text-foreground/90">{userName}</div>
@@ -80,7 +80,7 @@ export function ChatMessageAvatarRow({
   const title = useAssistantAvatar ? assistantName : modelName;
 
   return (
-    <div className="flex w-full justify-start px-1">
+    <div className="flex w-full justify-start">
       <div className="flex min-w-0 items-center gap-2">
         {showModelIcon ? (
           useAssistantAvatar ? (
