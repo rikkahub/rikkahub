@@ -369,7 +369,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
               </div>
             ) : (
               <div className="flex min-h-0 flex-col gap-2">
-                <ScrollArea className="max-h-20 w-full">
+                <ScrollArea className="max-h-20 w-full **:data-[slot=scroll-area-viewport]:max-h-20">
                   <div className="flex flex-wrap items-center gap-1.5 pb-1">
                     {favoriteModels.length > 0 && (
                       <button
@@ -414,7 +414,7 @@ export function ModelList({ disabled = false, className, onChanged }: ModelListP
                   </div>
                 </ScrollArea>
 
-                <ScrollArea className="h-auto max-h-64 [&_[data-slot=scroll-area-viewport]]:max-h-64">
+                <ScrollArea className="h-auto max-h-64 **:data-[slot=scroll-area-viewport]:max-h-64">
                   <div className="space-y-0.5">
                     {displayedModels.map((model) => (
                       <ModelOptionRow
