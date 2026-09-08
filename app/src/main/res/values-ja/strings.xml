@@ -1276,7 +1276,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS 括弧内を読み上げない</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">有効にすると、TTS は括弧内の内容を読み上げません</string>
   <string name="assistant_page_context_message_limit">コンテキストメッセージ上限</string>
-  <string name="assistant_page_context_message_limit_desc">モデルに送信する直近のメッセージ数の上限を設定します。上限を超えた場合、ターンごとに1件ずつ削除するのではなく、一度にコンテキストを約半分まで切り詰めます。これによりリクエストのプレフィックスが安定し、プロンプトキャッシュが多くのターンにわたって有効に働きます。</string>
+  <string name="assistant_page_context_message_limit_desc">モデルに送信する最近のメッセージ数を制限します。</string>
   <string name="assistant_page_context_message_limit_count">コンテキストメッセージ制限: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">コンテキストメッセージ無制限</string>
   <string name="assistant_page_context_message_limit_warning">コンテキストの制限は、コンテキストが切り詰められるたびにプロンプトキャッシュを無効化します。制限が大きいほど切り詰めの頻度が減り、無制限なら切り詰めが発生せず、キャッシュは完全に保持されます。</string>
@@ -1364,4 +1364,5 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_time_reminder_interval_hint">正の整数を入力してください。メッセージ間隔がこの値を超えると、リマインダーが挿入されます。</string>
   <string name="assistant_page_time_reminder_interval_desc">メッセージ間隔がこの間隔を超えた場合にリマインダーを挿入します。最初のユーザーメッセージの前には常にリマインドします。</string>
   <string name="assistant_page_time_reminder_interval_value">%1$d 分</string>
+  <string name="assistant_page_context_message_limit_hint">0を入力すると無制限になります。それ以外の場合、値は大きいほど良いです。0または20以上に設定することをお勧めします。</string>
 </resources>

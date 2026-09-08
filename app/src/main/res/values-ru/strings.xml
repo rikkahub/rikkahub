@@ -1276,7 +1276,7 @@
   <string name="setting_display_page_tts_read_outside_brackets_title">TTS не читает текст в скобках</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">Если включено, TTS не будет читать содержимое в скобках</string>
   <string name="assistant_page_context_message_limit">Лимит контекстных сообщений</string>
-  <string name="assistant_page_context_message_limit_desc">Ограничивает количество последних сообщений, отправляемых модели. Когда лимит превышен, контекст сокращается примерно вдвое за один шаг, вместо удаления одного сообщения за каждый оборот, благодаря чему префикс запроса остаётся стабильным, и кэширование промптов продолжает работать на протяжении многих оборотов.</string>
+  <string name="assistant_page_context_message_limit_desc">Ограничивает количество последних сообщений, отправляемых модели.</string>
   <string name="assistant_page_context_message_limit_count">Лимит сообщений контекста: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">Неограниченные сообщения контекста</string>
   <string name="assistant_page_context_message_limit_warning">Ограничение контекста аннулирует кэш промпта каждый раз, когда контекст усекается. Больший лимит усекает реже; безлимитный не усекает никогда и сохраняет кэш полностью нетронутым.</string>
@@ -1364,4 +1364,5 @@
   <string name="assistant_page_time_reminder_interval_hint">Введите целое положительное число. Напоминание вставляется, когда промежуток между сообщениями превышает этот интервал.</string>
   <string name="assistant_page_time_reminder_interval_desc">Вставлять напоминание, когда промежуток между сообщениями превышает этот интервал. Всегда напоминать перед первым сообщением пользователя.</string>
   <string name="assistant_page_time_reminder_interval_value">%1$d мин</string>
+  <string name="assistant_page_context_message_limit_hint">Введите 0 для безлимита; в противном случае чем больше значения, тем лучше. Рекомендуется установить значение 0 или не менее 20.</string>
 </resources>
