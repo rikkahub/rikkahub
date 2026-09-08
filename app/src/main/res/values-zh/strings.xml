@@ -1369,4 +1369,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_time_reminder_interval_hint">请输入正整数。当消息间隔超过该时间间隔时，将插入一条提醒。</string>
   <string name="assistant_page_time_reminder_interval_desc">当消息间隔超过此设定值时插入提醒。始终在第一条用户消息之前提醒。</string>
   <string name="assistant_page_time_reminder_interval_value">%1$d 分钟</string>
+  <string name="imggen_page_delete_images_title">删除图片</string>
+  <string name="imggen_page_delete_images_message">删除选定的图片（%1$d）？此操作无法撤销。</string>
+  <string name="imggen_page_delete_images_success">已删除 %1$d 张图片</string>
+  <string name="imggen_page_delete_images_failed">已删除：%1$d。失败：%2$d。请重试。</string>
+  <string name="imggen_page_deleting">删除中…</string>
+  <string name="imggen_page_selected_count">已选择：%1$d</string>
+  <string name="imggen_page_select_image">选择图片</string>
 </resources>

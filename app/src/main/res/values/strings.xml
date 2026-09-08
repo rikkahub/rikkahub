@@ -1373,4 +1373,11 @@
   <string name="assistant_page_time_reminder_interval_hint">Enter a positive whole number. A reminder is inserted when the message gap exceeds this interval.</string>
   <string name="assistant_page_time_reminder_interval_desc">Insert a reminder when the message gap exceeds this interval. Always remind before the first user message.</string>
   <string name="assistant_page_time_reminder_interval_value">%1$d min</string>
+  <string name="imggen_page_delete_images_title">Delete images</string>
+  <string name="imggen_page_delete_images_message">Delete the selected images (%1$d)? This cannot be undone.</string>
+  <string name="imggen_page_delete_images_success">Images deleted: %1$d</string>
+  <string name="imggen_page_delete_images_failed">Deleted: %1$d. Failed: %2$d. Please try again.</string>
+  <string name="imggen_page_deleting">Deleting…</string>
+  <string name="imggen_page_selected_count">Selected: %1$d</string>
+  <string name="imggen_page_select_image">Select image</string>
 </resources>

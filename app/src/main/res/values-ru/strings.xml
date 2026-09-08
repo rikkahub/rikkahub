@@ -1365,4 +1365,11 @@
   <string name="assistant_page_time_reminder_interval_desc">Вставлять напоминание, когда промежуток между сообщениями превышает этот интервал. Всегда напоминать перед первым сообщением пользователя.</string>
   <string name="assistant_page_time_reminder_interval_value">%1$d мин</string>
   <string name="assistant_page_context_message_limit_hint">Введите 0 для безлимита; в противном случае чем больше значения, тем лучше. Рекомендуется установить значение 0 или не менее 20.</string>
+  <string name="imggen_page_delete_images_title">Удалить изображения</string>
+  <string name="imggen_page_delete_images_message">Удалить выбранные изображения (%1$d)? Это действие необратимо.</string>
+  <string name="imggen_page_delete_images_success">Изображения удалены: %1$d</string>
+  <string name="imggen_page_delete_images_failed">Удалено: %1$d. Не удалось: %2$d. Попробуйте ещё раз.</string>
+  <string name="imggen_page_deleting">Удаление…</string>
+  <string name="imggen_page_selected_count">Выбрано: %1$d</string>
+  <string name="imggen_page_select_image">Выбрать изображение</string>
 </resources>

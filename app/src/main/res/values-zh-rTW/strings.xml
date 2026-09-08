@@ -1363,4 +1363,11 @@
   <string name="assistant_page_time_reminder_interval_desc">當訊息間隔超過此時間間隔時插入提醒。第一則使用者訊息前一律提醒。</string>
   <string name="assistant_page_time_reminder_interval_value">%1$d 分</string>
   <string name="assistant_page_context_message_limit_hint">輸入 0 表示無限制；否則，數值越大越好。建議設為 0 或至少 20。</string>
+  <string name="imggen_page_delete_images_title">刪除圖片</string>
+  <string name="imggen_page_delete_images_message">刪除選取的圖片（%1$d）？此操作無法復原。</string>
+  <string name="imggen_page_delete_images_success">已刪除 %1$d 張圖片</string>
+  <string name="imggen_page_delete_images_failed">已刪除：%1$d。失敗：%2$d。請再試一次。</string>
+  <string name="imggen_page_deleting">刪除中…</string>
+  <string name="imggen_page_selected_count">已選取：%1$d</string>
+  <string name="imggen_page_select_image">選擇圖片</string>
 </resources>

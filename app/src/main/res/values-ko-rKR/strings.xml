@@ -1365,4 +1365,11 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_time_reminder_interval_desc">메시지 사이의 간격이 이 간격을 초과하면 알림 메시지를 삽입합니다. 항상 첫 번째 사용자 메시지 전에 알림 메시지를 삽입합니다.</string>
   <string name="assistant_page_time_reminder_interval_value">%1$d분</string>
   <string name="assistant_page_context_message_limit_hint">무제한으로 하려면 0을 입력하세요. 그렇지 않으면 값이 클수록 좋습니다. 0 또는 최소 20으로 설정하는 것이 좋습니다.</string>
+  <string name="imggen_page_delete_images_title">이미지 삭제</string>
+  <string name="imggen_page_delete_images_message">선택한 이미지(%1$d)를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.</string>
+  <string name="imggen_page_delete_images_success">이미지 %1$d개가 삭제되었습니다.</string>
+  <string name="imggen_page_delete_images_failed">삭제됨: %1$d. 실패: %2$d. 다시 시도하세요.</string>
+  <string name="imggen_page_deleting">삭제 중…</string>
+  <string name="imggen_page_selected_count">선택됨: %1$d</string>
+  <string name="imggen_page_select_image">이미지 선택</string>
 </resources>

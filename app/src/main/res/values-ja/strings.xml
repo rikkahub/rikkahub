@@ -1365,4 +1365,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_time_reminder_interval_desc">メッセージ間隔がこの間隔を超えた場合にリマインダーを挿入します。最初のユーザーメッセージの前には常にリマインドします。</string>
   <string name="assistant_page_time_reminder_interval_value">%1$d 分</string>
   <string name="assistant_page_context_message_limit_hint">0を入力すると無制限になります。それ以外の場合、値は大きいほど良いです。0または20以上に設定することをお勧めします。</string>
+  <string name="imggen_page_delete_images_title">画像を削除</string>
+  <string name="imggen_page_delete_images_message">選択した画像 (%1$d) を削除しますか？この操作は元に戻せません。</string>
+  <string name="imggen_page_delete_images_success">画像を%1$d件削除しました</string>
+  <string name="imggen_page_delete_images_failed">削除：%1$d件、失敗：%2$d件。もう一度お試しください。</string>
+  <string name="imggen_page_deleting">削除中…</string>
+  <string name="imggen_page_selected_count">選択中: %1$d</string>
+  <string name="imggen_page_select_image">画像を選択</string>
 </resources>
