@@ -213,6 +213,11 @@ fun WorkspaceDetailPage(id: String) {
                         when {
                             entry.isDirectory -> vm.open(entry)
 
+                            entry.name.substringAfterLast('.').equals("svg", ignoreCase = true) ->
+                                navController.navigate(
+                                    Screen.WorkspaceFileEditor(id, state.area.name, entry.path)
+                                )
+
                             else -> when (entry.detectFileType()) {
                                 WorkspaceFileType.TEXT -> navController.navigate(
                                     Screen.WorkspaceFileEditor(id, state.area.name, entry.path)
