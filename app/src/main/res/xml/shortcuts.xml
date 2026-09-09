@@ -12,4 +12,14 @@
             android:data="rikkahub://shortcut" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
+    <shortcut
+        android:shortcutId="translator"
+        android:enabled="true"
+        android:icon="@drawable/ic_translate"
+        android:shortcutShortLabel="@string/translator_page_title"
+        android:shortcutLongLabel="@string/translator_page_title">
+        <intent
+            android:action="me.rerere.rikkahub.action.TRANSLATE"
+            android:targetClass="me.rerere.rikkahub.RouteActivity" />
+    </shortcut>
 </shortcuts>
