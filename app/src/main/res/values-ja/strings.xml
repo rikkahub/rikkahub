@@ -1372,4 +1372,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="imggen_page_deleting">削除中…</string>
   <string name="imggen_page_selected_count">選択中: %1$d</string>
   <string name="imggen_page_select_image">画像を選択</string>
+  <string name="workspace_detail_compatibility_mode">互換モード</string>
+  <string name="workspace_detail_compatibility_mode_desc">ターミナルが起動しない場合、これを有効にしてみてください。パフォーマンスが低下する可能性があります。新しいターミナルタブとその後のコマンドに適用されます。</string>
+  <string name="workspace_detail_settings_save_failed">設定の保存に失敗しました</string>
 </resources>

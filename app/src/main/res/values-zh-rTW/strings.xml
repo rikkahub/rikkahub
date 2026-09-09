@@ -1370,4 +1370,7 @@
   <string name="imggen_page_deleting">刪除中…</string>
   <string name="imggen_page_selected_count">已選取：%1$d</string>
   <string name="imggen_page_select_image">選擇圖片</string>
+  <string name="workspace_detail_compatibility_mode">相容模式</string>
+  <string name="workspace_detail_compatibility_mode_desc">如果終端機無法啟動，請嘗試啟用此選項。這可能會降低效能。適用於新的終端機分頁和後續指令。</string>
+  <string name="workspace_detail_settings_save_failed">儲存設定失敗</string>
 </resources>

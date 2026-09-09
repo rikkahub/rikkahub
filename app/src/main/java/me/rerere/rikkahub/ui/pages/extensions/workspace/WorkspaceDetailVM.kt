@@ -36,6 +36,13 @@ class WorkspaceDetailVM(
     private val _installError = MutableStateFlow<String?>(null)
     val installError = _installError.asStateFlow()
 
+    private val _settingsError = MutableStateFlow<String?>(null)
+    val settingsError = _settingsError.asStateFlow()
+
+    fun dismissSettingsError() {
+        _settingsError.value = null
+    }
+
     init {
         loadWorkspace()
         refresh()
@@ -170,6 +177,20 @@ class WorkspaceDetailVM(
                 file
             }.onSuccess(onReady).onFailure { error ->
                 _state.update { it.copy(error = error.message ?: "导出文件失败") }
+            }
+        }
+    }
+
+    fun setShellCompatibilityMode(enabled: Boolean) {
+        viewModelScope.launch {
+            try {
+                repository.setShellCompatibilityMode(id, enabled)
+                val workspace = repository.getById(id)
+                _state.update { it.copy(workspace = workspace) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _settingsError.value = error.message.orEmpty()
             }
         }
     }

@@ -1372,4 +1372,7 @@
   <string name="imggen_page_deleting">Удаление…</string>
   <string name="imggen_page_selected_count">Выбрано: %1$d</string>
   <string name="imggen_page_select_image">Выбрать изображение</string>
+  <string name="workspace_detail_compatibility_mode">Режим совместимости</string>
+  <string name="workspace_detail_compatibility_mode_desc">Попробуйте включить это, если терминал не запускается. Это может снизить производительность. Применяется к новым вкладкам терминала и последующим командам.</string>
+  <string name="workspace_detail_settings_save_failed">Не удалось сохранить настройки</string>
 </resources>

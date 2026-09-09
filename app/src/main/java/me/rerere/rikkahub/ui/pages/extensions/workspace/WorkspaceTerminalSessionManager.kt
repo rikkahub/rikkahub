@@ -40,12 +40,12 @@ class WorkspaceTerminalSessionManager internal constructor(
             .map { states -> states[root] ?: WorkspaceTerminalTabsState() }
             .distinctUntilChanged()
 
-    internal fun ensureSession(root: String) {
-        launchCreateTab(root = root, onlyIfEmpty = true)
+    internal fun ensureSession(root: String, shellCompatibilityMode: Boolean) {
+        launchCreateTab(root = root, onlyIfEmpty = true, shellCompatibilityMode = shellCompatibilityMode)
     }
 
-    internal fun createTab(root: String) {
-        launchCreateTab(root = root, onlyIfEmpty = false)
+    internal fun createTab(root: String, shellCompatibilityMode: Boolean) {
+        launchCreateTab(root = root, onlyIfEmpty = false, shellCompatibilityMode = shellCompatibilityMode)
     }
 
     internal fun selectTab(root: String, tabId: Long) {
@@ -98,13 +98,13 @@ class WorkspaceTerminalSessionManager internal constructor(
         }
     }
 
-    private fun launchCreateTab(root: String, onlyIfEmpty: Boolean) {
+    private fun launchCreateTab(root: String, onlyIfEmpty: Boolean, shellCompatibilityMode: Boolean) {
         if (root in creationJobs) return
 
         lateinit var job: Job
         job = appScope.launch(start = CoroutineStart.LAZY) {
             try {
-                createTab(root = root, onlyIfEmpty = onlyIfEmpty)
+                createTab(root = root, onlyIfEmpty = onlyIfEmpty, shellCompatibilityMode = shellCompatibilityMode)
             } finally {
                 creationJobs.remove(root, job)
             }
@@ -113,7 +113,7 @@ class WorkspaceTerminalSessionManager internal constructor(
         job.start()
     }
 
-    private suspend fun createTab(root: String, onlyIfEmpty: Boolean) = withContext(Dispatchers.Main.immediate) {
+    private suspend fun createTab(root: String, onlyIfEmpty: Boolean, shellCompatibilityMode: Boolean) = withContext(Dispatchers.Main.immediate) {
         val initialState = currentState(root)
         if (initialState.isCreating || (onlyIfEmpty && initialState.tabs.isNotEmpty())) {
             return@withContext
@@ -162,6 +162,7 @@ class WorkspaceTerminalSessionManager internal constructor(
                 context = appContext,
                 root = root,
                 client = client,
+                shellCompatibilityMode = shellCompatibilityMode,
             )
         }.onFailure { error ->
             Log.e(TAG, "Failed to create terminal for workspace $root", error)

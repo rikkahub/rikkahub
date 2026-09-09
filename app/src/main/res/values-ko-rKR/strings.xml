@@ -1372,4 +1372,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="imggen_page_deleting">삭제 중…</string>
   <string name="imggen_page_selected_count">선택됨: %1$d</string>
   <string name="imggen_page_select_image">이미지 선택</string>
+  <string name="workspace_detail_compatibility_mode">호환 모드</string>
+  <string name="workspace_detail_compatibility_mode_desc">터미널이 시작되지 않으면 이 옵션을 활성화해 보세요. 성능이 저하될 수 있습니다. 새 터미널 탭과 이후 명령에 적용됩니다.</string>
+  <string name="workspace_detail_settings_save_failed">설정 저장에 실패했습니다.</string>
 </resources>

@@ -1376,4 +1376,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="imggen_page_deleting">删除中…</string>
   <string name="imggen_page_selected_count">已选择：%1$d</string>
   <string name="imggen_page_select_image">选择图片</string>
+  <string name="workspace_detail_compatibility_mode">兼容模式</string>
+  <string name="workspace_detail_compatibility_mode_desc">如果终端无法启动，请尝试启用此功能。这可能会降低性能。适用于新的终端标签页及后续命令。</string>
+  <string name="workspace_detail_settings_save_failed">保存设置失败</string>
 </resources>
