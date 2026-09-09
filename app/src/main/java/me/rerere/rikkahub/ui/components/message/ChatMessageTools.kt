@@ -188,11 +188,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
         } else {
             null
         },
-        onClick = if (context.content != null || isPending || images.isNotEmpty()) {
-            { showResult = true }
-        } else {
-            null
-        },
+        onClick = { showResult = true },
         content = if (hasExtraContent) {
             {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
