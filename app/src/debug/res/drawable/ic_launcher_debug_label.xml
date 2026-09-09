@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- DEV as paths so the label does not depend on device fonts. -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M40,66 H44 Q48,66 48,70 Q48,74 44,74 H40 Z M42,68 V72 H44 Q46,72 46,70 Q46,68 44,68 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M50,66 H57 V68 H52 V69 H56 V71 H52 V72 H57 V74 H50 Z M59,66 H61.2 L63.5,71.5 L65.8,66 H68 L64.5,74 H62.5 Z" />
+</vector>

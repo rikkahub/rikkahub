@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Move the logo up to leave transparent space around the themed DEV label. -->
+    <item android:bottom="16dp" android:drawable="@mipmap/ic_launcher_monochrome" />
+    <item android:drawable="@drawable/ic_launcher_debug_label" />
+</layer-list>

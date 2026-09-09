@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Keep the badge inside the adaptive icon's central safe area. -->
+    <path
+        android:fillColor="#E65100"
+        android:pathData="M38,62 H70 Q73,62 73,65 V75 Q73,78 70,78 H38 Q35,78 35,75 V65 Q35,62 38,62 Z" />
+</vector>
