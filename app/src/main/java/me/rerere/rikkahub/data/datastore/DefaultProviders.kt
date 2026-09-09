@@ -66,6 +66,30 @@ val DEFAULT_PROVIDERS = listOf(
         },
     ),
     ProviderSetting.OpenAI(
+        id = Uuid.parse("2a05506f-3a59-450a-a493-33a82bc85a81"),
+        name = "APIMart",
+        baseUrl = "https://api.apimart.ai/v1",
+        apiKey = "",
+        enabled = false,
+        builtIn = true,
+        description = {
+            Text(
+                text = buildAnnotatedString {
+                    append("APIMart 是专注 AI 图片/视频生成的低价 API 平台，GPT-Image-2 低至 $0.006/张，1 美元可出图 160+ 张。图片、视频一套异步 API 通吃，提交任务拿 ID、回调取结果，跑批万张不超时、换模型不改代码。按量付费、无月费。")
+                    appendLine()
+                    withLink(LinkAnnotation.Url("https://go.apimart.ai/gh-rikkahub")) {
+                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
+                            append("通过此注册链接注册即可开用")
+                        }
+                    }
+                }
+            )
+        },
+        shortDescription = {
+            Text("AI 图片/视频生成，GPT-Image-2 低至 $0.006/张")
+        },
+    ),
+    ProviderSetting.OpenAI(
         id = Uuid.parse("56a94d29-c88b-41c5-8e09-38a7612d6cf8"),
         name = "硅基流动",
         baseUrl = "https://api.siliconflow.cn/v1",
@@ -241,6 +265,34 @@ val DEFAULT_PROVIDERS = listOf(
             )
         },
     ),
+    ProviderSetting.OpenAI(
+        id = Uuid.parse("afbc54ad-807e-4455-9594-7d7a546356ad"),
+        name = "MaruCode",
+        baseUrl = "https://api.muteki.site/v1",
+        apiKey = "",
+        enabled = false,
+        builtIn = true,
+        description = {
+            Text(
+                text = buildAnnotatedString {
+                    append("MaruCode 是一家偶尔做做慈善的小破站 API，自营号池，主要提供 Codex、Claude Code、GPT Image 等主流模型，支持 Websocket 协议，明码标价(Codex 0.25x, CC 1.5x)，透明汇率(1:1)。")
+                    appendLine()
+                    withLink(LinkAnnotation.Url("https://api.muteki.site/register?aff=Rikkahub&promo=Rikkahub")) {
+                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
+                            append("新用户注册送 2 刀")
+                        }
+                    }
+                    appendLine()
+                    withLink(LinkAnnotation.Url("https://images-2.muteki.site")) {
+                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
+                            append("生图工作台🖼️")
+                        }
+                    }
+                }
+            )
+        },
+        useResponseApi = true,
+    ),
     ProviderSetting.Claude(
         id = Uuid.parse("b4deabea-20fb-4101-a74c-65679c7e4754"),
         name = "MiniMax",
@@ -256,28 +308,5 @@ val DEFAULT_PROVIDERS = listOf(
         apiKey = "",
         enabled = false,
         builtIn = true,
-    ),
-    ProviderSetting.OpenAI(
-        id = Uuid.parse("53027b08-1b58-43d5-90ed-29173203e3d8"),
-        name = "AckAI",
-        baseUrl = "https://ackai.fun/v1",
-        apiKey = "",
-        enabled = false,
-        builtIn = true,
-        description = {
-            Text(
-                text = buildAnnotatedString {
-                    append(
-                        "所有AI大模型全都可以用！无需翻墙！价格是官方5折！\n" +
-                            "官网："
-                    )
-                    withLink(LinkAnnotation.Url("https://ackai.fun/register?aff=jxpP")) {
-                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
-                            append("https://ackai.fun")
-                        }
-                    }
-                }
-            )
-        }
     ),
 )
