@@ -15,13 +15,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SliderState
 import androidx.compose.material3.Text
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -91,10 +91,16 @@ fun ReasoningPicker(
     onUpdateReasoningLevel: (ReasoningLevel) -> Unit,
 ) {
     val currentIndex = levels.indexOf(reasoningLevel).coerceAtLeast(0)
-    var sliderValue by remember { mutableFloatStateOf(currentIndex.toFloat()) }
+    val sliderState = remember {
+        SliderState(
+            value = currentIndex.toFloat(),
+            trackRange = 0f..(levelCount - 1).toFloat(),
+            steps = levelCount - 2,
+        )
+    }
 
     LaunchedEffect(currentIndex) {
-        sliderValue = currentIndex.toFloat()
+        sliderState.value = currentIndex.toFloat()
     }
 
     ModalBottomSheet(
@@ -156,15 +162,13 @@ fun ReasoningPicker(
             }
 
             Slider(
-                value = sliderValue,
-                onValueChange = { sliderValue = it },
+                state = sliderState,
+                onValueChange = { sliderState.value = it },
                 onValueChangeFinished = {
-                    val snappedIndex = sliderValue.roundToInt().coerceIn(0, levelCount - 1)
-                    sliderValue = snappedIndex.toFloat()
+                    val snappedIndex = sliderState.value.roundToInt().coerceIn(0, levelCount - 1)
+                    sliderState.value = snappedIndex.toFloat()
                     onUpdateReasoningLevel(levels[snappedIndex])
                 },
-                valueRange = 0f..(levelCount - 1).toFloat(),
-                steps = levelCount - 2,
                 modifier = Modifier.fillMaxWidth(),
                 thumb = {
                     Box(
