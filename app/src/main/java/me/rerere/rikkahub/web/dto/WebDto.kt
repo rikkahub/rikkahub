@@ -214,6 +214,7 @@ data class MessageDto(
     val annotations: List<UIMessageAnnotation> = emptyList(),
     val createdAt: String,
     val finishedAt: String? = null,
+    val generationTimeMillis: Long? = null,
     val modelId: String? = null,
     val usage: TokenUsage? = null,
     val translation: String? = null
@@ -353,6 +354,7 @@ fun UIMessage.toDto() = MessageDto(
     annotations = annotations,
     createdAt = createdAt.toString(),
     finishedAt = finishedAt?.toString(),
+    generationTimeMillis = generationTimeMillis,
     modelId = modelId?.toString(),
     usage = usage,
     translation = translation

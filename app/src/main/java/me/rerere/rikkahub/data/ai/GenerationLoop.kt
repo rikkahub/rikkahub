@@ -400,6 +400,7 @@ class GenerationLoop(
             },
             sessionId = conversationId?.toString(),
         )
+        var stepStart = Clock.System.now()
         try {
             if (stream) {
                 // 每次重试都从本次模型调用开始前的消息快照重新合并，避免将重试响应
@@ -421,6 +422,7 @@ class GenerationLoop(
                     val streamChunkHandler = StreamChunkHandler(model)
                     var attemptMessages = responseBaseMessages
                     try {
+                        stepStart = Clock.System.now()
                         providerImpl.streamText(
                             providerSetting = provider,
                             messages = internalMessages,
@@ -458,6 +460,7 @@ class GenerationLoop(
                     processingStatus = processingStatus,
                     enabled = settings.networkSetting.enableAutoRetry,
                 ) {
+                    stepStart = Clock.System.now()
                     providerImpl.generateText(
                         providerSetting = provider,
                         messages = internalMessages,
@@ -470,6 +473,13 @@ class GenerationLoop(
         } finally {
             processingStatus.value = null
         }
+        val stepDurationMillis = (Clock.System.now() - stepStart).inWholeMilliseconds
+        val lastMessage = messages.last()
+        messages = messages.dropLast(1) + lastMessage.copy(
+            generationTimeMillis = lastMessage.generationTimeMillis?.plus(stepDurationMillis)
+                ?: stepDurationMillis
+        )
+        onUpdateMessages(messages)
     }
 
     private suspend fun <T> executeProviderRequestWithRetry(

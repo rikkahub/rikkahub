@@ -69,6 +69,7 @@ export interface MessageDto {
   annotations?: UIMessageAnnotation[];
   createdAt: string;
   finishedAt?: string | null;
+  generationTimeMillis?: number | null;
   modelId?: string | null;
   usage?: TokenUsage | null;
   translation?: string | null;
