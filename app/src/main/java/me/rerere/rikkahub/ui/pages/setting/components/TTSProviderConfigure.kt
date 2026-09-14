@@ -5,13 +5,23 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.View
+import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
@@ -48,6 +58,7 @@ fun TTSProviderConfigure(
                     is TTSProviderSetting.Step -> "Step"
                     is TTSProviderSetting.ElevenLabs -> "ElevenLabs"
                     is TTSProviderSetting.FishAudio -> "Fish Audio"
+                    is TTSProviderSetting.Volcengine -> "火山引擎"
                 },
                 options = providers,
                 readOnly = true,
@@ -64,6 +75,7 @@ fun TTSProviderConfigure(
                         TTSProviderSetting.MiMo::class -> "MiMo"
                         TTSProviderSetting.ElevenLabs::class -> "ElevenLabs"
                         TTSProviderSetting.FishAudio::class -> "Fish Audio"
+                        TTSProviderSetting.Volcengine::class -> "火山引擎"
                         TTSProviderSetting.Step::class -> "Step"
                         else -> providerClass.simpleName ?: "Unknown"
                     }
@@ -125,6 +137,8 @@ fun TTSProviderConfigure(
                             name = "Step TTS"
                         )
 
+                        TTSProviderSetting.Volcengine::class -> TTSProviderSetting.Volcengine(id = setting.id)
+
                         else -> setting
                     }
                     onValueChange(newSetting)
@@ -160,6 +174,7 @@ fun TTSProviderConfigure(
             is TTSProviderSetting.ElevenLabs -> ElevenLabsTTSConfiguration(setting, onValueChange)
             is TTSProviderSetting.FishAudio -> FishAudioTTSConfiguration(setting, onValueChange)
             is TTSProviderSetting.Step -> StepTTSConfiguration(setting, onValueChange)
+            is TTSProviderSetting.Volcengine -> VolcengineTTSConfiguration(setting, onValueChange)
         }
     }
 }
@@ -1247,6 +1262,76 @@ private fun StepTTSConfiguration(
             placeholder = { Text("例如: 语气温柔, 语速偏慢") },
             minLines = 2,
             maxLines = 4,
+        )
+    }
+}
+
+@Composable
+private fun VolcengineTTSConfiguration(
+    setting: TTSProviderSetting.Volcengine,
+    onValueChange: (TTSProviderSetting) -> Unit
+) {
+    var keyVisible by remember(setting.id) { mutableStateOf(false) }
+
+    FormItem(
+        label = { Text("API Key") },
+        description = { Text("请填写豆包语音控制台的 API Key，不是火山方舟控制台的 API Key。") }
+    ) {
+        OutlinedTextField(
+            value = setting.apiKey,
+            onValueChange = { onValueChange(setting.copy(apiKey = it)) },
+            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { keyVisible = !keyVisible }) {
+                    Icon(
+                        imageVector = if (keyVisible) HugeIcons.ViewOff else HugeIcons.View,
+                        contentDescription = if (keyVisible) "隐藏 API Key" else "显示 API Key",
+                    )
+                }
+            },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    FormItem(label = { Text(stringResource(R.string.setting_tts_page_base_url)) }) {
+        OutlinedTextField(
+            value = setting.baseUrl,
+            onValueChange = { onValueChange(setting.copy(baseUrl = it)) },
+            placeholder = { Text("https://openspeech.bytedance.com") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    FormItem(
+        label = { Text("资源 ID") },
+        description = { Text("需与已开通的服务和音色匹配，默认 seed-tts-2.0。") }
+    ) {
+        OutlinedTextField(
+            value = setting.resourceId,
+            onValueChange = { onValueChange(setting.copy(resourceId = it)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    FormItem(
+        label = { Text("音色 ID") },
+        description = { Text("填写控制台中的音色 ID，默认使用 VV 音色。") }
+    ) {
+        OutlinedTextField(
+            value = setting.speaker,
+            onValueChange = { onValueChange(setting.copy(speaker = it)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    FormItem(
+        label = { Text(stringResource(R.string.setting_tts_page_speed)) },
+        description = { Text("范围 -50～100，0 为正常语速，-50 为半速，100 为两倍速。") }
+    ) {
+        OutlinedNumberInput(
+            value = setting.speechRate,
+            onValueChange = { onValueChange(setting.copy(speechRate = it.coerceIn(-50, 100))) },
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }

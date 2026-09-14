@@ -283,6 +283,21 @@ sealed class TTSProviderSetting {
         }
     }
 
+    @Serializable
+    @SerialName("volcengine")
+    data class Volcengine(
+        override val id: Uuid = Uuid.random(),
+        override val name: String = "Volcengine TTS",
+        val apiKey: String = "",
+        val baseUrl: String = "https://openspeech.bytedance.com",
+        val resourceId: String = "seed-tts-2.0",
+        val speaker: String = "zh_female_vv_uranus_bigtts",
+        val speechRate: Int = 0,
+    ) : TTSProviderSetting() {
+        override fun copyProvider(id: Uuid, name: String): TTSProviderSetting =
+            copy(id = id, name = name)
+    }
+
     companion object {
         val Types by lazy {
             listOf(
@@ -297,6 +312,7 @@ sealed class TTSProviderSetting {
                 ElevenLabs::class,
                 Step::class,
                 FishAudio::class,
+                Volcengine::class,
             )
         }
     }
