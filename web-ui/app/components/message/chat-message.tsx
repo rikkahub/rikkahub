@@ -130,6 +130,7 @@ function getNerdStats(
   usage: TokenUsage,
   createdAt: string,
   finishedAt: string | null | undefined,
+  generationTimeMillis: number | null | undefined,
   t: TFunction,
 ) {
   const stats: Array<{ key: string; icon: React.ReactNode; label: string }> = [];
@@ -159,7 +160,11 @@ function getNerdStats(
   const durationMs = getDurationMs(createdAt, finishedAt);
   if (durationMs && usage.completionTokens > 0) {
     const durationSeconds = durationMs / 1000;
-    const tps = usage.completionTokens / durationSeconds;
+    const generationMs =
+      typeof generationTimeMillis === 'number' && generationTimeMillis > 0
+        ? generationTimeMillis
+        : durationMs;
+    const tps = usage.completionTokens / (generationMs / 1000);
 
     stats.push({
       key: "speed",
@@ -491,7 +496,13 @@ const ChatMessageNerdLineRow = React.memo(({
     return null;
   }
 
-  const stats = getNerdStats(message.usage, message.createdAt, message.finishedAt, t);
+  const stats = getNerdStats(
+    message.usage,
+    message.createdAt,
+    message.finishedAt,
+    message.generationTimeMillis,
+    t,
+  );
   if (stats.length === 0) return null;
 
   return (
