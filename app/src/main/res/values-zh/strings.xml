@@ -542,7 +542,7 @@
   <string name="reasoning_picker_title">调整模型思考深度</string>
   <string name="reasoning_xhigh">超高</string>
   <string name="regenerate">重新生成</string>
-  <string name="regenerate_confirm_message">确定要重新生成此消息吗？</string>
+  <string name="regenerate_confirm_message">确定要重新生成此消息吗？此消息下方所有消息会被清理</string>
   <string name="render_with_webview">网页视图渲染</string>
   <string name="rikkahub_provider_description">官方免费 AI 服务，使用用户赞助资金为新用户提供部分免费模型作为备用，无需 API 密钥。有严格速率限制，如已购买自有服务商，请尽量使用自有服务商。</string>
   <string name="safe_mode_assistants">助手</string>

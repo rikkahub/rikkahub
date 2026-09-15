@@ -540,7 +540,7 @@
   <string name="reasoning_picker_title">Настроить глубину мышления модели</string>
   <string name="reasoning_xhigh">Очень высокий</string>
   <string name="regenerate">Сгенерировать заново</string>
-  <string name="regenerate_confirm_message">Вы уверены, что хотите перегенерировать это сообщение?</string>
+  <string name="regenerate_confirm_message">Вы уверены, что хотите заново сгенерировать это сообщение? Все сообщения ниже этого будут удалены.</string>
   <string name="render_with_webview">Отображать в WebView</string>
   <string name="rikkahub_provider_description">Официальный бесплатный AI-сервис, использующий средства спонсоров для предоставления новым пользователям бесплатных моделей в качестве резерва; API-ключ не требуется. Действуют строгие ограничения по частоте запросов. Если у вас есть собственный провайдер, используйте его по возможности.</string>
   <string name="safe_mode_assistants">Помощники</string>

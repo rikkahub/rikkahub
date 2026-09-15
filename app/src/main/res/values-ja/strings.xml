@@ -540,7 +540,7 @@
   <string name="reasoning_picker_title">モデルの思考深度を調整</string>
   <string name="reasoning_xhigh">XHigh</string>
   <string name="regenerate">再生成</string>
-  <string name="regenerate_confirm_message">このメッセージを再生成してもよろしいですか？</string>
+  <string name="regenerate_confirm_message">このメッセージを再生成してもよろしいですか？このメッセージより下のメッセージはすべて削除されます。</string>
   <string name="render_with_webview">WebViewで表示</string>
   <string name="rikkahub_provider_description">公式の無料AIサービスです。ユーザーのスポンサー資金を使い、新規ユーザーのためのフォールバック用の一部無料モデルを提供します。APIキーは不要です。厳しいレート制限があります。独自のプロバイダーを購入済みの場合は、可能な限りそちらをご利用ください。</string>
   <string name="safe_mode_assistants">アシスタント</string>
