@@ -1375,4 +1375,9 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="workspace_detail_compatibility_mode">호환 모드</string>
   <string name="workspace_detail_compatibility_mode_desc">터미널이 시작되지 않으면 이 옵션을 활성화해 보세요. 성능이 저하될 수 있습니다. 새 터미널 탭과 이후 명령에 적용됩니다.</string>
   <string name="workspace_detail_settings_save_failed">설정 저장에 실패했습니다.</string>
+  <string name="setting_display_page_background_effect_title">입력창 배경 효과</string>
+  <string name="setting_display_page_background_effect_desc">채팅 입력창에 블러 또는 글래스 효과를 사용합니다</string>
+  <string name="setting_display_page_background_effect_type">배경 효과 유형</string>
+  <string name="setting_display_page_background_effect_blur">블러</string>
+  <string name="setting_display_page_background_effect_glass">글래스</string>
 </resources>

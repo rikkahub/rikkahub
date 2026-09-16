@@ -1375,4 +1375,9 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_detail_compatibility_mode">互換モード</string>
   <string name="workspace_detail_compatibility_mode_desc">ターミナルが起動しない場合、これを有効にしてみてください。パフォーマンスが低下する可能性があります。新しいターミナルタブとその後のコマンドに適用されます。</string>
   <string name="workspace_detail_settings_save_failed">設定の保存に失敗しました</string>
+  <string name="setting_display_page_background_effect_title">入力バーの背景エフェクト</string>
+  <string name="setting_display_page_background_effect_desc">チャット入力バーのぼかしまたはガラス効果を有効にします</string>
+  <string name="setting_display_page_background_effect_type">背景効果の種類</string>
+  <string name="setting_display_page_background_effect_blur">ぼかし</string>
+  <string name="setting_display_page_background_effect_glass">ガラス</string>
 </resources>

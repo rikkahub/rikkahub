@@ -1379,4 +1379,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_detail_compatibility_mode">兼容模式</string>
   <string name="workspace_detail_compatibility_mode_desc">如果终端无法启动，请尝试启用此功能。这可能会降低性能。适用于新的终端标签页及后续命令。</string>
   <string name="workspace_detail_settings_save_failed">保存设置失败</string>
+  <string name="setting_display_page_background_effect_title">输入栏背景效果</string>
+  <string name="setting_display_page_background_effect_desc">为聊天输入栏启用模糊或玻璃效果</string>
+  <string name="setting_display_page_background_effect_type">背景效果类型</string>
+  <string name="setting_display_page_background_effect_blur">模糊</string>
+  <string name="setting_display_page_background_effect_glass">玻璃</string>
 </resources>

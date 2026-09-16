@@ -1373,4 +1373,9 @@
   <string name="workspace_detail_compatibility_mode">相容模式</string>
   <string name="workspace_detail_compatibility_mode_desc">如果終端機無法啟動，請嘗試啟用此選項。這可能會降低效能。適用於新的終端機分頁和後續指令。</string>
   <string name="workspace_detail_settings_save_failed">儲存設定失敗</string>
+  <string name="setting_display_page_background_effect_title">輸入列背景效果</string>
+  <string name="setting_display_page_background_effect_desc">在聊天輸入列上啟用模糊或玻璃效果</string>
+  <string name="setting_display_page_background_effect_type">背景效果類型</string>
+  <string name="setting_display_page_background_effect_blur">模糊</string>
+  <string name="setting_display_page_background_effect_glass">玻璃</string>
 </resources>
