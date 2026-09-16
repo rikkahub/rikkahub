@@ -144,7 +144,16 @@ kotlin {
     }
 }
 
+// Local JVM tests need the desktop native library instead of the Android AAR.
+configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
+    resolutionStrategy.dependencySubstitution {
+        substitute(module("io.github.dokar3:quickjs-kt-android"))
+            .using(module("io.github.dokar3:quickjs-kt-jvm:${libs.versions.quickjs.get()}"))
+    }
+}
+
 dependencies {
+    implementation(libs.quickjs)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.process)

@@ -34027,8 +34027,6 @@ SPLcom/petterp/floatingx/util/FxLog$Companion;-><init>()V
 SPLcom/petterp/floatingx/util/FxLog$Companion;-><init>(Lkotlin/jvm/internal/DefaultConstructorMarker;)V
 SPLcom/petterp/floatingx/util/FxLog$Companion;->builder(ZLjava/lang/String;)Lcom/petterp/floatingx/util/FxLog;
 Lcom/petterp/floatingx/view/IFxInternalHelper;
-Lcom/whl/quickjs/android/QuickJSLoader;
-SPLcom/whl/quickjs/android/QuickJSLoader;->init()V
 Ldev/chrisbanes/haze/CanvasKt;
 SPLdev/chrisbanes/haze/CanvasKt;->drawContentSafely(Landroidx/compose/ui/graphics/drawscope/ContentDrawScope;)V
 Ldev/chrisbanes/haze/HazeArea;

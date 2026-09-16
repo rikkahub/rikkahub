@@ -3,10 +3,13 @@ package me.rerere.search
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
-import com.whl.quickjs.wrapper.QuickJSContext
+import com.dokar.quickjs.quickJs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -61,11 +64,11 @@ object CustomJsSearchService : SearchService<SearchServiceOptions.CustomJsOption
 
             val resultJson = executeScript(
                 userScript = script,
-                invocation = "search(${quoteJsString(query)}, ${commonOptions.resultSize})"
+                invocation = "search(${JsonPrimitive(query)}, ${commonOptions.resultSize})"
             )
 
             json.decodeFromString<SearchResult>(resultJson)
-        }
+        }.onFailure { if (it is CancellationException) throw it }
     }
 
     override suspend fun scrape(
@@ -83,36 +86,23 @@ object CustomJsSearchService : SearchService<SearchServiceOptions.CustomJsOption
             )
 
             json.decodeFromString<ScrapedResult>(resultJson)
-        }
+        }.onFailure { if (it is CancellationException) throw it }
     }
 
-    private fun executeScript(userScript: String, invocation: String): String {
-        val context = QuickJSContext.create()
-        try {
-            context.injectFetch(httpClient)
-            context.evaluate(userScript)
+    private suspend fun executeScript(userScript: String, invocation: String): String =
+        withTimeoutOrNull(30_000) {
+            quickJs(Dispatchers.IO) {
+                memoryLimit = 64L * 1024 * 1024
+                maxStackSize = 256L * 1024
+                evaluationTimeoutMillis = 30_000
+                // The previous runtime supplied console even without a log listener.
+                evaluate<Unit>("globalThis.console = { log() {}, info() {}, warn() {}, error() {}, debug() {} }; void 0;")
+                injectFetch(httpClient)
+                evaluate<Unit>(userScript + "\n;void 0;")
 
-            val result = context.evaluate("JSON.stringify($invocation)")
-            return result as? String ?: error("Function returned null or undefined")
-        } finally {
-            context.destroy()
-        }
-    }
-
-    private fun quoteJsString(s: String): String {
-        val sb = StringBuilder("\"")
-        for (ch in s) {
-            when (ch) {
-                '"' -> sb.append("\\\"")
-                '\\' -> sb.append("\\\\")
-                '\n' -> sb.append("\\n")
-                '\r' -> sb.append("\\r")
-                '\t' -> sb.append("\\t")
-                else -> sb.append(ch)
+                // Await async functions too, and serialize inside the interruptible engine.
+                evaluate<String?>("JSON.stringify(await $invocation)")
+                    ?: error("Function returned null or undefined")
             }
-        }
-        sb.append("\"")
-        return sb.toString()
-    }
-
+        } ?: error("JavaScript search execution timed out after 30s")
 }

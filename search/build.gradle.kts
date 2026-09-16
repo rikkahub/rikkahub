@@ -24,6 +24,14 @@ android {
     }
 }
 
+// Use desktop native binaries when executing local JVM tests.
+configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
+    resolutionStrategy.dependencySubstitution {
+        substitute(module("io.github.dokar3:quickjs-kt-android"))
+            .using(module("io.github.dokar3:quickjs-kt-jvm:${libs.versions.quickjs.get()}"))
+    }
+}
+
 dependencies {
     implementation(project(":ai"))
     implementation(project(":common"))
