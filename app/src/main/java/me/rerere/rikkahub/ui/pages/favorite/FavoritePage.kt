@@ -141,6 +141,8 @@ private fun SwipeableFavoriteCard(
     LaunchedEffect(dismissState.currentValue) {
         when (dismissState.currentValue) {
             SwipeToDismissBoxValue.EndToStart -> {
+                // Reset before removal so undo cannot restore a dismissed swipe state.
+                dismissState.reset()
                 onDelete()
             }
 
