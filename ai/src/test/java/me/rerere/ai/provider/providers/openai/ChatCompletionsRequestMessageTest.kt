@@ -284,7 +284,7 @@ class ChatCompletionsRequestMessageTest {
         val nextMsg = result[assistantIndex + 1].jsonObject
         assertEquals("tool", nextMsg["role"]?.jsonPrimitive?.content)
         assertEquals("call_abc", nextMsg["tool_call_id"]?.jsonPrimitive?.content)
-        assertEquals("my_tool", nextMsg["name"]?.jsonPrimitive?.content)
+        assertFalse("Tool results must omit unsupported name field", nextMsg.containsKey("name"))
     }
 
     @Test
