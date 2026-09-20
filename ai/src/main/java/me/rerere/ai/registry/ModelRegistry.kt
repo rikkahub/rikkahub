@@ -461,6 +461,12 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val STEP_5 = defineModel {
+        tokens("step", "5")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val INTERN_S1 = defineModel {
         tokens("intern", "s", "1")
         visionInput()
@@ -664,6 +670,7 @@ object ModelRegistry {
         KIMI_K3_ALIAS,
         STEP_3,
         STEP_3_7_FLASH,
+        STEP_5,
         INTERN_S1,
         GLM_4_5,
         GLM_4_6,
