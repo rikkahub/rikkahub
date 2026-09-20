@@ -1,8 +1,15 @@
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
+import android.content.ContentResolver
+import android.net.Uri
+import android.provider.DocumentsContract
+import android.webkit.MimeTypeMap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.getAndUpdate
@@ -26,6 +33,72 @@ class WorkspaceDetailVM(
 ) : ViewModel() {
     private val _state = MutableStateFlow(WorkspaceDetailState())
     val state = _state.asStateFlow()
+
+    private var pendingExport: Pair<WorkspaceStorageArea, List<WorkspaceFileEntry>>? = null
+
+    fun prepareBatchExport(entries: List<WorkspaceFileEntry>): Boolean {
+        val files = entries.filterNot { it.isDirectory }
+        if (pendingExport != null || state.value.exporting || files.isEmpty()) return false
+        pendingExport = state.value.area to files
+        return true
+    }
+
+    fun dismissExportResult() {
+        _state.update { it.copy(exportResult = null) }
+    }
+
+    fun exportFilesToDirectory(treeUri: Uri?, resolver: ContentResolver) {
+        val (area, entries) = pendingExport.also { pendingExport = null } ?: return
+        if (treeUri == null) return
+        _state.update { it.copy(exporting = true, exportCompleted = 0, exportTotal = entries.size, exportResult = null) }
+        viewModelScope.launch {
+            var succeeded = 0
+            val failures = mutableListOf<String>()
+            try {
+                withContext(Dispatchers.IO) {
+                    val parent = DocumentsContract.buildDocumentUriUsingTree(
+                        treeUri, DocumentsContract.getTreeDocumentId(treeUri)
+                    )
+                    entries.forEachIndexed { index, entry ->
+                        ensureActive()
+                        var destination: Uri? = null
+                        try {
+                            val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(
+                                entry.name.substringAfterLast('.', "").lowercase()
+                            ) ?: "application/octet-stream"
+                            val document = DocumentsContract.createDocument(resolver, parent, mime, entry.name)
+                                ?: error("无法创建目标文件")
+                            destination = document
+                            val output = resolver.openOutputStream(document) ?: error("无法打开目标文件")
+                            output.use { repository.exportFile(id, area, entry.path, it) }
+                            succeeded++
+                            destination = null
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            failures += "${entry.name}：${error.message ?: "导出失败"}"
+                        } finally {
+                            // 只清理本次创建但未完整写入的文件。
+                            destination?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
+                        }
+                        _state.update { it.copy(exportCompleted = index + 1) }
+                    }
+                }
+                _state.update {
+                    it.copy(exportResult = buildString {
+                        append("已导出 $succeeded/${entries.size} 个文件")
+                        if (failures.isNotEmpty()) append("\n\n" + failures.joinToString("\n"))
+                    })
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _state.update { it.copy(exportResult = "导出失败：${error.message}") }
+            } finally {
+                _state.update { it.copy(exporting = false) }
+            }
+        }
+    }
 
     private val _terminalState = MutableStateFlow(WorkspaceTerminalState())
     val terminalState = _terminalState.asStateFlow()
@@ -289,6 +362,10 @@ data class WorkspaceDetailState(
     val entries: List<WorkspaceFileEntry> = emptyList(),
     val loading: Boolean = false,
     val error: String? = null,
+    val exporting: Boolean = false,
+    val exportCompleted: Int = 0,
+    val exportTotal: Int = 0,
+    val exportResult: String? = null,
 )
 
 data class WorkspaceTerminalState(
