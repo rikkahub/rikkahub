@@ -284,9 +284,10 @@ class ChatCompletionsAPI(
 
                     "dashscope.aliyuncs.com" -> {
                         // 阿里云百炼
-                        // https://bailian.console.aliyun.com/console?tab=doc#/doc/?type=model&url=https%3A%2F%2Fhelp.aliyun.com%2Fdocument_detail%2F2870973.html&renderType=iframe
-                        put("enable_thinking", level.isEnabled)
-                        if (level != ReasoningLevel.AUTO) put("thinking_budget", level.budgetTokens)
+                        // https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions
+                        if (level != ReasoningLevel.AUTO) {
+                            put("reasoning_effort", level.effort)
+                        }
                     }
 
                     "ark.cn-beijing.volces.com" -> {
