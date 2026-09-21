@@ -51,9 +51,12 @@
 - 📝 AI翻译
 - 🌐 自定义HTTP请求头和请求体
 
-## ✨ 贡献
+## ✨ 开发
 
-本项目使用[Android Studio](https://developer.android.com/studio)开发，欢迎提交PR
+> [!IMPORTANT]
+> 本项目不接受 Pull Request（PR）。
+
+本项目使用[Android Studio](https://developer.android.com/studio)开发。
 
 技术栈文档:
 
@@ -71,12 +74,6 @@
 
 > [!TIP]
 > 你需要在 `app` 文件夹下添加 `google-services.json` 文件才能构建应用。
-
-> [!IMPORTANT]  
-> 以下PR将被拒绝：
-> 1. 添加新语言，因为添加新语言会增加后续本地化的工作量
-> 2. 添加新功能，这个项目是有态度的
-> 3. AI生成的大规模重构和更改
 
 ## 💰 捐赠
 
