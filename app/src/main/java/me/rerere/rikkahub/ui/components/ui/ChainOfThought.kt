@@ -33,14 +33,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastForEach
+import androidx.compose.ui.util.fastForEachIndexed
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowRight01
@@ -144,26 +141,20 @@ fun <T> ChainOfThought(
             }
 
             val lineColor = MaterialTheme.colorScheme.outlineVariant
-            val scope = remember { ChainOfThoughtScopeImpl() }
-            Box(
-                // 将时间线和节点单独合成，节点清除连线时不会影响卡片背景。
-                modifier = Modifier.graphicsLayer {
-                    compositingStrategy = CompositingStrategy.Offscreen
-                }.drawBehind {
-                    val x = 12.dp.toPx()
-                    val offsetPx = 18.dp.toPx()
-                    drawLine(
-                        color = lineColor,
-                        start = Offset(x, offsetPx),
-                        end = Offset(x, size.height - offsetPx),
-                        strokeWidth = 1.dp.toPx()
-                    )
-                }
-            ) {
-                Column {
-                    visibleSteps.fastForEach { step ->
-                        scope.content(step)
+            // 每个步骤只绘制自己的连线分段并在节点处留空，
+            // 避免使用离屏合成 + BlendMode.Clear（离屏层过大时部分设备会退化，节点区域被清成黑块）。
+            Column {
+                visibleSteps.fastForEachIndexed { index, step ->
+                    val isFirst = index == 0
+                    val isLast = index == visibleSteps.lastIndex
+                    val scope = remember(isFirst, isLast, lineColor) {
+                        ChainOfThoughtScopeImpl(
+                            isFirst = isFirst,
+                            isLast = isLast,
+                            lineColor = lineColor,
+                        )
                     }
+                    scope.content(step)
                 }
             }
         }
@@ -226,7 +217,11 @@ interface ChainOfThoughtScope {
     )
 }
 
-private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
+private class ChainOfThoughtScopeImpl(
+    private val isFirst: Boolean,
+    private val isLast: Boolean,
+    private val lineColor: Color,
+) : ChainOfThoughtScope {
     @Composable
     override fun ChainOfThoughtStep(
         icon: @Composable (() -> Unit)?,
@@ -302,6 +297,29 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
             // Label 行：Icon + Label + Extra + 指示器
             Row(
                 modifier = Modifier
+                    .drawBehind {
+                        // 节点上下的连线分段，节点（20.dp）区域留空
+                        val x = 12.dp.toPx()
+                        val centerY = size.height / 2
+                        val gap = 10.dp.toPx()
+                        val strokeWidth = 1.dp.toPx()
+                        if (!isFirst) {
+                            drawLine(
+                                color = lineColor,
+                                start = Offset(x, 0f),
+                                end = Offset(x, centerY - gap),
+                                strokeWidth = strokeWidth,
+                            )
+                        }
+                        if (!isLast) {
+                            drawLine(
+                                color = lineColor,
+                                start = Offset(x, centerY + gap),
+                                end = Offset(x, size.height),
+                                strokeWidth = strokeWidth,
+                            )
+                        }
+                    }
                     .then(
                         if (shouldFillMaxWidth) {
                             Modifier.fillMaxWidth()
@@ -326,17 +344,12 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // 清除节点区域的连线，避免半透明卡片背景重复叠加。
                 Box(
                     modifier = Modifier.width(24.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .drawBehind {
-                                drawRect(color = Color.Transparent, blendMode = BlendMode.Clear)
-                            },
+                        modifier = Modifier.size(20.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (icon != null) {
@@ -404,6 +417,17 @@ private class ChainOfThoughtScopeImpl : ChainOfThoughtScope {
                                 Modifier
                             }
                         )
+                        .drawBehind {
+                            if (!isLast) {
+                                val x = 12.dp.toPx()
+                                drawLine(
+                                    color = lineColor,
+                                    start = Offset(x, 0f),
+                                    end = Offset(x, size.height),
+                                    strokeWidth = 1.dp.toPx(),
+                                )
+                            }
+                        }
                         .padding(start = 32.dp, top = 4.dp, bottom = 8.dp)
                 ) {
                     content()
