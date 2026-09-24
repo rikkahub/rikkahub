@@ -40,6 +40,7 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
     private fun parseEvent(payload: JsonObject): List<StreamChunk> {
         val chunkType = payload["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
         val itemId = payload["item_id"]?.jsonPrimitive?.contentOrNull
+        val outputIndex = payload["output_index"]?.jsonPrimitive?.intOrNull
         val contentIndex = payload["content_index"]?.jsonPrimitive?.intOrNull ?: 0
         val summaryIndex = payload["summary_index"]?.jsonPrimitive?.intOrNull ?: contentIndex
         val textId = itemId?.let { "$it:text:$contentIndex" }
@@ -82,11 +83,12 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
             "response.output_item.added" -> {
                 val item = payload["item"]?.jsonObject ?: error("chunk item not found")
                 val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
-                val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
+                val id = item.itemIdOrCallId() ?: error("chunk id not found")
                 when (type) {
                     "function_call" -> {
                         val callId = item["call_id"]?.jsonPrimitive?.contentOrNull ?: id
                         state.toolCallIdsByItemId[id] = callId
+                        outputIndex?.let { state.toolCallIdsByOutputIndex[it] = callId }
                         state.startTool(
                             id = callId,
                             name = item["name"]?.jsonPrimitive?.contentOrNull ?: "",
@@ -109,7 +111,7 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
             "response.output_item.done" -> {
                 val item = payload["item"]?.jsonObject ?: error("chunk item not found")
                 val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
-                val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
+                val id = item.itemIdOrCallId() ?: error("chunk id not found")
                 when (type) {
                     "reasoning" -> {
                         val metadata = OpenAIReasoningMetadata(
@@ -140,16 +142,12 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
                     } else emptyList()
                 }
             }
-            "response.function_call_arguments.delta" -> {
-                val requiredItemId = itemId ?: error("item_id not found")
-                state.toolDelta(
-                    state.toolCallIdsByItemId[requiredItemId] ?: requiredItemId,
-                    payload["delta"]?.jsonPrimitive?.contentOrNull ?: "",
-                )
-            }
+            "response.function_call_arguments.delta" -> state.toolDelta(
+                resolveToolCallId(payload, itemId, outputIndex),
+                payload["delta"]?.jsonPrimitive?.contentOrNull ?: "",
+            )
             "response.function_call_arguments.done" -> {
-                val requiredItemId = itemId ?: error("item_id not found")
-                val toolCallId = state.toolCallIdsByItemId[requiredItemId] ?: requiredItemId
+                val toolCallId = resolveToolCallId(payload, itemId, outputIndex)
                 buildList {
                     if (toolCallId !in state.toolIdsWithInput) {
                         addAll(state.toolDelta(
@@ -176,6 +174,17 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
             else -> parseServerToolStatusEvent(chunkType, itemId)
         }
     }
+
+    // 部分兼容网关的 arguments 事件不带 item_id，只带 call_id，依次回退到 call_id、output_index
+    private fun resolveToolCallId(payload: JsonObject, itemId: String?, outputIndex: Int?): String =
+        itemId?.let { state.toolCallIdsByItemId[it] ?: it }
+            ?: payload["call_id"]?.jsonPrimitive?.contentOrNull
+            ?: outputIndex?.let { state.toolCallIdsByOutputIndex[it] }
+            ?: error("item_id not found")
+
+    // function_call 的 item.id 在规范中是可选的，只有 call_id 必填
+    private fun JsonObject.itemIdOrCallId(): String? =
+        this["id"]?.jsonPrimitive?.contentOrNull ?: this["call_id"]?.jsonPrimitive?.contentOrNull
 
     private fun parseTerminalResponse(payload: JsonObject): List<StreamChunk> {
         val response = payload["response"]?.jsonObject
@@ -238,6 +247,7 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
 
     private class ResponseStreamState {
         val toolCallIdsByItemId = mutableMapOf<String, String>()
+        val toolCallIdsByOutputIndex = mutableMapOf<Int, String>()
         val toolIdsWithInput = mutableSetOf<String>()
         val reasoningMetadata = mutableMapOf<String, JsonObject>()
         private val openTextIds = linkedSetOf<String>()

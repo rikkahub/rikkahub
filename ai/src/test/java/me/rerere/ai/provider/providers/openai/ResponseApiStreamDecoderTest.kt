@@ -319,6 +319,75 @@ class ResponseApiStreamDecoderTest {
         }
     }
 
+    @Test
+    fun `function call arguments without item_id should fall back to call_id`() {
+        val decoder = ResponseApiStreamDecoder()
+        val chunks = buildList {
+            addAll(decoder.decode(functionCallItemEvent("response.output_item.added", id = "fc_1")))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.function_call_arguments.delta")
+                put("output_index", 1)
+                put("call_id", "call_1")
+                put("delta", "{\"query\":")
+            }))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.function_call_arguments.delta")
+                put("output_index", 1)
+                put("call_id", "call_1")
+                put("delta", "\"Kotlin\"}")
+            }))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.function_call_arguments.done")
+                put("output_index", 1)
+                put("call_id", "call_1")
+                put("arguments", "{\"query\":\"Kotlin\"}")
+            }))
+            addAll(decoder.decode(functionCallItemEvent("response.output_item.done", id = "fc_1")))
+        }
+
+        assertSingleSearchTool(chunks)
+    }
+
+    @Test
+    fun `function call arguments without any id should fall back to output_index`() {
+        val decoder = ResponseApiStreamDecoder()
+        val chunks = buildList {
+            addAll(decoder.decode(functionCallItemEvent("response.output_item.added", id = null)))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.function_call_arguments.delta")
+                put("output_index", 1)
+                put("delta", "{\"query\":\"Kotlin\"}")
+            }))
+            addAll(decoder.decode(functionCallItemEvent("response.output_item.done", id = null)))
+        }
+
+        assertSingleSearchTool(chunks)
+    }
+
+    private fun assertSingleSearchTool(chunks: List<StreamChunk>) {
+        val handler = StreamChunkHandler(Model(modelId = "test-model"))
+        val messages = chunks.fold(listOf(UIMessage.user("search"))) { messages, chunk ->
+            handler.handle(messages, chunk)
+        }
+        val tool = messages.last().parts.filterIsInstance<UIMessagePart.Tool>().single()
+        assertEquals("call_1", tool.toolCallId)
+        assertEquals("search_web", tool.toolName)
+        assertEquals("Kotlin", tool.inputAsJson().jsonObject["query"]?.jsonPrimitive?.content)
+        assertEquals(1, chunks.count { it is StreamChunk.ToolCallEnd })
+    }
+
+    private fun functionCallItemEvent(type: String, id: String?) = buildJsonObject {
+        put("type", type)
+        put("output_index", 1)
+        put("item", buildJsonObject {
+            put("type", "function_call")
+            id?.let { put("id", it) }
+            put("call_id", "call_1")
+            put("name", "search_web")
+            put("arguments", "")
+        })
+    }
+
     private fun webSearchItem(status: String) = buildJsonObject {
         put("type", "web_search_call")
         put("id", "ws_1")
