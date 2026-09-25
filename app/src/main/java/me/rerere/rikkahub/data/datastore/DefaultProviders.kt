@@ -209,7 +209,7 @@ val DEFAULT_PROVIDERS = listOf(
     ProviderSetting.OpenAI(
         id = Uuid.parse("ef5d149b-8e34-404b-818c-6ec242e5c3c5"),
         name = "腾讯Hunyuan",
-        baseUrl = "https://api.hunyuan.cloud.tencent.com/v1",
+        baseUrl = "https://tokenhub.tencentmaas.com/v1",
         apiKey = "",
         enabled = false,
         builtIn = true
