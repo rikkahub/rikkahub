@@ -1380,4 +1380,14 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_display_page_background_effect_type">배경 효과 유형</string>
   <string name="setting_display_page_background_effect_blur">블러</string>
   <string name="setting_display_page_background_effect_glass">글래스</string>
+  <string name="safe_mode_enter_app">앱 들어가기</string>
+  <string name="setting_tts_page_temperature">Temperature</string>
+  <string name="setting_tts_page_temperature_description">음성의 무작위성을 제어합니다 (0.0 - 1.0, 높을수록 더 표현력이 풍부합니다)</string>
+  <string name="setting_tts_page_fish_audio_speed_description">음성 속도 (0.5 - 2.0, 1.0이 기본)</string>
+  <string name="theme_name_claude">Claude</string>
+  <string name="workspace_terminal_tab">터미널 %1$d</string>
+  <string name="workspace_terminal_new_tab">새 터미널 탭</string>
+  <string name="workspace_terminal_close_tab">터미널 %1$d 닫기</string>
+  <string name="workspace_terminal_no_tabs">열린 터미널 탭이 없습니다</string>
+  <string name="assistant_page_context_message_limit_too_small">컨텍스트 메시지 제한은 %1$d보다 작을 수 없습니다. %1$d(으)로 재설정되었습니다.</string>
 </resources>

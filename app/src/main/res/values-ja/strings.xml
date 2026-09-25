@@ -1380,4 +1380,14 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_display_page_background_effect_type">背景効果の種類</string>
   <string name="setting_display_page_background_effect_blur">ぼかし</string>
   <string name="setting_display_page_background_effect_glass">ガラス</string>
+  <string name="safe_mode_enter_app">アプリを開く</string>
+  <string name="setting_tts_page_temperature">Temperature</string>
+  <string name="setting_tts_page_temperature_description">音声のランダム性を制御します（0.0 - 1.0、大きいほど表現豊かになります）</string>
+  <string name="setting_tts_page_fish_audio_speed_description">話速（0.5 - 2.0、1.0が標準）</string>
+  <string name="theme_name_claude">Claude</string>
+  <string name="workspace_terminal_tab">ターミナル %1$d</string>
+  <string name="workspace_terminal_new_tab">新しいターミナルタブ</string>
+  <string name="workspace_terminal_close_tab">ターミナル %1$d を閉じる</string>
+  <string name="workspace_terminal_no_tabs">開いているターミナルタブはありません</string>
+  <string name="assistant_page_context_message_limit_too_small">コンテキストメッセージの上限は %1$d 未満にはできません。%1$d にリセットされました。</string>
 </resources>

@@ -1378,4 +1378,14 @@
   <string name="setting_display_page_background_effect_type">背景效果類型</string>
   <string name="setting_display_page_background_effect_blur">模糊</string>
   <string name="setting_display_page_background_effect_glass">玻璃</string>
+  <string name="safe_mode_enter_app">進入應用程式</string>
+  <string name="setting_tts_page_temperature">溫度</string>
+  <string name="setting_tts_page_temperature_description">控制語音的隨機性（0.0 - 1.0，數值越高越有表現力）</string>
+  <string name="setting_tts_page_fish_audio_speed_description">語速（0.5 - 2.0，1.0 為正常）</string>
+  <string name="theme_name_claude">Claude</string>
+  <string name="workspace_terminal_tab">終端機 %1$d</string>
+  <string name="workspace_terminal_new_tab">新增終端機分頁</string>
+  <string name="workspace_terminal_close_tab">關閉終端機 %1$d</string>
+  <string name="workspace_terminal_no_tabs">沒有開啟的終端機分頁</string>
+  <string name="assistant_page_context_message_limit_too_small">上下文訊息限制不能小於 %1$d。已重設為 %1$d。</string>
 </resources>

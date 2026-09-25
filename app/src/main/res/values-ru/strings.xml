@@ -1380,4 +1380,14 @@
   <string name="setting_display_page_background_effect_type">Тип фонового эффекта</string>
   <string name="setting_display_page_background_effect_blur">Размытие</string>
   <string name="setting_display_page_background_effect_glass">Стекло</string>
+  <string name="safe_mode_enter_app">Войти в приложение</string>
+  <string name="setting_tts_page_temperature">Температура</string>
+  <string name="setting_tts_page_temperature_description">Управляет случайностью голоса (0.0–1.0, выше — более выразительно)</string>
+  <string name="setting_tts_page_fish_audio_speed_description">Скорость речи (0.5–2.0, 1.0 — обычная)</string>
+  <string name="theme_name_claude">Claude</string>
+  <string name="workspace_terminal_tab">Терминал %1$d</string>
+  <string name="workspace_terminal_new_tab">Новая вкладка терминала</string>
+  <string name="workspace_terminal_close_tab">Закрыть терминал %1$d</string>
+  <string name="workspace_terminal_no_tabs">Нет открытых вкладок терминала</string>
+  <string name="assistant_page_context_message_limit_too_small">Лимит сообщений контекста не может быть меньше %1$d. Значение сброшено до %1$d.</string>
 </resources>
