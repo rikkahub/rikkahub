@@ -59,24 +59,26 @@ class StringsXmlParser:
     @staticmethod
     def update_entry(file_path: Path, key: str, value: str) -> None:
         """Update single entry."""
+        StringsXmlParser.update_entries(file_path, {key: value})
+
+    @staticmethod
+    def update_entries(file_path: Path, entries: dict[str, str]) -> None:
+        """Update entries in place, keeping existing order and appending new keys."""
         if not file_path.exists():
-            StringsXmlParser.write(file_path, {key: value})
+            StringsXmlParser.write(file_path, entries)
             return
 
         with open(file_path, 'r', encoding='utf-8') as f:
             tree = etree.parse(f)
         root = tree.getroot()
 
-        # Find existing entry
-        found = False
+        pending = dict(entries)
         for string_elem in root.findall("string"):
-            if string_elem.get("name") == key:
-                string_elem.text = value
-                found = True
-                break
+            key = string_elem.get("name")
+            if key in pending:
+                string_elem.text = pending.pop(key)
 
-        # Add if not exists
-        if not found:
+        for key, value in pending.items():
             string_elem = etree.SubElement(root, "string")
             string_elem.set("name", key)
             string_elem.text = value
@@ -88,9 +90,10 @@ class StringsXmlParser:
             str(file_path), encoding="utf-8", xml_declaration=True, pretty_print=True
         )
 
-        # Add newline at end of file
-        with open(file_path, 'a', encoding='utf-8') as f:
-            f.write('\n')
+        # Ensure file ends with exactly one newline
+        content = file_path.read_text(encoding='utf-8')
+        if not content.endswith('\n'):
+            file_path.write_text(content + '\n', encoding='utf-8')
 
     @staticmethod
     def delete_entry(file_path: Path, key: str) -> bool:

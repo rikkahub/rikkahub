@@ -33,10 +33,36 @@ uv run --directory locale-tui src/main.py add greeting "Welcome" -m app
 uv run --directory locale-tui src/main.py add test_key "Test" --skip-translate
 ```
 
+```bash
+# Batch-translate all missing entries (e.g. after adding a new language to config.yml)
+uv run --directory locale-tui src/main.py translate-missing [OPTIONS]
+
+# Examples
+uv run --directory locale-tui src/main.py translate-missing --dry-run      # only report missing counts
+uv run --directory locale-tui src/main.py translate-missing -l values-ar   # one language, all modules
+uv run --directory locale-tui src/main.py translate-missing -m app -l values-ja -l values-ru
+```
+
 ## Options
 
 - `--module, -m`: Specify module name (defaults to first module in config)
 - `--skip-translate`: Add only to source language and skip translations
+
+`translate-missing` options:
+
+- `--lang, -l`: Target language code, repeatable (defaults to all non-source languages)
+- `--module, -m`: Module name, repeatable (defaults to all modules)
+- `--concurrency, -c` / `--retries`: Parallel requests (default 8) / attempts per batch (default 3)
+- `--dry-run`: Only print missing counts per module/language
+
+Translations are validated (placeholders and `\n` must match the source, quotes are escaped). Entries that
+still fail after retries are not written and are listed at the end with a non-zero exit code; rerun to fill them.
+
+## Adding a new language
+
+1. Add `values-xx` to `languages` in `locale-tui/config.yml`.
+2. Run `translate-missing -l values-xx`.
+3. Build resources (`./gradlew :app:processDebugResources`) to verify; `generateLocaleConfig` picks the locale up automatically.
 
 ## Constraints
 

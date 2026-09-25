@@ -74,7 +74,7 @@ translation:
     3. Maintain the same tone and style (formal/informal) as the source
     4. For UI text, keep it concise
     5. Do not translate brand names or technical terms that should remain in English (e.g. OpenAI, Anthropic, Token, API)
-    6. Use AI/LLM-specific terminology: translate "prompt" as "提示词" (not "提示"), "context" as "上下文", "model" as "模型", "inference" as "推理"
+    6. Use established AI/LLM terminology in the target language. For Chinese: translate "prompt" as "提示词" (not "提示"), "context" as "上下文", "model" as "模型", "inference" as "推理"
 
     Source strings (JSON format):
     {source_strings}

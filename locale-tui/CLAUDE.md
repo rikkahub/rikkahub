@@ -17,6 +17,13 @@ uv run python src/main.py
 uv run textual run --dev src/main.py
 ```
 
+CLI subcommands (`add`, `set`, `list-keys`, `translate-missing`, `test-connection`) are defined in `src/main.py`.
+
+```bash
+uv run pytest tests/test_validation.py   # offline unit tests
+uv run pytest tests/test_translator.py   # calls the real API
+```
+
 ## Architecture
 
 ### Core Components
@@ -33,7 +40,8 @@ uv run textual run --dev src/main.py
 ### Services (services/)
 
 - **xml_parser.py**: Android `strings.xml` read/write using lxml
-- **translator.py**: OpenAI-based batch translation with async API
+- **translator.py**: OpenAI-based batch translation with async API; `translate_entries` adds concurrency, retries and validation
+- **validation.py**: Pure checks for translated values (placeholder/line-break parity, quote escaping)
 - **dead_entry_finder.py**: Scans source code to detect unreferenced string keys
 
 ### Key Data Flow

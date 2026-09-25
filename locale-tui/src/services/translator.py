@@ -1,9 +1,12 @@
 """AI translation service using OpenAI SDK."""
 
+import asyncio
 import json
 from typing import Optional, Callable, TYPE_CHECKING
 
 from openai import AsyncOpenAI
+
+from services.validation import escape_android_quotes, validate_translation
 
 if TYPE_CHECKING:
     from config import Config
@@ -84,6 +87,61 @@ class AITranslator:
             raise TranslationError(f"Failed to parse response: {e}")
         except Exception as e:
             raise TranslationError(f"Translation failed: {e}")
+
+    async def translate_entries(
+        self,
+        entries: dict[str, str],  # {key: source_text}
+        target_language: str,
+        concurrency: int = 8,
+        retries: int = 3,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        """Translate entries in concurrent batches, validating every result.
+
+        Entries that fail validation are retried. Returns (translations, failures)
+        where failures maps key to the last error message.
+        """
+        translations: dict[str, str] = {}
+        failures: dict[str, str] = {}
+        semaphore = asyncio.Semaphore(concurrency)
+        keys = list(entries.keys())
+        batch_size = self.config.batch_size
+
+        async def run_batch(batch_keys: list[str]) -> None:
+            pending = {k: entries[k] for k in batch_keys}
+            for _ in range(retries):
+                if not pending:
+                    break
+                async with semaphore:
+                    try:
+                        result = await self.translate_batch(pending, target_language)
+                    except TranslationError as e:
+                        for k in pending:
+                            failures[k] = str(e)
+                        continue
+                for key in list(pending):
+                    value = result.get(key)
+                    if not isinstance(value, str):
+                        failures[key] = "missing in response"
+                        continue
+                    value = escape_android_quotes(value)
+                    error = validate_translation(pending[key], value)
+                    if error:
+                        failures[key] = error
+                        continue
+                    translations[key] = value
+                    failures.pop(key, None)
+                    del pending[key]
+            if progress_callback:
+                progress_callback(len(translations), len(keys))
+
+        await asyncio.gather(
+            *(
+                run_batch(keys[i : i + batch_size])
+                for i in range(0, len(keys), batch_size)
+            )
+        )
+        return translations, failures
 
     async def translate_all_missing(
         self,

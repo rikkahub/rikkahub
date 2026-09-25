@@ -313,6 +313,121 @@ def list_keys(module: str):
         click.echo(f"  {key:40} {value}")
 
 
+@cli.command("translate-missing")
+@click.option(
+    "--lang",
+    "-l",
+    "langs",
+    multiple=True,
+    help="目标语言代码，可重复（例如：-l values-ar -l values-ja），默认所有非源语言",
+)
+@click.option(
+    "--module",
+    "-m",
+    "module_names",
+    multiple=True,
+    help="模块名称，可重复，默认所有模块",
+)
+@click.option("--concurrency", "-c", default=8, show_default=True, help="并发请求数")
+@click.option("--retries", default=3, show_default=True, help="单批次最大尝试次数")
+@click.option("--dry-run", is_flag=True, help="只统计缺失条目，不调用翻译")
+def translate_missing(
+    langs: tuple[str, ...],
+    module_names: tuple[str, ...],
+    concurrency: int,
+    retries: int,
+    dry_run: bool,
+):
+    """批量翻译缺失的条目（适合新增语言后补全）
+
+    \b
+    译文会校验占位符与换行是否与原文一致，并自动转义引号；
+    校验失败的条目会重试，仍失败则不写入并在最后列出。
+
+    \b
+    示例：
+        locale-tui translate-missing -l values-ar
+        locale-tui translate-missing -m app --dry-run
+    """
+    config = load_config()
+
+    if not dry_run and not config.openai_api_key:
+        click.echo("错误：未设置 OPENAI_API_KEY，无法翻译。", err=True)
+        sys.exit(1)
+
+    known_langs = [lang.code for lang in config.languages if not lang.is_source]
+    for code in langs:
+        if code not in known_langs:
+            click.echo(f"错误：未在配置中找到目标语言 '{code}'", err=True)
+            click.echo(f"可用语言：{', '.join(known_langs)}", err=True)
+            sys.exit(1)
+    target_langs = list(langs) or known_langs
+
+    modules = config.modules
+    if module_names:
+        modules = [m for m in config.modules if m.name in module_names]
+        unknown = {*module_names} - {m.name for m in modules}
+        if unknown:
+            click.echo(f"错误：未找到模块 {', '.join(sorted(unknown))}", err=True)
+            click.echo(f"可用模块：{', '.join(m.name for m in config.modules)}", err=True)
+            sys.exit(1)
+
+    all_failures: list[tuple[str, str, str, str]] = []
+
+    async def run_all():
+        translator = None if dry_run else AITranslator(config)
+        for module in modules:
+            res_dir = config.project_root / module.res_path
+            source_file = res_dir / "values" / "strings.xml"
+            if not source_file.exists():
+                continue
+            source = StringsXmlParser.parse(source_file)
+
+            for lang_code in target_langs:
+                lang_name = config.get_language_name(lang_code)
+                target_file = res_dir / lang_code / "strings.xml"
+                existing = StringsXmlParser.parse(target_file)
+                missing = {k: v for k, v in source.items() if k not in existing}
+                if not missing:
+                    continue
+
+                label = f"[{module.name}/{lang_code}]"
+                click.echo(f"{label} 缺失 {len(missing)} 条")
+                if dry_run:
+                    continue
+
+                def on_progress(done: int, total: int, label=label):
+                    click.echo(f"\r{label} {done}/{total}", nl=False)
+
+                translations, failures = await translator.translate_entries(
+                    missing,
+                    lang_name,
+                    concurrency=concurrency,
+                    retries=retries,
+                    progress_callback=on_progress,
+                )
+                click.echo()
+
+                if translations:
+                    StringsXmlParser.update_entries(target_file, translations)
+                click.echo(
+                    f"{label} ✓ 写入 {len(translations)}/{len(missing)} 条 -> "
+                    f"{target_file.relative_to(config.project_root)}"
+                )
+                for key, error in failures.items():
+                    all_failures.append((module.name, lang_code, key, error))
+
+    asyncio.run(run_all())
+
+    if all_failures:
+        click.echo(f"\n{len(all_failures)} 条翻译失败（未写入，可重新运行补全）：", err=True)
+        for module_name, lang_code, key, error in all_failures:
+            click.echo(f"  {module_name}/{lang_code} {key}: {error}", err=True)
+        sys.exit(1)
+
+    click.echo("完成！")
+
+
 def main():
     """Main entry point."""
     cli()
