@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="oauth_callback_error_hint">أغلق علامة التبويب هذه وحاول مرة أخرى من RikkaHub.</string>
+  <string name="oauth_callback_error_message">لم يوافق مزوّد التفويض على هذا الطلب.</string>
+  <string name="oauth_callback_error_title">فشل التفويض</string>
+  <string name="oauth_callback_handled_hint">يمكنك إغلاق علامة التبويب هذه بأمان والعودة إلى RikkaHub.</string>
+  <string name="oauth_callback_handled_message">تمت معالجة استدعاء التفويض هذا بالفعل.</string>
+  <string name="oauth_callback_handled_title">تمت معالجة التفويض بالفعل</string>
+  <string name="oauth_callback_invalid_hint">عُد إلى RikkaHub وابدأ التفويض من جديد.</string>
+  <string name="oauth_callback_invalid_message">استدعاء التفويض الراجع يفتقد إلى معلومات أو انتهت صلاحيته.</string>
+  <string name="oauth_callback_invalid_title">رد اتصال تفويض غير صالح</string>
+  <string name="oauth_callback_success_hint">يمكنك إغلاق علامة التبويب هذه والعودة إلى RikkaHub.</string>
+  <string name="oauth_callback_success_message">تم ربط الحساب بنجاح.</string>
+  <string name="oauth_callback_success_title">اكتمل التفويض</string>
+  <string name="oauth_notification_channel_name">تفويض OAuth</string>
+  <string name="oauth_notification_text">في انتظار رد اتصال تفويض المتصفح…</string>
+  <string name="oauth_notification_title">جارٍ تفويض OAuth</string>
+</resources>

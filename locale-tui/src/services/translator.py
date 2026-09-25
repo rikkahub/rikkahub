@@ -51,16 +51,28 @@ class AITranslator:
         except Exception as e:
             raise TranslationError(f"Connection test failed: {e}")
 
+    def build_prompt(self, entries: dict[str, str], target_language: str) -> str:
+        """Build the translation prompt, appending the language glossary if any."""
+        prompt = self.config.translation_prompt.format(
+            target_language=target_language,
+            source_strings=json.dumps(entries, ensure_ascii=False, indent=2),
+        )
+        glossary = self.config.get_glossary(target_language)
+        if glossary:
+            terms = "\n".join(f"- {en} -> {tr}" for en, tr in glossary.items())
+            prompt += (
+                f"\n\nGlossary for {target_language} (mandatory, use these renderings "
+                f"consistently, inflecting for grammar where needed):\n{terms}"
+            )
+        return prompt
+
     async def translate_batch(
         self,
         entries: dict[str, str],  # {key: source_text}
         target_language: str,
     ) -> dict[str, str]:
         """Translate a batch of entries."""
-        prompt = self.config.translation_prompt.format(
-            target_language=target_language,
-            source_strings=json.dumps(entries, ensure_ascii=False, indent=2),
-        )
+        prompt = self.build_prompt(entries, target_language)
 
         try:
             response = await self.client.chat.completions.create(

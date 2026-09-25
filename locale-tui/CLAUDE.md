@@ -17,10 +17,10 @@ uv run python src/main.py
 uv run textual run --dev src/main.py
 ```
 
-CLI subcommands (`add`, `set`, `list-keys`, `translate-missing`, `test-connection`) are defined in `src/main.py`.
+CLI subcommands (`add`, `set`, `list-keys`, `translate-missing`, `retranslate`, `test-connection`) are defined in `src/main.py`.
 
 ```bash
-uv run pytest tests/test_validation.py   # offline unit tests
+uv run pytest tests/test_validation.py tests/test_prompt.py   # offline unit tests
 uv run pytest tests/test_translator.py   # calls the real API
 ```
 
@@ -54,7 +54,9 @@ uv run pytest tests/test_translator.py   # calls the real API
 
 ## Configuration
 
-**config.yml**: Defines modules (res paths, source patterns), languages, translation settings
+**config.yml**: Defines modules (res paths, source patterns), languages, translation settings. Each language may
+define a `glossary` (English term -> rendering) that `AITranslator.build_prompt` appends to the prompt, looked up
+by language display name.
 
 **Environment variables** (`.env`):
 - `OPENAI_API_KEY`: Required for AI translation

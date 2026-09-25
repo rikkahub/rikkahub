@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Android Locale Manager TUI Application."""
 
+import re
 import sys
 import asyncio
+from typing import Callable
 from pathlib import Path
 
 # Add src to path for imports
@@ -313,41 +315,45 @@ def list_keys(module: str):
         click.echo(f"  {key:40} {value}")
 
 
-@cli.command("translate-missing")
-@click.option(
-    "--lang",
-    "-l",
-    "langs",
-    multiple=True,
-    help="目标语言代码，可重复（例如：-l values-ar -l values-ja），默认所有非源语言",
-)
-@click.option(
-    "--module",
-    "-m",
-    "module_names",
-    multiple=True,
-    help="模块名称，可重复，默认所有模块",
-)
-@click.option("--concurrency", "-c", default=8, show_default=True, help="并发请求数")
-@click.option("--retries", default=3, show_default=True, help="单批次最大尝试次数")
-@click.option("--dry-run", is_flag=True, help="只统计缺失条目，不调用翻译")
-def translate_missing(
+_batch_options = [
+    click.option(
+        "--lang",
+        "-l",
+        "langs",
+        multiple=True,
+        help="目标语言代码，可重复（例如：-l values-ar -l values-ja），默认所有非源语言",
+    ),
+    click.option(
+        "--module",
+        "-m",
+        "module_names",
+        multiple=True,
+        help="模块名称，可重复，默认所有模块",
+    ),
+    click.option("--concurrency", "-c", default=8, show_default=True, help="并发请求数"),
+    click.option("--retries", default=3, show_default=True, help="单批次最大尝试次数"),
+    click.option("--dry-run", is_flag=True, help="只统计待翻译条目，不调用翻译"),
+]
+
+
+def batch_options(func):
+    for option in reversed(_batch_options):
+        func = option(func)
+    return func
+
+
+def run_batch_translation(
     langs: tuple[str, ...],
     module_names: tuple[str, ...],
     concurrency: int,
     retries: int,
     dry_run: bool,
+    select: Callable[[dict[str, str], dict[str, str]], dict[str, str]],
+    action: str,
 ):
-    """批量翻译缺失的条目（适合新增语言后补全）
+    """Translate entries picked by select(source, existing) for each module/language.
 
-    \b
-    译文会校验占位符与换行是否与原文一致，并自动转义引号；
-    校验失败的条目会重试，仍失败则不写入并在最后列出。
-
-    \b
-    示例：
-        locale-tui translate-missing -l values-ar
-        locale-tui translate-missing -m app --dry-run
+    Results are validated by AITranslator.translate_entries and written in place.
     """
     config = load_config()
 
@@ -387,12 +393,12 @@ def translate_missing(
                 lang_name = config.get_language_name(lang_code)
                 target_file = res_dir / lang_code / "strings.xml"
                 existing = StringsXmlParser.parse(target_file)
-                missing = {k: v for k, v in source.items() if k not in existing}
-                if not missing:
+                selected = select(source, existing)
+                if not selected:
                     continue
 
                 label = f"[{module.name}/{lang_code}]"
-                click.echo(f"{label} 缺失 {len(missing)} 条")
+                click.echo(f"{label} {action} {len(selected)} 条")
                 if dry_run:
                     continue
 
@@ -400,7 +406,7 @@ def translate_missing(
                     click.echo(f"\r{label} {done}/{total}", nl=False)
 
                 translations, failures = await translator.translate_entries(
-                    missing,
+                    selected,
                     lang_name,
                     concurrency=concurrency,
                     retries=retries,
@@ -411,7 +417,7 @@ def translate_missing(
                 if translations:
                     StringsXmlParser.update_entries(target_file, translations)
                 click.echo(
-                    f"{label} ✓ 写入 {len(translations)}/{len(missing)} 条 -> "
+                    f"{label} ✓ 写入 {len(translations)}/{len(selected)} 条 -> "
                     f"{target_file.relative_to(config.project_root)}"
                 )
                 for key, error in failures.items():
@@ -420,12 +426,75 @@ def translate_missing(
     asyncio.run(run_all())
 
     if all_failures:
-        click.echo(f"\n{len(all_failures)} 条翻译失败（未写入，可重新运行补全）：", err=True)
+        click.echo(f"\n{len(all_failures)} 条翻译失败（未写入，可重新运行）：", err=True)
         for module_name, lang_code, key, error in all_failures:
             click.echo(f"  {module_name}/{lang_code} {key}: {error}", err=True)
         sys.exit(1)
 
     click.echo("完成！")
+
+
+@cli.command("translate-missing")
+@batch_options
+def translate_missing(**options):
+    """批量翻译缺失的条目（适合新增语言后补全）
+
+    \b
+    译文会校验占位符与换行是否与原文一致，并自动转义引号；
+    校验失败的条目会重试，仍失败则不写入并在最后列出。
+
+    \b
+    示例：
+        locale-tui translate-missing -l values-ar
+        locale-tui translate-missing -m app --dry-run
+    """
+    run_batch_translation(
+        **options,
+        select=lambda source, existing: {
+            k: v for k, v in source.items() if k not in existing
+        },
+        action="缺失",
+    )
+
+
+@cli.command()
+@click.option(
+    "--match",
+    "pattern",
+    default=None,
+    help="正则表达式（忽略大小写），重新翻译英文原文匹配的条目",
+)
+@click.option("--key", "keys", multiple=True, help="按 key 指定条目，可重复")
+@batch_options
+def retranslate(pattern: str | None, keys: tuple[str, ...], **options):
+    """重新翻译已有条目（例如更新术语表后统一术语）
+
+    \b
+    只覆盖目标语言中已存在的条目，缺失条目请用 translate-missing。
+    --match 与 --key 至少指定一个，两者同时指定时取并集。
+
+    \b
+    示例：
+        locale-tui retranslate -l values-ar --match '\\bprompts?\\b' --dry-run
+        locale-tui retranslate -l values-ja --key setting_page_title
+    """
+    if not pattern and not keys:
+        click.echo("错误：请至少指定 --match 或 --key", err=True)
+        sys.exit(1)
+    try:
+        regex = re.compile(pattern, re.IGNORECASE) if pattern else None
+    except re.error as e:
+        click.echo(f"错误：无效的正则表达式 - {e}", err=True)
+        sys.exit(1)
+
+    def select(source: dict[str, str], existing: dict[str, str]) -> dict[str, str]:
+        return {
+            k: v
+            for k, v in source.items()
+            if k in existing and (k in keys or (regex and regex.search(v)))
+        }
+
+    run_batch_translation(**options, select=select, action="重新翻译")
 
 
 def main():

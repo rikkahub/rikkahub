@@ -15,6 +15,8 @@ class LanguageConfig:
     code: str
     name: str
     is_source: bool = False
+    # 术语表：英文术语 -> 目标语言译法，翻译时注入 prompt
+    glossary: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -74,6 +76,7 @@ class Config:
                 code=lang["code"],
                 name=lang["name"],
                 is_source=lang.get("is_source", False),
+                glossary=lang.get("glossary") or {},
             )
             for lang in data.get("languages", [])
         ]
@@ -105,6 +108,13 @@ class Config:
             if lang.code == code:
                 return lang.name
         return code
+
+    def get_glossary(self, name: str) -> dict[str, str]:
+        """Get glossary by language display name."""
+        for lang in self.languages:
+            if lang.name == name:
+                return lang.glossary
+        return {}
 
     def get_language_codes(self) -> list[str]:
         """Get all language codes."""
