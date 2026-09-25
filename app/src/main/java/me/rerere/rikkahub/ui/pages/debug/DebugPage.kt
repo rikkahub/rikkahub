@@ -76,7 +76,7 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
             )
         }
     ) { contentPadding ->
-        val state = rememberPagerState { 3 }
+        val state = rememberPagerState { 4 }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -118,6 +118,17 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
                         Text("Logging")
                     }
                 )
+                Tab(
+                    selected = state.currentPage == 3,
+                    onClick = {
+                        scope.launch {
+                            state.animateScrollToPage(3)
+                        }
+                    },
+                    text = {
+                        Text("Recovery")
+                    }
+                )
             }
             HorizontalPager(
                 state = state,
@@ -129,6 +140,7 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
                     0 -> MainPage(vm)
                     1 -> ColorsPage()
                     2 -> Box {}
+                    3 -> RecoveryPage(vm)
                 }
             }
         }
@@ -300,6 +312,69 @@ private fun MainPage(vm: DebugVM) {
             onValueChange = { markdown = it },
             modifier = Modifier.fillMaxWidth()
         )
+    }
+}
+
+@Composable
+private fun RecoveryPage(vm: DebugVM) {
+    val settings = LocalSettings.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+    val conversationAssistants by vm.conversationAssistants.collectAsStateWithLifecycle()
+    val existingIds = settings.assistants.map { it.id }.toSet()
+    val missing = conversationAssistants
+        ?.filterKeys { it !in existingIds }
+        ?.entries
+        ?.sortedByDescending { it.value }
+    var recovering by remember { mutableStateOf(false) }
+    Column(
+        modifier = Modifier
+            .padding(8.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            "扫描聊天记录中引用的助手，为设置中缺失的助手创建占位助手，使对应聊天记录重新可见。助手的其他配置无法恢复。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text("设置中的助手数: ${settings.assistants.size}")
+        Text("聊天记录中的助手数: ${conversationAssistants?.size?.toString() ?: "..."}")
+        Text("缺失的助手数: ${missing?.size?.toString() ?: "..."}")
+        missing?.forEach { (id, count) ->
+            Text(
+                "$id ($count 个对话)",
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = JetbrainsMono,
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { vm.scanConversationAssistants() }) {
+                Text("重新扫描")
+            }
+            Button(
+                enabled = !recovering && !settings.init && !missing.isNullOrEmpty(),
+                onClick = {
+                    recovering = true
+                    scope.launch {
+                        runCatching { vm.recoverAssistantsFromConversations() }
+                            .onSuccess { count ->
+                                when (count) {
+                                    null -> toaster.show("设置尚未加载", type = ToastType.Error)
+                                    0 -> toaster.show("没有需要恢复的助手")
+                                    else -> toaster.show("已恢复 $count 个助手", type = ToastType.Success)
+                                }
+                            }
+                            .onFailure {
+                                toaster.show("恢复失败: ${it.message}", type = ToastType.Error)
+                            }
+                        recovering = false
+                    }
+                }
+            ) {
+                Text("恢复")
+            }
+        }
     }
 }
 
