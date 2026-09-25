@@ -53,6 +53,7 @@ import androidx.paging.compose.itemKey
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.theme.extendColors
+import me.rerere.rikkahub.utils.mirrorForRtl
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
 import java.time.ZoneId
@@ -336,7 +337,7 @@ private fun ConversationItem(
                         showDropdownMenu = false
                     },
                     leadingIcon = {
-                        Icon(HugeIcons.Forward02, null)
+                        Icon(HugeIcons.Forward02, null, modifier = Modifier.mirrorForRtl())
                     }
                 )
 
