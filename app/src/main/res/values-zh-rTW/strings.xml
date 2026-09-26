@@ -1388,4 +1388,6 @@
   <string name="workspace_terminal_close_tab">關閉終端機 %1$d</string>
   <string name="workspace_terminal_no_tabs">沒有開啟的終端機分頁</string>
   <string name="assistant_page_context_message_limit_too_small">上下文訊息限制不能小於 %1$d。已重設為 %1$d。</string>
+  <string name="skills_page_search_placeholder">搜尋技能</string>
+  <string name="skills_page_search_no_result">找不到符合的技能</string>
 </resources>

@@ -1388,4 +1388,6 @@
   <string name="workspace_terminal_tab">الطرفية %1$d</string>
   <string name="workspace_terminal_title">الطرفية</string>
   <string name="workspace_terminal_title_with_name">%s · الطرفية</string>
+  <string name="skills_page_search_placeholder">البحث في المهارات</string>
+  <string name="skills_page_search_no_result">لا توجد مهارات مطابقة</string>
 </resources>

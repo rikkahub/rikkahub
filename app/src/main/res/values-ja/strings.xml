@@ -1390,4 +1390,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_terminal_close_tab">ターミナル %1$d を閉じる</string>
   <string name="workspace_terminal_no_tabs">開いているターミナルタブはありません</string>
   <string name="assistant_page_context_message_limit_too_small">コンテキストメッセージの上限は %1$d 未満にはできません。%1$d にリセットされました。</string>
+  <string name="skills_page_search_placeholder">スキルを検索</string>
+  <string name="skills_page_search_no_result">一致するスキルがありません</string>
 </resources>

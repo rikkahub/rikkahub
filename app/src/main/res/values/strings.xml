@@ -1389,4 +1389,6 @@
   <string name="setting_display_page_background_effect_type">Background effect type</string>
   <string name="setting_display_page_background_effect_blur">Blur</string>
   <string name="setting_display_page_background_effect_glass">Glass</string>
+  <string name="skills_page_search_placeholder">Search skills</string>
+  <string name="skills_page_search_no_result">No matching skills</string>
 </resources>

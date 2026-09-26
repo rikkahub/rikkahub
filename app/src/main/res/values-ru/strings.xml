@@ -1390,4 +1390,6 @@
   <string name="workspace_terminal_close_tab">Закрыть терминал %1$d</string>
   <string name="workspace_terminal_no_tabs">Нет открытых вкладок терминала</string>
   <string name="assistant_page_context_message_limit_too_small">Лимит сообщений контекста не может быть меньше %1$d. Значение сброшено до %1$d.</string>
+  <string name="skills_page_search_placeholder">Поиск навыков</string>
+  <string name="skills_page_search_no_result">Нет подходящих навыков</string>
 </resources>

@@ -1390,4 +1390,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_terminal_new_tab">新建终端标签页</string>
   <string name="workspace_terminal_close_tab">关闭终端 %1$d</string>
   <string name="workspace_terminal_no_tabs">没有打开的终端标签页</string>
+  <string name="skills_page_search_placeholder">搜索技能</string>
+  <string name="skills_page_search_no_result">没有匹配的技能</string>
 </resources>
