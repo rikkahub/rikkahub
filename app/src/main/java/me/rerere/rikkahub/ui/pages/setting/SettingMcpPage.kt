@@ -32,7 +32,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,7 +45,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,7 +52,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberBottomSheetState
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -86,14 +83,12 @@ import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.AlertCircle
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
-import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.hugeicons.stroke.MessageBlocked
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
-import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
 import me.rerere.rikkahub.data.ai.mcp.McpManager
@@ -102,6 +97,9 @@ import me.rerere.rikkahub.data.ai.mcp.McpStatus
 import me.rerere.rikkahub.data.ai.mcp.McpTool
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.ItemAction
+import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
+import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.components.ui.Switch
 import me.rerere.rikkahub.ui.components.ui.SwitchSize
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -256,8 +254,7 @@ private fun McpServerItem(
 ) {
     val mcpManager = koinInject<McpManager>()
     val status by mcpManager.getStatus(item).collectAsStateWithLifecycle(McpStatus.Idle)
-    val dismissBoxState = rememberSwipeToDismissBoxState()
-    val scope = rememberCoroutineScope()
+    var showDeleteDialog by remember { mutableStateOf(false) }
     var errorDetail by remember { mutableStateOf<McpStatus.Error?>(null) }
 
     errorDetail?.let { error ->
@@ -294,148 +291,138 @@ private fun McpServerItem(
             },
         )
     }
-    SwipeToDismissBox(
-        state = dismissBoxState,
-        backgroundContent = {
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-            ) {
-                FilledTonalIconButton(
-                    onClick = {
-                        scope.launch { dismissBoxState.reset() }
-                    }
-                ) {
-                    Icon(HugeIcons.Cancel01, null)
-                }
-                FilledTonalIconButton(
-                    onClick = {
-                        onDelete()
-                    }
-                ) {
-                    Icon(HugeIcons.Delete01, null)
-                }
-            }
-        },
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = true,
-        modifier = modifier
+    Card(
+        onClick = { onEdit(item) },
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor
+        )
     ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = CustomColors.listItemColors.containerColor
-            )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            when (status) {
+                McpStatus.Idle -> Icon(HugeIcons.MessageBlocked, null)
+                McpStatus.Connecting -> CircularProgressIndicator(
+                    modifier = Modifier.size(
+                        24.dp
+                    )
+                )
+
+                McpStatus.Connected -> Icon(HugeIcons.McpServer, null)
+                is McpStatus.Reconnecting -> CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp)
+                )
+                is McpStatus.Error -> Icon(HugeIcons.AlertCircle, null)
+                McpStatus.NeedsAuthorization -> Icon(HugeIcons.AlertCircle, null)
+                McpStatus.Authorizing -> CircularProgressIndicator(
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                when (status) {
-                    McpStatus.Idle -> Icon(HugeIcons.MessageBlocked, null)
-                    McpStatus.Connecting -> CircularProgressIndicator(
-                        modifier = Modifier.size(
-                            24.dp
-                        )
-                    )
-
-                    McpStatus.Connected -> Icon(HugeIcons.McpServer, null)
-                    is McpStatus.Reconnecting -> CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp)
-                    )
-                    is McpStatus.Error -> Icon(HugeIcons.AlertCircle, null)
-                    McpStatus.NeedsAuthorization -> Icon(HugeIcons.AlertCircle, null)
-                    McpStatus.Authorizing -> CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = item.commonOptions.name,
-                            style = MaterialTheme.typography.titleLarge,
-                        )
-                        val dotColor =
-                            if (item.commonOptions.enable) MaterialTheme.extendColors.green6 else MaterialTheme.extendColors.red6
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .drawWithContent {
-                                    drawCircle(
-                                        color = dotColor
-                                    )
-                                }
-                        )
-                    }
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Tag(type = TagType.SUCCESS) {
-                            when (item) {
-                                is McpServerConfig.SseTransportServer -> Text("SSE")
-                                is McpServerConfig.StreamableHTTPServer -> Text("Streamable HTTP")
+                    Text(
+                        text = item.commonOptions.name,
+                        style = MaterialTheme.typography.titleLarge,
+                    )
+                    val dotColor =
+                        if (item.commonOptions.enable) MaterialTheme.extendColors.green6 else MaterialTheme.extendColors.red6
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .drawWithContent {
+                                drawCircle(
+                                    color = dotColor
+                                )
                             }
-                        }
-                    }
-                    if (status is McpStatus.Error) {
-                        val error = status as McpStatus.Error
-                        Text(
-                            text = error.message,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.clickable { errorDetail = error },
-                        )
-                    }
-                    if (status == McpStatus.NeedsAuthorization) {
-                        val context = LocalContext.current
-                        Text(
-                            text = "需要 OAuth 授权",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                        Button(
-                            onClick = { mcpManager.startAuthorization(item, context) },
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                        ) {
-                            Text("OAuth 授权")
-                        }
-                    }
-                    if (status == McpStatus.Authorizing) {
-                        Text(
-                            text = "正在授权，请在浏览器中完成…",
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                        TextButton(
-                            onClick = { mcpManager.cancelAuthorization(item) },
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                        ) {
-                            Text("取消授权")
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Tag(type = TagType.SUCCESS) {
+                        when (item) {
+                            is McpServerConfig.SseTransportServer -> Text("SSE")
+                            is McpServerConfig.StreamableHTTPServer -> Text("Streamable HTTP")
                         }
                     }
                 }
-
-                IconButton(
-                    onClick = {
-                        onEdit(item)
+                if (status is McpStatus.Error) {
+                    val error = status as McpStatus.Error
+                    Text(
+                        text = error.message,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.clickable { errorDetail = error },
+                    )
+                }
+                if (status == McpStatus.NeedsAuthorization) {
+                    val context = LocalContext.current
+                    Text(
+                        text = "需要 OAuth 授权",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Button(
+                        onClick = { mcpManager.startAuthorization(item, context) },
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    ) {
+                        Text("OAuth 授权")
                     }
-                ) {
-                    Icon(HugeIcons.Settings03, null)
+                }
+                if (status == McpStatus.Authorizing) {
+                    Text(
+                        text = "正在授权，请在浏览器中完成…",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    TextButton(
+                        onClick = { mcpManager.cancelAuthorization(item) },
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    ) {
+                        Text("取消授权")
+                    }
                 }
             }
+
+            ItemActionMenu(
+                actions = listOf(
+                    ItemAction(
+                        text = stringResource(R.string.delete),
+                        icon = HugeIcons.Delete01,
+                        destructive = true,
+                        onClick = { showDeleteDialog = true },
+                    ),
+                )
+            )
         }
+    }
+
+    RikkaConfirmDialog(
+        show = showDeleteDialog,
+        title = stringResource(R.string.confirm_delete),
+        confirmText = stringResource(R.string.delete),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            showDeleteDialog = false
+            onDelete()
+        },
+        onDismiss = { showDeleteDialog = false },
+    ) {
+        Text(stringResource(R.string.common_delete_confirm_message, item.commonOptions.name))
     }
 }
 

@@ -6,12 +6,11 @@ import me.rerere.hugeicons.stroke.ArrowUp01
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.hugeicons.stroke.DragDropVertical
 import me.rerere.hugeicons.stroke.Refresh03
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -41,7 +40,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -55,12 +53,9 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -88,9 +83,13 @@ import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.ItemAction
+import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
+import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TextArea
+import me.rerere.rikkahub.ui.components.ui.longPressReorder
 import me.rerere.rikkahub.ui.theme.ChatFontProvider
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
@@ -521,7 +520,7 @@ private fun AssistantPromptContent(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.padding(horizontal = 8.dp)
             ) {
-                val haptic = LocalHapticFeedback.current
+                var expandedIds by remember { mutableStateOf(emptySet<Uuid>()) }
                 ReorderableColumn(
                     list = assistant.regexes,
                     onSettle = { fromIndex, toIndex ->
@@ -536,25 +535,21 @@ private fun AssistantPromptContent(
                         ReorderableItem(
                             modifier = Modifier.fillMaxWidth()
                         ) {
+                            val expanded = regex.id in expandedIds
                             AssistantRegexCard(
                                 regex = regex,
                                 onUpdate = onUpdate,
                                 assistant = assistant,
                                 index = index,
-                                modifier = Modifier.scale(if (isDragging) 0.95f else 1f),
-                                dragHandleModifier = Modifier
-                                    .size(48.dp)
-                                    .longPressDraggableHandle(
-                                        enabled = assistant.regexes.size > 1,
-                                        onDragStarted = {
-                                            haptic.performHapticFeedback(
-                                                HapticFeedbackType.GestureThresholdActivate
-                                            )
-                                        },
-                                        onDragStopped = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                        }
-                                    )
+                                expanded = expanded,
+                                onExpandedChange = {
+                                    expandedIds = if (it) expandedIds + regex.id else expandedIds - regex.id
+                                },
+                                // 展开后内部是输入框，长按拖拽会与文本选择冲突
+                                modifier = longPressReorder(
+                                    isDragging = isDragging,
+                                    enabled = !expanded && assistant.regexes.size > 1,
+                                ),
                             )
                         }
                     }
@@ -584,12 +579,11 @@ private fun AssistantRegexCard(
     onUpdate: (Assistant) -> Unit,
     assistant: Assistant,
     index: Int,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    dragHandleModifier: Modifier = Modifier,
 ) {
-    var expanded by remember {
-        mutableStateOf(false)
-    }
+    var showDeleteDialog by remember { mutableStateOf(false) }
     ElevatedCard(
         modifier = modifier.fillMaxWidth()
     ) {
@@ -600,17 +594,16 @@ private fun AssistantRegexCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable { onExpandedChange(!expanded) },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = dragHandleModifier,
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.DragDropVertical,
-                        contentDescription = null,
-                    )
-                }
+                Icon(
+                    imageVector = if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
+                    contentDescription = null,
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
                 Text(
                     text = regex.name,
                     maxLines = 1,
@@ -636,16 +629,16 @@ private fun AssistantRegexCard(
                     },
                     modifier = Modifier.padding(start = 8.dp)
                 )
-                IconButton(
-                    onClick = {
-                        expanded = !expanded
-                    }
-                ) {
-                    Icon(
-                        imageVector = if (expanded) HugeIcons.ArrowUp01 else HugeIcons.ArrowDown01,
-                        contentDescription = null
+                ItemActionMenu(
+                    actions = listOf(
+                        ItemAction(
+                            text = stringResource(R.string.delete),
+                            icon = HugeIcons.Delete01,
+                            destructive = true,
+                            onClick = { showDeleteDialog = true },
+                        ),
                     )
-                }
+                )
             }
 
             if (expanded) {
@@ -777,27 +770,21 @@ private fun AssistantRegexCard(
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
-
-                TextButton(
-                    onClick = {
-                        onUpdate(
-                            assistant.copy(
-                                regexes = assistant.regexes.filterIndexed { i, _ ->
-                                    i != index
-                                }
-                            )
-                        )
-                    }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(HugeIcons.Delete01, null)
-                        Text(stringResource(R.string.delete))
-                    }
-                }
             }
         }
+    }
+
+    RikkaConfirmDialog(
+        show = showDeleteDialog,
+        title = stringResource(R.string.confirm_delete),
+        confirmText = stringResource(R.string.delete),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            showDeleteDialog = false
+            onUpdate(assistant.copy(regexes = assistant.regexes.filter { it.id != regex.id }))
+        },
+        onDismiss = { showDeleteDialog = false },
+    ) {
+        Text(stringResource(R.string.common_delete_confirm_message, regex.name))
     }
 }
