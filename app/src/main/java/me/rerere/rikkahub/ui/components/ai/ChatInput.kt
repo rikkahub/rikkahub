@@ -250,7 +250,7 @@ fun ChatInput(
                                     input = HazeInput.Sources(hazeState),
                                     style = GlassStyle.Material3(
                                         containerColor = hazeTintColor,
-                                        tint = hazeTintColor.copy(alpha = 0.72f),
+                                        tint = hazeTintColor.copy(alpha = 0.3f),
                                     ) {
                                         // Keep background text from competing with the input text.
                                         optics(GlassDefaults.optics.copy(
