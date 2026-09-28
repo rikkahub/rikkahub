@@ -1391,4 +1391,12 @@
   <string name="setting_display_page_background_effect_glass">Glass</string>
   <string name="skills_page_search_placeholder">Search skills</string>
   <string name="skills_page_search_no_result">No matching skills</string>
+  <string name="assistant_page_local_tools_chart_display_title">Chart Display</string>
+  <string name="assistant_page_local_tools_chart_display_desc">Let the AI display line, bar, and scatter charts</string>
+  <string name="chat_message_tool_chart_display">Display chart</string>
+  <string name="chat_message_tool_chart_display_with_title">Display chart: %1$s</string>
+  <string name="chart_mode_chart">Chart</string>
+  <string name="chart_mode_table">Table</string>
+  <string name="chart_series">Series</string>
+  <string name="chart_series_name">Series %1$d</string>
 </resources>

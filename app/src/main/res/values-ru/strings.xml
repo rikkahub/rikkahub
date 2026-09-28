@@ -1392,4 +1392,12 @@
   <string name="assistant_page_context_message_limit_too_small">Лимит сообщений контекста не может быть меньше %1$d. Значение сброшено до %1$d.</string>
   <string name="skills_page_search_placeholder">Поиск навыков</string>
   <string name="skills_page_search_no_result">Нет подходящих навыков</string>
+  <string name="assistant_page_local_tools_chart_display_title">Отображение диаграмм</string>
+  <string name="assistant_page_local_tools_chart_display_desc">Разрешить ИИ отображать линейные, столбчатые и точечные диаграммы</string>
+  <string name="chat_message_tool_chart_display">Показать диаграмму</string>
+  <string name="chat_message_tool_chart_display_with_title">Показать диаграмму: %1$s</string>
+  <string name="chart_mode_chart">Диаграмма</string>
+  <string name="chart_mode_table">Таблица</string>
+  <string name="chart_series">Ряд</string>
+  <string name="chart_series_name">Ряд %1$d</string>
 </resources>

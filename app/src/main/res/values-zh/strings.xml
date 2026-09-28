@@ -1392,4 +1392,12 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_terminal_no_tabs">没有打开的终端标签页</string>
   <string name="skills_page_search_placeholder">搜索技能</string>
   <string name="skills_page_search_no_result">没有匹配的技能</string>
+  <string name="assistant_page_local_tools_chart_display_title">图表显示</string>
+  <string name="assistant_page_local_tools_chart_display_desc">让 AI 显示折线图、柱状图和散点图</string>
+  <string name="chat_message_tool_chart_display">显示图表</string>
+  <string name="chat_message_tool_chart_display_with_title">显示图表：%1$s</string>
+  <string name="chart_mode_chart">图表</string>
+  <string name="chart_mode_table">表格</string>
+  <string name="chart_series">系列</string>
+  <string name="chart_series_name">系列 %1$d</string>
 </resources>
