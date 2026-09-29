@@ -97,6 +97,18 @@ internal fun backgroundTextGenerationParams(
     sessionId = conversationId.toString(),
 )
 
+private val forkTitleSuffixRegex = Regex("""\((\d+)\)$""")
+
+internal fun forkConversationTitle(sourceTitle: String, existingTitles: Set<String>): String {
+    // 源标题已带 (N) 后缀时递增序号，避免多次 fork 后叠加成 xxx(1)(1)(1)
+    val suffix = forkTitleSuffixRegex.find(sourceTitle)
+    val baseTitle = suffix?.let { sourceTitle.removeRange(it.range) } ?: sourceTitle
+    val start = suffix?.groupValues?.get(1)?.toIntOrNull()?.plus(1) ?: 1
+    return generateSequence(start) { it + 1 }
+        .map { "$baseTitle($it)" }
+        .first { it !in existingTitles }
+}
+
 internal fun createForkConversation(
     source: Conversation,
     messageNodes: List<MessageNode>,
@@ -104,9 +116,7 @@ internal fun createForkConversation(
 ): Conversation = Conversation(
     id = Uuid.random(),
     assistantId = source.assistantId,
-    title = generateSequence(1) { it + 1 }
-        .map { "${source.title}($it)" }
-        .first { it !in existingTitles },
+    title = forkConversationTitle(source.title, existingTitles),
     messageNodes = messageNodes,
     customSystemPrompt = source.customSystemPrompt,
     modeInjectionIds = source.modeInjectionIds,
