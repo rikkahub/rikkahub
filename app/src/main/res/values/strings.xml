@@ -280,6 +280,7 @@
   <string name="chat_page_export_format">Export Format</string>
   <string name="chat_page_export_image">Export as Image</string>
   <string name="chat_page_export_image_desc">Export conversation as PNG image</string>
+  <string name="chat_page_export_include_reasoning">Export Reasoning</string>
   <string name="chat_page_export_image_expand_reasoning">Expand Reasoning</string>
   <string name="chat_page_export_markdown">Markdown</string>
   <string name="chat_page_export_markdown_desc">Export conversation as a markdown file</string>
