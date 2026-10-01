@@ -59,7 +59,6 @@ class ModelRegistryTest {
         assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-4.5-sonnet"))
         assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-sonnet-4-20250929"))
         assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-4-sonnet"))
-        assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-3.5-sonnet"))
         assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-sonnet-5"))
         assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-opus-5"))
         assertEquals(
@@ -74,6 +73,21 @@ class ModelRegistryTest {
         assertEquals(1_000_000, ModelRegistry.MODEL_CONTEXT_LENGTH.getData("claude-opus-5"))
         assertEquals(1_000_000, ModelRegistry.MODEL_CONTEXT_LENGTH.getData("claude-sonnet-5-20260305"))
         assertEquals(null, ModelRegistry.MODEL_CONTEXT_LENGTH.getData("claude-sonnet-4.5"))
+    }
+
+    @Test
+    fun testClaude55() {
+        val visionInput = listOf(Modality.TEXT, Modality.IMAGE)
+        val toolReasoning = listOf(ModelAbility.TOOL, ModelAbility.REASONING)
+        assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-sonnet-5-5"))
+        assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-opus-5-5"))
+        assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-opus-5.5"))
+        assertEquals(visionInput, ModelRegistry.MODEL_INPUT_MODALITIES.getData("claude-sonnet-5-5"))
+        assertEquals(visionInput, ModelRegistry.MODEL_INPUT_MODALITIES.getData("claude-opus-5-5"))
+        assertEquals(toolReasoning, ModelRegistry.MODEL_ABILITIES.getData("claude-sonnet-5-5"))
+        assertEquals(toolReasoning, ModelRegistry.MODEL_ABILITIES.getData("claude-opus-5-5"))
+        assertEquals(1_000_000, ModelRegistry.MODEL_CONTEXT_LENGTH.getData("claude-sonnet-5-5"))
+        assertEquals(1_000_000, ModelRegistry.MODEL_CONTEXT_LENGTH.getData("claude-opus-5-5"))
     }
 
     @Test
