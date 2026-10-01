@@ -14,7 +14,6 @@ import io.modelcontextprotocol.kotlin.sdk.types.CallToolRequestParams
 import io.modelcontextprotocol.kotlin.sdk.types.CallToolResult
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.Tool
-import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,7 +33,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
-import me.rerere.ai.core.InputSchema
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import java.util.concurrent.ConcurrentHashMap
@@ -511,6 +509,3 @@ private fun mergeTools(storedTools: List<McpTool>, serverTools: List<Tool>): Lis
         )
     }
 }
-
-private fun ToolSchema.toSchema(): InputSchema =
-    InputSchema.Obj(properties = properties ?: JsonObject(emptyMap()), required = required)
