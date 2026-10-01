@@ -478,6 +478,20 @@ private fun ProviderConfigureGoogle(
         )
     }
 
+    if (!provider.vertexAI) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Interactions API (Beta)")
+            Switch(
+                checked = provider.useInteractionsApi,
+                onCheckedChange = { onEdit(provider.copy(useInteractionsApi = it)) }
+            )
+        }
+    }
+
     if (provider.vertexAI) {
         Row(
             modifier = Modifier.fillMaxWidth(),

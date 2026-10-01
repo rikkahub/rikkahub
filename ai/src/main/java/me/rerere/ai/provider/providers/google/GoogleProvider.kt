@@ -86,6 +86,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     private val serviceAccountTokenProvider by lazy {
         ServiceAccountTokenProvider(client)
     }
+    private val interactionsAPI = InteractionsAPI(client = client, keyRoulette = keyRoulette)
+
+    // Interactions API 目前只有 Gemini Developer API 提供，Vertex AI 仍走 generateContent
+    private fun ProviderSetting.Google.usesInteractionsApi() = useInteractionsApi && !vertexAI
 
     private fun buildUrl(providerSetting: ProviderSetting.Google, path: String): HttpUrl {
         return if (!providerSetting.vertexAI) {
@@ -167,6 +171,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         messages: List<UIMessage>,
         params: TextGenerationParams,
     ): TextGenerationResult = withContext(Dispatchers.IO) {
+        if (providerSetting.usesInteractionsApi()) {
+            return@withContext interactionsAPI.generateText(providerSetting, messages, params)
+        }
+
         val requestBody = buildCompletionRequestBody(messages, params)
 
         val url = buildUrl(
@@ -211,6 +219,16 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     }
 
     override suspend fun streamText(
+        providerSetting: ProviderSetting.Google,
+        messages: List<UIMessage>,
+        params: TextGenerationParams,
+    ): Flow<StreamChunk> = if (providerSetting.usesInteractionsApi()) {
+        interactionsAPI.streamText(providerSetting, messages, params)
+    } else {
+        streamGenerateContent(providerSetting, messages, params)
+    }
+
+    private fun streamGenerateContent(
         providerSetting: ProviderSetting.Google,
         messages: List<UIMessage>,
         params: TextGenerationParams,
