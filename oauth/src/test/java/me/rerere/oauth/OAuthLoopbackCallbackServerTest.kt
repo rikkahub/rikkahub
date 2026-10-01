@@ -20,6 +20,7 @@ class OAuthLoopbackCallbackServerTest {
         val server = OAuthLoopbackCallbackServer()
         val session = server.openSession("expected-state")
         try {
+            assertTrue(session.redirectUri.startsWith("http://localhost:"))
             execute("${session.redirectUri}?code=wrong-code&state=wrong-state").use { response ->
                 assertEquals(400, response.code)
             }

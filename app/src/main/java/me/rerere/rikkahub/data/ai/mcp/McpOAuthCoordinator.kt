@@ -24,7 +24,7 @@ private const val TOKEN_REFRESH_LEEWAY_MS = 60_000L
 internal const val MCP_OAUTH_CALLBACK_PORT = 52_134
 internal const val MCP_OAUTH_CALLBACK_PATH = "/oauth/callback"
 internal const val MCP_OAUTH_REDIRECT_URI =
-    "http://127.0.0.1:$MCP_OAUTH_CALLBACK_PORT$MCP_OAUTH_CALLBACK_PATH"
+    "http://localhost:$MCP_OAUTH_CALLBACK_PORT$MCP_OAUTH_CALLBACK_PATH"
 private val OAUTH_CALLBACK_TIMEOUT = 5.minutes
 
 /**
