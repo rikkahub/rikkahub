@@ -1400,4 +1400,6 @@
   <string name="chart_mode_table">Таблица</string>
   <string name="chart_series">Ряд</string>
   <string name="chart_series_name">Ряд %1$d</string>
+  <string name="error_fast_model_not_found">Быстрая модель не найдена. Пожалуйста, выберите её в настройках.</string>
+  <string name="error_fast_model_provider_not_found">Провайдер быстрой модели не найден</string>
 </resources>

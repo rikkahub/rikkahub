@@ -1400,4 +1400,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chart_mode_table">表</string>
   <string name="chart_series">系列</string>
   <string name="chart_series_name">系列 %1$d</string>
+  <string name="error_fast_model_not_found">高速モデルが見つかりません。設定で選択してください。</string>
+  <string name="error_fast_model_provider_not_found">高速モデルのプロバイダーが見つかりません</string>
 </resources>

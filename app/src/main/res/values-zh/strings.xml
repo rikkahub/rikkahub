@@ -1401,4 +1401,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chart_mode_table">表格</string>
   <string name="chart_series">系列</string>
   <string name="chart_series_name">系列 %1$d</string>
+  <string name="error_fast_model_not_found">未找到快速模型。请在设置中选择一个。</string>
+  <string name="error_fast_model_provider_not_found">未找到快速模型的提供商</string>
 </resources>
