@@ -19,9 +19,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
@@ -92,6 +95,9 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     var selectedTagIds by remember { mutableStateOf(emptySet<Uuid>()) }
     // 待删除的助手
     var deleteTarget by remember { mutableStateOf<Assistant?>(null) }
+    // 待复制的助手(仅在有独立记忆时需要询问是否一并复制)
+    var cloneTarget by remember { mutableStateOf<Assistant?>(null) }
+    var cloneWithMemories by remember { mutableStateOf(false) }
 
     // 根据搜索关键词和选中的标签过滤助手
     val filteredAssistants = remember(settings.assistants, selectedTagIds, searchQuery) {
@@ -203,7 +209,13 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                                 navController.navigate(Screen.AssistantDetail(id = assistant.id.toString()))
                             },
                             onCopy = {
-                                vm.copyAssistant(assistant)
+                                // 全局记忆是共享的, 复制后的助手本来就能读到, 无需询问
+                                if (!assistant.useGlobalMemory && memories.isNotEmpty()) {
+                                    cloneWithMemories = false
+                                    cloneTarget = assistant
+                                } else {
+                                    vm.copyAssistant(assistant)
+                                }
                             },
                             onDelete = {
                                 deleteTarget = assistant
@@ -233,6 +245,33 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
         onDismiss = { deleteTarget = null },
     ) {
         Text(stringResource(R.string.assistant_page_delete_dialog_text))
+    }
+
+    RikkaConfirmDialog(
+        show = cloneTarget != null,
+        title = stringResource(R.string.assistant_page_clone),
+        confirmText = stringResource(R.string.confirm),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            cloneTarget?.let { vm.copyAssistant(it, copyMemories = cloneWithMemories) }
+            cloneTarget = null
+        },
+        onDismiss = { cloneTarget = null },
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = cloneWithMemories,
+                    role = Role.Checkbox,
+                    onValueChange = { cloneWithMemories = it },
+                ),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = cloneWithMemories, onCheckedChange = null)
+            Text(stringResource(R.string.assistant_page_clone_with_memories))
+        }
     }
 }
 

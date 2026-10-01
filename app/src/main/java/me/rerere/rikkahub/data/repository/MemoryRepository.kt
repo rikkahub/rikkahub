@@ -65,6 +65,14 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
         return newMemory
     }
 
+    suspend fun copyMemories(fromAssistantId: String, toAssistantId: String) {
+        val memories = memoryDAO.getMemoriesOfAssistant(fromAssistantId)
+        if (memories.isEmpty()) return
+        memoryDAO.insertMemories(
+            memories.map { MemoryEntity(assistantId = toAssistantId, content = it.content) }
+        )
+    }
+
     suspend fun deleteMemory(id: Int) {
         memoryDAO.deleteMemory(id)
     }
