@@ -33,6 +33,7 @@ import me.rerere.ai.provider.CustomHeader
 import me.rerere.highlight.LocalCodeHighlighter
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.SelectTextField
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeVisualTransformation
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
@@ -41,6 +42,28 @@ private val jsonLenient = Json {
     ignoreUnknownKeys = true
     isLenient = true
     prettyPrint = true
+}
+
+private val COMMON_HEADER_NAMES = listOf(
+    "User-Agent",
+    "HTTP-Referer",
+    "X-Title",
+    "Referer",
+    "Origin",
+    "Accept-Language",
+    "Cookie",
+    "anthropic-beta",
+    "OpenAI-Organization",
+    "OpenAI-Project",
+)
+
+// 按已输入内容过滤常用请求头，没有匹配(或已完整输入)时展示全部
+private fun commonHeaderNames(input: String): List<String> {
+    val keyword = input.trim()
+    val matched = COMMON_HEADER_NAMES.filter {
+        it.contains(keyword, ignoreCase = true) && !it.equals(keyword, ignoreCase = true)
+    }
+    return matched.ifEmpty { COMMON_HEADER_NAMES }
 }
 
 @Composable
@@ -63,14 +86,17 @@ fun CustomHeaders(headers: List<CustomHeader>, onUpdate: (List<CustomHeader>) ->
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            OutlinedTextField(
+                            val updateHeaderName = { name: String ->
+                                headerName = name
+                                val updatedHeaders = headers.toMutableList()
+                                updatedHeaders[index] = updatedHeaders[index].copy(name = name.trim())
+                                onUpdate(updatedHeaders)
+                            }
+                            SelectTextField(
                                 value = headerName,
-                                onValueChange = {
-                                    headerName = it
-                                    val updatedHeaders = headers.toMutableList()
-                                    updatedHeaders[index] = updatedHeaders[index].copy(name = it.trim())
-                                    onUpdate(updatedHeaders)
-                                },
+                                options = commonHeaderNames(headerName),
+                                onValueChange = updateHeaderName,
+                                onOptionSelected = updateHeaderName,
                                 label = { Text(stringResource(R.string.assistant_page_header_name)) },
                                 modifier = Modifier.fillMaxWidth()
                             )

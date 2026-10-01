@@ -123,6 +123,7 @@ fun <T> SelectTextField(
     modifier: Modifier = Modifier,
     onValueChange: (String) -> Unit = {},
     readOnly: Boolean = false,
+    label: @Composable (() -> Unit)? = null,
     placeholder: @Composable (() -> Unit)? = null,
     optionToString: @Composable (T) -> String = { it.toString() },
 ) {
@@ -135,6 +136,7 @@ fun <T> SelectTextField(
             value = value,
             onValueChange = onValueChange,
             readOnly = readOnly,
+            label = label,
             placeholder = placeholder,
             modifier = Modifier
                 .fillMaxWidth()
