@@ -164,6 +164,14 @@ internal class McpOAuthDiscoveryClient(
     companion object {
         private val RESOURCE_METADATA_REGEX = Regex("resource_metadata=\"([^\"]+)\"")
 
+        /** 服务器 origin，用于未提供受保护资源元数据时作为授权服务器 issuer。 */
+        fun serverOrigin(serverUrl: String): String? {
+            val url = serverUrl.toHttpUrlOrNull() ?: return null
+            val defaultPort = HttpUrl.defaultPort(url.scheme)
+            val port = if (url.port == defaultPort) "" else ":${url.port}"
+            return "${url.scheme}://${url.host}$port"
+        }
+
         /** RFC 8707 与 MCP 规范使用的 canonical resource URI。 */
         fun canonicalResource(serverUrl: String): String {
             val url = serverUrl.toHttpUrlOrNull() ?: return serverUrl

@@ -121,10 +121,10 @@ internal class McpOAuthCoordinator(
     }
 
     suspend fun needsAuthorization(config: McpServerConfig, error: Throwable): Boolean {
-        if (looksUnauthorized(error) && config.commonOptions.oauth?.enabled == true) return true
         if (config.commonOptions.headers.any { it.first.equals("Authorization", ignoreCase = true) }) {
             return false
         }
+        if (looksUnauthorized(error)) return true
         return runCatching { discoveryClient.discoverProtectedResource(config.serverUrl) }
             .onFailure {
                 Log.i(TAG, "OAuth probe failed for ${config.commonOptions.name}: ${it.message}")
@@ -136,16 +136,20 @@ internal class McpOAuthCoordinator(
         val serverUrl = config.serverUrl
         require(serverUrl.isNotBlank()) { "Server URL 为空，无法授权" }
 
-        val protectedResource = discoveryClient.discoverProtectedResource(serverUrl)
-        val issuer = protectedResource.authorizationServers.firstOrNull()
-            ?: error("受保护资源未声明授权服务器")
+        // 部分服务器（如 Zomato）不提供 RFC 9728 元数据，按旧版规范退回到服务器 origin 作为授权服务器
+        val protectedResource = runCatching { discoveryClient.discoverProtectedResource(serverUrl) }
+            .onFailure { Log.i(TAG, "Protected resource discovery failed, fallback to server origin: ${it.message}") }
+            .getOrNull()
+        val issuer = protectedResource?.authorizationServers?.firstOrNull()
+            ?: McpOAuthDiscoveryClient.serverOrigin(serverUrl)
+            ?: error("无法确定授权服务器")
         val metadata = discoveryClient.discoverAuthorizationServer(issuer)
         val authorizationEndpoint = metadata.authorizationEndpoint
             ?: error("授权服务器缺少 authorization_endpoint")
         val tokenEndpoint = metadata.tokenEndpoint
             ?: error("授权服务器缺少 token_endpoint")
         val scope = config.commonOptions.oauth?.scope
-            ?: protectedResource.scopesSupported?.joinToString(" ")
+            ?: protectedResource?.scopesSupported?.joinToString(" ")
             ?: metadata.scopesSupported?.joinToString(" ")
 
         val pkce = oauthClient.generatePkce()
