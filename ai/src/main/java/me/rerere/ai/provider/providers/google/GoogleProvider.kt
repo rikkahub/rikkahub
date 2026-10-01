@@ -358,12 +358,15 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
                     val isGeminiPro =
                         params.model.modelId.contains(Regex("2\\.5.*pro", RegexOption.IGNORE_CASE))
+                    val useThinkingLevel =
+                        ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId) ||
+                            ModelRegistry.GEMINI_4.match(modelId = params.model.modelId)
 
                     when (params.reasoningLevel) {
                         ReasoningLevel.AUTO -> {} // 自动模式，不设置参数
 
                         ReasoningLevel.OFF -> {
-                            if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
+                            if (useThinkingLevel) {
                                 put("thinkingLevel", "minimal")
                             } else if (!isGeminiPro) {
                                 put("thinkingBudget", 0)
@@ -372,7 +375,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         }
 
                         else -> {
-                            if (ModelRegistry.GEMINI_3_SERIES.match(modelId = params.model.modelId)) {
+                            if (useThinkingLevel) {
                                 when (params.reasoningLevel) {
                                     ReasoningLevel.LOW -> put("thinkingLevel", "low")
                                     ReasoningLevel.MEDIUM -> put("thinkingLevel", "medium")

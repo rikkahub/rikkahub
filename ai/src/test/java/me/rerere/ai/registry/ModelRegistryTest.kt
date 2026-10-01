@@ -40,6 +40,20 @@ class ModelRegistryTest {
     }
 
     @Test
+    fun testGemini4() {
+        val visionInput = listOf(Modality.TEXT, Modality.IMAGE)
+        val toolReasoning = listOf(ModelAbility.TOOL, ModelAbility.REASONING)
+        assertTrue(ModelRegistry.GEMINI_4.match("gemini-4-pro"))
+        assertTrue(ModelRegistry.GEMINI_4.match("gemini-4-flash-preview"))
+        assertTrue(ModelRegistry.GEMINI_SERIES.match("gemini-4-pro"))
+        assertFalse(ModelRegistry.GEMINI_4.match("gemini-3-pro"))
+        assertFalse(ModelRegistry.GEMINI_4.match("gemini-2.5-flash-preview-04-17"))
+        assertFalse(ModelRegistry.GEMINI_3_SERIES.match("gemini-4-pro"))
+        assertEquals(visionInput, ModelRegistry.MODEL_INPUT_MODALITIES.getData("gemini-4-pro"))
+        assertEquals(toolReasoning, ModelRegistry.MODEL_ABILITIES.getData("gemini-4-flash"))
+    }
+
+    @Test
     fun testClaudeSeries() {
         assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-sonnet-4.5-20250929"))
         assertTrue(ModelRegistry.CLAUDE_SERIES.match("claude-4.5-sonnet"))
