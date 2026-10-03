@@ -447,6 +447,17 @@ class ResponseApiRequestMessageTest {
     }
 
     @Test
+    fun `function tools should disable strict mode so optional fields stay optional`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
+            params = createToolParams(tools = listOf(createFunctionTool("get_weather")))
+        )
+
+        val tool = requestBody["tools"]!!.jsonArray[0].jsonObject
+        assertEquals("false", tool["strict"]?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun `tools key should be absent when neither function nor built-in tools exist`() {
         val requestBody = invokeBuildRequestBody(
             providerSetting = ProviderSetting.OpenAI(baseUrl = "https://api.openai.com/v1"),
