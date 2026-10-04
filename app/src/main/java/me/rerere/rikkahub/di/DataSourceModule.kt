@@ -8,6 +8,7 @@ import io.pebbletemplates.pebble.PebbleEngine
 import kotlinx.serialization.json.Json
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
@@ -18,6 +19,7 @@ import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.api.RikkaHubAPI
 import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.files.RemoteFileStore
 import me.rerere.rikkahub.data.sync.BackupManager
 import me.rerere.rikkahub.data.db.AppDatabaseFactory
 import me.rerere.rikkahub.data.db.AppDatabase
@@ -225,6 +227,14 @@ val dataSourceModule = module {
             backupManager = get(),
             context = get(),
             httpClient = get()
+        )
+    }
+
+    single {
+        RemoteFileStore(
+            settingsStore = get(),
+            httpClient = get(),
+            scope = get<AppScope>()
         )
     }
 
