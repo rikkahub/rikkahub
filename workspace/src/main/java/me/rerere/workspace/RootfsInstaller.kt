@@ -332,16 +332,16 @@ class RootfsInstaller(
         setExecutable(mode and 0b001_000_000 != 0, false)
     }
 
+    // 根目录条目 (如 Alpine minirootfs 开头的 "./") 规范化后为空串, 由调用方跳过
     private fun normalizeTarPath(path: String): String {
-        val normalized = path
+        require(!path.contains('\u0000')) { "Rootfs entry path contains invalid character" }
+        val segments = path
             .replace('\\', '/')
             .trim()
-            .trimStart('/')
-            .removePrefix("./")
-        require(normalized.isNotBlank()) { "Rootfs entry path is blank" }
-        require(!normalized.contains('\u0000')) { "Rootfs entry path contains invalid character" }
-        require(normalized.split('/').none { it == ".." }) { "Rootfs entry escapes target directory: $path" }
-        return normalized
+            .split('/')
+            .filter { it.isNotEmpty() && it != "." }
+        require(segments.none { it == ".." }) { "Rootfs entry escapes target directory: $path" }
+        return segments.joinToString("/")
     }
 
     private fun ByteArray.string(offset: Int, length: Int): String {

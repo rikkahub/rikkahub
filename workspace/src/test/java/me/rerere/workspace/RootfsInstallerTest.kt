@@ -2,11 +2,13 @@ package me.rerere.workspace
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.OutputStream
+import java.nio.file.Files
 import java.util.zip.GZIPOutputStream
 
 class RootfsInstallerTest {
@@ -49,14 +51,39 @@ class RootfsInstallerTest {
         assertEquals("content", File(target, "dir/file.txt").readText())
     }
 
+    @Test
+    fun `extract handles alpine style rootfs`() {
+        // Alpine minirootfs 以根目录条目 "./" 开头, 且 /bin/sh 是指向 /bin/busybox 的绝对路径软链
+        val archive = tmp.newFile("rootfs.tar.gz")
+        GZIPOutputStream(archive.outputStream()).use { out ->
+            out.writeTarEntry("./", '5', ByteArray(0))
+            out.writeTarEntry("./bin/", '5', ByteArray(0))
+            out.writeTarEntry("./bin/busybox", '0', "busybox".toByteArray())
+            out.writeTarEntry("./bin/sh", '2', ByteArray(0), linkName = "/bin/busybox")
+            out.write(ByteArray(TAR_BLOCK * 2))
+        }
+
+        val target = tmp.newFolder("out")
+        createInstaller().extractTar(archive, target) {}
+
+        assertEquals("busybox", File(target, "bin/busybox").readText())
+        assertEquals("/bin/busybox", Files.readSymbolicLink(File(target, "bin/sh").toPath()).toString())
+        assertTrue(WorkspaceManager.isUsableRootfs(target))
+        assertEquals("/bin/sh", WorkspaceManager.rootfsShell(target))
+
+        File(target, "bin/bash").writeText("bash")
+        assertEquals("/bin/bash", WorkspaceManager.rootfsShell(target))
+    }
+
     private fun createInstaller() = RootfsInstaller(WorkspaceManager(tmp.newFolder()))
 
-    private fun OutputStream.writeTarEntry(name: String, type: Char, data: ByteArray) {
+    private fun OutputStream.writeTarEntry(name: String, type: Char, data: ByteArray, linkName: String = "") {
         val header = ByteArray(TAR_BLOCK)
         name.toByteArray(Charsets.UTF_8).copyInto(header, 0)
         "0000755".toByteArray().copyInto(header, 100)
         data.size.toLong().toOctalField().copyInto(header, 124)
         header[156] = type.code.toByte()
+        linkName.toByteArray(Charsets.UTF_8).copyInto(header, 157)
         write(header)
         write(data)
         val padding = (TAR_BLOCK - data.size % TAR_BLOCK) % TAR_BLOCK

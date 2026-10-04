@@ -16,7 +16,7 @@ class ProotShellRunner(
     private val patcher: RootfsPatcher = RootfsPatcher(),
 ) : WorkspaceShellRunner {
     override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
-        if (!context.linuxDir.hasUsableRootfs()) {
+        if (!WorkspaceManager.isUsableRootfs(context.linuxDir)) {
             return WorkspaceCommandResult(
                 exitCode = 127,
                 stdout = "",
@@ -104,7 +104,7 @@ class ProotShellRunner(
             "CI=true",
             "NO_COLOR=1",
             "PAGER=cat",
-            "/bin/bash",
+            WorkspaceManager.rootfsShell(context.linuxDir),
             "-l",
             "-c",
             // 命令通过位置参数传入, 避免任何转义; eval "$2" 对命令文本只求值一次, 等价于 bash -c "$cmd"
@@ -124,9 +124,6 @@ class ProotShellRunner(
             "$WORKSPACE_DIR/$normalized"
         }
     }
-
-    private fun File.hasUsableRootfs(): Boolean =
-        isDirectory && File(this, "bin/sh").isFile
 
     private companion object {
         private const val PROOT_EXEC = "libproot_exec.so"

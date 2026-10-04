@@ -252,6 +252,12 @@ class WorkspaceRepository(
         manager.rootfsFileSize(workspace.root, path)
     }
 
+    /** Rootfs 内执行命令实际使用的 shell 路径 (/bin/bash 或 /bin/sh) */
+    suspend fun rootfsShell(id: String): String = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        manager.rootfsShell(workspace.root)
+    }
+
     /** 按 Rootfs 内绝对路径导出文件内容, 支持 /workspace、bind mount 与 Rootfs 内部路径 */
     suspend fun exportRootfsFile(
         id: String,
