@@ -46,7 +46,14 @@ data class GeneratedImage(
 
 private fun GenMediaEntity.toGeneratedImage(filesManager: FilesManager): GeneratedImage {
     val imagesDir = filesManager.getImagesDir()
-    val fullPath = File(imagesDir, this.path.removePrefix("images/")).absolutePath
+    val name = this.path.removePrefix("images/")
+    val file = File(imagesDir, name)
+    // 旧版本直接把含 "/" 的模型名拼进文件名，图片实际落在子目录里，而记录只存了最后一段
+    val fullPath = if (file.exists() || '/' !in modelId) {
+        file.absolutePath
+    } else {
+        File(imagesDir, "${createAt}_${modelId.substringBeforeLast('/')}/$name").absolutePath
+    }
 
     return GeneratedImage(
         id = this.id,
@@ -56,6 +63,9 @@ private fun GenMediaEntity.toGeneratedImage(filesManager: FilesManager): Generat
         model = this.modelId
     )
 }
+
+// 模型名可能含 "/"（如 OpenRouter 的 vendor/model），直接拼进文件名会变成子目录
+private fun String.toFileNamePart(): String = replace(Regex("""[\\/:*?"<>|]"""), "_")
 
 class ImgGenVM(
     context: Application,
@@ -290,7 +300,10 @@ class ImgGenVM(
         index: Int,
     ): File {
         val timestamp = System.currentTimeMillis()
-        val imageFile = File(getApplication<Application>().appTempFolder, "imggen_${timestamp}_${modelName}_$index.png")
+        val imageFile = File(
+            getApplication<Application>().appTempFolder,
+            "imggen_${timestamp}_${modelName.toFileNamePart()}_$index.png"
+        )
         return filesManager.createImageFileFromBase64(item.data, imageFile.absolutePath)
     }
 
@@ -305,7 +318,7 @@ class ImgGenVM(
         val imagesDir = filesManager.getImagesDir()
 
         val timestamp = System.currentTimeMillis()
-        val filename = "${timestamp}_${modelName}_$index.png"
+        val filename = "${timestamp}_${modelName.toFileNamePart()}_$index.png"
         val imageFile = File(imagesDir, filename)
 
         val createdFile = filesManager.createImageFileFromBase64(item.data, imageFile.absolutePath)
