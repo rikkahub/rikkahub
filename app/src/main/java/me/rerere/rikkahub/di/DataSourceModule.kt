@@ -8,6 +8,7 @@ import io.pebbletemplates.pebble.PebbleEngine
 import kotlinx.serialization.json.Json
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
+import me.rerere.mediagen.provider.MediaGenerationManager
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
@@ -95,6 +96,10 @@ val dataSourceModule = module {
 
     single {
         get<AppDatabase>().folderDao()
+    }
+
+    single {
+        get<AppDatabase>().mediaCreationDao()
     }
 
     single {
@@ -236,6 +241,10 @@ val dataSourceModule = module {
             httpClient = get(),
             scope = get<AppScope>()
         )
+    }
+
+    single {
+        MediaGenerationManager(client = get())
     }
 
     single<Retrofit> {

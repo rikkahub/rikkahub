@@ -1,0 +1,585 @@
+package me.rerere.rikkahub.ui.pages.mediacreation
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.dokar.sonner.ToastType
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowLeft01
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Copy01
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Download01
+import me.rerere.hugeicons.stroke.ImageAdd01
+import me.rerere.hugeicons.stroke.ImageToVideo
+import me.rerere.hugeicons.stroke.MoreVertical
+import me.rerere.hugeicons.stroke.PencilEdit01
+import me.rerere.hugeicons.stroke.Refresh
+import me.rerere.hugeicons.stroke.Share01
+import me.rerere.hugeicons.stroke.Video01
+import me.rerere.mediagen.model.ImageRole
+import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.model.MediaCreationAsset
+import me.rerere.rikkahub.data.model.MediaCreationAssetType
+import me.rerere.rikkahub.data.model.MediaCreationNode
+import me.rerere.rikkahub.data.model.MediaCreationOutput
+import me.rerere.rikkahub.data.model.MediaCreationRecord
+import me.rerere.rikkahub.data.model.MediaCreationStatus
+import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
+import me.rerere.rikkahub.ui.components.ui.ItemAction
+import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
+import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
+import me.rerere.rikkahub.ui.components.ui.VideoPlayerDialog
+import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.toMessageTimeString
+import me.rerere.rikkahub.utils.writeClipboardText
+import java.io.File
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
+
+/** 正在全屏查看的文件。 */
+private data class MediaPreview(val file: File, val isVideo: Boolean)
+
+/**
+ * 时间线上的一项，显示它当前选中的版本：上面是这次生成的输入，下面是进度或产出，
+ * 最后一行是可以对它做的操作，有多个版本时右下角可以切换。
+ *
+ * [editing] 表示输入区正在修改这一项。
+ */
+@Composable
+internal fun MediaCreationRecordItem(
+    node: MediaCreationNode,
+    editing: Boolean,
+    vm: MediaCreationVM,
+    modifier: Modifier = Modifier,
+) {
+    val record = node.record
+    var preview by remember { mutableStateOf<MediaPreview?>(null) }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CustomColors.cardColors,
+        border = if (editing) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+    ) {
+        Column(
+            modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            RecordInput(
+                record = record,
+                resolve = vm::resolve,
+                onPreview = { preview = it },
+            )
+            when {
+                record.status.isActive -> RecordProgress(record)
+                record.status == MediaCreationStatus.SUCCEEDED -> RecordOutputs(
+                    record = record,
+                    vm = vm,
+                    onPreview = { preview = it },
+                )
+
+                else -> RecordFailure(record)
+            }
+            RecordActions(node = node, vm = vm)
+        }
+    }
+
+    preview?.let { target ->
+        if (target.isVideo) {
+            VideoPlayerDialog(file = target.file, onDismissRequest = { preview = null })
+        } else {
+            ImagePreviewDialog(images = listOf(target.file.absolutePath), onDismissRequest = { preview = null })
+        }
+    }
+}
+
+@Composable
+private fun RecordInput(
+    record: MediaCreationRecord,
+    resolve: (String) -> File,
+    onPreview: (MediaPreview) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (record.inputs.isNotEmpty()) {
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                // 只有区分角色的输入才标注，纯参考图不需要说明
+                val showRoles = record.inputs.any { it.type == MediaCreationAssetType.IMAGE && it.role != ImageRole.REFERENCE }
+                record.inputs.forEach { asset ->
+                    InputThumbnail(
+                        asset = asset,
+                        file = resolve(asset.path),
+                        showRole = showRoles,
+                        onPreview = onPreview,
+                    )
+                }
+            }
+        }
+        if (record.prompt.isNotBlank()) {
+            var expanded by remember { mutableStateOf(false) }
+            Text(
+                text = record.prompt,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = if (expanded) Int.MAX_VALUE else 4,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.clickable { expanded = !expanded },
+            )
+        }
+        val time = remember(record.createAt) {
+            record.createAt.atZone(ZoneId.systemDefault()).toLocalDateTime().toMessageTimeString()
+        }
+        Text(
+            text = (listOf(record.modelId) + record.params.summary(record.kind) + time).joinToString(" · "),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun InputThumbnail(
+    asset: MediaCreationAsset,
+    file: File,
+    showRole: Boolean,
+    onPreview: (MediaPreview) -> Unit,
+) {
+    val isVideo = asset.type == MediaCreationAssetType.VIDEO
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onPreview(MediaPreview(file, isVideo)) },
+    ) {
+        MediaThumbnail(
+            file = file,
+            isVideo = isVideo,
+            modifier = Modifier.fillMaxSize(),
+            playIconSize = 8.dp,
+        )
+        if (showRole && !isVideo) {
+            Text(
+                text = asset.role.label,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .padding(vertical = 1.dp),
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecordProgress(record: MediaCreationRecord) {
+    // 当前阶段已经持续的时间
+    val elapsed by produceState(initialValue = elapsedSeconds(record.updateAt), record.updateAt) {
+        while (true) {
+            value = elapsedSeconds(record.updateAt)
+            delay(1000)
+        }
+    }
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            Text(
+                text = "${record.status.label}  %d:%02d".format(elapsed / 60, elapsed % 60),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
+private fun elapsedSeconds(since: Instant): Long = Duration.between(since, Instant.now()).seconds.coerceAtLeast(0)
+
+@Composable
+private fun RecordFailure(record: MediaCreationRecord) {
+    val cancelled = record.status == MediaCreationStatus.CANCELLED
+    Surface(
+        color = if (cancelled) {
+            MaterialTheme.colorScheme.surfaceContainerHighest
+        } else {
+            MaterialTheme.colorScheme.errorContainer
+        },
+        contentColor = if (cancelled) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        } else {
+            MaterialTheme.colorScheme.onErrorContainer
+        },
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        SelectionContainer {
+            Text(
+                text = when {
+                    !cancelled -> record.error ?: record.status.label
+                    record.taskId != null -> "已停止等待，任务可能仍在服务端运行"
+                    else -> record.status.label
+                },
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(12.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecordOutputs(
+    record: MediaCreationRecord,
+    vm: MediaCreationVM,
+    onPreview: (MediaPreview) -> Unit,
+) {
+    val outputs = record.outputs
+    if (outputs.size == 1) {
+        val output = outputs.single()
+        // 竖图不占满整行，免得一条记录撑出好几屏
+        OutputTile(
+            output = output,
+            vm = vm,
+            onPreview = onPreview,
+            modifier = Modifier.fillMaxWidth(if (output.aspectRatio() < 0.9f) 0.6f else 1f),
+        )
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            outputs.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { output ->
+                        OutputTile(
+                            output = output,
+                            vm = vm,
+                            onPreview = onPreview,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+private fun MediaCreationOutput.aspectRatio(): Float {
+    val width = width ?: return 1f
+    val height = height ?: return 1f
+    if (width <= 0 || height <= 0) return 1f
+    return (width.toFloat() / height).coerceIn(0.5f, 2.4f)
+}
+
+@Composable
+private fun OutputTile(
+    output: MediaCreationOutput,
+    vm: MediaCreationVM,
+    onPreview: (MediaPreview) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val file = remember(output.path) { vm.resolve(output.path) }
+    Box(
+        modifier = modifier
+            .aspectRatio(output.aspectRatio())
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onPreview(MediaPreview(file, output.isVideo)) },
+    ) {
+        MediaThumbnail(
+            file = file,
+            isVideo = output.isVideo,
+            poster = output.posterPath?.let(vm::resolve),
+            modifier = Modifier.fillMaxSize(),
+        )
+        output.durationSeconds?.takeIf { output.isVideo }?.let { duration ->
+            Text(
+                text = "%d:%02d".format(duration.toInt() / 60, duration.toInt() % 60),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(8.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
+            )
+        }
+        OutputMenu(
+            output = output,
+            file = file,
+            vm = vm,
+            modifier = Modifier.align(Alignment.TopEnd),
+        )
+    }
+}
+
+/** 单项产出的操作：放回输入区、保存、分享。 */
+@Composable
+private fun OutputMenu(
+    output: MediaCreationOutput,
+    file: File,
+    vm: MediaCreationVM,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+    var expanded by remember { mutableStateOf(false) }
+
+    @Composable
+    fun MenuItem(text: String, icon: ImageVector, onClick: () -> Unit) {
+        DropdownMenuItem(
+            text = { Text(text) },
+            leadingIcon = { Icon(icon, contentDescription = null) },
+            onClick = {
+                expanded = false
+                onClick()
+            },
+        )
+    }
+
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .padding(6.dp)
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.45f))
+                .clickable { expanded = true },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = HugeIcons.MoreVertical,
+                contentDescription = stringResource(R.string.more_options),
+                tint = Color.White,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            if (output.isVideo) {
+                MenuItem("续写（尾帧作首帧）", HugeIcons.Video01) { vm.continueVideo(output) }
+                MenuItem("用作参考视频", HugeIcons.ImageAdd01) { vm.useVideo(output) }
+            } else {
+                MenuItem("用作参考图", HugeIcons.ImageAdd01) { vm.useImage(output, ImageRole.REFERENCE) }
+                MenuItem("用作首帧", HugeIcons.ImageToVideo) { vm.useImage(output, ImageRole.FIRST_FRAME) }
+                MenuItem("用作尾帧", HugeIcons.ImageToVideo) { vm.useImage(output, ImageRole.LAST_FRAME) }
+            }
+            MenuItem("保存到相册", HugeIcons.Download01) {
+                scope.launch {
+                    runCatching { saveMediaToGallery(context, file, output.mimeType) }
+                        .onSuccess { toaster.show("已保存到相册", type = ToastType.Success) }
+                        .onFailure { toaster.show(it.message ?: "保存失败", type = ToastType.Error) }
+                }
+            }
+            MenuItem("分享", HugeIcons.Share01) {
+                runCatching { shareMedia(context, file, output.mimeType) }
+                    .onFailure { toaster.show(it.message ?: "分享失败", type = ToastType.Error) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordActions(
+    node: MediaCreationNode,
+    vm: MediaCreationVM,
+) {
+    val record = node.record
+    val hasVersions = node.versionCount > 1
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    var confirmCancel by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    Row(verticalAlignment = Alignment.Top) {
+        // 放不下时换行，保证每个操作都看得见
+        FlowRow(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            when {
+                record.status.isActive -> ActionChip("取消", HugeIcons.Cancel01) {
+                    // 已经提交给服务端的任务撤不回来，先说明清楚
+                    if (record.taskId != null) confirmCancel = true else vm.cancel(record)
+                }
+
+                record.status == MediaCreationStatus.SUCCEEDED -> {
+                    // 只有一项产出时把最常用的去向直接摆出来，多项产出走各自的菜单
+                    record.outputs.singleOrNull()?.let { output ->
+                        if (output.isVideo) {
+                            ActionChip("续写", HugeIcons.Video01) { vm.continueVideo(output) }
+                        } else {
+                            ActionChip("用作参考", HugeIcons.ImageAdd01) { vm.useImage(output, ImageRole.REFERENCE) }
+                            ActionChip("做成视频", HugeIcons.ImageToVideo) { vm.useImage(output, ImageRole.FIRST_FRAME) }
+                        }
+                    }
+                    ActionChip("再来一次", HugeIcons.Refresh) { vm.rerun(record) }
+                }
+
+                else -> ActionChip(
+                    text = if (record.taskId != null) "继续获取结果" else "重试",
+                    icon = HugeIcons.Refresh,
+                ) { vm.retry(record) }
+            }
+            ActionChip("改一改", HugeIcons.PencilEdit01) { vm.editFrom(record) }
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            ItemActionMenu(
+                actions = listOfNotNull(
+                    ItemAction(text = "复制提示词", icon = HugeIcons.Copy01) {
+                        context.writeClipboardText(record.prompt)
+                        toaster.show("已复制提示词", type = ToastType.Success)
+                    }.takeIf { record.prompt.isNotBlank() },
+                    ItemAction(
+                        text = if (hasVersions) "删除这个版本" else stringResource(R.string.delete),
+                        icon = HugeIcons.Delete01,
+                        destructive = true,
+                    ) { confirmDelete = true },
+                )
+            )
+            if (hasVersions) {
+                VersionSwitcher(node = node, onSwitch = { vm.switchVersion(node, it) })
+            }
+        }
+    }
+
+    RikkaConfirmDialog(
+        show = confirmCancel,
+        title = "停止等待？",
+        confirmText = "停止等待",
+        dismissText = "继续等待",
+        onConfirm = {
+            confirmCancel = false
+            vm.cancel(record)
+        },
+        onDismiss = { confirmCancel = false },
+    ) {
+        Text("任务已经提交给服务端，无法撤回，服务端仍可能完成并计费。停止后可以随时点「继续获取结果」。")
+    }
+
+    RikkaConfirmDialog(
+        show = confirmDelete,
+        title = stringResource(R.string.confirm_delete),
+        confirmText = stringResource(R.string.delete),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            confirmDelete = false
+            vm.delete(record)
+        },
+        onDismiss = { confirmDelete = false },
+    ) {
+        val target = if (hasVersions) "这个版本" else "这条记录"
+        Text(
+            buildString {
+                if (record.status.isActive) {
+                    append("${target}还在生成，删除后不会再获取结果，已生成的文件也会一并删除。")
+                } else {
+                    append("${target}和它生成的文件会被删除，无法恢复。")
+                }
+                if (hasVersions) append("其余 ${node.versionCount - 1} 个版本会保留。")
+            }
+        )
+    }
+}
+
+/** 在一项的各个版本之间切换。 */
+@Composable
+private fun VersionSwitcher(
+    node: MediaCreationNode,
+    onSwitch: (offset: Int) -> Unit,
+) {
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+
+    @Composable
+    fun Arrow(icon: ImageVector, description: String, offset: Int) {
+        val enabled = node.versionIndex + offset in 0 until node.versionCount
+        Icon(
+            imageVector = icon,
+            contentDescription = description,
+            tint = color,
+            modifier = Modifier
+                .clip(CircleShape)
+                .alpha(if (enabled) 1f else 0.5f)
+                .clickable(enabled = enabled) { onSwitch(offset) }
+                .padding(8.dp)
+                .size(16.dp),
+        )
+    }
+
+    Row(
+        // 和左边的操作按钮同高，两边的最后一行对齐
+        modifier = Modifier.heightIn(min = 48.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Arrow(HugeIcons.ArrowLeft01, "上一个版本", offset = -1)
+        Text(
+            text = "${node.versionIndex + 1}/${node.versionCount}",
+            style = MaterialTheme.typography.bodySmall,
+            color = color,
+        )
+        Arrow(HugeIcons.ArrowRight01, "下一个版本", offset = 1)
+    }
+}
+
+@Composable
+private fun ActionChip(text: String, icon: ImageVector, onClick: () -> Unit) {
+    AssistChip(
+        onClick = onClick,
+        label = { Text(text) },
+        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp)) },
+    )
+}

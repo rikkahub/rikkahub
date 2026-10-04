@@ -94,6 +94,30 @@ class BackupManagerTest {
         assertEquals("live", probe(liveDatabase))
     }
 
+    @Test fun mediaCreationFilesKeepTheirDirectoriesAndSkipUnfinishedDownloads() = runBlocking {
+        val session = File(context.filesDir, "media_creation/session")
+        File(session, "record").mkdirs()
+        File(session, "draft").mkdirs()
+        File(session, "record/out_0.png").writeText("image")
+        File(session, "record/out_1.mp4.part").writeText("half a video")
+        File(session, "draft/asset.jpg").writeText("asset")
+        val archive = manager.createBackup(includeDatabase = false, includeFiles = true)
+        ZipFile(archive).use { zip ->
+            assertTrue(zip.getEntry("media_creation/session/record/out_0.png") != null)
+            assertTrue(zip.getEntry("media_creation/session/draft/asset.jpg") != null)
+            assertEquals(null, zip.getEntry("media_creation/session/record/out_1.mp4.part"))
+        }
+        session.deleteRecursively()
+        manager.stageRestore(archive, includeDatabase = false, includeFiles = true)
+        assertFalse(session.exists())
+        // Applying the staged settings would write to the real settings store of the app under test.
+        assertTrue(File(context.noBackupFilesDir, "backup-restore/pending/settings.json").delete())
+        assertTrue(BackupManager.applyPendingRestore(context, JsonInstant))
+        assertEquals("image", File(session, "record/out_0.png").readText())
+        assertEquals("asset", File(session, "draft/asset.jpg").readText())
+        assertFalse(File(session, "record/out_1.mp4.part").exists())
+    }
+
     @Test fun unsupportedSchemaIsRejectedBeforePublishing() = runBlocking {
         val future = File(directory, "future")
         withRoom(future) {

@@ -16,6 +16,7 @@ import me.rerere.rikkahub.data.db.AppDatabaseFactory
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.SQLiteConfiguration
 import me.rerere.rikkahub.data.files.FileFolders
+import me.rerere.rikkahub.data.files.MediaCreationFiles
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
@@ -50,12 +51,16 @@ class BackupManager(
                     addFile(zip, snapshot, DatabaseBackup.ARCHIVE_DATABASE)
                 }
                 if (includeFiles) {
-                    for (folder in listOf(FileFolders.UPLOAD, FileFolders.SKILLS, FileFolders.FONTS)) {
+                    for (folder in ATTACHMENT_FOLDERS) {
                         val directory = File(context.filesDir, folder)
-                        val files = if (folder == FileFolders.SKILLS) directory.walkTopDown().asSequence()
+                        val files = if (folder in NESTED_ATTACHMENT_FOLDERS) directory.walkTopDown().asSequence()
                         else directory.listFiles().orEmpty().asSequence()
                         for (file in files.filter { it.isFile }) {
                             currentCoroutineContext().ensureActive()
+                            // A media result still being downloaded is incomplete and gets renamed when it finishes.
+                            if (folder == FileFolders.MEDIA_CREATION &&
+                                file.name.endsWith(MediaCreationFiles.PARTIAL_SUFFIX)
+                            ) continue
                             val relative = file.relativeTo(directory).invariantSeparatorsPath
                             PendingRestore.resolveInside(directory, relative)
                             addFile(zip, file, "$folder/$relative")
@@ -140,10 +145,10 @@ class BackupManager(
 
     private fun isAttachment(name: String): Boolean {
         val folder = name.substringBefore('/')
-        if (folder !in listOf(FileFolders.UPLOAD, FileFolders.SKILLS, FileFolders.FONTS) || '/' !in name) return false
+        if (folder !in ATTACHMENT_FOLDERS || '/' !in name) return false
         val relative = name.substringAfter('/')
         require(relative.isNotBlank()) { "Invalid backup attachment: $name" }
-        require(folder == FileFolders.SKILLS || '/' !in relative) { "Invalid backup attachment: $name" }
+        require(folder in NESTED_ATTACHMENT_FOLDERS || '/' !in relative) { "Invalid backup attachment: $name" }
         return true
     }
 
@@ -154,6 +159,12 @@ class BackupManager(
     }
 
     companion object {
+        private val ATTACHMENT_FOLDERS =
+            listOf(FileFolders.UPLOAD, FileFolders.SKILLS, FileFolders.FONTS, FileFolders.MEDIA_CREATION)
+
+        /** Backed up with their subdirectories; the other folders only contain top-level files. */
+        private val NESTED_ATTACHMENT_FOLDERS = setOf(FileFolders.SKILLS, FileFolders.MEDIA_CREATION)
+
         private fun pendingRestore(context: Context) = PendingRestore(
             root = File(context.noBackupFilesDir, "backup-restore"),
             databaseFile = context.getDatabasePath(SQLiteConfiguration.DATABASE_NAME),

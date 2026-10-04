@@ -128,6 +128,10 @@
       android:exported="false"
       android:foregroundServiceType="dataSync" />
     <service
+      android:name=".service.MediaCreationForegroundService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
+    <service
       android:name=".service.WebServerService"
       android:exported="false"
       android:foregroundServiceType="specialUse">
