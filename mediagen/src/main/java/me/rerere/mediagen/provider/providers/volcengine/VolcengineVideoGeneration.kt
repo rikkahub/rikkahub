@@ -109,6 +109,7 @@ internal class VolcengineVideoGeneration(
         request.generateAudio?.let { put("generate_audio", it) }
         request.watermark?.let { put("watermark", it) }
         request.seed?.let { put("seed", it) }
+        require(request.count == null || request.count == 1) { "Volcengine generates one video per task" }
         require(request.promptEnhancement == null) {
             "Volcengine does not expose prompt enhancement in the video generation API"
         }

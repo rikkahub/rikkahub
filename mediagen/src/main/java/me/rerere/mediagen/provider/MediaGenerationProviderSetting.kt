@@ -23,6 +23,8 @@ sealed class MediaGenerationProviderSetting {
     abstract fun copyProvider(
         id: Uuid = this.id,
         name: String = this.name,
+        apiKey: String = this.apiKey,
+        baseUrl: String = this.baseUrl,
         models: List<MediaGenerationModel> = this.models,
     ): MediaGenerationProviderSetting
 
@@ -43,11 +45,15 @@ sealed class MediaGenerationProviderSetting {
         override fun copyProvider(
             id: Uuid,
             name: String,
+            apiKey: String,
+            baseUrl: String,
             models: List<MediaGenerationModel>,
         ): MediaGenerationProviderSetting {
             return this.copy(
                 id = id,
                 name = name,
+                apiKey = apiKey,
+                baseUrl = baseUrl,
                 models = models,
             )
         }
@@ -76,11 +82,15 @@ sealed class MediaGenerationProviderSetting {
         override fun copyProvider(
             id: Uuid,
             name: String,
+            apiKey: String,
+            baseUrl: String,
             models: List<MediaGenerationModel>,
         ): MediaGenerationProviderSetting {
             return this.copy(
                 id = id,
                 name = name,
+                apiKey = apiKey,
+                baseUrl = baseUrl,
                 models = models,
             )
         }
@@ -108,11 +118,15 @@ sealed class MediaGenerationProviderSetting {
         override fun copyProvider(
             id: Uuid,
             name: String,
+            apiKey: String,
+            baseUrl: String,
             models: List<MediaGenerationModel>,
         ): MediaGenerationProviderSetting {
             return this.copy(
                 id = id,
                 name = name,
+                apiKey = apiKey,
+                baseUrl = baseUrl,
                 models = models,
             )
         }
@@ -135,11 +149,15 @@ sealed class MediaGenerationProviderSetting {
         override fun copyProvider(
             id: Uuid,
             name: String,
+            apiKey: String,
+            baseUrl: String,
             models: List<MediaGenerationModel>,
         ): MediaGenerationProviderSetting {
             return this.copy(
                 id = id,
                 name = name,
+                apiKey = apiKey,
+                baseUrl = baseUrl,
                 models = models,
             )
         }

@@ -116,6 +116,7 @@ internal class AliyunVideoGeneration(
             request.seed?.let { put("seed", it) }
             request.promptEnhancement?.let { put("prompt_extend", it) }
         })
+        require(request.count == null || request.count == 1) { "Aliyun generates one video per task" }
         require(request.callbackUrl == null) {
             "Aliyun uses account-level asynchronous callbacks instead of a callback_url request field"
         }

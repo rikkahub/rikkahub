@@ -118,6 +118,7 @@ class MiniMaxMediaGenerationProvider(
         request.aspectRatio?.let { put("ratio", it) }
         request.callbackUrl?.let { put("callback_url", it) }
         request.watermark?.let { put("aigc_watermark", it) }
+        require(request.count == null || request.count == 1) { "MiniMax H3 generates one video per task" }
         require(request.generateAudio == null) { "MiniMax H3 does not expose generateAudio as an output option" }
         require(request.seed == null) { "MiniMax H3 does not expose seed" }
         require(request.promptEnhancement == null) { "MiniMax H3 does not expose prompt enhancement" }
