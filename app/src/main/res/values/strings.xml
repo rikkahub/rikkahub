@@ -1554,4 +1554,7 @@
   <string name="setting_media_page_add_model">Add model</string>
   <string name="video_player_error">Unable to play this video</string>
   <string name="video_player_open_with">Open with another app</string>
+  <string name="search_picker_off">Off</string>
+  <string name="search_picker_status_off">Turned off</string>
+  <string name="search_picker_off_description">The model answers only from what it already knows and will not access the web.</string>
 </resources>

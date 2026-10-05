@@ -1556,4 +1556,7 @@
   <string name="media_creation_page_active_count">%1$d в процессе</string>
   <string name="media_creation_page_rename_session">Переименовать сессию</string>
   <string name="media_creation_page_files_unreadable">Не удалось прочитать файлов: %1$d</string>
+  <string name="search_picker_off">Выкл.</string>
+  <string name="search_picker_status_off">Выключено</string>
+  <string name="search_picker_off_description">Модель отвечает только на основе того, что уже знает, и не будет обращаться к интернету.</string>
 </resources>

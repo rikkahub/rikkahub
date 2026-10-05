@@ -1554,4 +1554,7 @@
   <string name="media_creation_page_active_count">%1$d 個生成中</string>
   <string name="media_creation_page_rename_session">重新命名工作階段</string>
   <string name="media_creation_page_files_unreadable">%1$d 個檔案無法讀取</string>
+  <string name="search_picker_off">關閉</string>
+  <string name="search_picker_status_off">已關閉</string>
+  <string name="search_picker_off_description">模型僅根據自身已知的內容回答，不會存取網路。</string>
 </resources>

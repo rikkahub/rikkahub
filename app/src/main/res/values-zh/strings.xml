@@ -1556,4 +1556,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="video_player_error">无法播放这个视频</string>
   <string name="video_player_open_with">用其他应用打开</string>
   <string name="common_delete_confirm_message">您确定要删除“%s”吗？此操作无法撤销。</string>
+  <string name="search_picker_off">关闭</string>
+  <string name="search_picker_status_off">已关闭</string>
+  <string name="search_picker_off_description">模型只根据已有知识回答，不会访问网络。</string>
 </resources>

@@ -3,9 +3,12 @@ package me.rerere.rikkahub.ui.components.ai
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -15,24 +18,31 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,8 +52,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.graphics.shapes.RoundedPolygon
 import androidx.compose.ui.util.fastForEachIndexed
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
@@ -70,6 +87,8 @@ enum class SearchMode {
     LOCAL,
     BUILT_IN,
 }
+
+private val modeShapes = SearchMode.entries.map { it.shape() }
 
 @Composable
 fun SearchPickerButton(
@@ -197,66 +216,125 @@ private fun SearchPicker(
         if (showModelSearch) add(SearchMode.BUILT_IN)
     }
 
+    val currentService = settings.searchServices.getOrNull(settings.searchServiceSelected)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 16.dp),
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 32.dp),
     ) {
-        SheetHeader(
-            title = stringResource(R.string.search_picker_title),
-            actions = {
-                IconButton(
-                    onClick = {
-                        onDismiss()
-                        navBackStack.navigate(Screen.SettingSearch)
-                    }
-                ) {
-                    Icon(HugeIcons.Settings03, contentDescription = null)
+        val enabled = currentMode != SearchMode.OFF
+        PickerHeader(
+            title = stringResource(R.string.use_web_search),
+            hint = when (currentMode) {
+                SearchMode.OFF -> stringResource(R.string.search_picker_off_description)
+                SearchMode.LOCAL -> stringResource(R.string.search_picker_local_description)
+                SearchMode.BUILT_IN -> stringResource(R.string.search_picker_model_description)
+            },
+            modifier = Modifier.padding(bottom = 24.dp),
+        ) {
+            PickerHero(
+                shapes = modeShapes,
+                index = currentMode.ordinal,
+                icon = currentMode.icon(),
+                containerColor = if (enabled) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHighest
+                },
+                contentColor = if (enabled) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PickerValueLabel(
+                value = currentMode,
+                modifier = Modifier.weight(1f),
+            ) {
+                when (it) {
+                    SearchMode.OFF -> stringResource(R.string.search_picker_status_off)
+                    SearchMode.LOCAL -> stringResource(R.string.search_picker_local_title)
+                    SearchMode.BUILT_IN -> stringResource(R.string.search_picker_model_title)
                 }
             }
-        )
+            IconButton(
+                onClick = {
+                    onDismiss()
+                    navBackStack.navigate(Screen.SettingSearch)
+                }
+            ) {
+                Icon(
+                    imageVector = HugeIcons.Settings03,
+                    contentDescription = stringResource(R.string.search_picker_title),
+                )
+            }
+        }
 
-        Column(
-            modifier = Modifier.selectableGroup(),
-            verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+        // 连接式按钮组，选中项更宽并带图标
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
         ) {
             modes.fastForEachIndexed { index, mode ->
                 val selected = mode == currentMode
-                SegmentedListItem(
-                    selected = selected,
-                    onClick = { if (!selected) onUpdateSearchMode(mode) },
-                    shapes = ListItemDefaults.segmentedShapes(index = index, count = modes.size),
-                    leadingContent = {
-                        Icon(
-                            imageVector = when (mode) {
-                                SearchMode.OFF -> HugeIcons.SearchRemove
-                                SearchMode.LOCAL -> HugeIcons.GlobalSearch
-                                SearchMode.BUILT_IN -> HugeIcons.AiSearch02
-                            },
-                            contentDescription = null,
-                        )
+                val weight by animateFloatAsState(
+                    targetValue = if (selected) 1.3f else 1f,
+                    animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
+                )
+                ToggleButton(
+                    checked = selected,
+                    onCheckedChange = { if (!selected) onUpdateSearchMode(mode) },
+                    modifier = Modifier
+                        .weight(weight)
+                        .heightIn(min = 52.dp)
+                        .semantics { role = Role.RadioButton },
+                    shapes = when (index) {
+                        0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                        modes.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                        else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                     },
-                    supportingContent = when (mode) {
-                        SearchMode.OFF -> null
-                        SearchMode.LOCAL -> {
-                            { Text(stringResource(R.string.search_picker_local_description)) }
-                        }
-
-                        SearchMode.BUILT_IN -> {
-                            { Text(stringResource(R.string.search_picker_model_description)) }
-                        }
-                    },
-                    trailingContent = {
-                        RadioButton(selected = selected, onClick = null)
-                    },
+                    colors = ToggleButtonDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    ),
+                    contentPadding = PaddingValues(horizontal = 8.dp),
                 ) {
+                    AnimatedVisibility(
+                        visible = selected,
+                        enter = expandHorizontally(MaterialTheme.motionScheme.fastSpatialSpec()) + fadeIn(),
+                        exit = shrinkHorizontally(MaterialTheme.motionScheme.fastSpatialSpec()) + fadeOut(),
+                    ) {
+                        Row {
+                            Icon(
+                                imageVector = mode.icon(),
+                                contentDescription = null,
+                                modifier = Modifier.size(ToggleButtonDefaults.IconSize),
+                            )
+                            Spacer(Modifier.width(ToggleButtonDefaults.IconSpacing))
+                        }
+                    }
                     Text(
                         text = when (mode) {
-                            SearchMode.OFF -> stringResource(R.string.search_picker_turn_off)
+                            SearchMode.OFF -> stringResource(R.string.search_picker_off)
                             SearchMode.LOCAL -> stringResource(R.string.search_picker_local_title)
                             SearchMode.BUILT_IN -> stringResource(R.string.search_picker_model_title)
-                        }
+                        },
+                        // 三个按钮并排时较长的译文放不下，自动缩小字号
+                        autoSize = TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = 14.sp),
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }
@@ -267,42 +345,46 @@ private fun SearchPicker(
             enter = expandVertically(MaterialTheme.motionScheme.fastSpatialSpec()) + fadeIn(),
             exit = shrinkVertically(MaterialTheme.motionScheme.fastSpatialSpec()) + fadeOut(),
         ) {
-            val currentService = settings.searchServices.getOrNull(settings.searchServiceSelected)
-            Column {
+            SegmentedListItem(
+                onClick = onSelectProvider,
+                shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+                modifier = Modifier.padding(top = 16.dp),
+                leadingContent = {
+                    if (currentService != null) {
+                        AutoAIIcon(
+                            name = currentService.displayName,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    } else {
+                        Icon(HugeIcons.GlobalSearch, contentDescription = null)
+                    }
+                },
+                supportingContent = currentService?.let {
+                    { SearchAbilityTagLine(options = it) }
+                },
+                trailingContent = {
+                    Icon(HugeIcons.ArrowRight01, contentDescription = null)
+                },
+            ) {
                 Text(
-                    text = stringResource(R.string.search_picker_select_provider),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp),
+                    text = currentService?.displayName
+                        ?: stringResource(R.string.search_picker_select_provider)
                 )
-                SegmentedListItem(
-                    onClick = onSelectProvider,
-                    shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
-                    leadingContent = {
-                        if (currentService != null) {
-                            AutoAIIcon(
-                                name = currentService.displayName,
-                                modifier = Modifier.size(24.dp),
-                            )
-                        } else {
-                            Icon(HugeIcons.GlobalSearch, contentDescription = null)
-                        }
-                    },
-                    supportingContent = currentService?.let {
-                        { SearchAbilityTagLine(options = it) }
-                    },
-                    trailingContent = {
-                        Icon(HugeIcons.ArrowRight01, contentDescription = null)
-                    },
-                ) {
-                    Text(
-                        text = currentService?.displayName
-                            ?: stringResource(R.string.search_picker_select_provider)
-                    )
-                }
             }
         }
     }
+}
+
+private fun SearchMode.icon(): ImageVector = when (this) {
+    SearchMode.OFF -> HugeIcons.SearchRemove
+    SearchMode.LOCAL -> HugeIcons.GlobalSearch
+    SearchMode.BUILT_IN -> HugeIcons.AiSearch02
+}
+
+private fun SearchMode.shape(): RoundedPolygon = when (this) {
+    SearchMode.OFF -> MaterialShapes.Circle
+    SearchMode.LOCAL -> MaterialShapes.Cookie6Sided
+    SearchMode.BUILT_IN -> MaterialShapes.Cookie9Sided
 }
 
 @Composable

@@ -1556,4 +1556,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="media_creation_page_active_count">%1$d 件生成中</string>
   <string name="media_creation_page_rename_session">セッション名を変更</string>
   <string name="media_creation_page_files_unreadable">%1$d 件のファイルを読み込めませんでした</string>
+  <string name="search_picker_off">オフ</string>
+  <string name="search_picker_status_off">オフ</string>
+  <string name="search_picker_off_description">モデルは既に知っている情報のみから回答し、ウェブにはアクセスしません。</string>
 </resources>

@@ -1556,4 +1556,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="media_creation_page_active_count">%1$d개 생성 중</string>
   <string name="media_creation_page_rename_session">세션 이름 바꾸기</string>
   <string name="media_creation_page_files_unreadable">%1$d개 파일을 읽을 수 없습니다</string>
+  <string name="search_picker_off">꺼짐</string>
+  <string name="search_picker_status_off">꺼짐</string>
+  <string name="search_picker_off_description">모델은 이미 알고 있는 내용만으로 답변하며 웹에 접속하지 않습니다.</string>
 </resources>

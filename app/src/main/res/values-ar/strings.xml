@@ -1554,4 +1554,7 @@
   <string name="media_creation_page_active_count">%1$d قيد التوليد</string>
   <string name="media_creation_page_rename_session">إعادة تسمية الجلسة</string>
   <string name="media_creation_page_files_unreadable">تعذّرت قراءة %1$d من الملفات</string>
+  <string name="search_picker_off">إيقاف</string>
+  <string name="search_picker_status_off">تم الإيقاف</string>
+  <string name="search_picker_off_description">يجيب النموذج فقط مما يعرفه مسبقًا ولن يصل إلى الويب.</string>
 </resources>
