@@ -1,9 +1,11 @@
 package me.rerere.mediagen.provider
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
 import me.rerere.mediagen.model.MediaGenerationModel
 import me.rerere.mediagen.model.MediaGenerationRequest
 import me.rerere.mediagen.model.MediaGenerationTask
@@ -29,15 +31,17 @@ class MediaGenerationManager(
         setting: MediaGenerationProviderSetting,
         model: MediaGenerationModel,
         request: MediaGenerationRequest,
-    ): Result<MediaGenerationTask> =
+    ): Result<MediaGenerationTask> = withContext(Dispatchers.Default) {
         unsupportedKind(setting, model) ?: provider(setting).createUnsafe(setting, model, request)
+    }
 
     suspend fun query(
         setting: MediaGenerationProviderSetting,
         model: MediaGenerationModel,
         taskId: String,
-    ): Result<MediaGenerationTask> =
+    ): Result<MediaGenerationTask> = withContext(Dispatchers.Default) {
         unsupportedKind(setting, model) ?: provider(setting).queryUnsafe(setting, model, taskId)
+    }
 
     /**
      * 提交请求并跟踪到终态。同步返回结果的供应商只会发出一次终态任务；异步供应商先发出提交结果，
