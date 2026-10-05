@@ -166,6 +166,21 @@ internal fun MediaGenerationProviderSetting.presets(kind: MediaKind): MediaCreat
         aspectRatios = VIDEO_ASPECT_RATIOS + "adaptive",
         durations = VIDEO_DURATIONS,
     )
+
+    // 背后是各家的模型，取值取的是多数模型都接受的那些
+    is MediaGenerationProviderSetting.OpenRouter -> when (kind) {
+        MediaKind.IMAGE -> MediaCreationPresets(
+            resolutions = listOf("1K", "2K", "4K"),
+            aspectRatios = listOf("1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"),
+            counts = IMAGE_COUNTS,
+        )
+
+        MediaKind.VIDEO -> MediaCreationPresets(
+            resolutions = listOf("480p", "720p", "1080p", "4K"),
+            aspectRatios = VIDEO_ASPECT_RATIOS,
+            durations = listOf(4, 5, 6, 8, 10),
+        )
+    }
 }
 
 private val IMAGE_COUNTS = listOf(1, 2, 3, 4)

@@ -47,6 +47,7 @@ import me.rerere.rikkahub.data.model.deriveMediaCreationTitle
 import me.rerere.rikkahub.data.model.supportedBy
 import me.rerere.rikkahub.data.repository.MediaCreationRepository
 import me.rerere.rikkahub.utils.sendNotification
+import okhttp3.Headers.Companion.toHeaders
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -266,7 +267,7 @@ class MediaCreationService(
         }
 
         repository.updateRecord(record.id) { it.copy(status = MediaCreationStatus.DOWNLOADING) }
-        val outputs = downloadOutputs(record, task.outputs)
+        val outputs = downloadOutputs(setting, record, task.outputs)
         repository.updateRecord(record.id) {
             if (outputs.isEmpty()) {
                 it.copy(
@@ -354,6 +355,7 @@ class MediaCreationService(
     }
 
     private suspend fun downloadOutputs(
+        setting: MediaGenerationProviderSetting,
         record: MediaCreationRecord,
         outputs: List<MediaGenerationOutput>,
     ): List<MediaCreationOutput> = withContext(Dispatchers.IO) {
@@ -368,7 +370,7 @@ class MediaCreationService(
             val url = output.url
             when {
                 data != null -> file.writeBytes(data)
-                url != null -> download(url, file)
+                url != null -> download(setting, url, file)
                 else -> return@mapIndexedNotNull null
             }
 
@@ -378,7 +380,7 @@ class MediaCreationService(
                 // 尾帧只是「续写」时的捷径，下载不到就等用的时候再从视频里抽
                 val lastFrame = output.lastFrameUrl?.let { lastFrameUrl ->
                     File(dir, "$OUTPUT_PREFIX${index}_last.${lastFrameUrl.urlExtension() ?: "jpg"}")
-                        .takeIf { runCatching { download(lastFrameUrl, it, attempts = 1) }.isSuccess }
+                        .takeIf { runCatching { download(setting, lastFrameUrl, it, attempts = 1) }.isSuccess }
                 }
                 val info = MediaCreationFiles.videoInfo(file)
                 MediaCreationOutput(
@@ -402,12 +404,19 @@ class MediaCreationService(
         }
     }
 
-    private suspend fun download(url: String, target: File, attempts: Int = DOWNLOAD_ATTEMPTS) {
+    private suspend fun download(
+        setting: MediaGenerationProviderSetting,
+        url: String,
+        target: File,
+        attempts: Int = DOWNLOAD_ATTEMPTS,
+    ) {
+        // 个别厂商的结果地址没有签名，要带着密钥去取
+        val request = Request.Builder().url(url).headers(setting.downloadHeaders(url).toHeaders()).build()
         var attempt = 0
         while (true) {
             attempt++
             try {
-                downloadOnce(url, target)
+                downloadOnce(request, target)
                 return
             } catch (e: Exception) {
                 currentCoroutineContext().ensureActive()
@@ -418,9 +427,9 @@ class MediaCreationService(
         }
     }
 
-    private suspend fun downloadOnce(url: String, target: File) {
+    private suspend fun downloadOnce(request: Request, target: File) {
         val partial = File(target.parentFile, target.name + MediaCreationFiles.PARTIAL_SUFFIX)
-        val call = okHttpClient.newCall(Request.Builder().url(url).build())
+        val call = okHttpClient.newCall(request)
         try {
             coroutineScope {
                 // 断流时线程卡在 read() 里，走不到 ensureActive()：取消时关掉连接，让 read() 立刻抛出来
@@ -527,6 +536,7 @@ private fun MediaGenerationOutput.fileExtension(): String = when (mimeType.lower
     "image/jpeg" -> "jpg"
     "image/webp" -> "webp"
     "image/gif" -> "gif"
+    "image/svg+xml" -> "svg"
     "video/mp4" -> "mp4"
     "video/webm" -> "webm"
     "video/quicktime" -> "mov"

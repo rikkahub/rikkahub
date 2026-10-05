@@ -10,6 +10,7 @@ import me.rerere.mediagen.model.MediaGenerationTask
 import me.rerere.mediagen.provider.providers.aliyun.AliyunMediaGenerationProvider
 import me.rerere.mediagen.provider.providers.minimax.MiniMaxMediaGenerationProvider
 import me.rerere.mediagen.provider.providers.openai.OpenAIMediaGenerationProvider
+import me.rerere.mediagen.provider.providers.openrouter.OpenRouterMediaGenerationProvider
 import me.rerere.mediagen.provider.providers.volcengine.VolcengineMediaGenerationProvider
 import okhttp3.OkHttpClient
 import kotlin.time.Duration
@@ -22,6 +23,7 @@ class MediaGenerationManager(
     private val aliyun = AliyunMediaGenerationProvider(client)
     private val volcengine = VolcengineMediaGenerationProvider(client)
     private val miniMax = MiniMaxMediaGenerationProvider(client)
+    private val openRouter = OpenRouterMediaGenerationProvider(client)
 
     suspend fun create(
         setting: MediaGenerationProviderSetting,
@@ -79,6 +81,7 @@ class MediaGenerationManager(
             is MediaGenerationProviderSetting.Aliyun -> aliyun
             is MediaGenerationProviderSetting.Volcengine -> volcengine
             is MediaGenerationProviderSetting.MiniMax -> miniMax
+            is MediaGenerationProviderSetting.OpenRouter -> openRouter
         }
 
     // 厂商适配器尚未实现该模型的 kind 时返回失败，否则返回 null

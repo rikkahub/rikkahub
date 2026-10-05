@@ -74,6 +74,11 @@ fun MediaGenerationProviderSetting.capabilities(kind: MediaKind): MediaGeneratio
             MediaKind.IMAGE -> null
             MediaKind.VIDEO -> MINIMAX_VIDEO
         }
+
+        is MediaGenerationProviderSetting.OpenRouter -> when (kind) {
+            MediaKind.IMAGE -> OPENROUTER_IMAGE
+            MediaKind.VIDEO -> OPENROUTER_VIDEO
+        }
     }
 
 // 图像接口不区分图片角色，统一当作参考图
@@ -153,5 +158,31 @@ private val MINIMAX_VIDEO = MediaGenerationCapabilities(
     videoInput = true,
     framesExcludeReferences = true,
     requiresPrompt = true,
+    requiresRemoteInputs = true,
+)
+
+private val OPENROUTER_IMAGE = MediaGenerationCapabilities(
+    parameters = setOf(
+        MediaGenerationParameter.COUNT,
+        MediaGenerationParameter.RESOLUTION,
+        MediaGenerationParameter.ASPECT_RATIO,
+        MediaGenerationParameter.SEED,
+    ),
+    imageRoles = REFERENCE_ONLY,
+    requiresPrompt = true,
+)
+
+private val OPENROUTER_VIDEO = MediaGenerationCapabilities(
+    parameters = setOf(
+        MediaGenerationParameter.RESOLUTION,
+        MediaGenerationParameter.ASPECT_RATIO,
+        MediaGenerationParameter.DURATION,
+        MediaGenerationParameter.GENERATE_AUDIO,
+        MediaGenerationParameter.SEED,
+    ),
+    imageRoles = ALL_IMAGE_ROLES,
+    videoInput = true,
+    // 两者同时出现时接口不报错，但只按首尾帧生成，参考素材被忽略
+    framesExcludeReferences = true,
     requiresRemoteInputs = true,
 )

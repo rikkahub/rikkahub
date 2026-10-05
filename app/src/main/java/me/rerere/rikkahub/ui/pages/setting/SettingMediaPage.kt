@@ -332,6 +332,7 @@ private fun AddMediaProviderButton(onAdd: (MediaGenerationProviderSetting) -> Un
                 { MediaGenerationProviderSetting.Aliyun() },
                 { MediaGenerationProviderSetting.Volcengine() },
                 { MediaGenerationProviderSetting.MiniMax() },
+                { MediaGenerationProviderSetting.OpenRouter() },
             ).forEach { create ->
                 DropdownMenuItem(
                     text = { Text(remember { create() }.typeName) },

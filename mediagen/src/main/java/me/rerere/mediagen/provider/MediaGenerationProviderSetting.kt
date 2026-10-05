@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.mediagen.model.MediaGenerationModel
 import me.rerere.mediagen.model.MediaKind
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlin.uuid.Uuid
 
 /**
@@ -19,6 +20,12 @@ sealed class MediaGenerationProviderSetting {
 
     // What our adapter implements, not every API offered by this vendor.
     abstract val supportedKinds: Set<MediaKind>
+
+    /**
+     * 下载产出地址 [url] 时要带上的请求头。多数厂商给的是带签名的地址，不需要额外的头；
+     * OpenRouter 的视频要凭 API Key 从它自己的接口取。
+     */
+    open fun downloadHeaders(url: String): Map<String, String> = emptyMap()
 
     abstract fun copyProvider(
         id: Uuid = this.id,
@@ -163,6 +170,46 @@ sealed class MediaGenerationProviderSetting {
         }
     }
 
+    @Serializable
+    @SerialName("openrouter")
+    data class OpenRouter(
+        override val id: Uuid = Uuid.random(),
+        override val name: String = "OpenRouter",
+        override val apiKey: String = "",
+        override val baseUrl: String = "https://openrouter.ai/api/v1",
+        override val models: List<MediaGenerationModel> = listOf(
+            MediaGenerationModel(modelId = "openai/gpt-image-2", kind = MediaKind.IMAGE),
+            MediaGenerationModel(modelId = "google/veo-3.1", kind = MediaKind.VIDEO),
+        ),
+    ) : MediaGenerationProviderSetting() {
+        override val supportedKinds: Set<MediaKind>
+            get() = setOf(MediaKind.IMAGE, MediaKind.VIDEO)
+
+        // 密钥只发给 baseUrl 所在的站点，结果地址指向别处时原样下载
+        override fun downloadHeaders(url: String): Map<String, String> {
+            val target = url.toHttpUrlOrNull() ?: return emptyMap()
+            val base = baseUrl.toHttpUrlOrNull() ?: return emptyMap()
+            if (target.scheme != base.scheme || target.host != base.host || target.port != base.port) return emptyMap()
+            return mapOf("Authorization" to "Bearer $apiKey")
+        }
+
+        override fun copyProvider(
+            id: Uuid,
+            name: String,
+            apiKey: String,
+            baseUrl: String,
+            models: List<MediaGenerationModel>,
+        ): MediaGenerationProviderSetting {
+            return this.copy(
+                id = id,
+                name = name,
+                apiKey = apiKey,
+                baseUrl = baseUrl,
+                models = models,
+            )
+        }
+    }
+
     companion object {
         val Types by lazy {
             listOf(
@@ -170,6 +217,7 @@ sealed class MediaGenerationProviderSetting {
                 Aliyun::class,
                 Volcengine::class,
                 MiniMax::class,
+                OpenRouter::class,
             )
         }
     }

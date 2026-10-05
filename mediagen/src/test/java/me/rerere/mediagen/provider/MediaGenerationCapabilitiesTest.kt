@@ -7,6 +7,8 @@ import me.rerere.mediagen.provider.providers.aliyun.AliyunImageGeneration
 import me.rerere.mediagen.provider.providers.aliyun.AliyunVideoGeneration
 import me.rerere.mediagen.provider.providers.minimax.MiniMaxMediaGenerationProvider
 import me.rerere.mediagen.provider.providers.openai.OpenAIMediaGenerationProvider
+import me.rerere.mediagen.provider.providers.openrouter.OpenRouterImageGeneration
+import me.rerere.mediagen.provider.providers.openrouter.OpenRouterVideoGeneration
 import me.rerere.mediagen.provider.providers.volcengine.VolcengineImageGeneration
 import me.rerere.mediagen.provider.providers.volcengine.VolcengineVideoGeneration
 import okhttp3.OkHttpClient
@@ -24,6 +26,7 @@ class MediaGenerationCapabilitiesTest {
         MediaGenerationProviderSetting.Aliyun(),
         MediaGenerationProviderSetting.Volcengine(),
         MediaGenerationProviderSetting.MiniMax(),
+        MediaGenerationProviderSetting.OpenRouter(),
     )
 
     // 各适配器组装请求体的入口，不支持的公共字段会在这里被拒绝
@@ -45,6 +48,11 @@ class MediaGenerationCapabilitiesTest {
 
             is MediaGenerationProviderSetting.MiniMax ->
                 MiniMaxMediaGenerationProvider(client).buildCreateBody(model, request)
+
+            is MediaGenerationProviderSetting.OpenRouter -> when (kind) {
+                MediaKind.IMAGE -> OpenRouterImageGeneration(client).buildBody(model, request)
+                MediaKind.VIDEO -> OpenRouterVideoGeneration(client).buildCreateBody(model, request)
+            }
         }
     }
 

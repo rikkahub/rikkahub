@@ -63,6 +63,23 @@ class AwsSignatureV4Test {
     }
 
     @Test
+    fun `presigned url defaults to https when the endpoint has no scheme`() {
+        fun url(endpoint: String) = AwsSignatureV4.presignGetUrl(
+            config = awsExample.copy(endpoint = endpoint, bucket = "rikka-hub"),
+            path = "/rikkahub_uploads/a.png",
+            expires = 1.hours,
+            now = awsExampleTime,
+        ).substringBefore('?')
+
+        assertEquals(
+            "https://rikka-hub.oss-cn-beijing.aliyuncs.com/rikkahub_uploads/a.png",
+            url("oss-cn-beijing.aliyuncs.com"),
+        )
+        // 显式写了 http:// 的（内网自建服务）保持不变
+        assertEquals("http://rikka-hub.minio.lan:9000/rikkahub_uploads/a.png", url("http://minio.lan:9000"))
+    }
+
+    @Test
     fun `presigned url signature depends on the expiry`() {
         fun signature(seconds: Int) = AwsSignatureV4.presignGetUrl(
             config = awsExample,
