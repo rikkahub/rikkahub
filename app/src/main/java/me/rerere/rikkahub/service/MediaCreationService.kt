@@ -140,20 +140,32 @@ class MediaCreationService(
      * 重新执行失败或已取消的记录。服务端还有任务时接着查询，否则重新提交。
      */
     suspend fun retry(recordId: Uuid) = inAppScope {
-        if (jobs.containsKey(recordId)) return@inAppScope
-        val record = repository.updateRecord(recordId) { record ->
-            if (record.status == MediaCreationStatus.SUCCEEDED) {
-                record
-            } else {
-                record.copy(
-                    status = if (record.taskId != null) MediaCreationStatus.RUNNING else MediaCreationStatus.PREPARING,
-                    error = null,
-                    outputs = emptyList(),
-                )
+        val sessionId = repository.getRecord(recordId)?.sessionId ?: return@inAppScope
+        // 和 submit 一样先登记任务，再把记录改成进行中
+        val job = register(recordId, sessionId) ?: return@inAppScope
+        var started = false
+        try {
+            val record = repository.updateRecord(recordId) { record ->
+                if (record.status == MediaCreationStatus.SUCCEEDED) {
+                    record
+                } else {
+                    record.copy(
+                        status = if (record.taskId != null) MediaCreationStatus.RUNNING else MediaCreationStatus.PREPARING,
+                        error = null,
+                        outputs = emptyList(),
+                    )
+                }
+            }
+            if (record != null && record.status != MediaCreationStatus.SUCCEEDED) {
+                job.start()
+                started = true
+            }
+        } finally {
+            if (!started) {
+                jobs.remove(recordId, job)
+                job.cancel()
             }
         }
-        if (record == null || record.status == MediaCreationStatus.SUCCEEDED) return@inAppScope
-        register(record.id, record.sessionId)?.start()
     }
 
     /**
