@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -45,8 +46,10 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -68,7 +71,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -770,6 +778,7 @@ private fun ParamsSheet(
                     presets = presets.aspectRatios,
                     default = defaults.aspectRatio.takeIf { MediaGenerationParameter.ASPECT_RATIO in required },
                     placeholder = stringResource(R.string.media_creation_page_param_aspect_ratio_hint),
+                    presetIcon = { AspectRatioIcon(it) },
                     onValueChange = { update(current.copy(aspectRatio = it)) },
                 )
             }
@@ -854,6 +863,7 @@ private fun <T> PresetChips(
     default: T?,
     onValueChange: (T?) -> Unit,
     label: (T) -> String = { it.toString() },
+    icon: (@Composable (T) -> Unit)? = null,
 ) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (default == null) {
@@ -868,9 +878,49 @@ private fun <T> PresetChips(
                 selected = (value ?: default) == preset,
                 onClick = { onValueChange(preset) },
                 label = { Text(label(preset)) },
+                leadingIcon = icon?.let { { it(preset) } },
             )
         }
     }
+}
+
+/**
+ * 比例选项前面的小图标：按「宽:高」画出对应形状的方框。adaptive 这类不是固定比例的取值画成虚线方框。
+ */
+@Composable
+private fun AspectRatioIcon(value: String) {
+    val ratio = remember(value) { parseAspectRatio(value) }
+    val color = LocalContentColor.current
+    Canvas(modifier = Modifier.size(FilterChipDefaults.IconSize)) {
+        val strokeWidth = 1.5.dp.toPx()
+        // 描边压在边线两侧，留出一个线宽才不会被裁掉
+        val box = size.minDimension - strokeWidth
+        // 太扁或太窄的比例收一收，保证看得出是个方框
+        val shape = (ratio ?: 1f).coerceIn(0.4f, 2.5f)
+        val frame = if (shape >= 1f) Size(box, box / shape) else Size(box * shape, box)
+        drawRoundRect(
+            color = color,
+            topLeft = Offset((size.width - frame.width) / 2, (size.height - frame.height) / 2),
+            size = frame,
+            cornerRadius = CornerRadius(2.dp.toPx()),
+            style = Stroke(
+                width = strokeWidth,
+                pathEffect = if (ratio == null) {
+                    PathEffect.dashPathEffect(floatArrayOf(2.dp.toPx(), 2.dp.toPx()))
+                } else {
+                    null
+                },
+            ),
+        )
+    }
+}
+
+private fun parseAspectRatio(value: String): Float? {
+    val parts = value.split(':')
+    if (parts.size != 2) return null
+    val width = parts[0].trim().toFloatOrNull() ?: return null
+    val height = parts[1].trim().toFloatOrNull() ?: return null
+    return if (width > 0 && height > 0) width / height else null
 }
 
 @Composable
@@ -881,9 +931,16 @@ private fun TextParam(
     default: String?,
     placeholder: String,
     onValueChange: (String?) -> Unit,
+    presetIcon: (@Composable (String) -> Unit)? = null,
 ) {
     FormItem(label = { Text(label) }) {
-        PresetChips(value = value, presets = presets, default = default, onValueChange = onValueChange)
+        PresetChips(
+            value = value,
+            presets = presets,
+            default = default,
+            onValueChange = onValueChange,
+            icon = presetIcon,
+        )
         OutlinedTextField(
             value = value.orEmpty(),
             onValueChange = { text -> onValueChange(text.trim().ifEmpty { null }) },
