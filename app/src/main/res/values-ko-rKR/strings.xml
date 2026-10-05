@@ -537,7 +537,7 @@
   <string name="reasoning_off">꺼짐</string>
   <string name="reasoning_off_desc">사고 기능 끄기, 모델이 질문에 직접 응답합니다</string>
   <string name="reasoning_picker_hint">모든 모델이 깊이 조정을 지원하는 것은 아닙니다. 모델 및 제공자 문서를 참조하세요.</string>
-  <string name="reasoning_picker_title">모델 사고 깊이 조정</string>
+  <string name="reasoning_picker_title">사고 깊이 조정</string>
   <string name="reasoning_xhigh">XHigh</string>
   <string name="regenerate">다시 생성</string>
   <string name="regenerate_confirm_message">이 메시지를 다시 생성하시겠습니까? 이 메시지 아래의 모든 메시지가 삭제됩니다.</string>

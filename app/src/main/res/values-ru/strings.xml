@@ -537,7 +537,7 @@
   <string name="reasoning_off">Выключено</string>
   <string name="reasoning_off_desc">Отключить функцию обоснования, модель будет отвечать на вопросы напрямую.</string>
   <string name="reasoning_picker_hint">Не все модели поддерживают настройку глубины. См. документацию модели и провайдера.</string>
-  <string name="reasoning_picker_title">Настроить глубину мышления модели</string>
+  <string name="reasoning_picker_title">Настройка глубины мышления</string>
   <string name="reasoning_xhigh">Очень высокий</string>
   <string name="regenerate">Сгенерировать заново</string>
   <string name="regenerate_confirm_message">Вы уверены, что хотите заново сгенерировать это сообщение? Все сообщения ниже этого будут удалены.</string>

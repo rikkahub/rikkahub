@@ -540,7 +540,7 @@
   <string name="reasoning_off">关闭</string>
   <string name="reasoning_off_desc">关闭推理功能，模型将直接回答问题。</string>
   <string name="reasoning_picker_hint">并非所有模型都支持深度调整。请参考模型和提供商文档。</string>
-  <string name="reasoning_picker_title">调整模型思考深度</string>
+  <string name="reasoning_picker_title">调整思考深度</string>
   <string name="reasoning_xhigh">超高</string>
   <string name="regenerate">重新生成</string>
   <string name="regenerate_confirm_message">确定要重新生成此消息吗？此消息下方所有消息会被清理</string>
