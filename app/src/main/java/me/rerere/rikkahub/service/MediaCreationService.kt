@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.service
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
@@ -30,6 +31,7 @@ import me.rerere.mediagen.provider.capabilities
 import me.rerere.mediagen.provider.providers.MediaGenerationApiException
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.MEDIA_CREATION_NOTIFICATION_CHANNEL_ID
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.MediaCreationFiles
 import me.rerere.rikkahub.data.files.RemoteFileStore
@@ -95,7 +97,7 @@ class MediaCreationService(
      */
     suspend fun submit(submission: MediaCreationSubmission): MediaCreationRecord = inAppScope {
         val capabilities = submission.provider.capabilities(submission.model.kind)
-            ?: error("${submission.provider.name} 不支持这种类型的模型")
+            ?: error(context.getString(R.string.media_creation_error_kind_unsupported, submission.provider.name))
         val recordId = Uuid.random()
         val assets = submission.assets.supportedBy(capabilities)
         val record = MediaCreationRecord(
@@ -111,7 +113,8 @@ class MediaCreationService(
             inputs = copyInputs(submission.sessionId, recordId, assets),
         )
         // 先登记任务再写入记录：恢复逻辑把「进行中但没有任务」的记录当作被中断，不能让它看到这个空档
-        val job = register(record.id, record.sessionId) ?: error("任务已存在")
+        val job = register(record.id, record.sessionId)
+            ?: error(context.getString(R.string.media_creation_error_task_exists))
         try {
             repository.insertRecord(record)
             repository.updateSession(record.sessionId) { session ->
@@ -182,7 +185,10 @@ class MediaCreationService(
                         register(record.id, record.sessionId)?.start()
                     } else {
                         repository.updateRecord(record.id) {
-                            it.copy(status = MediaCreationStatus.FAILED, error = "应用在任务完成前被关闭")
+                            it.copy(
+                                status = MediaCreationStatus.FAILED,
+                                error = context.getString(R.string.media_creation_error_interrupted),
+                            )
                         }
                     }
                 }
@@ -228,7 +234,7 @@ class MediaCreationService(
         val record = repository.getRecord(recordId) ?: return
         val setting = settingsStore.settingsFlow.first { !it.init }
             .mediaGenerationProviders.find { it.id == record.providerId }
-            ?: error("提供商「${record.providerName}」已被删除")
+            ?: error(context.getString(R.string.media_creation_error_provider_deleted, record.providerName))
         val model = MediaGenerationModel(modelId = record.modelId, kind = record.kind)
 
         val task = if (record.taskId != null) {
@@ -252,7 +258,7 @@ class MediaCreationService(
         if (task.status != MediaGenerationStatus.SUCCEEDED) {
             // 服务端的任务已经结束，没有再查询的意义
             repository.updateRecord(record.id) {
-                it.copy(status = MediaCreationStatus.FAILED, taskId = null, error = task.failureMessage())
+                it.copy(status = MediaCreationStatus.FAILED, taskId = null, error = task.failureMessage(context))
             }
             return
         }
@@ -261,7 +267,11 @@ class MediaCreationService(
         val outputs = downloadOutputs(record, task.outputs)
         repository.updateRecord(record.id) {
             if (outputs.isEmpty()) {
-                it.copy(status = MediaCreationStatus.FAILED, taskId = null, error = "接口没有返回任何结果")
+                it.copy(
+                    status = MediaCreationStatus.FAILED,
+                    taskId = null,
+                    error = context.getString(R.string.media_creation_error_no_output),
+                )
             } else {
                 it.copy(status = MediaCreationStatus.SUCCEEDED, outputs = outputs, error = null)
             }
@@ -273,9 +283,10 @@ class MediaCreationService(
         model: MediaGenerationModel,
         record: MediaCreationRecord,
     ): MediaGenerationTask {
-        val capabilities = setting.capabilities(record.kind) ?: error("${setting.name} 不支持这种类型的模型")
+        val capabilities = setting.capabilities(record.kind)
+            ?: error(context.getString(R.string.media_creation_error_kind_unsupported, setting.name))
         val inputUrls = if (capabilities.requiresRemoteInputs && record.inputs.isNotEmpty()) {
-            check(remoteFileStore.isConfigured) { "这个模型的素材需要公网地址，请先在「设置 → 媒体 → S3」里配置素材上传" }
+            check(remoteFileStore.isConfigured) { context.getString(R.string.media_creation_error_upload_required) }
             repository.updateRecord(record.id) { it.copy(status = MediaCreationStatus.PREPARING) }
             record.inputs.map { remoteFileStore.upload(repository.resolve(it.path)).getOrThrow().url }
         } else {
@@ -313,7 +324,7 @@ class MediaCreationService(
                 Log.w(TAG, "Query $taskId failed ($failures)", error)
                 if (!error.isRetryable() || failures >= MAX_QUERY_FAILURES) throw error
             }
-            check(Instant.now() < deadline) { "等待结果超时" }
+            check(Instant.now() < deadline) { context.getString(R.string.media_creation_error_timeout) }
             delay(pollDelay(failures))
         }
     }
@@ -329,7 +340,7 @@ class MediaCreationService(
             dir.mkdirs()
             assets.mapIndexed { index, asset ->
                 val source = repository.resolve(asset.path)
-                check(source.isFile) { "素材文件已不存在，请移除后重新添加" }
+                check(source.isFile) { context.getString(R.string.media_creation_error_asset_missing) }
                 val target = File(dir, "in_$index.${source.extension.ifEmpty { "bin" }}")
                 source.copyTo(target, overwrite = true)
                 asset.copy(path = repository.relativePath(target))
@@ -409,7 +420,9 @@ class MediaCreationService(
         val partial = File(target.parentFile, target.name + MediaCreationFiles.PARTIAL_SUFFIX)
         try {
             okHttpClient.newCall(Request.Builder().url(url).build()).await().use { response ->
-                check(response.isSuccessful) { "下载结果失败（HTTP ${response.code}）" }
+                check(response.isSuccessful) {
+                    context.getString(R.string.media_creation_error_download_failed, response.code)
+                }
                 response.body.byteStream().use { input ->
                     partial.outputStream().use { output ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -422,7 +435,7 @@ class MediaCreationService(
                     }
                 }
             }
-            check(partial.renameTo(target)) { "保存结果失败" }
+            check(partial.renameTo(target)) { context.getString(R.string.media_creation_error_save_failed) }
         } finally {
             partial.delete()
         }
@@ -432,12 +445,19 @@ class MediaCreationService(
         if (record.status != MediaCreationStatus.SUCCEEDED && record.status != MediaCreationStatus.FAILED) return
         // 应用在前台时时间线上已经能看到结果
         if (ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) return
-        val kind = if (record.kind == MediaKind.VIDEO) "视频" else "图像"
+        val isVideo = record.kind == MediaKind.VIDEO
+        val succeeded = record.status == MediaCreationStatus.SUCCEEDED
+        val titleRes = when {
+            isVideo && succeeded -> R.string.media_creation_notification_video_succeeded
+            isVideo -> R.string.media_creation_notification_video_failed
+            succeeded -> R.string.media_creation_notification_image_succeeded
+            else -> R.string.media_creation_notification_image_failed
+        }
         context.sendNotification(
             channelId = MEDIA_CREATION_NOTIFICATION_CHANNEL_ID,
             notificationId = record.id.hashCode(),
         ) {
-            title = if (record.status == MediaCreationStatus.SUCCEEDED) "${kind}生成完成" else "${kind}生成失败"
+            title = context.getString(titleRes)
             content = record.error?.takeIf { record.status == MediaCreationStatus.FAILED }
                 ?: record.prompt.ifBlank { record.modelId }
             autoCancel = true
@@ -470,12 +490,12 @@ private fun MediaGenerationStatus.toCreationStatus(current: MediaCreationStatus)
     else -> current.takeIf { it == MediaCreationStatus.QUEUED } ?: MediaCreationStatus.RUNNING
 }
 
-private fun MediaGenerationTask.failureMessage(): String {
+private fun MediaGenerationTask.failureMessage(context: Context): String {
     val reason = error?.let { error -> listOfNotNull(error.code, error.message).joinToString("：") }
     return reason?.takeIf(String::isNotBlank) ?: when (status) {
-        MediaGenerationStatus.CANCELLED -> "任务已在服务端取消"
-        MediaGenerationStatus.EXPIRED -> "任务已过期"
-        else -> "生成失败"
+        MediaGenerationStatus.CANCELLED -> context.getString(R.string.media_creation_error_cancelled_remotely)
+        MediaGenerationStatus.EXPIRED -> context.getString(R.string.media_creation_error_expired)
+        else -> context.getString(R.string.media_creation_status_failed)
     }
 }
 

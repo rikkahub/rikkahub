@@ -70,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,6 +92,7 @@ import me.rerere.mediagen.provider.MediaGenerationCapabilities
 import me.rerere.mediagen.provider.MediaGenerationParameter
 import me.rerere.mediagen.provider.MediaGenerationProviderSetting
 import me.rerere.mediagen.provider.capabilities
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.MediaCreationAsset
 import me.rerere.rikkahub.data.model.MediaCreationAssetType
 import me.rerere.rikkahub.data.model.MediaCreationDraft
@@ -175,14 +177,14 @@ internal fun MediaCreationComposer(
                 )
                 if (draft.assets.mixesFramesWithReferences(capabilities)) {
                     Text(
-                        text = "首帧、尾帧不能和参考素材一起使用，请移除其中一种",
+                        text = stringResource(R.string.media_creation_page_frames_with_references),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
                 if (capabilities.requiresRemoteInputs && draft.assets.isNotEmpty() && !uploadConfigured) {
                     Text(
-                        text = "这个模型的素材要先上传到 S3 才能使用，点这里去配置",
+                        text = stringResource(R.string.media_creation_page_upload_not_configured_hint),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.clickable(onClick = onOpenMediaSettings),
@@ -193,7 +195,7 @@ internal fun MediaCreationComposer(
             OutlinedTextField(
                 state = vm.promptState,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("描述你想生成的画面") },
+                placeholder = { Text(stringResource(R.string.media_creation_page_prompt_placeholder)) },
                 lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 1, maxHeightInLines = 5),
                 shape = MaterialTheme.shapes.large,
                 textStyle = MaterialTheme.typography.bodyMedium,
@@ -207,7 +209,7 @@ internal fun MediaCreationComposer(
                 ) {
                     ComposerChip(
                         icon = if (selection?.model?.kind == MediaKind.VIDEO) HugeIcons.Video01 else HugeIcons.Image02,
-                        text = selection?.model?.name ?: "选择模型",
+                        text = selection?.model?.name ?: stringResource(R.string.media_creation_page_select_model),
                         onClick = { showModels = true },
                         modifier = Modifier.weight(1f, fill = false),
                     )
@@ -217,7 +219,8 @@ internal fun MediaCreationComposer(
                             .summary(selection.model.kind)
                         ComposerChip(
                             icon = HugeIcons.SlidersHorizontal,
-                            text = summary.take(3).joinToString(" · ").ifEmpty { "参数" },
+                            text = summary.take(3).joinToString(" · ")
+                                .ifEmpty { stringResource(R.string.media_creation_page_params) },
                             onClick = { showParams = true },
                             modifier = Modifier.widthIn(max = 160.dp),
                         )
@@ -225,7 +228,10 @@ internal fun MediaCreationComposer(
                 }
                 if (hasContent) {
                     IconButton(onClick = vm::clearDraft) {
-                        Icon(HugeIcons.Eraser, contentDescription = "清空输入")
+                        Icon(
+                            imageVector = HugeIcons.Eraser,
+                            contentDescription = stringResource(R.string.media_creation_page_clear_input),
+                        )
                     }
                 }
                 GenerateButton(enabled = canSubmit, onClick = vm::generate)
@@ -303,14 +309,14 @@ private fun EditingBar(onStop: () -> Unit) {
             modifier = Modifier.size(14.dp),
         )
         Text(
-            text = "正在修改，生成后成为原记录的新版本",
+            text = stringResource(R.string.media_creation_page_editing_hint),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.weight(1f),
         )
         Icon(
             imageVector = HugeIcons.Cancel01,
-            contentDescription = "退出修改",
+            contentDescription = stringResource(R.string.media_creation_page_stop_editing),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier
                 .clip(CircleShape)
@@ -369,7 +375,7 @@ private fun GenerateButton(enabled: Boolean, onClick: () -> Unit) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = HugeIcons.ArrowUp02,
-                contentDescription = "生成",
+                contentDescription = stringResource(R.string.media_creation_page_generate),
                 tint = if (enabled) {
                     MaterialTheme.colorScheme.onPrimary
                 } else {
@@ -404,7 +410,7 @@ private fun AssetRow(
         AssetTile(
             file = resolve(asset.path),
             isVideo = isVideo,
-            label = if (isVideo) "视频" else asset.role.label.takeIf { showLabels },
+            label = if (isVideo) stringResource(R.string.video) else asset.role.label.takeIf { showLabels },
             // 图片可以在各个槽位之间挪动
             roleOptions = if (isVideo) emptyList() else capabilities.imageRoles.filter { it != asset.role },
             onSetRole = { onSetRole(asset, it) },
@@ -424,7 +430,14 @@ private fun AssetRow(
             .filter { it.type == MediaCreationAssetType.VIDEO || it.role == ImageRole.REFERENCE }
             .forEach { Tile(it) }
         if (ImageRole.REFERENCE in capabilities.imageRoles || capabilities.videoInput) {
-            EmptyAssetTile(label = if (showLabels) "参考" else "参考图", onClick = { onPick(ImageRole.REFERENCE) })
+            EmptyAssetTile(
+                label = if (showLabels) {
+                    ImageRole.REFERENCE.label
+                } else {
+                    stringResource(R.string.media_creation_page_reference_image)
+                },
+                onClick = { onPick(ImageRole.REFERENCE) },
+            )
         }
     }
 }
@@ -478,7 +491,7 @@ private fun AssetTile(
         ) {
             Icon(
                 imageVector = HugeIcons.Cancel01,
-                contentDescription = "移除",
+                contentDescription = stringResource(R.string.media_creation_page_remove),
                 tint = Color.White,
                 modifier = Modifier.size(12.dp),
             )
@@ -486,7 +499,17 @@ private fun AssetTile(
         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
             roleOptions.forEach { role ->
                 DropdownMenuItem(
-                    text = { Text("设为${role.label}") },
+                    text = {
+                        Text(
+                            stringResource(
+                                when (role) {
+                                    ImageRole.FIRST_FRAME -> R.string.media_creation_page_set_as_first_frame
+                                    ImageRole.LAST_FRAME -> R.string.media_creation_page_set_as_last_frame
+                                    ImageRole.REFERENCE -> R.string.media_creation_page_set_as_reference
+                                }
+                            )
+                        )
+                    },
                     onClick = {
                         showMenu = false
                         onSetRole(role)
@@ -531,31 +554,40 @@ private fun AssetPickerSheet(
     onDismiss: () -> Unit,
 ) {
     ComposerSheet(onDismiss = onDismiss) {
-        Text(text = "添加${role.label}素材", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = stringResource(
+                when (role) {
+                    ImageRole.FIRST_FRAME -> R.string.media_creation_page_add_first_frame_asset
+                    ImageRole.LAST_FRAME -> R.string.media_creation_page_add_last_frame_asset
+                    ImageRole.REFERENCE -> R.string.media_creation_page_add_reference_asset
+                }
+            ),
+            style = MaterialTheme.typography.titleMedium,
+        )
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onPickImages, modifier = Modifier.weight(1f)) {
                 Icon(HugeIcons.Image02, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.size(8.dp))
-                Text("相册图片")
+                Text(stringResource(R.string.media_creation_page_gallery_image))
             }
             if (acceptsVideo) {
                 OutlinedButton(onClick = onPickVideo, modifier = Modifier.weight(1f)) {
                     Icon(HugeIcons.Video01, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(8.dp))
-                    Text("相册视频")
+                    Text(stringResource(R.string.media_creation_page_gallery_video))
                 }
             }
         }
 
         Text(
-            text = "最近生成",
+            text = stringResource(R.string.media_creation_page_recent_outputs),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (recentOutputs.isEmpty()) {
             Text(
-                text = "还没有可以复用的生成结果",
+                text = stringResource(R.string.media_creation_page_recent_outputs_empty),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 16.dp),
@@ -599,11 +631,14 @@ private fun ModelSheet(
         .filter { it.second.isNotEmpty() }
 
     ComposerSheet(onDismiss = onDismiss) {
-        Text(text = "选择模型", style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = stringResource(R.string.media_creation_page_select_model),
+            style = MaterialTheme.typography.titleMedium,
+        )
 
         if (groups.isEmpty()) {
             Text(
-                text = "还没有可用的模型，先去添加一个媒体生成提供商",
+                text = stringResource(R.string.media_creation_page_no_models),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 16.dp),
@@ -641,7 +676,7 @@ private fun ModelSheet(
         }
 
         TextButton(onClick = onManage, modifier = Modifier.align(Alignment.End)) {
-            Text("管理提供商")
+            Text(stringResource(R.string.media_creation_page_manage_providers))
         }
     }
 }
@@ -713,12 +748,12 @@ private fun ParamsSheet(
     ComposerSheet(onDismiss = onDismiss) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = "生成参数",
+                text = stringResource(R.string.media_creation_page_params_title),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = { update(MediaCreationParams()) }) {
-                Text("全部恢复默认")
+                Text(stringResource(R.string.media_creation_page_params_reset))
             }
         }
 
@@ -730,38 +765,45 @@ private fun ParamsSheet(
         ) {
             if (MediaGenerationParameter.ASPECT_RATIO in supported) {
                 TextParam(
-                    label = "比例",
+                    label = stringResource(R.string.media_creation_page_param_aspect_ratio),
                     value = current.aspectRatio,
                     presets = presets.aspectRatios,
                     default = defaults.aspectRatio.takeIf { MediaGenerationParameter.ASPECT_RATIO in required },
-                    placeholder = "如 16:9",
+                    placeholder = stringResource(R.string.media_creation_page_param_aspect_ratio_hint),
                     onValueChange = { update(current.copy(aspectRatio = it)) },
                 )
             }
             if (MediaGenerationParameter.RESOLUTION in supported) {
                 TextParam(
-                    label = "分辨率",
+                    label = stringResource(R.string.media_creation_page_param_resolution),
                     value = current.resolution,
                     presets = presets.resolutions,
                     default = defaults.resolution.takeIf { MediaGenerationParameter.RESOLUTION in required },
-                    placeholder = if (kind == MediaKind.VIDEO) "如 1080P" else "如 2K 或 1536x1024",
+                    placeholder = stringResource(
+                        if (kind == MediaKind.VIDEO) {
+                            R.string.media_creation_page_param_resolution_hint_video
+                        } else {
+                            R.string.media_creation_page_param_resolution_hint_image
+                        }
+                    ),
                     onValueChange = { update(current.copy(resolution = it)) },
                 )
             }
             if (MediaGenerationParameter.DURATION in supported) {
                 NumberParam(
-                    label = "时长（秒）",
+                    label = stringResource(R.string.media_creation_page_param_duration),
                     value = current.durationSeconds?.toLong(),
                     presets = presets.durations.map { it.toLong() },
                     default = defaults.durationSeconds?.toLong()
                         .takeIf { MediaGenerationParameter.DURATION in required },
-                    special = AUTO_DURATION.toLong() to "智能",
+                    special = AUTO_DURATION.toLong() to
+                        stringResource(R.string.media_creation_page_param_duration_auto),
                     onValueChange = { update(current.copy(durationSeconds = it?.toInt())) },
                 )
             }
             if (MediaGenerationParameter.COUNT in supported) {
                 NumberParam(
-                    label = "数量",
+                    label = stringResource(R.string.media_creation_page_param_count),
                     value = current.count?.toLong(),
                     presets = presets.counts.map { it.toLong() },
                     default = defaults.count?.toLong().takeIf { MediaGenerationParameter.COUNT in required },
@@ -770,28 +812,28 @@ private fun ParamsSheet(
             }
             if (MediaGenerationParameter.GENERATE_AUDIO in supported) {
                 ToggleParam(
-                    label = "生成声音",
+                    label = stringResource(R.string.media_creation_page_param_audio),
                     value = current.generateAudio,
                     onValueChange = { update(current.copy(generateAudio = it)) },
                 )
             }
             if (MediaGenerationParameter.WATERMARK in supported) {
                 ToggleParam(
-                    label = "水印",
+                    label = stringResource(R.string.media_creation_page_param_watermark),
                     value = current.watermark,
                     onValueChange = { update(current.copy(watermark = it)) },
                 )
             }
             if (MediaGenerationParameter.PROMPT_ENHANCEMENT in supported) {
                 ToggleParam(
-                    label = "提示词优化",
+                    label = stringResource(R.string.media_creation_page_param_prompt_enhancement),
                     value = current.promptEnhancement,
                     onValueChange = { update(current.copy(promptEnhancement = it)) },
                 )
             }
             if (MediaGenerationParameter.SEED in supported) {
                 NumberParam(
-                    label = "随机种子",
+                    label = stringResource(R.string.media_creation_page_param_seed),
                     value = current.seed,
                     presets = emptyList(),
                     allowZero = true,
@@ -818,7 +860,7 @@ private fun <T> PresetChips(
             FilterChip(
                 selected = value == null,
                 onClick = { onValueChange(null) },
-                label = { Text("默认") },
+                label = { Text(stringResource(R.string.media_creation_page_param_default)) },
             )
         }
         presets.forEach { preset ->
@@ -889,7 +931,7 @@ private fun NumberParam(
                 onValueChange(number)
             },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(default?.toString() ?: "默认") },
+            placeholder = { Text(default?.toString() ?: stringResource(R.string.media_creation_page_param_default)) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             textStyle = MaterialTheme.typography.bodyMedium,
@@ -903,7 +945,11 @@ private fun ToggleParam(
     value: Boolean?,
     onValueChange: (Boolean?) -> Unit,
 ) {
-    val options = listOf<Pair<Boolean?, String>>(null to "默认", true to "开", false to "关")
+    val options = listOf<Pair<Boolean?, String>>(
+        null to stringResource(R.string.media_creation_page_param_default),
+        true to stringResource(R.string.media_creation_page_param_on),
+        false to stringResource(R.string.media_creation_page_param_off),
+    )
     FormItem(label = { Text(label) }) {
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             options.forEachIndexed { index, (option, text) ->

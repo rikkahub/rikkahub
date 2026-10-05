@@ -83,7 +83,7 @@ fun MediaCreationPage(id: String) {
             TopAppBar(
                 title = {
                     Text(
-                        text = session?.title?.ifBlank { null } ?: "媒体创作",
+                        text = session?.title?.ifBlank { null } ?: stringResource(R.string.media_creation_title),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -131,8 +131,8 @@ fun MediaCreationPage(id: String) {
 
     RikkaConfirmDialog(
         show = showUploadDialog,
-        title = "还没有配置素材上传",
-        confirmText = "去配置",
+        title = stringResource(R.string.media_creation_page_upload_dialog_title),
+        confirmText = stringResource(R.string.media_creation_page_go_configure),
         dismissText = stringResource(R.string.cancel),
         onConfirm = {
             showUploadDialog = false
@@ -140,7 +140,7 @@ fun MediaCreationPage(id: String) {
         },
         onDismiss = { showUploadDialog = false },
     ) {
-        Text("这个模型只接受公网地址的素材。在「设置 → 媒体 → S3」里配置一个桶后，素材会在提交时自动上传。")
+        Text(stringResource(R.string.media_creation_page_upload_dialog_text))
     }
 }
 
@@ -221,20 +221,20 @@ private fun TimelineEmpty(
     ) {
         if (hasModels) {
             Text(
-                text = "在下面写一段提示词，生成图像或视频。\n生成的结果可以直接作为下一轮的素材。",
+                text = stringResource(R.string.media_creation_page_empty_hint),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
         } else {
             Text(
-                text = "还没有配置媒体生成提供商",
+                text = stringResource(R.string.media_creation_page_no_providers),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
             Button(onClick = onOpenMediaSettings) {
-                Text("去配置")
+                Text(stringResource(R.string.media_creation_page_go_configure))
             }
         }
     }

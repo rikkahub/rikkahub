@@ -274,7 +274,7 @@ private fun RecordFailure(record: MediaCreationRecord) {
             Text(
                 text = when {
                     !cancelled -> record.error ?: record.status.label
-                    record.taskId != null -> "已停止等待，任务可能仍在服务端运行"
+                    record.taskId != null -> stringResource(R.string.media_creation_page_cancelled_task_running)
                     else -> record.status.label
                 },
                 style = MaterialTheme.typography.bodySmall,
@@ -411,23 +411,48 @@ private fun OutputMenu(
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             if (output.isVideo) {
-                MenuItem("续写（尾帧作首帧）", HugeIcons.Video01) { vm.continueVideo(output) }
-                MenuItem("用作参考视频", HugeIcons.ImageAdd01) { vm.useVideo(output) }
+                MenuItem(stringResource(R.string.media_creation_page_continue_video_long), HugeIcons.Video01) {
+                    vm.continueVideo(output)
+                }
+                MenuItem(stringResource(R.string.media_creation_page_use_as_reference_video), HugeIcons.ImageAdd01) {
+                    vm.useVideo(output)
+                }
             } else {
-                MenuItem("用作参考图", HugeIcons.ImageAdd01) { vm.useImage(output, ImageRole.REFERENCE) }
-                MenuItem("用作首帧", HugeIcons.ImageToVideo) { vm.useImage(output, ImageRole.FIRST_FRAME) }
-                MenuItem("用作尾帧", HugeIcons.ImageToVideo) { vm.useImage(output, ImageRole.LAST_FRAME) }
-            }
-            MenuItem("保存到相册", HugeIcons.Download01) {
-                scope.launch {
-                    runCatching { saveMediaToGallery(context, file, output.mimeType) }
-                        .onSuccess { toaster.show("已保存到相册", type = ToastType.Success) }
-                        .onFailure { toaster.show(it.message ?: "保存失败", type = ToastType.Error) }
+                MenuItem(stringResource(R.string.media_creation_page_use_as_reference_image), HugeIcons.ImageAdd01) {
+                    vm.useImage(output, ImageRole.REFERENCE)
+                }
+                MenuItem(stringResource(R.string.media_creation_page_use_as_first_frame), HugeIcons.ImageToVideo) {
+                    vm.useImage(output, ImageRole.FIRST_FRAME)
+                }
+                MenuItem(stringResource(R.string.media_creation_page_use_as_last_frame), HugeIcons.ImageToVideo) {
+                    vm.useImage(output, ImageRole.LAST_FRAME)
                 }
             }
-            MenuItem("分享", HugeIcons.Share01) {
+            MenuItem(stringResource(R.string.media_creation_page_save_to_gallery), HugeIcons.Download01) {
+                scope.launch {
+                    runCatching { saveMediaToGallery(context, file, output.mimeType) }
+                        .onSuccess {
+                            toaster.show(
+                                context.getString(R.string.media_creation_page_saved_to_gallery),
+                                type = ToastType.Success,
+                            )
+                        }
+                        .onFailure {
+                            toaster.show(
+                                it.message ?: context.getString(R.string.media_creation_page_save_failed),
+                                type = ToastType.Error,
+                            )
+                        }
+                }
+            }
+            MenuItem(stringResource(R.string.share), HugeIcons.Share01) {
                 runCatching { shareMedia(context, file, output.mimeType) }
-                    .onFailure { toaster.show(it.message ?: "分享失败", type = ToastType.Error) }
+                    .onFailure {
+                        toaster.show(
+                            it.message ?: context.getString(R.string.media_creation_page_share_failed),
+                            type = ToastType.Error,
+                        )
+                    }
             }
         }
     }
@@ -452,7 +477,7 @@ private fun RecordActions(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             when {
-                record.status.isActive -> ActionChip("取消", HugeIcons.Cancel01) {
+                record.status.isActive -> ActionChip(stringResource(R.string.cancel), HugeIcons.Cancel01) {
                     // 已经提交给服务端的任务撤不回来，先说明清楚
                     if (record.taskId != null) confirmCancel = true else vm.cancel(record)
                 }
@@ -461,31 +486,58 @@ private fun RecordActions(
                     // 只有一项产出时把最常用的去向直接摆出来，多项产出走各自的菜单
                     record.outputs.singleOrNull()?.let { output ->
                         if (output.isVideo) {
-                            ActionChip("续写", HugeIcons.Video01) { vm.continueVideo(output) }
+                            ActionChip(
+                                stringResource(R.string.media_creation_page_continue_video),
+                                HugeIcons.Video01,
+                            ) { vm.continueVideo(output) }
                         } else {
-                            ActionChip("用作参考", HugeIcons.ImageAdd01) { vm.useImage(output, ImageRole.REFERENCE) }
-                            ActionChip("做成视频", HugeIcons.ImageToVideo) { vm.useImage(output, ImageRole.FIRST_FRAME) }
+                            ActionChip(
+                                stringResource(R.string.media_creation_page_use_as_reference),
+                                HugeIcons.ImageAdd01,
+                            ) { vm.useImage(output, ImageRole.REFERENCE) }
+                            ActionChip(
+                                stringResource(R.string.media_creation_page_make_video),
+                                HugeIcons.ImageToVideo,
+                            ) { vm.useImage(output, ImageRole.FIRST_FRAME) }
                         }
                     }
-                    ActionChip("再来一次", HugeIcons.Refresh) { vm.rerun(record) }
+                    ActionChip(stringResource(R.string.media_creation_page_rerun), HugeIcons.Refresh) {
+                        vm.rerun(record)
+                    }
                 }
 
                 else -> ActionChip(
-                    text = if (record.taskId != null) "继续获取结果" else "重试",
+                    text = stringResource(
+                        if (record.taskId != null) {
+                            R.string.media_creation_page_resume
+                        } else {
+                            R.string.media_creation_page_retry
+                        }
+                    ),
                     icon = HugeIcons.Refresh,
                 ) { vm.retry(record) }
             }
-            ActionChip("改一改", HugeIcons.PencilEdit01) { vm.editFrom(record) }
+            ActionChip(stringResource(R.string.media_creation_page_edit), HugeIcons.PencilEdit01) {
+                vm.editFrom(record)
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             ItemActionMenu(
                 actions = listOfNotNull(
-                    ItemAction(text = "复制提示词", icon = HugeIcons.Copy01) {
+                    ItemAction(
+                        text = stringResource(R.string.media_creation_page_copy_prompt),
+                        icon = HugeIcons.Copy01,
+                    ) {
                         context.writeClipboardText(record.prompt)
-                        toaster.show("已复制提示词", type = ToastType.Success)
+                        toaster.show(
+                            context.getString(R.string.media_creation_page_prompt_copied),
+                            type = ToastType.Success,
+                        )
                     }.takeIf { record.prompt.isNotBlank() },
                     ItemAction(
-                        text = if (hasVersions) "删除这个版本" else stringResource(R.string.delete),
+                        text = stringResource(
+                            if (hasVersions) R.string.media_creation_page_delete_version else R.string.delete
+                        ),
                         icon = HugeIcons.Delete01,
                         destructive = true,
                     ) { confirmDelete = true },
@@ -499,16 +551,16 @@ private fun RecordActions(
 
     RikkaConfirmDialog(
         show = confirmCancel,
-        title = "停止等待？",
-        confirmText = "停止等待",
-        dismissText = "继续等待",
+        title = stringResource(R.string.media_creation_page_stop_waiting_title),
+        confirmText = stringResource(R.string.media_creation_page_stop_waiting),
+        dismissText = stringResource(R.string.media_creation_page_keep_waiting),
         onConfirm = {
             confirmCancel = false
             vm.cancel(record)
         },
         onDismiss = { confirmCancel = false },
     ) {
-        Text("任务已经提交给服务端，无法撤回，服务端仍可能完成并计费。停止后可以随时点「继续获取结果」。")
+        Text(stringResource(R.string.media_creation_page_stop_waiting_text))
     }
 
     RikkaConfirmDialog(
@@ -522,15 +574,21 @@ private fun RecordActions(
         },
         onDismiss = { confirmDelete = false },
     ) {
-        val target = if (hasVersions) "这个版本" else "这条记录"
+        val active = record.status.isActive
         Text(
-            buildString {
-                if (record.status.isActive) {
-                    append("${target}还在生成，删除后不会再获取结果，已生成的文件也会一并删除。")
-                } else {
-                    append("${target}和它生成的文件会被删除，无法恢复。")
-                }
-                if (hasVersions) append("其余 ${node.versionCount - 1} 个版本会保留。")
+            when {
+                hasVersions && active -> stringResource(
+                    R.string.media_creation_page_delete_version_active_text,
+                    node.versionCount - 1,
+                )
+
+                hasVersions -> stringResource(
+                    R.string.media_creation_page_delete_version_text,
+                    node.versionCount - 1,
+                )
+
+                active -> stringResource(R.string.media_creation_page_delete_record_active_text)
+                else -> stringResource(R.string.media_creation_page_delete_record_text)
             }
         )
     }
@@ -565,13 +623,13 @@ private fun VersionSwitcher(
         modifier = Modifier.heightIn(min = 48.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Arrow(HugeIcons.ArrowLeft01, "上一个版本", offset = -1)
+        Arrow(HugeIcons.ArrowLeft01, stringResource(R.string.media_creation_page_previous_version), offset = -1)
         Text(
             text = "${node.versionIndex + 1}/${node.versionCount}",
             style = MaterialTheme.typography.bodySmall,
             color = color,
         )
-        Arrow(HugeIcons.ArrowRight01, "下一个版本", offset = 1)
+        Arrow(HugeIcons.ArrowRight01, stringResource(R.string.media_creation_page_next_version), offset = 1)
     }
 }
 

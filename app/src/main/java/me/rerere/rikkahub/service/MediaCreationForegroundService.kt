@@ -153,8 +153,8 @@ class MediaCreationForegroundService : Service() {
     private fun buildNotification() =
         NotificationCompat.Builder(this, MEDIA_CREATION_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_rikkahub)
-            .setContentTitle("媒体创作")
-            .setContentText("${activeRecords.size} 个任务正在生成")
+            .setContentTitle(getString(R.string.media_creation_title))
+            .setContentText(getString(R.string.media_creation_notification_running, activeRecords.size))
             .setContentIntent(sessionPendingIntent(this, activeRecords.values.last()))
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setOngoing(true)

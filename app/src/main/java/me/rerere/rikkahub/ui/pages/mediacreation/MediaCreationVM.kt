@@ -40,6 +40,7 @@ import me.rerere.mediagen.provider.MediaGenerationCapabilities
 import me.rerere.mediagen.provider.MediaGenerationProviderSetting
 import me.rerere.mediagen.provider.capabilities
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.MediaCreationFiles
 import me.rerere.rikkahub.data.files.RemoteFileStore
@@ -255,7 +256,11 @@ class MediaCreationVM(
                 }
             }
             if (files.size < uris.size) {
-                _events.send(MediaCreationEvent.Error("有 ${uris.size - files.size} 个文件无法读取"))
+                _events.send(
+                    MediaCreationEvent.Error(
+                        context.getString(R.string.media_creation_page_files_unreadable, uris.size - files.size)
+                    )
+                )
             }
             files.forEach { addAsset(MediaCreationAsset(repository.relativePath(it), type, role)) }
         }
@@ -296,7 +301,9 @@ class MediaCreationVM(
                 if (extracted) repository.relativePath(target) else null
             }
             if (framePath == null) {
-                _events.send(MediaCreationEvent.Error("无法从视频里取出最后一帧"))
+                _events.send(
+                    MediaCreationEvent.Error(context.getString(R.string.media_creation_page_last_frame_failed))
+                )
                 return@launch
             }
             if (!ensureModel { ImageRole.FIRST_FRAME in it.imageRoles }) return@launch
@@ -307,7 +314,7 @@ class MediaCreationVM(
     private suspend fun addCopy(path: String, type: MediaCreationAssetType, role: ImageRole = ImageRole.REFERENCE) {
         val copy = copyToDraft(path)
         if (copy == null) {
-            _events.send(MediaCreationEvent.Error("无法添加这个素材"))
+            _events.send(MediaCreationEvent.Error(context.getString(R.string.media_creation_page_asset_add_failed)))
             return
         }
         addAsset(MediaCreationAsset(copy, type, role))
@@ -357,7 +364,7 @@ class MediaCreationVM(
             }
         }
         if (candidates.isEmpty()) {
-            _events.send(MediaCreationEvent.Error("还没有配置视频模型"))
+            _events.send(MediaCreationEvent.Error(context.getString(R.string.media_creation_page_no_video_model)))
             return false
         }
         // 优先用上一次生成视频时的模型
@@ -377,7 +384,9 @@ class MediaCreationVM(
         val submitted = draftState.value ?: return
         val selection = currentSelection(submitted)
         if (selection == null) {
-            _events.trySend(MediaCreationEvent.Error("请先选择模型"))
+            _events.trySend(
+                MediaCreationEvent.Error(context.getString(R.string.media_creation_page_select_model_first))
+            )
             return
         }
         if (!submitted.canSubmit(selection.capabilities)) return
@@ -411,7 +420,11 @@ class MediaCreationVM(
         val provider = settingsStore.settingsFlow.value.mediaGenerationProviders.find { it.id == record.providerId }
         val capabilities = provider?.capabilities(record.kind)
         if (provider == null || capabilities == null) {
-            _events.trySend(MediaCreationEvent.Error("提供商「${record.providerName}」已被删除"))
+            _events.trySend(
+                MediaCreationEvent.Error(
+                    context.getString(R.string.media_creation_error_provider_deleted, record.providerName)
+                )
+            )
             return
         }
         submit(
@@ -449,7 +462,9 @@ class MediaCreationVM(
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to submit", e)
-                _events.send(MediaCreationEvent.Error(e.message ?: "提交失败"))
+                _events.send(
+                    MediaCreationEvent.Error(e.message ?: context.getString(R.string.media_creation_page_submit_failed))
+                )
             }
         }
     }

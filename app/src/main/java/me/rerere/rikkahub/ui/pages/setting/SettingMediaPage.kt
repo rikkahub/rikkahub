@@ -92,7 +92,7 @@ fun SettingMediaPage(vm: SettingVM = koinViewModel()) {
         topBar = {
             LargeFlexibleTopAppBar(
                 title = {
-                    Text("媒体")
+                    Text(stringResource(R.string.setting_page_media))
                 },
                 navigationIcon = {
                     BackButton()
@@ -120,7 +120,7 @@ fun SettingMediaPage(vm: SettingVM = koinViewModel()) {
                     selected = selectedPage == 0,
                     onClick = { selectedPage = 0 },
                     icon = { Icon(HugeIcons.Image02, contentDescription = null) },
-                    label = { Text("提供商") }
+                    label = { Text(stringResource(R.string.setting_media_page_providers)) }
                 )
                 NavigationBarItem(
                     selected = selectedPage == 1,
@@ -151,7 +151,7 @@ fun SettingMediaPage(vm: SettingVM = koinViewModel()) {
 
     editingProvider?.let { provider ->
         MediaProviderSheet(
-            title = "编辑提供商",
+            title = stringResource(R.string.setting_media_page_edit_provider),
             initial = provider,
             confirmText = stringResource(R.string.chat_page_save),
             onConfirm = { edited ->
@@ -192,7 +192,7 @@ private fun MediaProviderList(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "还没有媒体生成提供商，点右上角添加",
+                text = stringResource(R.string.setting_media_page_empty),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -321,7 +321,7 @@ private fun AddMediaProviderButton(onAdd: (MediaGenerationProviderSetting) -> Un
         IconButton(
             onClick = { showTypeMenu = true }
         ) {
-            Icon(HugeIcons.Add01, "添加提供商")
+            Icon(HugeIcons.Add01, stringResource(R.string.setting_media_page_add_provider))
         }
         DropdownMenu(
             expanded = showTypeMenu,
@@ -334,7 +334,7 @@ private fun AddMediaProviderButton(onAdd: (MediaGenerationProviderSetting) -> Un
                 { MediaGenerationProviderSetting.MiniMax() },
             ).forEach { create ->
                 DropdownMenuItem(
-                    text = { Text(remember { create().typeName }) },
+                    text = { Text(remember { create() }.typeName) },
                     onClick = {
                         newProvider = create()
                         showTypeMenu = false
@@ -346,7 +346,7 @@ private fun AddMediaProviderButton(onAdd: (MediaGenerationProviderSetting) -> Un
 
     newProvider?.let { provider ->
         MediaProviderSheet(
-            title = "添加提供商",
+            title = stringResource(R.string.setting_media_page_add_provider),
             initial = provider,
             confirmText = stringResource(R.string.setting_tts_page_add),
             onConfirm = onAdd,
@@ -452,8 +452,7 @@ private fun MediaUploadS3Tab(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "部分接口只接受公网地址的素材（如视频生成的参考图、参考视频）。配置后，本地文件会先上传到这个桶，" +
-                    "再以临时地址交给接口；上传的文件 7 天后自动清理。此配置与备份的 S3 互相独立。",
+                text = stringResource(R.string.setting_media_page_s3_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

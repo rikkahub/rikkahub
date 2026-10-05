@@ -53,8 +53,6 @@ import org.koin.androidx.compose.koinViewModel
 import java.time.ZoneId
 import kotlin.uuid.Uuid
 
-private const val NEW_SESSION_TITLE = "新会话"
-
 /**
  * 媒体创作的入口：列出所有会话，点进去是这个会话的创作页（[MediaCreationPage]）。
  */
@@ -73,7 +71,7 @@ fun MediaCreationSessionsPage(vm: MediaCreationSessionsVM = koinViewModel()) {
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("媒体创作") },
+                title = { Text(stringResource(R.string.media_creation_title)) },
                 navigationIcon = { BackButton() },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
@@ -81,7 +79,7 @@ fun MediaCreationSessionsPage(vm: MediaCreationSessionsVM = koinViewModel()) {
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { vm.newSession(open) }) {
-                Icon(HugeIcons.Add01, contentDescription = NEW_SESSION_TITLE)
+                Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.media_creation_page_new_session))
             }
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -133,11 +131,15 @@ fun MediaCreationSessionsPage(vm: MediaCreationSessionsVM = koinViewModel()) {
     ) {
         val session = deleting
         Text(
-            buildString {
-                append("会话「${session?.title?.ifBlank { null } ?: NEW_SESSION_TITLE}」里的 ${session?.nodeCount ?: 0} 条记录")
-                append("和它们生成的文件都会被删除，无法恢复。")
-                if ((session?.activeCount ?: 0) > 0) append("其中还在生成的任务不会再获取结果。")
-            }
+            stringResource(
+                if ((session?.activeCount ?: 0) > 0) {
+                    R.string.media_creation_page_delete_session_active_text
+                } else {
+                    R.string.media_creation_page_delete_session_text
+                },
+                session?.title?.ifBlank { null } ?: stringResource(R.string.media_creation_page_new_session),
+                session?.nodeCount ?: 0,
+            )
         )
     }
 }
@@ -158,12 +160,12 @@ private fun EmptySessionsState() {
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            text = "还没有会话",
+            text = stringResource(R.string.media_creation_page_sessions_empty),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            text = "点右下角的按钮，开始生成图像或视频",
+            text = stringResource(R.string.media_creation_page_sessions_empty_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -193,7 +195,7 @@ private fun SessionCard(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = session.title.ifBlank { NEW_SESSION_TITLE },
+                    text = session.title.ifBlank { stringResource(R.string.media_creation_page_new_session) },
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -203,8 +205,9 @@ private fun SessionCard(
                 }
                 Text(
                     text = listOfNotNull(
-                        "${session.nodeCount} 条记录",
-                        "${session.activeCount} 个生成中".takeIf { session.activeCount > 0 },
+                        stringResource(R.string.media_creation_page_record_count, session.nodeCount),
+                        stringResource(R.string.media_creation_page_active_count, session.activeCount)
+                            .takeIf { session.activeCount > 0 },
                         time,
                     ).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
@@ -213,7 +216,11 @@ private fun SessionCard(
             }
             ItemActionMenu(
                 actions = listOf(
-                    ItemAction(text = "重命名", icon = HugeIcons.PencilEdit01, onClick = onRename),
+                    ItemAction(
+                        text = stringResource(R.string.common_rename),
+                        icon = HugeIcons.PencilEdit01,
+                        onClick = onRename,
+                    ),
                     ItemAction(
                         text = stringResource(R.string.delete),
                         icon = HugeIcons.Delete01,
@@ -235,7 +242,7 @@ private fun RenameSessionDialog(
     var title by remember { mutableStateOf(initialTitle) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("重命名会话") },
+        title = { Text(stringResource(R.string.media_creation_page_rename_session)) },
         text = {
             OutlinedTextField(
                 value = title,

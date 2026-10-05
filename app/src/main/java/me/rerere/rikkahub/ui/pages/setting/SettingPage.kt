@@ -237,8 +237,8 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     item(
                         onClick = { navController.navigate(Screen.SettingMedia) },
                         leadingContent = { Icon(HugeIcons.Image02, null) },
-                        supportingContent = { Text("图像与视频生成提供商、素材上传") },
-                        headlineContent = { Text("媒体") },
+                        supportingContent = { Text(stringResource(R.string.setting_page_media_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_media)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingMcp) },

@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
@@ -40,6 +41,7 @@ import me.rerere.hugeicons.stroke.Play
 import me.rerere.mediagen.model.ImageRole
 import me.rerere.mediagen.model.MediaKind
 import me.rerere.mediagen.provider.MediaGenerationProviderSetting
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.MediaCreationFiles
 import me.rerere.rikkahub.data.model.MediaCreationParams
 import me.rerere.rikkahub.data.model.MediaCreationStatus
@@ -47,36 +49,69 @@ import me.rerere.rikkahub.utils.getActivity
 import java.io.File
 
 internal val ImageRole.label: String
-    get() = when (this) {
-        ImageRole.FIRST_FRAME -> "首帧"
-        ImageRole.LAST_FRAME -> "尾帧"
-        ImageRole.REFERENCE -> "参考"
+    @Composable get() = when (this) {
+        ImageRole.FIRST_FRAME -> stringResource(R.string.media_creation_role_first_frame)
+        ImageRole.LAST_FRAME -> stringResource(R.string.media_creation_role_last_frame)
+        ImageRole.REFERENCE -> stringResource(R.string.media_creation_role_reference)
     }
 
 internal val MediaCreationStatus.label: String
-    get() = when (this) {
-        MediaCreationStatus.PREPARING -> "上传素材中"
-        MediaCreationStatus.QUEUED -> "排队中"
-        MediaCreationStatus.RUNNING -> "生成中"
-        MediaCreationStatus.DOWNLOADING -> "下载结果中"
-        MediaCreationStatus.SUCCEEDED -> "已完成"
-        MediaCreationStatus.FAILED -> "生成失败"
-        MediaCreationStatus.CANCELLED -> "已取消"
+    @Composable get() = when (this) {
+        MediaCreationStatus.PREPARING -> stringResource(R.string.media_creation_status_preparing)
+        MediaCreationStatus.QUEUED -> stringResource(R.string.media_creation_status_queued)
+        MediaCreationStatus.RUNNING -> stringResource(R.string.media_creation_status_running)
+        MediaCreationStatus.DOWNLOADING -> stringResource(R.string.media_creation_status_downloading)
+        MediaCreationStatus.SUCCEEDED -> stringResource(R.string.media_creation_status_succeeded)
+        MediaCreationStatus.FAILED -> stringResource(R.string.media_creation_status_failed)
+        MediaCreationStatus.CANCELLED -> stringResource(R.string.media_creation_status_cancelled)
     }
 
 /** 时长的特殊取值：交给模型决定（智能时长）。 */
 internal const val AUTO_DURATION = -1
 
 /** 用户改过的参数，按「比例 · 分辨率 · 时长 · 数量」的顺序列出；都没改时为空。 */
+@Composable
 internal fun MediaCreationParams.summary(kind: MediaKind): List<String> = listOfNotNull(
     aspectRatio,
     resolution,
-    durationSeconds?.let { if (it == AUTO_DURATION) "智能时长" else "$it 秒" },
-    count?.let { if (kind == MediaKind.VIDEO) "$it 段" else "$it 张" },
-    generateAudio?.let { if (it) "有声" else "无声" },
-    watermark?.let { if (it) "带水印" else "无水印" },
-    promptEnhancement?.let { if (it) "提示词优化" else "不优化提示词" },
-    seed?.let { "种子 $it" },
+    durationSeconds?.let {
+        if (it == AUTO_DURATION) {
+            stringResource(R.string.media_creation_page_summary_auto_duration)
+        } else {
+            stringResource(R.string.media_creation_page_summary_seconds, it)
+        }
+    },
+    count?.let {
+        if (kind == MediaKind.VIDEO) {
+            stringResource(R.string.media_creation_page_summary_video_count, it)
+        } else {
+            stringResource(R.string.media_creation_page_summary_image_count, it)
+        }
+    },
+    generateAudio?.let {
+        stringResource(
+            if (it) R.string.media_creation_page_summary_audio_on else R.string.media_creation_page_summary_audio_off
+        )
+    },
+    watermark?.let {
+        stringResource(
+            if (it) {
+                R.string.media_creation_page_summary_watermark_on
+            } else {
+                R.string.media_creation_page_summary_watermark_off
+            }
+        )
+    },
+    promptEnhancement?.let {
+        stringResource(
+            if (it) {
+                R.string.media_creation_page_param_prompt_enhancement
+            } else {
+                R.string.media_creation_page_summary_prompt_enhancement_off
+            }
+        )
+    },
+    seed?.let { stringResource(R.string.media_creation_page_summary_seed, it) },
 )
 
 /**
@@ -190,7 +225,7 @@ internal fun MediaThumbnail(
  * 把生成的图片或视频存进系统相册。
  */
 internal suspend fun saveMediaToGallery(context: Context, file: File, mimeType: String) = withContext(Dispatchers.IO) {
-    check(file.isFile) { "文件已不存在" }
+    check(file.isFile) { context.getString(R.string.media_creation_page_file_missing) }
     val isVideo = mimeType.startsWith("video/")
     val name = "RikkaHub_${System.currentTimeMillis()}.${file.extension}"
     val directory = if (isVideo) Environment.DIRECTORY_MOVIES else Environment.DIRECTORY_PICTURES
@@ -206,9 +241,11 @@ internal suspend fun saveMediaToGallery(context: Context, file: File, mimeType: 
         } else {
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         }
-        val uri = resolver.insert(collection, values) ?: error("无法写入相册")
+        val uri = resolver.insert(collection, values)
+            ?: error(context.getString(R.string.media_creation_page_gallery_write_failed))
         try {
-            val output = resolver.openOutputStream(uri) ?: error("无法写入相册")
+            val output = resolver.openOutputStream(uri)
+                ?: error(context.getString(R.string.media_creation_page_gallery_write_failed))
             output.use { target -> file.inputStream().use { it.copyTo(target) } }
         } catch (e: Exception) {
             resolver.delete(uri, null, null)
@@ -219,7 +256,7 @@ internal suspend fun saveMediaToGallery(context: Context, file: File, mimeType: 
         val permission = Manifest.permission.WRITE_EXTERNAL_STORAGE
         if (ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
             context.getActivity()?.let { ActivityCompat.requestPermissions(it, arrayOf(permission), 1) }
-            error("请授予存储权限后重试")
+            error(context.getString(R.string.media_creation_page_storage_permission_required))
         }
         val target = File(Environment.getExternalStoragePublicDirectory(directory), name)
         file.copyTo(target, overwrite = true)

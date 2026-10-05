@@ -712,7 +712,7 @@ private fun DrawerActions(navController: Navigator) {
         // 媒体创作入口
         DrawerEntry(
             icon = HugeIcons.ImageToVideo,
-            text = "媒体创作",
+            text = stringResource(R.string.media_creation_title),
             onClick = { navController.navigate(Screen.MediaCreationSessions) },
         )
     }

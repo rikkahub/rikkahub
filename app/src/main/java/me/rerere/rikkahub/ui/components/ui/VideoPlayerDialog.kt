@@ -99,7 +99,7 @@ fun VideoPlayerDialog(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text = "无法播放这个视频\n${error?.errorCodeName.orEmpty()}",
+                        text = stringResource(R.string.video_player_error) + "\n" + error?.errorCodeName.orEmpty(),
                         color = Color.White,
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
@@ -114,7 +114,7 @@ fun VideoPlayerDialog(
                             runCatching { context.startActivity(Intent.createChooser(intent, null)) }
                         }
                     ) {
-                        Text("用其他应用打开", color = Color.White)
+                        Text(stringResource(R.string.video_player_open_with), color = Color.White)
                     }
                 }
             }

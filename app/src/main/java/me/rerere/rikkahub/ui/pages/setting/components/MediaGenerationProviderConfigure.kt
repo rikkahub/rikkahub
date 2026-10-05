@@ -29,17 +29,17 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.FormItem
 
 val MediaGenerationProviderSetting.typeName: String
-    get() = when (this) {
+    @Composable get() = when (this) {
         is MediaGenerationProviderSetting.OpenAI -> "OpenAI"
-        is MediaGenerationProviderSetting.Aliyun -> "阿里云百炼"
-        is MediaGenerationProviderSetting.Volcengine -> "火山方舟"
+        is MediaGenerationProviderSetting.Aliyun -> stringResource(R.string.media_provider_type_aliyun)
+        is MediaGenerationProviderSetting.Volcengine -> stringResource(R.string.media_provider_type_volcengine)
         is MediaGenerationProviderSetting.MiniMax -> "MiniMax"
     }
 
 val MediaKind.label: String
-    get() = when (this) {
-        MediaKind.IMAGE -> "图像"
-        MediaKind.VIDEO -> "视频"
+    @Composable get() = when (this) {
+        MediaKind.IMAGE -> stringResource(R.string.media_kind_image)
+        MediaKind.VIDEO -> stringResource(R.string.video)
     }
 
 @Composable
@@ -52,7 +52,7 @@ fun MediaGenerationProviderConfigure(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier.verticalScroll(rememberScrollState())
     ) {
-        FormItem(label = { Text("提供商类型") }) {
+        FormItem(label = { Text(stringResource(R.string.setting_media_page_provider_type)) }) {
             OutlinedTextField(
                 value = setting.typeName,
                 onValueChange = {},
@@ -61,7 +61,7 @@ fun MediaGenerationProviderConfigure(
             )
         }
 
-        FormItem(label = { Text("名称") }) {
+        FormItem(label = { Text(stringResource(R.string.setting_media_page_provider_name)) }) {
             OutlinedTextField(
                 value = setting.name,
                 onValueChange = { onValueChange(setting.copyProvider(name = it)) },
@@ -90,9 +90,14 @@ fun MediaGenerationProviderConfigure(
 
         if (setting is MediaGenerationProviderSetting.Aliyun) {
             FormItem(
-                label = { Text("业务空间 ID") },
+                label = { Text(stringResource(R.string.setting_media_page_workspace_id)) },
                 description = {
-                    Text("替换 Base URL 里的 ${MediaGenerationProviderSetting.Aliyun.WORKSPACE_PLACEHOLDER}，地址不含占位符时可以留空")
+                    Text(
+                        stringResource(
+                            R.string.setting_media_page_workspace_id_desc,
+                            MediaGenerationProviderSetting.Aliyun.WORKSPACE_PLACEHOLDER,
+                        )
+                    )
                 }
             ) {
                 OutlinedTextField(
@@ -105,8 +110,8 @@ fun MediaGenerationProviderConfigure(
         }
 
         FormItem(
-            label = { Text("模型") },
-            description = { Text("模型 ID 会原样下发给接口") }
+            label = { Text(stringResource(R.string.setting_media_page_models)) },
+            description = { Text(stringResource(R.string.setting_media_page_models_desc)) }
         ) {
             MediaGenerationModelList(
                 models = setting.models,
@@ -144,7 +149,7 @@ private fun MediaGenerationModelList(
                         value = model.modelId,
                         onValueChange = { update(model.copy(modelId = it.trim())) },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("模型 ID") },
+                        placeholder = { Text(stringResource(R.string.setting_media_page_model_id)) },
                         singleLine = true
                     )
                     // 只支持一种类型的厂商不需要选择
@@ -173,7 +178,7 @@ private fun MediaGenerationModelList(
             enabled = kinds.isNotEmpty()
         ) {
             Icon(HugeIcons.Add01, null)
-            Text("添加模型")
+            Text(stringResource(R.string.setting_media_page_add_model))
         }
     }
 }

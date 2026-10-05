@@ -260,7 +260,7 @@ class RikkaHubApp : Application() {
 
         val mediaCreationChannel = NotificationChannelCompat
             .Builder(MEDIA_CREATION_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_DEFAULT)
-            .setName("媒体创作")
+            .setName(getString(R.string.media_creation_title))
             .build()
         notificationManager.createNotificationChannel(mediaCreationChannel)
     }
