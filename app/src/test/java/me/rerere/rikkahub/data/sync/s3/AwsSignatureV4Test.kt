@@ -63,9 +63,9 @@ class AwsSignatureV4Test {
     }
 
     @Test
-    fun `presigned url defaults to https when the endpoint has no scheme`() {
+    fun `withHttpsByDefault makes a scheme-less endpoint presign as https`() {
         fun url(endpoint: String) = AwsSignatureV4.presignGetUrl(
-            config = awsExample.copy(endpoint = endpoint, bucket = "rikka-hub"),
+            config = awsExample.copy(endpoint = endpoint, bucket = "rikka-hub").withHttpsByDefault(),
             path = "/rikkahub_uploads/a.png",
             expires = 1.hours,
             now = awsExampleTime,
@@ -77,6 +77,17 @@ class AwsSignatureV4Test {
         )
         // 显式写了 http:// 的（内网自建服务）保持不变
         assertEquals("http://rikka-hub.minio.lan:9000/rikkahub_uploads/a.png", url("http://minio.lan:9000"))
+        assertEquals(S3Config(), S3Config().withHttpsByDefault())
+    }
+
+    @Test
+    fun `scheme-less endpoint keeps signing as http for existing backup configs`() {
+        val signed = AwsSignatureV4.sign(
+            awsExample.copy(endpoint = "192.168.1.10:9000", pathStyle = true),
+            method = "GET",
+            path = "/test.txt",
+        )
+        assertEquals("http://192.168.1.10:9000/examplebucket/test.txt", signed.url)
     }
 
     @Test

@@ -21,9 +21,12 @@ data class S3Config(
             .removePrefix("http://")
             .trimEnd('/')
 
-    // 没写协议时按 https 处理，只有显式写了 http:// 才走明文
     val isHttps: Boolean
-        get() = !endpoint.startsWith("http://")
+        get() = endpoint.startsWith("https://")
+
+    /** endpoint 没写协议时补上 https://，给不需要兼容旧行为的配置用。 */
+    fun withHttpsByDefault(): S3Config =
+        if (endpoint.isBlank() || "://" in endpoint) this else copy(endpoint = "https://$endpoint")
 
     fun bucketUrl(): String {
         return if (pathStyle) {

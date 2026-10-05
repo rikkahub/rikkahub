@@ -41,7 +41,8 @@ class RemoteFileStore internal constructor(
 ) {
     constructor(settingsStore: SettingsStore, httpClient: HttpClient, scope: CoroutineScope) : this(
         scope = scope,
-        config = { settingsStore.settingsFlow.value.uploadS3Config },
+        // 签出的地址要交给只接受 HTTPS 素材的接口，没写协议时不能落到 http
+        config = { settingsStore.settingsFlow.value.uploadS3Config.withHttpsByDefault() },
         storage = { S3ObjectStorage(S3Client(it, httpClient)) },
     )
 
