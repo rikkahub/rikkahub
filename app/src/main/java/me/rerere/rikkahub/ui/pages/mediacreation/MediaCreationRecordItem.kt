@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -284,6 +285,9 @@ private fun RecordFailure(record: MediaCreationRecord) {
     }
 }
 
+private val SingleOutputMaxWidth = 280.dp
+private val OutputMaxHeight = 240.dp
+
 @Composable
 private fun RecordOutputs(
     record: MediaCreationRecord,
@@ -292,25 +296,27 @@ private fun RecordOutputs(
 ) {
     val outputs = record.outputs
     if (outputs.size == 1) {
-        val output = outputs.single()
-        // 竖图不占满整行，免得一条记录撑出好几屏
+        // 不铺满整行：横图受宽度限制，竖图受高度限制，免得一条记录占掉大半屏
         OutputTile(
-            output = output,
+            output = outputs.single(),
             vm = vm,
             onPreview = onPreview,
-            modifier = Modifier.fillMaxWidth(if (output.aspectRatio() < 0.9f) 0.6f else 1f),
+            modifier = Modifier.sizeIn(maxWidth = SingleOutputMaxWidth, maxHeight = OutputMaxHeight),
         )
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             outputs.chunked(2).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     row.forEach { output ->
-                        OutputTile(
-                            output = output,
-                            vm = vm,
-                            onPreview = onPreview,
-                            modifier = Modifier.weight(1f),
-                        )
+                        // 每格宽度固定，太高的竖图在格子里按高度上限缩小
+                        Box(modifier = Modifier.weight(1f)) {
+                            OutputTile(
+                                output = output,
+                                vm = vm,
+                                onPreview = onPreview,
+                                modifier = Modifier.heightIn(max = OutputMaxHeight),
+                            )
+                        }
                     }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
