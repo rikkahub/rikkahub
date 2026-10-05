@@ -512,16 +512,25 @@ private fun RecordActions(
                     }
                 }
 
-                else -> ActionChip(
-                    text = stringResource(
-                        if (record.taskId != null) {
-                            R.string.media_creation_page_resume
-                        } else {
-                            R.string.media_creation_page_retry
+                else -> {
+                    ActionChip(
+                        text = stringResource(
+                            if (record.taskId != null) {
+                                R.string.media_creation_page_resume
+                            } else {
+                                R.string.media_creation_page_retry
+                            }
+                        ),
+                        icon = HugeIcons.Refresh,
+                    ) { vm.retry(record) }
+                    // 服务端的任务可能已经取不回来了（被清掉、结果地址失效），而这一点客户端判断不了：
+                    // 留一个不依赖旧任务的出口，另起一个版本重新提交
+                    if (record.taskId != null) {
+                        ActionChip(stringResource(R.string.media_creation_page_rerun), HugeIcons.Refresh) {
+                            vm.rerun(record)
                         }
-                    ),
-                    icon = HugeIcons.Refresh,
-                ) { vm.retry(record) }
+                    }
+                }
             }
             ActionChip(stringResource(R.string.media_creation_page_edit), HugeIcons.PencilEdit01) {
                 vm.editFrom(record)

@@ -170,6 +170,8 @@ internal class AliyunVideoGeneration(
         "SUCCEEDED" -> MediaGenerationStatus.SUCCEEDED
         "FAILED" -> MediaGenerationStatus.FAILED
         "CANCELED", "CANCELLED" -> MediaGenerationStatus.CANCELLED
+        // 百炼的 UNKNOWN 是「任务不存在」：task_id 只能查 24 小时，过期后一直返回这个状态
+        "UNKNOWN" -> MediaGenerationStatus.EXPIRED
         else -> MediaGenerationStatus.UNKNOWN
     }
 }

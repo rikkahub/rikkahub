@@ -241,7 +241,7 @@ class MediaCreationService(
         val model = MediaGenerationModel(modelId = record.modelId, kind = record.kind)
 
         val task = if (record.taskId != null) {
-            awaitTask(setting, model, record.id, record.taskId)
+            awaitTask(setting, model, record.id, record.taskId, since = record.updateAt)
         } else {
             val created = create(setting, model, record)
             if (created.isTerminal) {
@@ -254,7 +254,7 @@ class MediaCreationService(
                     }
                 }
                 delay(POLL_INTERVAL)
-                awaitTask(setting, model, record.id, created.id)
+                awaitTask(setting, model, record.id, created.id, since = Instant.now())
             }
         }
 
@@ -306,14 +306,18 @@ class MediaCreationService(
     /**
      * 轮询到终态。网络抖动和服务端的临时错误不代表任务失败，退避后继续查询；
      * 接口明确拒绝（4xx）、连续失败太多次或等待超时才放弃，此时记录仍保留任务 ID，可以重试。
+     *
+     * 时限从 [since] 算起。接着查询已有任务时传记录最后一次变化的时间，而不是现在：
+     * 否则进程每重启一次时限就续一次，一个始终不结束的任务会被永远查下去。
      */
     private suspend fun awaitTask(
         setting: MediaGenerationProviderSetting,
         model: MediaGenerationModel,
         recordId: Uuid,
         taskId: String,
+        since: Instant,
     ): MediaGenerationTask {
-        val deadline = Instant.now() + MAX_WAIT.toJavaDuration()
+        val deadline = since + MAX_WAIT.toJavaDuration()
         var failures = 0
         while (true) {
             val result = manager.query(setting, model, taskId)
