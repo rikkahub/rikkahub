@@ -30,6 +30,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.mediagen.model.ImageRole
 import me.rerere.mediagen.model.MediaGenerationModel
@@ -150,6 +152,9 @@ class MediaCreationVM(
     // 输入区最近一次提交，还没有结果时不接受下一次
     private var generateJob: Job? = null
 
+    // 同一个文件连续选用两次时，第二次要等第一次的副本写完
+    private val draftCopyMutex = Mutex()
+
     init {
         viewModelScope.launch { load() }
         viewModelScope.launch {
@@ -269,7 +274,7 @@ class MediaCreationVM(
     fun useImage(output: MediaCreationOutput, role: ImageRole) {
         viewModelScope.launch {
             if (!ensureModel { role in it.imageRoles }) return@launch
-            addAsset(MediaCreationAsset(output.path, MediaCreationAssetType.IMAGE, role))
+            addCopy(output.path, MediaCreationAssetType.IMAGE, role)
         }
     }
 
@@ -277,19 +282,18 @@ class MediaCreationVM(
     fun useVideo(output: MediaCreationOutput) {
         viewModelScope.launch {
             if (!ensureModel { it.videoInput }) return@launch
-            addAsset(MediaCreationAsset(output.path, MediaCreationAssetType.VIDEO))
+            addCopy(output.path, MediaCreationAssetType.VIDEO)
         }
     }
 
     /** 续写：用视频的最后一帧作为下一段的首帧。 */
     fun continueVideo(output: MediaCreationOutput) {
         viewModelScope.launch {
-            val framePath = withContext(Dispatchers.IO) {
-                output.lastFramePath?.takeIf { repository.resolve(it).isFile } ?: run {
-                    val target = File(repository.draftDir(sessionId), "${Uuid.random()}.jpg")
-                    val extracted = MediaCreationFiles.extractFrame(repository.resolve(output.path), target, last = true)
-                    if (extracted) repository.relativePath(target) else null
-                }
+            // 接口随视频返回了尾帧就用它，没有的话自己从视频里抽
+            val framePath = output.lastFramePath?.let { copyToDraft(it) } ?: withContext(Dispatchers.IO) {
+                val target = File(repository.draftDir(sessionId), "${Uuid.random()}.jpg")
+                val extracted = MediaCreationFiles.extractFrame(repository.resolve(output.path), target, last = true)
+                if (extracted) repository.relativePath(target) else null
             }
             if (framePath == null) {
                 _events.send(MediaCreationEvent.Error("无法从视频里取出最后一帧"))
@@ -297,6 +301,33 @@ class MediaCreationVM(
             }
             if (!ensureModel { ImageRole.FIRST_FRAME in it.imageRoles }) return@launch
             addAsset(MediaCreationAsset(framePath, MediaCreationAssetType.IMAGE, ImageRole.FIRST_FRAME))
+        }
+    }
+
+    private suspend fun addCopy(path: String, type: MediaCreationAssetType, role: ImageRole = ImageRole.REFERENCE) {
+        val copy = copyToDraft(path)
+        if (copy == null) {
+            _events.send(MediaCreationEvent.Error("无法添加这个素材"))
+            return
+        }
+        addAsset(MediaCreationAsset(copy, type, role))
+    }
+
+    /**
+     * 把一条记录的产出复制进草稿目录，返回副本的路径：产出可能来自别的会话，那条记录或会话被删除时草稿不受影响。
+     * 副本的名字由来源决定，同一个文件再选一次得到的还是同一份。复制不了时返回 null。
+     */
+    private suspend fun copyToDraft(path: String): String? = draftCopyMutex.withLock {
+        withContext(Dispatchers.IO) {
+            val source = repository.resolve(path)
+            val target = File(repository.draftDir(sessionId), "${source.parentFile?.name}_${source.name}")
+            runCatching {
+                if (!target.isFile) source.copyTo(target)
+                repository.relativePath(target)
+            }.onFailure {
+                Log.e(TAG, "Failed to copy $path into the draft", it)
+                target.delete()
+            }.getOrNull()
         }
     }
 

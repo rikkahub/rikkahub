@@ -34,7 +34,7 @@ import kotlin.uuid.Uuid
  * 时间线由「项」组成，每一项下面是一条或多条记录（版本），其中一条被选中显示。
  *
  * 文件按归属存放：`media_creation/{会话}/{记录}/` 下是一条记录自己的输入和输出，`media_creation/{会话}/draft/`
- * 下是草稿里从相册选进来、还没有提交的素材。删除记录或会话时连同目录一起删除。
+ * 下是草稿里还没有提交的素材，从相册选进来的和选用已有产出时复制过来的都在这里。删除记录或会话时连同目录一起删除。
  */
 class MediaCreationRepository(
     private val context: Context,
