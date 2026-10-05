@@ -97,7 +97,7 @@
       </intent-filter>
 
       <intent-filter>
-        <action android:name="me.rerere.rikkahub.action.IMAGE_GEN" />
+        <action android:name="me.rerere.rikkahub.action.MEDIA_CREATION" />
         <category android:name="android.intent.category.DEFAULT" />
       </intent-filter>
 

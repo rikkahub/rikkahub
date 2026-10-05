@@ -81,6 +81,10 @@ class MediaCreationRepository(
         }
     }
 
+    /** 准备一个空会话，模型沿用最近那个会话选中的。 */
+    suspend fun newSession(): MediaCreationSession =
+        getOrCreateEmptySession(MediaCreationDraft(modelId = getLatestSession()?.draft?.modelId))
+
     suspend fun renameSession(id: Uuid, title: String) = dao.renameSession(id.toString(), title)
 
     suspend fun saveDraft(id: Uuid, draft: MediaCreationDraft) =

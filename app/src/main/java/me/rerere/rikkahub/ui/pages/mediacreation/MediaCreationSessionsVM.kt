@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import me.rerere.rikkahub.data.model.MediaCreationDraft
 import me.rerere.rikkahub.data.model.MediaCreationSession
 import me.rerere.rikkahub.data.repository.MediaCreationRepository
 import me.rerere.rikkahub.service.MediaCreationService
@@ -20,12 +19,9 @@ class MediaCreationSessionsVM(
     val sessions: StateFlow<List<MediaCreationSession>?> = repository.observeSessions()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    /** 准备一个空会话交给 [onReady] 打开，模型沿用最近那个会话选中的。 */
+    /** 准备一个空会话交给 [onReady] 打开。 */
     fun newSession(onReady: (Uuid) -> Unit) {
-        viewModelScope.launch {
-            val modelId = repository.getLatestSession()?.draft?.modelId
-            onReady(repository.getOrCreateEmptySession(MediaCreationDraft(modelId = modelId)).id)
-        }
+        viewModelScope.launch { onReady(repository.newSession().id) }
     }
 
     fun rename(id: Uuid, title: String) {

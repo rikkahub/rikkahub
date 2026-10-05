@@ -1401,4 +1401,5 @@
   <string name="error_fast_model_not_found">找不到快速模型。請在設定中選擇一個。</string>
   <string name="error_fast_model_provider_not_found">找不到快速模型的供應商</string>
   <string name="assistant_page_clone_with_memories">同時複製記憶</string>
+  <string name="shortcut_media_creation">媒體創作</string>
 </resources>

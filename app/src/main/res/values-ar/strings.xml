@@ -1401,4 +1401,5 @@
   <string name="error_fast_model_not_found">لم يتم العثور على النموذج السريع. يرجى اختيار واحد في الإعدادات.</string>
   <string name="error_fast_model_provider_not_found">لم يتم العثور على مزوّد النموذج السريع</string>
   <string name="assistant_page_clone_with_memories">نسخ الذاكرة أيضًا</string>
+  <string name="shortcut_media_creation">إنشاء الوسائط</string>
 </resources>

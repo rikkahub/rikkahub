@@ -23,13 +23,13 @@
             android:targetClass="me.rerere.rikkahub.RouteActivity" />
     </shortcut>
     <shortcut
-        android:shortcutId="image_gen"
+        android:shortcutId="media_creation"
         android:enabled="true"
-        android:icon="@drawable/ic_image_generation"
-        android:shortcutShortLabel="@string/imggen_page_title"
-        android:shortcutLongLabel="@string/imggen_page_title">
+        android:icon="@drawable/ic_media_creation"
+        android:shortcutShortLabel="@string/shortcut_media_creation"
+        android:shortcutLongLabel="@string/shortcut_media_creation">
         <intent
-            android:action="me.rerere.rikkahub.action.IMAGE_GEN"
+            android:action="me.rerere.rikkahub.action.MEDIA_CREATION"
             android:targetClass="me.rerere.rikkahub.RouteActivity" />
     </shortcut>
 </shortcuts>

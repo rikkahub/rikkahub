@@ -1403,4 +1403,5 @@
   <string name="error_fast_model_not_found">Fast model not found. Please select one in settings.</string>
   <string name="error_fast_model_provider_not_found">Provider of the fast model not found</string>
   <string name="assistant_page_clone_with_memories">Also copy memories</string>
+  <string name="shortcut_media_creation">Media Creation</string>
 </resources>

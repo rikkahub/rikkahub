@@ -1404,4 +1404,5 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="error_fast_model_not_found">未找到快速模型。请在设置中选择一个。</string>
   <string name="error_fast_model_provider_not_found">未找到快速模型的提供商</string>
   <string name="assistant_page_clone_with_memories">同时复制记忆</string>
+  <string name="shortcut_media_creation">媒体创作</string>
 </resources>
