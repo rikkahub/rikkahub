@@ -19,8 +19,9 @@ setting 是厂商级的，只保存凭据（`apiKey` / `baseUrl`）和该厂商�
 | 阿里云百炼             | 万相 / 千问，生成 + 编辑，同步      | 万相，异步任务        |
 | 火山方舟              | Seedream，生成 + 参考图生图，同步 | Seedance，异步任务 |
 | MiniMax           | 未实现                     | H3，异步任务        |
+| OpenRouter        | 生成 + 参考图生图，同步           | 异步任务           |
 
-适配器按厂商分包，放在 `provider/providers/{openai,aliyun,volcengine,minimax}` 下，公用的 HTTP 和图片工具留在
+适配器按厂商分包，放在 `provider/providers/{openai,aliyun,volcengine,minimax,openrouter}` 下，公用的 HTTP 和图片工具留在
 `provider/providers`。两种 kind 都实现的厂商，provider 只做路由，图像和视频协议各自放在 `{Vendor}ImageGeneration` /
 `{Vendor}VideoGeneration` 里。
 给已有厂商补另一种 kind 时，加上对应的类和路由分支并扩充 `supportedKinds`，setting 和公共接口不用改。
@@ -33,13 +34,16 @@ setting 是厂商级的，只保存凭据（`apiKey` / `baseUrl`）和该厂商�
 2. 任务未到终态时用 `query` 轮询；
 3. 成功后从 `outputs` 取结果。
 
-同步接口（三家的图像）在 `create` 里直接返回终态任务，没有可查询的任务。上层不需要区分两种情况：
+同步接口（各家的图像）在 `create` 里直接返回终态任务，没有可查询的任务。上层不需要区分两种情况：
 `MediaGenerationManager.generate` 提交后跟踪到终态，同步供应商只发出一次，异步供应商按间隔轮询；
 `watch` 用于按任务 ID 恢复轮询。两者都是可取消的 Flow。
 
 模块只负责供应商协议适配，不负责持久化任务、下载或落盘结果、把本地素材上传成公网地址或 UI 状态管理。接口返回非 2xx
 时抛出 `MediaGenerationApiException`（携带 `provider`、`statusCode`、`code`）；接口正常返回但没有任何产出时，得到的是
 带 `error` 的 `FAILED` 任务。
+
+结果地址大多带签名，直接下载即可；OpenRouter 的视频地址没有签名，要带着 API Key 去取。上层下载时统一加上
+`setting.downloadHeaders(url)` 返回的请求头：它只在地址和 `baseUrl` 同源时给出 `Authorization`，其它情况为空。
 
 公共模型位于 `model/` 包：
 
@@ -53,24 +57,44 @@ setting 是厂商级的，只保存凭据（`apiKey` / `baseUrl`）和该厂商�
   （已解码的字节，不参与序列化）；
 - `extraParameters` / `Raw`：承接模型快速迭代产生的供应商专属字段，避免频繁修改公共 API。
 
+### 适配器能力
+
+`setting.capabilities(kind)` 返回适配器在该 kind 下接受的请求形态（`MediaGenerationCapabilities`），没有实现的 kind 返回 `null`：
+
+- `parameters`：会映射的公共字段（`MediaGenerationParameter`），不在其中的字段传了会直接报错；
+- `requiredParameters`：接口没有默认值、需要调用方给出的字段。目前只有 MiniMax：`resolution`、`duration` 必填，
+  `ratio` 在文生视频时必填且不能是 `adaptive`；
+- `imageRoles` / `videoInput`：接受哪些角色的图片输入、是否接受视频输入；
+- `framesExcludeReferences`：首帧 / 尾帧和参考素材（参考图、参考视频）不能出现在同一个请求里，各家的视频接口都是如此
+  （OpenRouter 不会报错，但只按首尾帧生成）；
+- `requiresPrompt`：只用公共字段时提示词是否必填；
+- `requiresRemoteInputs`：素材是否必须是公网地址，为 `false` 时图片可以直接传本地文件路径。
+
+上层据此决定展示哪些选项、提交前要不要先把本地素材上传。它描述的是适配器而不是具体模型，字段的取值范围仍以接口为准，
+同一厂商下也有只被部分模型接受的字段（如 Seedance 的 `seed` 只有 1.0 系列支持，万相 2.7 图像没有 `prompt_extend`）。
+
+`parameters` 由 `MediaGenerationCapabilitiesTest` 对照各适配器的校验来保证，新增或调整字段映射时要同步修改；其余几项适配器
+不做校验，依据的是文末的官方文档，接口约定变化时需要手动更新。
+
 ## 图像
 
-三家的图像接口都是同步的，生成一张高质量图片可能需要数分钟，传入的 `OkHttpClient` 需要配置足够长的读超时。请求里带
+各家的图像接口都是同步的，生成一张高质量图片可能需要数分钟，传入的 `OkHttpClient` 需要配置足够长的读超时。请求里带
 `MediaGenerationInput.Image` 就是编辑 / 参考图生图，否则是文生图；图像接口不区分 `ImageRole`。
 
 ### 字段映射
 
-| 公共字段                | OpenAI        | 火山 Seedream           | 阿里万相 / 千问               |
-|---------------------|---------------|-----------------------|-------------------------|
-| `count`             | `n`           | 只接受 1，组图走 `extraParameters` | `n`                     |
-| `resolution`        | `size`        | `size`（`2K` 或 `2048x2048`） | `size`（`2K`，像素尺寸转成 `1536*1024`） |
-| `watermark`         | 不支持           | `watermark`           | `watermark`             |
-| `seed`              | 不支持           | 不支持                   | `seed`                  |
-| `promptEnhancement` | 不支持           | 不支持，走 `extraParameters` | `prompt_extend`         |
-| 图片输入                | 本地文件，multipart | 公网地址 / data URI / 本地文件 | 公网地址 / data URI / 本地文件  |
-| 结果                  | 内联字节或 url     | 24 小时有效的 url，或内联字节    | 24 小时有效的 url           |
+| 公共字段                | OpenAI        | 火山 Seedream           | 阿里万相 / 千问               | OpenRouter                  |
+|---------------------|---------------|-----------------------|-------------------------|-----------------------------|
+| `count`             | `n`           | 只接受 1，组图走 `extraParameters` | `n`                     | `n`                         |
+| `resolution`        | `size`        | `size`（`2K` 或 `2048x2048`） | `size`（`2K`，像素尺寸转成 `1536*1024`） | 档位走 `resolution`，像素尺寸走 `size` |
+| `aspectRatio`       | 不支持           | 不支持                   | 不支持                     | `aspect_ratio`              |
+| `watermark`         | 不支持           | `watermark`           | `watermark`             | 不支持                         |
+| `seed`              | 不支持           | 不支持                   | `seed`                  | `seed`                      |
+| `promptEnhancement` | 不支持           | 不支持，走 `extraParameters` | `prompt_extend`         | 不支持                         |
+| 图片输入                | 本地文件，multipart | 公网地址 / data URI / 本地文件 | 公网地址 / data URI / 本地文件  | 公网地址 / data URI / 本地文件      |
+| 结果                  | 内联字节或 url     | 24 小时有效的 url，或内联字节    | 24 小时有效的 url           | 内联字节                        |
 
-`aspectRatio`、`durationSeconds`、`generateAudio`、`callbackUrl` 三家的图像接口都不支持，传了会直接报错。
+`durationSeconds`、`generateAudio`、`callbackUrl` 各家的图像接口都不支持，传了会直接报错。
 
 ### OpenAI
 
@@ -102,21 +126,49 @@ setting 是厂商级的，只保存凭据（`apiKey` / `baseUrl`）和该厂商�
 - `negative_prompt`、`thinking_mode`、`enable_sequential` 等走 `extraParameters`；
 - 响应里的 `usage.size`（`1488*704`）或 `width` / `height` 统一成 `1488x704` 放进 `output.resolution`。
 
+### OpenRouter
+
+- `POST {baseUrl}/images`（JSON，同步）。这是 OpenRouter 自己的图像接口，不是 OpenAI 兼容的 `/images/generations`；
+- 参考图放在 `input_references` 里，每项是 `{"type": "image_url", "image_url": {"url": ...}}`，本地文件会编码成 data URI；
+- `resolution` 是档位（`1K`、`2K`）时下发为 `resolution`，可以和 `aspect_ratio` 组合；是像素尺寸（`2048x2048`）时下发为
+  `size`，此时不要再传 `aspectRatio`，两者对不上接口会返回 400；
+- `quality`、`output_format`、`background` 以及 `provider`（路由和各上游专属参数）走 `extraParameters`；
+- 结果总是内联的 base64，解码后放进 `output.data`，`media_type` 作为 `mimeType`（矢量模型是 `image/svg+xml`）；
+- `usage.cost`（美元）等信息保留在 `task.metadata`；
+- 各模型接受哪些字段和取值见 `GET {baseUrl}/images/models`。
+
 ## 视频
 
 ### 能力差异
 
-| 能力        | 阿里万相 3.0        | 火山 Seedance 2.0 | MiniMax H3     |
-|-----------|-----------------|-----------------|----------------|
-| 文生视频      | 支持              | 支持              | 支持，且 prompt 必填 |
-| 首/尾帧      | 支持              | 支持              | 支持             |
-| 参考图/视频/音频 | 支持              | 支持              | 支持             |
-| 文件/网页输入   | 支持              | 不支持             | 不支持            |
-| 智能时长 `-1` | 支持              | 部分模型支持          | 不支持            |
-| 请求级回调 URL | 不支持，使用账号级异步回调配置 | 支持              | 支持             |
-| 有声输出开关    | 支持              | 部分模型支持          | API 未暴露        |
+| 能力        | 阿里万相 3.0        | 火山 Seedance 2.0 | MiniMax H3     | OpenRouter        |
+|-----------|-----------------|-----------------|----------------|-------------------|
+| 文生视频      | 支持              | 支持              | 支持，且 prompt 必填 | 支持                |
+| 首/尾帧      | 支持              | 支持              | 支持             | 取决于模型             |
+| 参考图/视频/音频 | 支持，不能和首/尾帧混用    | 支持，不能和首/尾帧混用    | 支持，不能和首/尾帧混用   | 取决于模型，和首/尾帧混用时被忽略 |
+| 必填参数      | 无               | 无               | 分辨率、时长；文生视频还要比例 | 无                 |
+| 文件/网页输入   | 支持              | 不支持             | 不支持            | 不支持               |
+| 智能时长 `-1` | 支持              | 部分模型支持          | 不支持            | 不支持               |
+| 请求级回调 URL | 不支持，使用账号级异步回调配置 | 支持              | 支持             | 支持（必须是 HTTPS）     |
+| 有声输出开关    | 支持              | 部分模型支持          | API 未暴露        | 部分模型支持            |
+| 水印开关      | 支持              | 支持              | 支持             | API 未暴露           |
+
+各家的视频接口都是一个任务产出一段视频，`count` 只接受 1，传更大的值会直接报错。
 
 不同模型的时长、分辨率、素材数量及格式限制变化较快，因此公共层不硬编码模型能力表；适配器只做协议级校验，服务端仍是模型参数合法性的最终来源。
+
+### OpenRouter
+
+- `POST {baseUrl}/videos` 提交，`GET {baseUrl}/videos/{id}` 轮询；状态 `pending` / `in_progress` / `completed` 对应
+  排队、运行、成功；
+- 首帧 / 尾帧放在 `frame_images`（带 `frame_type`），参考图、参考视频、参考音频放在 `input_references`。`Raw` 输入带
+  `frame_type` 时归入前者，否则归入后者；
+- `resolution` 是档位（`720p`、`1080p`、`4K`）时下发为 `resolution`，是像素尺寸（`1280x720`）时下发为 `size`；
+- `provider`（各上游的专属参数）、`previous_job_id`（续写已完成的任务）走 `extraParameters`；
+- 成功后 `unsigned_urls` 里的每个地址是一项产出。它们指向 `{baseUrl}/videos/{id}/content`，没有签名，下载时要带
+  `setting.downloadHeaders(url)`；
+- 轮询响应里没有时长、分辨率等信息，`usage.cost`（美元）保留在 `task.metadata`；
+- 各模型支持的时长、分辨率、比例、首尾帧见 `GET {baseUrl}/videos/models`，取值不被接受时接口返回 400 并列出可用值。
 
 ## 使用示例
 
@@ -166,3 +218,5 @@ manager.generate(
 - [火山方舟视频生成 API](https://www.volcengine.com/docs/82379/1520757)
 - [MiniMax H3 创建视频任务](https://platform.minimaxi.com/docs/api-reference/video-generation-v2-create)
 - [MiniMax H3 查询任务](https://platform.minimaxi.com/docs/api-reference/video-generation-v2-query)
+- [OpenRouter 图像生成](https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
+- [OpenRouter 视频生成](https://openrouter.ai/docs/guides/overview/multimodal/video-generation)

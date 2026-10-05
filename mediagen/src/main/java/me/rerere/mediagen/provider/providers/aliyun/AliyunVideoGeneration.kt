@@ -116,6 +116,7 @@ internal class AliyunVideoGeneration(
             request.seed?.let { put("seed", it) }
             request.promptEnhancement?.let { put("prompt_extend", it) }
         })
+        require(request.count == null || request.count == 1) { "Aliyun generates one video per task" }
         require(request.callbackUrl == null) {
             "Aliyun uses account-level asynchronous callbacks instead of a callback_url request field"
         }
@@ -169,6 +170,8 @@ internal class AliyunVideoGeneration(
         "SUCCEEDED" -> MediaGenerationStatus.SUCCEEDED
         "FAILED" -> MediaGenerationStatus.FAILED
         "CANCELED", "CANCELLED" -> MediaGenerationStatus.CANCELLED
+        // 百炼的 UNKNOWN 是「任务不存在」：task_id 只能查 24 小时，过期后一直返回这个状态
+        "UNKNOWN" -> MediaGenerationStatus.EXPIRED
         else -> MediaGenerationStatus.UNKNOWN
     }
 }

@@ -1,8 +1,6 @@
 package me.rerere.rikkahub.ui.pages.backup.tabs
 
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.View
-import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.hugeicons.stroke.Upload02
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,18 +24,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MultiChoiceSegmentedButtonRow
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.SheetValue
-import androidx.compose.material3.Switch
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,8 +44,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
@@ -59,6 +52,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.s3ConnectionItems
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.backup.BackupVM
 import me.rerere.rikkahub.utils.UiState
@@ -122,86 +116,7 @@ fun S3Tab(
             )
 
             CardGroup {
-                item(
-                    headlineContent = { Text(stringResource(R.string.backup_page_s3_endpoint)) },
-                    supportingContent = {
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
-                            value = s3Config.endpoint,
-                            onValueChange = { updateS3Config(s3Config.copy(endpoint = it.trim())) },
-                            placeholder = { Text("https://s3.amazonaws.com") },
-                            singleLine = true
-                        )
-                    },
-                )
-                item(
-                    headlineContent = { Text(stringResource(R.string.backup_page_s3_access_key_id)) },
-                    supportingContent = {
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
-                            value = s3Config.accessKeyId,
-                            onValueChange = { updateS3Config(s3Config.copy(accessKeyId = it.trim())) },
-                            singleLine = true
-                        )
-                    },
-                )
-                item(
-                    headlineContent = { Text(stringResource(R.string.backup_page_s3_secret_access_key)) },
-                    supportingContent = {
-                        var passwordVisible by remember { mutableStateOf(false) }
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
-                            value = s3Config.secretAccessKey,
-                            onValueChange = { updateS3Config(s3Config.copy(secretAccessKey = it.trim())) },
-                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                            trailingIcon = {
-                                val image = if (passwordVisible) {
-                                    HugeIcons.ViewOff
-                                } else {
-                                    HugeIcons.View
-                                }
-                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                                    Icon(imageVector = image, contentDescription = null)
-                                }
-                            },
-                            singleLine = true
-                        )
-                    },
-                )
-                item(
-                    headlineContent = { Text(stringResource(R.string.backup_page_s3_bucket)) },
-                    supportingContent = {
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
-                            value = s3Config.bucket,
-                            onValueChange = { updateS3Config(s3Config.copy(bucket = it.trim())) },
-                            placeholder = { Text("my-bucket") },
-                            singleLine = true
-                        )
-                    },
-                )
-                item(
-                    headlineContent = { Text(stringResource(R.string.backup_page_s3_path_style)) },
-                    supportingContent = { Text(stringResource(R.string.backup_page_s3_path_style_desc)) },
-                    trailingContent = {
-                        Switch(
-                            checked = s3Config.pathStyle,
-                            onCheckedChange = { updateS3Config(s3Config.copy(pathStyle = it)) },
-                        )
-                    },
-                )
-                item(
-                    headlineContent = { Text(stringResource(R.string.backup_page_s3_region)) },
-                    supportingContent = {
-                        OutlinedTextField(
-                            modifier = Modifier.fillMaxWidth(),
-                            value = s3Config.region,
-                            onValueChange = { updateS3Config(s3Config.copy(region = it.trim())) },
-                            placeholder = { Text("auto") },
-                            singleLine = true
-                        )
-                    },
-                )
+                s3ConnectionItems(config = s3Config, onUpdate = ::updateS3Config)
             }
 
             CardGroup {

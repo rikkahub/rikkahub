@@ -1,15 +1,18 @@
 package me.rerere.mediagen.provider
 
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
 import me.rerere.mediagen.model.MediaGenerationModel
 import me.rerere.mediagen.model.MediaGenerationRequest
 import me.rerere.mediagen.model.MediaGenerationTask
 import me.rerere.mediagen.provider.providers.aliyun.AliyunMediaGenerationProvider
 import me.rerere.mediagen.provider.providers.minimax.MiniMaxMediaGenerationProvider
 import me.rerere.mediagen.provider.providers.openai.OpenAIMediaGenerationProvider
+import me.rerere.mediagen.provider.providers.openrouter.OpenRouterMediaGenerationProvider
 import me.rerere.mediagen.provider.providers.volcengine.VolcengineMediaGenerationProvider
 import okhttp3.OkHttpClient
 import kotlin.time.Duration
@@ -22,20 +25,23 @@ class MediaGenerationManager(
     private val aliyun = AliyunMediaGenerationProvider(client)
     private val volcengine = VolcengineMediaGenerationProvider(client)
     private val miniMax = MiniMaxMediaGenerationProvider(client)
+    private val openRouter = OpenRouterMediaGenerationProvider(client)
 
     suspend fun create(
         setting: MediaGenerationProviderSetting,
         model: MediaGenerationModel,
         request: MediaGenerationRequest,
-    ): Result<MediaGenerationTask> =
+    ): Result<MediaGenerationTask> = withContext(Dispatchers.Default) {
         unsupportedKind(setting, model) ?: provider(setting).createUnsafe(setting, model, request)
+    }
 
     suspend fun query(
         setting: MediaGenerationProviderSetting,
         model: MediaGenerationModel,
         taskId: String,
-    ): Result<MediaGenerationTask> =
+    ): Result<MediaGenerationTask> = withContext(Dispatchers.Default) {
         unsupportedKind(setting, model) ?: provider(setting).queryUnsafe(setting, model, taskId)
+    }
 
     /**
      * 提交请求并跟踪到终态。同步返回结果的供应商只会发出一次终态任务；异步供应商先发出提交结果，
@@ -79,6 +85,7 @@ class MediaGenerationManager(
             is MediaGenerationProviderSetting.Aliyun -> aliyun
             is MediaGenerationProviderSetting.Volcengine -> volcengine
             is MediaGenerationProviderSetting.MiniMax -> miniMax
+            is MediaGenerationProviderSetting.OpenRouter -> openRouter
         }
 
     // 厂商适配器尚未实现该模型的 kind 时返回失败，否则返回 null

@@ -10,7 +10,7 @@ sealed class MediaGenerationInput {
 
     /**
      * 视频接口要求 [url] 是公网地址。图像接口也接受本地文件路径：OpenAI 以文件形式上传（只接受本地文件），
-     * 火山和阿里把本地文件编码成 data URI 内联进请求，公网地址和 data URI 则原样下发。
+     * 火山、阿里和 OpenRouter 把本地文件编码成 data URI 内联进请求，公网地址和 data URI 则原样下发。
      */
     @Serializable
     @SerialName("image")

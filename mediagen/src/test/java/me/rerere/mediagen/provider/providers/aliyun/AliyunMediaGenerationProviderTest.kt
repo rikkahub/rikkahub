@@ -261,6 +261,20 @@ class AliyunMediaGenerationProviderTest {
     }
 
     @Test
+    fun aliyunTreatsUnknownTaskStatusAsExpired() {
+        val video = AliyunVideoGeneration(client)
+        // 文档里 task_id 过期后的查询结果
+        val expired = video.parseTask(parse("""{"output":{"task_id":"t1","task_status":"UNKNOWN"}}"""))
+        assertEquals(MediaGenerationStatus.EXPIRED, expired.status)
+        assertTrue(expired.isTerminal)
+
+        // 文档没列出的状态仍然当作未结束，不能把还在跑的任务判成过期
+        val unrecognised = video.parseTask(parse("""{"output":{"task_id":"t1","task_status":"SUSPENDED"}}"""))
+        assertEquals(MediaGenerationStatus.UNKNOWN, unrecognised.status)
+        assertTrue(!unrecognised.isTerminal)
+    }
+
+    @Test
     fun aliyunMapsWan30MediaAndParameters() {
         val body = AliyunVideoGeneration(client).buildCreateBody(
             model = MediaGenerationModel(modelId = "wan3.0-video", kind = MediaKind.VIDEO),
