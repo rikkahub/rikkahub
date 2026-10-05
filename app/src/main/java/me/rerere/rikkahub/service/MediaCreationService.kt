@@ -11,7 +11,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -418,22 +420,34 @@ class MediaCreationService(
 
     private suspend fun downloadOnce(url: String, target: File) {
         val partial = File(target.parentFile, target.name + MediaCreationFiles.PARTIAL_SUFFIX)
+        val call = okHttpClient.newCall(Request.Builder().url(url).build())
         try {
-            okHttpClient.newCall(Request.Builder().url(url).build()).await().use { response ->
-                check(response.isSuccessful) {
-                    context.getString(R.string.media_creation_error_download_failed, response.code)
+            coroutineScope {
+                // 断流时线程卡在 read() 里，走不到 ensureActive()：取消时关掉连接，让 read() 立刻抛出来
+                val canceller = launch(start = CoroutineStart.UNDISPATCHED) {
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        call.cancel()
+                    }
                 }
-                response.body.byteStream().use { input ->
-                    partial.outputStream().use { output ->
-                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                        while (true) {
-                            currentCoroutineContext().ensureActive()
-                            val read = input.read(buffer)
-                            if (read < 0) break
-                            output.write(buffer, 0, read)
+                call.await().use { response ->
+                    check(response.isSuccessful) {
+                        context.getString(R.string.media_creation_error_download_failed, response.code)
+                    }
+                    response.body.byteStream().use { input ->
+                        partial.outputStream().use { output ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            while (true) {
+                                currentCoroutineContext().ensureActive()
+                                val read = input.read(buffer)
+                                if (read < 0) break
+                                output.write(buffer, 0, read)
+                            }
                         }
                     }
                 }
+                canceller.cancel()
             }
             check(partial.renameTo(target)) { context.getString(R.string.media_creation_error_save_failed) }
         } finally {
