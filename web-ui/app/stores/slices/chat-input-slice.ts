@@ -6,8 +6,6 @@ import type { UIMessagePart } from "~/types";
 const EMPTY_DRAFT: Draft = {
   text: "",
   parts: [],
-  modeInjectionIds: [],
-  lorebookIds: [],
 };
 
 function getDraft(drafts: Record<string, Draft>, conversationId: string): Draft {
@@ -65,28 +63,6 @@ export const createChatInputSlice: StateCreator<AppStoreState, [], [], ChatInput
         },
       };
     });
-  },
-  setPromptInjectionIds: (conversationId, ids) => {
-    set((state) => {
-      const draft = getDraft(state.drafts, conversationId);
-      return {
-        drafts: {
-          ...state.drafts,
-          [conversationId]: {
-            ...draft,
-            modeInjectionIds: ids.modeInjectionIds,
-            lorebookIds: ids.lorebookIds,
-          },
-        },
-      };
-    });
-  },
-  getPromptInjectionIds: (conversationId) => {
-    const draft = get().drafts[conversationId];
-    return {
-      modeInjectionIds: draft?.modeInjectionIds ?? [],
-      lorebookIds: draft?.lorebookIds ?? [],
-    };
   },
   clearDraft: (conversationId) => {
     set((state) => {

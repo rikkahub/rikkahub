@@ -16,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -29,14 +30,14 @@ import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
-import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
+import me.rerere.rikkahub.data.model.getAssistantOf
+import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.service.ChatError
@@ -110,15 +111,21 @@ class ChatVM(
     val settings: StateFlow<Settings> =
         settingsStore.settingsFlow.stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
 
-    // 网络搜索(每个助手独立)
-    val enableWebSearch = settings.map {
-        it.getCurrentAssistant().enableWebSearch
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    // 流式输出时会话每个 chunk 都在变，助手和模型只取决于下面这几个字段
+    private val configuredConversation = conversation.distinctUntilChanged { old, new ->
+        old.assistantId == new.assistantId && old.config == new.config &&
+            old.modeInjectionIds == new.modeInjectionIds && old.lorebookIds == new.lorebookIds
+    }
+
+    // 会话视角下的助手：会话开始后，模型、思考级别、搜索等以会话上固定的配置为准
+    val assistant: StateFlow<Assistant> = combine(settings, configuredConversation) { settings, conversation ->
+        settings.getAssistantOf(conversation)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, settings.value.getAssistantOf(conversation.value))
 
     // 当前模型
-    val currentChatModel = settings.map { settings ->
-        settings.getCurrentChatModel()
-    }.stateIn(viewModelScope, SharingStarted.Lazily, null)
+    val currentChatModel: StateFlow<Model?> = combine(settings, configuredConversation) { settings, conversation ->
+        settings.getChatModelOf(conversation)
+    }.stateIn(viewModelScope, SharingStarted.Lazily, settings.value.getChatModelOf(conversation.value))
 
     // 错误状态
     val errors: StateFlow<List<ChatError>> = chatService.errors
@@ -164,21 +171,24 @@ class ChatVM(
         }
     }
 
-    // 设置聊天模型
-    fun setChatModel(assistant: Assistant, model: Model) {
+    // 聊天页对助手的修改：新会话直接改助手，会话开始后只改当前会话
+    fun updateAssistant(assistant: Assistant) {
         viewModelScope.launch {
-            settingsStore.update { settings ->
-                settings.copy(
-                    assistants = settings.assistants.map {
-                        if (it.id == assistant.id) {
-                            it.copy(
-                                chatModelId = model.id
-                            )
-                        } else {
-                            it
-                        }
-                    })
-            }
+            chatService.updateChatAssistant(_conversationId) { assistant }
+        }
+    }
+
+    // 设置聊天模型
+    fun setChatModel(model: Model) {
+        viewModelScope.launch {
+            chatService.updateChatAssistant(_conversationId) { it.copy(chatModelId = model.id) }
+        }
+    }
+
+    // 切换搜索方式
+    fun updateSearch(enableWebSearch: Boolean, builtInSearch: Boolean) {
+        viewModelScope.launch {
+            chatService.updateChatSearch(_conversationId, enableWebSearch, builtInSearch)
         }
     }
 

@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEach
 import kotlin.uuid.Uuid
 import kotlinx.coroutines.Job
+import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowLeft01
@@ -69,7 +70,6 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
-import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
@@ -90,7 +90,9 @@ private enum class FilesPickerPage {
 @Composable
 internal fun FilesPicker(
     conversation: Conversation,
+    // 会话视角下的助手和模型：会话开始后以会话上固定的配置为准
     assistant: Assistant,
+    chatModel: Model?,
     state: ChatInputState,
     mcpManager: McpManager,
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
@@ -108,7 +110,7 @@ internal fun FilesPicker(
     onStartVoiceMode: (() -> Unit)? = null,
 ) {
     val settings = LocalSettings.current
-    val provider = settings.getCurrentChatModel()?.findProvider(providers = settings.providers)
+    val provider = chatModel?.findProvider(providers = settings.providers)
     val navController = LocalNavController.current
     val workspaceRepository: WorkspaceRepository = koinInject()
     val workspaces by workspaceRepository.listFlow().collectAsState(initial = emptyList())
@@ -147,11 +149,9 @@ internal fun FilesPicker(
             )
 
             FilesPickerPage.EXTENSIONS -> ExtensionPickerPage(
-                conversation = conversation,
                 assistant = assistant,
                 settings = settings,
                 onUpdateAssistant = onUpdateAssistant,
-                onUpdateConversation = onUpdateConversation,
                 onBack = { page = FilesPickerPage.MAIN },
                 onDismissAll = onDismiss,
             )
@@ -190,11 +190,9 @@ internal fun FilesPicker(
                     if (showWorkspace) {
                         WorkspacePickerListItem(
                             assistant = assistant,
-                            conversation = conversation,
                             workspaces = workspaces,
                             shapes = ListItemDefaults.segmentedShapes(index = itemIndex++, count = itemCount),
                             onUpdateAssistant = onUpdateAssistant,
-                            onUpdateConversation = onUpdateConversation,
                             onNavigateToDetail = { id ->
                                 onDismiss()
                                 navController.navigate(Screen.WorkspaceDetail(id))
@@ -245,15 +243,10 @@ internal fun FilesPicker(
                     }
 
                     // Extensions (Quick Messages + Prompt Injections + Skills)
-                    val modeAndLorebookCount =
-                        if (assistant.allowConversationPromptInjection) {
-                            conversation.modeInjectionIds.size + conversation.lorebookIds.size
-                        } else {
-                            assistant.modeInjectionIds.size + assistant.lorebookIds.size
-                        }
                     val activeCount =
                         assistant.quickMessageIds.size +
-                            modeAndLorebookCount +
+                            assistant.modeInjectionIds.size +
+                            assistant.lorebookIds.size +
                             assistant.enabledSkills.size
                     SegmentedListItem(
                         onClick = { page = FilesPickerPage.EXTENSIONS },
@@ -325,11 +318,9 @@ internal fun FilesPicker(
 @Composable
 private fun WorkspacePickerListItem(
     assistant: Assistant,
-    conversation: Conversation,
     workspaces: List<WorkspaceEntity>,
     shapes: ListItemShapes,
     onUpdateAssistant: (Assistant) -> Unit,
-    onUpdateConversation: (Conversation) -> Unit,
     onNavigateToDetail: (String) -> Unit,
     onNavigateToTerminal: (String) -> Unit,
     onNavigateToManage: () -> Unit,
@@ -388,10 +379,8 @@ private fun WorkspacePickerListItem(
             onSelect = { workspaceId ->
                 val newId = workspaceId?.let { Uuid.parse(it) }
                 if (newId != assistant.workspaceId) {
+                    // 会话的工作目录随工作区一并重置
                     onUpdateAssistant(assistant.copy(workspaceId = newId))
-                    if (conversation.workspaceCwd != null) {
-                        onUpdateConversation(conversation.copy(workspaceCwd = null))
-                    }
                 }
                 showSheet = false
             },
@@ -407,11 +396,9 @@ private fun WorkspacePickerListItem(
 // 扩展选择页，作为子页面嵌在加号 sheet 里
 @Composable
 private fun ExtensionPickerPage(
-    conversation: Conversation,
     assistant: Assistant,
     settings: Settings,
     onUpdateAssistant: (Assistant) -> Unit,
-    onUpdateConversation: (Conversation) -> Unit,
     onBack: () -> Unit,
     onDismissAll: () -> Unit,
 ) {
@@ -435,8 +422,6 @@ private fun ExtensionPickerPage(
             assistant = assistant,
             settings = settings,
             onUpdate = onUpdateAssistant,
-            conversation = conversation,
-            onUpdateConversation = onUpdateConversation,
             modifier = Modifier.weight(1f),
             onNavigateToQuickMessages = {
                 onDismissAll()

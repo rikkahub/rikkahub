@@ -19,7 +19,7 @@ import { usePickerPopover } from "~/hooks/use-picker-popover";
 import { extractErrorMessage } from "~/lib/error";
 import { cn } from "~/lib/utils";
 import api from "~/services/api";
-import type { ProviderModel } from "~/types";
+import type { ConversationDto, ProviderModel } from "~/types";
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
 
@@ -41,6 +41,7 @@ interface ReasoningPreset {
 export interface ReasoningPickerButtonProps {
   disabled?: boolean;
   className?: string;
+  conversation?: ConversationDto | null;
 }
 
 function isReasoningModel(model: ProviderModel | null): boolean {
@@ -115,10 +116,15 @@ function ReasoningSlider({
   );
 }
 
-export function ReasoningPickerButton({ disabled = false, className }: ReasoningPickerButtonProps) {
+export function ReasoningPickerButton({
+  disabled = false,
+  className,
+  conversation = null,
+}: ReasoningPickerButtonProps) {
   const { t } = useTranslation("input");
   const { settings, currentAssistant } = useCurrentAssistant();
-  const { currentModel } = useCurrentModel();
+  const { currentModel } = useCurrentModel(conversation);
+  const config = conversation?.config ?? null;
 
   const canUse = Boolean(settings && currentAssistant && !disabled);
   const canReasoning = isReasoningModel(currentModel);
@@ -166,7 +172,10 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
   );
 
   const currentLevel =
-    (currentAssistant?.reasoningLevel as ReasoningLevel | null | undefined) ?? "auto";
+    ((config ? config.reasoningLevel : currentAssistant?.reasoningLevel) as
+      | ReasoningLevel
+      | null
+      | undefined) ?? "auto";
   const currentIndex = Math.max(0, REASONING_LEVELS.indexOf(currentLevel));
 
   const [localIndex, setLocalIndex] = React.useState(currentIndex);
@@ -195,10 +204,12 @@ export function ReasoningPickerButton({ disabled = false, className }: Reasoning
       assistantId: string;
       reasoningLevel: ReasoningLevel;
     }) =>
-      api.post<{ status: string }>("settings/assistant/thinking-budget", {
-        assistantId,
-        reasoningLevel,
-      }),
+      conversation
+        ? api.post<unknown>(`conversations/${conversation.id}/config`, { reasoningLevel })
+        : api.post<unknown>("settings/assistant/thinking-budget", {
+            assistantId,
+            reasoningLevel,
+          }),
     onError: (updateError) => {
       setError(extractErrorMessage(updateError, t("reasoning.update_failed")));
       setLocalIndex(currentIndex);

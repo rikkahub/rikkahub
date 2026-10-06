@@ -93,6 +93,7 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.data.model.withConversation
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.ui.ErrorCardsDisplay
@@ -260,8 +261,15 @@ private fun ChatListNormal(
         )
     }
 
-    val assistant = remember(settings.assistants, conversation.assistantId) {
-        settings.getAssistantById(conversation.assistantId)
+    val assistant = remember(
+        settings.assistants,
+        conversation.assistantId,
+        conversation.config,
+        conversation.modeInjectionIds,
+        conversation.lorebookIds,
+    ) {
+        // 工作区等配置在会话开始后以会话上固定的为准
+        settings.getAssistantById(conversation.assistantId)?.withConversation(conversation)
     }
     val modelById = remember(settings.providers) {
         settings.providers

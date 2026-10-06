@@ -11,6 +11,7 @@ import me.rerere.ai.ui.limitContext
 import me.rerere.rikkahub.data.ai.tools.shouldUseExternalWebSearch
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ConversationConfig
 import me.rerere.rikkahub.data.model.toMessageNode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -27,6 +28,7 @@ class ChatServiceTest {
             assistantId = Uuid.random(),
             title = "Source conversation",
             messageNodes = emptyList(),
+            config = ConversationConfig(chatModelId = Uuid.random(), reasoningLevel = ReasoningLevel.HIGH),
             workspaceCwd = "/workspace/project",
             folderId = Uuid.random(),
         )
@@ -35,6 +37,7 @@ class ChatServiceTest {
 
         assertNotEquals(source.id, fork.id)
         assertEquals(source.assistantId, fork.assistantId)
+        assertEquals(source.config, fork.config)
         assertEquals(source.workspaceCwd, fork.workspaceCwd)
         assertEquals(source.folderId, fork.folderId)
         assertEquals("Source conversation(1)", fork.title)

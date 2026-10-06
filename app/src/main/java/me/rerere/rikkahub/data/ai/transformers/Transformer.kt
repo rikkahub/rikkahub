@@ -6,15 +6,12 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
-import kotlin.uuid.Uuid
 
 class TransformerContext(
     val context: Context,
     val model: Model,
     val assistant: Assistant,
     val settings: Settings,
-    val conversationModeInjectionIds: Set<Uuid> = emptySet(),
-    val conversationLorebookIds: Set<Uuid> = emptySet(),
     val processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     val workspaceCwd: String? = null,
 )
@@ -67,8 +64,6 @@ suspend fun List<UIMessage>.transforms(
     model: Model,
     assistant: Assistant,
     settings: Settings,
-    conversationModeInjectionIds: Set<Uuid> = emptySet(),
-    conversationLorebookIds: Set<Uuid> = emptySet(),
     processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
     workspaceCwd: String? = null,
 ): List<UIMessage> {
@@ -77,8 +72,6 @@ suspend fun List<UIMessage>.transforms(
         model = model,
         assistant = assistant,
         settings = settings,
-        conversationModeInjectionIds = conversationModeInjectionIds,
-        conversationLorebookIds = conversationLorebookIds,
         processingStatus = processingStatus,
         workspaceCwd = workspaceCwd,
     )

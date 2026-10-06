@@ -44,8 +44,6 @@
   <string name="assistant_page_add_header">헤더 추가</string>
   <string name="assistant_page_allow_conversation_system_prompt">대화별 시스템 프롬프트</string>
   <string name="assistant_page_allow_conversation_system_prompt_desc">각 대화에서 어시스턴트의 시스템 프롬프트를 재정의할 수 있도록 허용</string>
-  <string name="assistant_page_allow_conversation_prompt_injection">대화별 프롬프트 주입</string>
-  <string name="assistant_page_allow_conversation_prompt_injection_desc">각 대화가 자체 프롬프트 주입 및 로어북을 바인딩할 수 있도록 허용</string>
   <string name="assistant_page_available_variables">사용 가능한 변수: </string>
   <string name="assistant_page_background_opacity">배경 투명도</string>
   <string name="assistant_page_background_opacity_desc">채팅 배경 이미지의 표시 투명도를 조절합니다</string>

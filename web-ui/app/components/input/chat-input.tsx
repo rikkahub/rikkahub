@@ -42,7 +42,6 @@ export interface ChatInputProps {
   attachments: UIMessagePart[];
   suggestions?: string[];
   conversation?: ConversationDto | null;
-  draftKey?: string | null;
   ready?: boolean;
   disabled?: boolean;
   isGenerating?: boolean;
@@ -179,7 +178,6 @@ function ChatInputInner({
   attachments,
   suggestions = [],
   conversation = null,
-  draftKey = null,
   ready = true,
   disabled = false,
   isGenerating = false,
@@ -701,11 +699,10 @@ function ChatInputInner({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <SearchPickerButton disabled={!canSwitchModel} />
-              <McpPickerButton disabled={!canSwitchModel} />
+              <SearchPickerButton disabled={!canSwitchModel} conversation={conversation} />
+              <McpPickerButton disabled={!canSwitchModel} conversation={conversation} />
               <ExtensionPickerButton
                 conversation={conversation}
-                draftKey={draftKey}
                 disabled={!canSwitchModel}
               />
               <QuickMessageButton
@@ -715,8 +712,12 @@ function ChatInputInner({
               />
             </div>
             <div className="flex min-w-0 shrink-0 items-center gap-0.5 sm:gap-1">
-              <ModelList disabled={!canSwitchModel} className="max-w-[120px] sm:max-w-56" />
-              <ReasoningPickerButton disabled={!canSwitchModel} />
+              <ModelList
+                disabled={!canSwitchModel}
+                className="max-w-[120px] sm:max-w-56"
+                conversation={conversation}
+              />
+              <ReasoningPickerButton disabled={!canSwitchModel} conversation={conversation} />
               <Button
                 aria-label={canStop ? "停止生成" : "发送消息"}
                 title={sendHint}

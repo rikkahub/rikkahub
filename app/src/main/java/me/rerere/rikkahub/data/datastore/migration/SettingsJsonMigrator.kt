@@ -61,6 +61,12 @@ object SettingsJsonMigrator {
                 }
             }
 
+            // V4: 移除 assistants 的 allowConversationPromptInjection 开关
+            root["assistants"]?.let { element ->
+                val migrated = migrateAssistantsConversationInjections(JsonInstant.encodeToString(element))
+                root["assistants"] = JsonInstant.parseToJsonElement(migrated)
+            }
+
             JsonInstant.encodeToString(JsonObject(root))
         }.onFailure {
             Log.e(TAG, "migrate: Failed to migrate settings JSON, using original", it)

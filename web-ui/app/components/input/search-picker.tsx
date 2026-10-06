@@ -11,7 +11,7 @@ import { usePickerPopover } from "~/hooks/use-picker-popover";
 import { extractErrorMessage } from "~/lib/error";
 import { cn } from "~/lib/utils";
 import api from "~/services/api";
-import type { BuiltInTool, ProviderModel, SearchServiceOption } from "~/types";
+import type { BuiltInTool, ConversationDto, ProviderModel, SearchServiceOption } from "~/types";
 import { AIIcon } from "~/components/ui/ai-icon";
 import { Button } from "~/components/ui/button";
 import {
@@ -46,6 +46,7 @@ const SEARCH_SERVICE_LABELS: Record<string, string> = {
 export interface SearchPickerButtonProps {
   disabled?: boolean;
   className?: string;
+  conversation?: ConversationDto | null;
 }
 
 function getToolType(tool: BuiltInTool | string | null | undefined): string | null {
@@ -99,16 +100,26 @@ function getServiceLabel(service: SearchServiceOption, t: TFunction): string {
   return SEARCH_SERVICE_LABELS[type] ?? type;
 }
 
-export function SearchPickerButton({ disabled = false, className }: SearchPickerButtonProps) {
+export function SearchPickerButton({
+  disabled = false,
+  className,
+  conversation = null,
+}: SearchPickerButtonProps) {
   const { t } = useTranslation("input");
   const { settings, currentAssistant } = useCurrentAssistant();
-  const { currentModel } = useCurrentModel();
+  const { currentModel } = useCurrentModel(conversation);
+  const config = conversation?.config ?? null;
 
   const canUse = Boolean(settings && currentAssistant && !disabled);
   const { error, setError, popoverProps } = usePickerPopover(canUse);
 
-  const builtInSearchEnabled = hasBuiltInSearch(currentModel?.tools);
-  const searchEnabled = currentAssistant?.enableWebSearch ?? false;
+  // 会话开始后以会话上固定的搜索方式为准
+  const builtInSearchEnabled = config
+    ? config.builtInSearch === true
+    : hasBuiltInSearch(currentModel?.tools);
+  const searchEnabled = config
+    ? config.enableWebSearch === true
+    : (currentAssistant?.enableWebSearch ?? false);
   const currentService = settings?.searchServices?.[settings.searchServiceSelected] ?? null;
   const checked = searchEnabled || builtInSearchEnabled;
 
@@ -120,10 +131,14 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
 
   const toggleSearchEnabledMutation = useMutation({
     mutationFn: ({ enabled }: { enabled: boolean }) =>
-      api.post<{ status: string }>("settings/search/enabled", {
-        assistantId: currentAssistant?.id,
-        enabled,
-      }),
+      conversation
+        ? api.post<unknown>(`conversations/${conversation.id}/config`, {
+            enableWebSearch: enabled,
+          })
+        : api.post<unknown>("settings/search/enabled", {
+            assistantId: currentAssistant?.id,
+            enabled,
+          }),
     onError: (toggleError) => {
       setError(extractErrorMessage(toggleError, t("search.update_search_failed")));
     },
@@ -141,11 +156,15 @@ export function SearchPickerButton({ disabled = false, className }: SearchPicker
 
   const toggleBuiltInSearchMutation = useMutation({
     mutationFn: ({ modelId, enabled }: { modelId: string; enabled: boolean }) =>
-      api.post<{ status: string }>("settings/model/built-in-tool", {
-        modelId,
-        tool: SEARCH_TOOL_NAME,
-        enabled,
-      }),
+      conversation
+        ? api.post<unknown>(`conversations/${conversation.id}/config`, {
+            builtInSearch: enabled,
+          })
+        : api.post<unknown>("settings/model/built-in-tool", {
+            modelId,
+            tool: SEARCH_TOOL_NAME,
+            enabled,
+          }),
     onError: (toolError) => {
       setError(extractErrorMessage(toolError, t("search.update_builtin_failed")));
     },

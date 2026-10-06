@@ -7,6 +7,7 @@ import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ConversationConfig
 import me.rerere.rikkahub.data.model.MessageNode
 
 // ========== Request DTOs ==========
@@ -14,8 +15,6 @@ import me.rerere.rikkahub.data.model.MessageNode
 @Serializable
 data class SendMessageRequest(
     val parts: List<UIMessagePart>,
-    val modeInjectionIds: List<String>? = null,
-    val lorebookIds: List<String>? = null,
 )
 
 @Serializable
@@ -60,6 +59,16 @@ data class UpdateConversationTitleRequest(
 data class UpdateConversationInjectionsRequest(
     val modeInjectionIds: List<String>,
     val lorebookIds: List<String>,
+)
+
+// 只更新传了值的字段；会话开始前这些修改落在助手上
+@Serializable
+data class UpdateConversationConfigRequest(
+    val chatModelId: String? = null,
+    val reasoningLevel: ReasoningLevel? = null,
+    val mcpServerIds: List<String>? = null,
+    val enableWebSearch: Boolean? = null,
+    val builtInSearch: Boolean? = null,
 )
 
 @Serializable
@@ -192,6 +201,7 @@ data class ConversationDto(
     val customSystemPrompt: String? = null,
     val modeInjectionIds: List<String> = emptyList(),
     val lorebookIds: List<String> = emptyList(),
+    val config: ConversationConfig? = null,
     val workspaceCwd: String? = null,
     val folderId: String? = null,
     val createAt: Long,
@@ -334,6 +344,7 @@ fun Conversation.toDto(isGenerating: Boolean = false) = ConversationDto(
     customSystemPrompt = customSystemPrompt,
     modeInjectionIds = modeInjectionIds.map { it.toString() },
     lorebookIds = lorebookIds.map { it.toString() },
+    config = config,
     workspaceCwd = workspaceCwd,
     folderId = folderId?.toString(),
     createAt = createAt.toEpochMilli(),

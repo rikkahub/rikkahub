@@ -87,6 +87,15 @@ interface ConversationDAO {
     @Query("UPDATE conversationentity SET folder_id = :folderId WHERE id = :id")
     suspend fun updateFolderId(id: String, folderId: String)
 
+    @Query("UPDATE conversationentity SET config = :config, mode_injection_ids = :modeInjectionIds, lorebook_ids = :lorebookIds, workspace_cwd = :workspaceCwd WHERE id = :id")
+    suspend fun updateConfig(
+        id: String,
+        config: String,
+        modeInjectionIds: String,
+        lorebookIds: String,
+        workspaceCwd: String,
+    )
+
     @Query("UPDATE conversationentity SET folder_id = '' WHERE folder_id = :folderId")
     suspend fun clearFolder(folderId: String)
 

@@ -1,5 +1,6 @@
 import type { TokenUsage } from "./core";
 import type { UIMessageAnnotation } from "./annotations";
+import type { ConversationConfig } from "./conversation";
 import type { UIMessagePart } from "./parts";
 
 export interface ConversationListDto {
@@ -92,6 +93,7 @@ export interface ConversationDto {
   customSystemPrompt?: string | null;
   modeInjectionIds?: string[];
   lorebookIds?: string[];
+  config?: ConversationConfig | null;
   workspaceCwd?: string | null;
   folderId?: string | null;
   createAt: number;

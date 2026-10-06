@@ -32,4 +32,6 @@ data class ConversationEntity(
     val workspaceCwd: String = "",
     @ColumnInfo("folder_id", defaultValue = "")
     val folderId: String = "",
+    @ColumnInfo("config", defaultValue = "")
+    val config: String = "",
 )

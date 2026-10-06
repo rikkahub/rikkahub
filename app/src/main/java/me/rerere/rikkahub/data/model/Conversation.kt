@@ -27,6 +27,8 @@ data class Conversation(
     val customSystemPrompt: String? = null,
     val modeInjectionIds: Set<Uuid> = emptySet(),
     val lorebookIds: Set<Uuid> = emptySet(),
+    // 会话开始后固定的配置，null 表示尚未开始、跟随助手
+    val config: ConversationConfig? = null,
     // Absolute path inside the workspace rootfs
     val workspaceCwd: String? = null,
     // 所属文件夹（助手内分组），null 表示未归入任何文件夹

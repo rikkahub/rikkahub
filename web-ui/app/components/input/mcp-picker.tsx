@@ -11,7 +11,7 @@ import { extractErrorMessage } from "~/lib/error";
 import { safeStringArray } from "~/lib/type-guards";
 import { cn } from "~/lib/utils";
 import api from "~/services/api";
-import type { McpToolOption } from "~/types";
+import type { ConversationDto, McpToolOption } from "~/types";
 import { Button } from "~/components/ui/button";
 import {
   Popover,
@@ -26,6 +26,7 @@ import { PickerErrorAlert } from "./picker-error-alert";
 export interface McpPickerButtonProps {
   disabled?: boolean;
   className?: string;
+  conversation?: ConversationDto | null;
 }
 
 function getEnabledToolsCount(tools: McpToolOption[] | undefined): {
@@ -41,7 +42,11 @@ function getEnabledToolsCount(tools: McpToolOption[] | undefined): {
   return { enabled, total };
 }
 
-export function McpPickerButton({ disabled = false, className }: McpPickerButtonProps) {
+export function McpPickerButton({
+  disabled = false,
+  className,
+  conversation = null,
+}: McpPickerButtonProps) {
   const { t } = useTranslation("input");
   const { settings, currentAssistant } = useCurrentAssistant();
 
@@ -62,9 +67,13 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
     [enabledServers],
   );
 
+  // 会话开始后以会话上固定的 MCP 服务器为准
+  const selectedServers = conversation?.config
+    ? conversation.config.mcpServers
+    : currentAssistant?.mcpServers;
   const selectedServerIds = React.useMemo(
-    () => safeStringArray(currentAssistant?.mcpServers),
-    [currentAssistant?.mcpServers],
+    () => safeStringArray(selectedServers),
+    [selectedServers],
   );
 
   const selectedServerIdSet = React.useMemo(() => new Set(selectedServerIds), [selectedServerIds]);
@@ -88,10 +97,14 @@ export function McpPickerButton({ disabled = false, className }: McpPickerButton
       assistantId: string;
       serverId: string;
     }) =>
-      api.post<{ status: string }>("settings/assistant/mcp", {
-        assistantId,
-        mcpServerIds: nextServerIds,
-      }),
+      conversation
+        ? api.post<unknown>(`conversations/${conversation.id}/config`, {
+            mcpServerIds: nextServerIds,
+          })
+        : api.post<unknown>("settings/assistant/mcp", {
+            assistantId,
+            mcpServerIds: nextServerIds,
+          }),
     onError: (updateError) => {
       setError(extractErrorMessage(updateError, t("mcp.update_failed")));
     },

@@ -53,7 +53,6 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.LorebooksContent
 import me.rerere.rikkahub.ui.components.ai.ModeInjectionsContent
@@ -75,8 +74,6 @@ fun ExtensionSelector(
     assistant: Assistant,
     settings: Settings,
     onUpdate: (Assistant) -> Unit,
-    conversation: Conversation? = null,
-    onUpdateConversation: ((Conversation) -> Unit)? = null,
     onNavigateToQuickMessages: () -> Unit = {},
     onNavigateToPrompts: () -> Unit = {},
     onNavigateToSkills: () -> Unit = {},
@@ -88,19 +85,6 @@ fun ExtensionSelector(
         // 打开扩展面板时清理运行时被删除的技能（残留的 enabledSkills 引用），
         // prune 顺带返回现存技能列表，避免重复读盘
         skills = skillManager.pruneOrphanedEnabledSkills()
-    }
-
-    val useConversationInjections =
-        assistant.allowConversationPromptInjection && conversation != null && onUpdateConversation != null
-    val selectedModeInjectionIds = if (useConversationInjections) {
-        conversation.modeInjectionIds
-    } else {
-        assistant.modeInjectionIds
-    }
-    val selectedLorebookIds = if (useConversationInjections) {
-        conversation.lorebookIds
-    } else {
-        assistant.lorebookIds
     }
 
     val pagerState = rememberPagerState { ExtensionTab.entries.size }
@@ -150,18 +134,14 @@ fun ExtensionSelector(
                     if (settings.modeInjections.isNotEmpty()) {
                         ModeInjectionsContent(
                             modeInjections = settings.modeInjections,
-                            selectedIds = selectedModeInjectionIds,
+                            selectedIds = assistant.modeInjectionIds,
                             onToggle = { id, checked ->
                                 val newIds = if (checked) {
-                                    selectedModeInjectionIds + id
+                                    assistant.modeInjectionIds + id
                                 } else {
-                                    selectedModeInjectionIds - id
+                                    assistant.modeInjectionIds - id
                                 }
-                                if (useConversationInjections) {
-                                    onUpdateConversation(conversation.copy(modeInjectionIds = newIds))
-                                } else {
-                                    onUpdate(assistant.copy(modeInjectionIds = newIds))
-                                }
+                                onUpdate(assistant.copy(modeInjectionIds = newIds))
                             },
                             onManage = onNavigateToPrompts,
                         )
@@ -179,18 +159,14 @@ fun ExtensionSelector(
                     if (settings.lorebooks.isNotEmpty()) {
                         LorebooksContent(
                             lorebooks = settings.lorebooks,
-                            selectedIds = selectedLorebookIds,
+                            selectedIds = assistant.lorebookIds,
                             onToggle = { id, checked ->
                                 val newIds = if (checked) {
-                                    selectedLorebookIds + id
+                                    assistant.lorebookIds + id
                                 } else {
-                                    selectedLorebookIds - id
+                                    assistant.lorebookIds - id
                                 }
-                                if (useConversationInjections) {
-                                    onUpdateConversation(conversation.copy(lorebookIds = newIds))
-                                } else {
-                                    onUpdate(assistant.copy(lorebookIds = newIds))
-                                }
+                                onUpdate(assistant.copy(lorebookIds = newIds))
                             },
                             onManage = onNavigateToPrompts,
                         )

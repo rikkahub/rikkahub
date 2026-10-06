@@ -23,7 +23,6 @@ import me.rerere.asr.providers.DashScopeASRController
 import me.rerere.asr.providers.VolcengineASRController
 import me.rerere.asr.providers.OpenAIRealtimeASRController
 import me.rerere.rikkahub.data.datastore.Settings
-import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
 import me.rerere.rikkahub.data.datastore.getSelectedTTSProvider
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
@@ -68,7 +67,7 @@ fun rememberVoiceModeStarter(vm: ChatVM, settings: Settings): () -> Unit {
         val blocked = when {
             provider == null -> context.getString(R.string.chat_page_voice_configure_asr)
             !provider.supportsServerVadVoiceMode -> context.getString(R.string.chat_page_voice_unsupported_asr)
-            settings.getCurrentChatModel() == null -> context.getString(R.string.chat_page_voice_select_model)
+            vm.currentChatModel.value == null -> context.getString(R.string.chat_page_voice_select_model)
             asr.state.value.isRecording -> context.getString(R.string.chat_page_voice_finish_dictation)
             vm.messageQueue.value.paused && vm.messageQueue.value.messages.isNotEmpty() ->
                 context.getString(R.string.chat_page_voice_resume_queue)
