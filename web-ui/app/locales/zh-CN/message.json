@@ -30,7 +30,10 @@
     "prompt_tokens": "{{promptTokens}} tokens",
     "completion_tokens": "{{completionTokens}} tokens",
     "tokens_per_second": "{{value}} tok/s",
-    "duration_seconds": "{{value}}s"
+    "duration_seconds": "{{value}}s",
+    "context_checkpoint": "以上内容已压缩为摘要",
+    "context_checkpoint_hint": "分隔线以上的消息不再发送给模型，由这份摘要代替。删除摘要即可恢复发送完整历史。",
+    "context_checkpoint_delete_confirm": "确认删除这份摘要吗？删除后会重新向模型发送完整历史。"
   },
   "tool_part": {
     "memory_create": "创建记忆",

@@ -125,6 +125,21 @@ internal fun createForkConversation(
     folderId = source.folderId,
 )
 
+/** 在 [afterNodeId] 节点之后插入压缩检查点；该节点已不存在时返回 null。 */
+internal fun insertContextCheckpoint(
+    conversation: Conversation,
+    afterNodeId: Uuid,
+    summary: String,
+): Conversation? {
+    val nodes = conversation.messageNodes
+    val index = nodes.indexOfFirst { it.id == afterNodeId }
+    if (index == -1) return null
+    val checkpoint = UIMessage.user(summary).copy(isContextCheckpoint = true).toMessageNode()
+    return conversation.copy(
+        messageNodes = nodes.subList(0, index + 1) + checkpoint + nodes.subList(index + 1, nodes.size),
+    )
+}
+
 data class ChatError(
     val id: Uuid = Uuid.random(),
     val title: String? = null,
@@ -935,6 +950,10 @@ class ChatService(
         targetTokens: Int,
         keepRecentMessages: Int = 32
     ): Result<Unit> = runCatching {
+        val session = sessionManager.getOrCreate(conversationId)
+        // 生成循环按下标回写消息，期间插入节点会让回复写到错误的节点上。
+        check(!session.isGenerating) { context.getString(R.string.chat_page_compress_blocked_generating) }
+
         val settings = settingsStore.settingsFlow.first()
         val model = settings.findModelById(settings.compressModelId)
             ?: settings.getCurrentChatModel()
@@ -945,22 +964,21 @@ class ChatService(
         val providerHandler = providerManager.getProviderByType(provider)
 
         val maxMessagesPerChunk = 256
-        val allMessages = conversation.currentMessages
+        val nodes = conversation.messageNodes
 
-        // Split messages into those to compress and those to keep
-        val messagesToCompress: List<UIMessage>
-        val messagesToKeep: List<UIMessage>
-
-        if (keepRecentMessages > 0 && allMessages.size > keepRecentMessages) {
-            messagesToCompress = allMessages.dropLast(keepRecentMessages)
-            messagesToKeep = allMessages.takeLast(keepRecentMessages)
-        } else if (keepRecentMessages > 0) {
-            // Not enough messages to compress while keeping recent ones
+        // 上一个检查点之前的消息已被它的摘要覆盖，只压缩它之后、保留区之前的部分。
+        val checkpointIndex = nodes.indexOfLast { it.currentMessage.isContextCheckpoint }
+        val cutIndex = nodes.size - keepRecentMessages.coerceAtLeast(0)
+        if (cutIndex <= checkpointIndex + 1) {
             throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
-        } else {
-            messagesToCompress = allMessages
-            messagesToKeep = emptyList()
         }
+        // 上一份摘要一并交给模型，新摘要才能覆盖完整历史。
+        val messagesToCompress = nodes.subList(checkpointIndex.coerceAtLeast(0), cutIndex)
+            .map { it.currentMessage }
+        // 生成循环只从最后一条消息恢复工具调用，待处理的工具被压到检查点之前就再也不会执行。
+        check(messagesToCompress.none { message ->
+            message.getTools().any { it.isPending || it.canResumeExecution }
+        }) { context.getString(R.string.chat_page_compress_pending_tools) }
 
         fun splitMessages(messages: List<UIMessage>): List<List<UIMessage>> {
             if (messages.size <= maxMessagesPerChunk) return listOf(messages)
@@ -971,7 +989,10 @@ class ChatService(
         }
 
         suspend fun compressMessages(messages: List<UIMessage>): String {
-            val contentToCompress = messages.joinToString("\n\n") { it.summaryAsText(maxLength = 2000) }
+            val contentToCompress = messages.joinToString("\n\n") {
+                // 上一份摘要是更早历史的唯一来源，不能截断。
+                it.summaryAsText(maxLength = if (it.isContextCheckpoint) Int.MAX_VALUE else 2000)
+            }
             val prompt = settings.compressPrompt.applyPlaceholders(
                 "content" to contentToCompress,
                 "target_tokens" to targetTokens.toString(),
@@ -997,17 +1018,17 @@ class ChatService(
                 .awaitAll()
         }
 
-        // Create new conversation with compressed history as multiple user messages + kept messages
-        val newMessageNodes = buildList {
-            compressedSummaries.forEach { summary ->
-                add(UIMessage.user(summary).toMessageNode())
-            }
-            addAll(messagesToKeep.map { it.toMessageNode() })
+        // 原消息原样保留，只在切点插入摘要。摘要生成期间对话可能已变化，
+        // 因此按节点定位插入到最新状态，而不是用调用时的快照整体覆盖。
+        val newConversation = synchronized(session) {
+            check(!session.isGenerating) { context.getString(R.string.chat_page_compress_blocked_generating) }
+            val updated = insertContextCheckpoint(
+                conversation = session.state.value,
+                afterNodeId = nodes[cutIndex - 1].id,
+                summary = compressedSummaries.joinToString("\n\n"),
+            ) ?: throw IllegalStateException(context.getString(R.string.chat_page_compress_conversation_changed))
+            updated.copy(chatSuggestions = emptyList()).also { updateConversation(conversationId, it) }
         }
-        val newConversation = conversation.copy(
-            messageNodes = newMessageNodes,
-            chatSuggestions = emptyList(),
-        )
 
         saveConversation(conversationId, newConversation)
     }
@@ -1215,6 +1236,15 @@ class ChatService(
                 return@map node
             }
             edited = true
+
+            if (node.messages.first { it.id == messageId }.isContextCheckpoint) {
+                // 摘要原地改写：新建分支会丢掉检查点标记，删除摘要时还会露出旧版本。
+                return@map node.copy(
+                    messages = node.messages.map { message ->
+                        if (message.id == messageId) message.copy(parts = processedParts) else message
+                    }
+                )
+            }
 
             node.copy(
                 messages = node.messages + UIMessage(

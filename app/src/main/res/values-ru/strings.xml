@@ -264,7 +264,6 @@
   <string name="chat_page_compress_keep_recent">Сохранять недавние сообщения</string>
   <string name="chat_page_compress_not_enough_messages">Недостаточно сообщений для сжатия. Уменьшите количество сохраняемых сообщений или добавьте больше сообщений.</string>
   <string name="chat_page_compress_target_tokens">Целевой размер токенов</string>
-  <string name="chat_page_compress_warning">⚠️ Сжатие контекста приведёт к сбросу всех сообщений в текущем диалоге</string>
   <string name="chat_page_compressing">Сжатие...</string>
   <string name="chat_page_conversation_system_prompt">Системный запрос для беседы</string>
   <string name="chat_page_conversation_system_prompt_clear">Очистить</string>
@@ -1559,4 +1558,9 @@
   <string name="search_picker_off">Выкл.</string>
   <string name="search_picker_status_off">Выключено</string>
   <string name="search_picker_off_description">Модель отвечает только на основе того, что уже знает, и не будет обращаться к интернету.</string>
+  <string name="chat_page_compress_checkpoint_title">Ранние сообщения сжаты в сводку</string>
+  <string name="chat_page_compress_checkpoint_hint">Сообщения над этой линией больше не отправляются модели; эта сводка заменяет их. Удалите сводку, чтобы снова отправлять всю историю.</string>
+  <string name="chat_page_compress_blocked_generating">Остановите генерацию перед сжатием контекста</string>
+  <string name="chat_page_compress_conversation_changed">Диалог изменился во время сжатия. Повторите попытку.</string>
+  <string name="chat_page_compress_pending_tools">Сначала обработайте ожидающие вызовы инструментов или сохраните последние сообщения, содержащие их</string>
 </resources>

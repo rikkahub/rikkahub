@@ -30,7 +30,10 @@
     "prompt_tokens": "{{promptTokens}} tokens",
     "completion_tokens": "{{completionTokens}} tokens",
     "tokens_per_second": "{{value}} tok/s",
-    "duration_seconds": "{{value}}s"
+    "duration_seconds": "{{value}}s",
+    "context_checkpoint": "Earlier messages compressed into a summary",
+    "context_checkpoint_hint": "Messages above this line are no longer sent to the model; this summary replaces them. Delete the summary to send the full history again.",
+    "context_checkpoint_delete_confirm": "Delete this summary? The full history will be sent to the model again."
   },
   "tool_part": {
     "memory_create": "Create memory",

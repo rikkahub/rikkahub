@@ -25,6 +25,8 @@ data class UIMessage(
     val modelId: Uuid? = null,
     val usage: TokenUsage? = null,
     val translation: String? = null,
+    // 压缩检查点：此消息是它之前全部历史的摘要，组装请求时从最后一个检查点开始取
+    val isContextCheckpoint: Boolean = false,
     // 请求期间生成的内部消息；该标记仅在内存中使用
     @Transient
     val isSynthetic: Boolean = false,
@@ -136,6 +138,20 @@ fun List<UIMessagePart>.isEmptyUIMessage(): Boolean {
 private const val CONTEXT_KEEP_RATIO = 0.5f
 
 /**
+ * 截取实际发送给模型的上下文
+ *
+ * 先丢弃最后一个压缩检查点之前的消息(它们只保留给用户查看), 再按 [limit] 限制条数。
+ * 检查点本身是被压缩历史的唯一来源, 始终保留, 条数限制只作用于它之后的消息。
+ *
+ * @param limit 触发截断的消息条数上限, 小于等于 0 表示不限制
+ */
+fun List<UIMessage>.limitContext(limit: Int): List<UIMessage> {
+    val checkpointIndex = indexOfLast { it.isContextCheckpoint }
+    if (checkpointIndex < 0) return limitMessageCount(limit)
+    return listOf(this[checkpointIndex]) + subList(checkpointIndex + 1, size).limitMessageCount(limit)
+}
+
+/**
  * 按阶梯式(滞回)策略限制上下文消息数量
  *
  * 与每轮平移一条的滑动窗口不同, 截断点只在消息数越过 [limit] 时才前进一大步,
@@ -146,7 +162,7 @@ private const val CONTEXT_KEEP_RATIO = 0.5f
  *
  * @param limit 触发截断的消息条数上限, 小于等于 0 表示不限制
  */
-fun List<UIMessage>.limitContext(limit: Int): List<UIMessage> {
+private fun List<UIMessage>.limitMessageCount(limit: Int): List<UIMessage> {
     if (limit <= 0 || this.size <= limit) return this
 
     // 截断后回落到的目标条数, 以及两次截断之间截断点前进的步幅
@@ -164,7 +180,7 @@ fun List<UIMessage>.limitContext(limit: Int): List<UIMessage> {
 /**
  * 将截断起点回退到安全边界, 避免把 tool call 与其结果拆散, 或让上下文从半截的工具调用开始
  *
- * 只会向前(下标减小)调整, 因此不会破坏 [limitContext] 保留条数的下界。
+ * 只会向前(下标减小)调整, 因此不会破坏 [limitMessageCount] 保留条数的下界。
  * 调整只依赖 `[0, startIndex]` 区间内的消息, 这部分在追加新消息时不会变化, 结果因此保持稳定。
  */
 private fun List<UIMessage>.alignContextStart(startIndex: Int): Int {

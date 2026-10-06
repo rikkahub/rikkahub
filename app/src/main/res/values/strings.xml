@@ -266,7 +266,6 @@
   <string name="chat_page_compress_keep_recent">Keep recent messages</string>
   <string name="chat_page_compress_not_enough_messages">Not enough messages to compress. Reduce the number of messages to keep or add more messages.</string>
   <string name="chat_page_compress_target_tokens">Target Token Size</string>
-  <string name="chat_page_compress_warning">⚠️ Compressing context will reset all messages in the current conversation</string>
   <string name="chat_page_compressing">Compressing...</string>
   <string name="chat_page_conversation_system_prompt">Conversation System Prompt</string>
   <string name="chat_page_conversation_system_prompt_clear">Clear</string>
@@ -1557,4 +1556,9 @@
   <string name="search_picker_off">Off</string>
   <string name="search_picker_status_off">Turned off</string>
   <string name="search_picker_off_description">The model answers only from what it already knows and will not access the web.</string>
+  <string name="chat_page_compress_checkpoint_title">Earlier messages compressed into a summary</string>
+  <string name="chat_page_compress_checkpoint_hint">Messages above this line are no longer sent to the model; this summary replaces them. Delete the summary to send the full history again.</string>
+  <string name="chat_page_compress_blocked_generating">Stop the generation before compressing the context</string>
+  <string name="chat_page_compress_conversation_changed">The conversation changed during compression. Please try again.</string>
+  <string name="chat_page_compress_pending_tools">Handle the pending tool calls first, or keep the recent messages that contain them</string>
 </resources>

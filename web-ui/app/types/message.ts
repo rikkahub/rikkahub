@@ -16,4 +16,5 @@ export interface UIMessage {
   modelId?: string | null;
   usage?: TokenUsage | null;
   translation?: string | null;
+  isContextCheckpoint?: boolean;
 }

@@ -124,13 +124,6 @@ fun CompressContextDialog(
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 4,
                     )
-
-                    // Warning text
-                    Text(
-                        text = stringResource(R.string.chat_page_compress_warning),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error
-                    )
                 }
             }
         },

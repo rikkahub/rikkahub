@@ -299,7 +299,6 @@
   <string name="chat_page_compress_keep_recent">الاحتفاظ بالرسائل الأخيرة</string>
   <string name="chat_page_compress_not_enough_messages">لا توجد رسائل كافية للضغط. قلّل عدد الرسائل المراد الاحتفاظ بها أو أضف المزيد من الرسائل.</string>
   <string name="chat_page_compress_target_tokens">حجم Token المستهدف</string>
-  <string name="chat_page_compress_warning">⚠️ سيؤدي ضغط السياق إلى إعادة تعيين جميع الرسائل في المحادثة الحالية</string>
   <string name="chat_page_compressing">جارٍ الضغط...</string>
   <string name="chat_page_conversation_system_prompt">مطالبة نظام المحادثة</string>
   <string name="chat_page_conversation_system_prompt_clear">مسح</string>
@@ -1557,4 +1556,9 @@
   <string name="search_picker_off">إيقاف</string>
   <string name="search_picker_status_off">تم الإيقاف</string>
   <string name="search_picker_off_description">يجيب النموذج فقط مما يعرفه مسبقًا ولن يصل إلى الويب.</string>
+  <string name="chat_page_compress_checkpoint_title">تم ضغط الرسائل السابقة في ملخص</string>
+  <string name="chat_page_compress_checkpoint_hint">الرسائل فوق هذا الخط لم تعد تُرسل إلى النموذج؛ هذا الملخص يحل محلها. احذف الملخص لإرسال السجل الكامل مرة أخرى.</string>
+  <string name="chat_page_compress_blocked_generating">أوقف التوليد قبل ضغط السياق</string>
+  <string name="chat_page_compress_conversation_changed">تغيّرت المحادثة أثناء الضغط. يرجى المحاولة مرة أخرى.</string>
+  <string name="chat_page_compress_pending_tools">تعامل مع استدعاءات الأدوات المعلّقة أولًا، أو احتفظ بالرسائل الحديثة التي تحتوي عليها</string>
 </resources>

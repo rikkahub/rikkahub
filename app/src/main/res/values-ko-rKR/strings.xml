@@ -264,7 +264,6 @@
   <string name="chat_page_compress_keep_recent">최근 메시지 유지</string>
   <string name="chat_page_compress_not_enough_messages">압축할 메시지가 부족합니다. 유지할 메시지 수를 줄이거나 더 많은 메시지를 추가하세요.</string>
   <string name="chat_page_compress_target_tokens">대상 토큰 크기</string>
-  <string name="chat_page_compress_warning">⚠️ 문맥 압축 시 현재 대화의 모든 메시지가 초기화됩니다</string>
   <string name="chat_page_compressing">압축 중...</string>
   <string name="chat_page_conversation_system_prompt">대화 시스템 프롬프트</string>
   <string name="chat_page_conversation_system_prompt_clear">지우기</string>
@@ -1559,4 +1558,9 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="search_picker_off">꺼짐</string>
   <string name="search_picker_status_off">꺼짐</string>
   <string name="search_picker_off_description">모델은 이미 알고 있는 내용만으로 답변하며 웹에 접속하지 않습니다.</string>
+  <string name="chat_page_compress_checkpoint_title">이전 메시지가 요약으로 압축됨</string>
+  <string name="chat_page_compress_checkpoint_hint">이 줄 위의 메시지는 더 이상 모델로 전송되지 않으며, 이 요약이 해당 메시지를 대체합니다. 전체 기록을 다시 보내려면 요약을 삭제하세요.</string>
+  <string name="chat_page_compress_blocked_generating">컨텍스트를 압축하기 전에 생성을 중지하세요</string>
+  <string name="chat_page_compress_conversation_changed">압축 중에 대화가 변경되었습니다. 다시 시도해 주세요.</string>
+  <string name="chat_page_compress_pending_tools">대기 중인 도구 호출을 먼저 처리하거나, 해당 호출이 포함된 최근 메시지를 유지하세요</string>
 </resources>

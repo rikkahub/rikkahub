@@ -165,6 +165,35 @@ class MessageContextLimitTest {
         assertEquals(messages.subList(1, 5), result)
     }
 
+    @Test
+    fun `limitContext should start from the last checkpoint`() {
+        val messages = createTestMessages(10).withCheckpointsAt(2, 6)
+
+        assertEquals(messages.subList(6, 10), messages.limitContext(0))
+    }
+
+    /**
+     * 摘要是被压缩历史的唯一来源, 条数限制不能把它截掉
+     */
+    @Test
+    fun `limitContext should keep the checkpoint when the limit truncates after it`() {
+        val messages = createTestMessages(20).withCheckpointsAt(4)
+        val result = messages.limitContext(10)
+
+        // 检查点之后有 15 条: limit=10 -> startIndex=10, 即保留最后 5 条
+        assertEquals(listOf(messages[4]) + messages.subList(15, 20), result)
+    }
+
+    @Test
+    fun `limitContext should not count messages before the checkpoint against the limit`() {
+        val messages = createTestMessages(30).withCheckpointsAt(24)
+
+        assertEquals(messages.subList(24, 30), messages.limitContext(10))
+    }
+
+    private fun List<UIMessage>.withCheckpointsAt(vararg indices: Int): List<UIMessage> =
+        mapIndexed { index, message -> message.copy(isContextCheckpoint = index in indices) }
+
     private fun createTestMessages(count: Int): List<UIMessage> = List(count) { index ->
         UIMessage(
             role = if (index % 2 == 0) MessageRole.USER else MessageRole.ASSISTANT,

@@ -264,7 +264,6 @@
   <string name="chat_page_compress_keep_recent">最近のメッセージを保持</string>
   <string name="chat_page_compress_not_enough_messages">圧縮するためのメッセージが不足しています。保持するメッセージ数を減らすか、メッセージを追加してください。</string>
   <string name="chat_page_compress_target_tokens">ターゲットトークンサイズ</string>
-  <string name="chat_page_compress_warning">⚠️ コンテキストを圧縮すると、現在の会話のすべてのメッセージがリセットされます</string>
   <string name="chat_page_compressing">圧縮中…</string>
   <string name="chat_page_conversation_system_prompt">会話システムプロンプト</string>
   <string name="chat_page_conversation_system_prompt_clear">クリア</string>
@@ -1559,4 +1558,9 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="search_picker_off">オフ</string>
   <string name="search_picker_status_off">オフ</string>
   <string name="search_picker_off_description">モデルは既に知っている情報のみから回答し、ウェブにはアクセスしません。</string>
+  <string name="chat_page_compress_checkpoint_title">以前のメッセージが要約に圧縮されました</string>
+  <string name="chat_page_compress_checkpoint_hint">この行より上のメッセージはモデルに送信されなくなり、代わりにこの要約が使用されます。要約を削除すると、履歴全体が再び送信されます。</string>
+  <string name="chat_page_compress_blocked_generating">コンテキストを圧縮する前に生成を停止してください</string>
+  <string name="chat_page_compress_conversation_changed">圧縮中に会話が変更されました。もう一度お試しください。</string>
+  <string name="chat_page_compress_pending_tools">保留中のツール呼び出しを先に処理するか、それらを含む最近のメッセージを保持してください</string>
 </resources>

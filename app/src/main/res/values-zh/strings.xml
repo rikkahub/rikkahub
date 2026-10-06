@@ -266,7 +266,6 @@
   <string name="chat_page_compress_keep_recent">保留最近的消息</string>
   <string name="chat_page_compress_not_enough_messages">消息数量不足，无法压缩。请减少保留的消息数量或添加更多消息。</string>
   <string name="chat_page_compress_target_tokens">目标Token大小</string>
-  <string name="chat_page_compress_warning">⚠️ 压缩上下文将重置当前对话中的所有消息</string>
   <string name="chat_page_compressing">正在压缩...</string>
   <string name="chat_page_conversation_system_prompt">对话系统提示</string>
   <string name="chat_page_conversation_system_prompt_clear">清除</string>
@@ -1559,4 +1558,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="search_picker_off">关闭</string>
   <string name="search_picker_status_off">已关闭</string>
   <string name="search_picker_off_description">模型只根据已有知识回答，不会访问网络。</string>
+  <string name="chat_page_compress_checkpoint_title">以上内容已压缩为摘要</string>
+  <string name="chat_page_compress_checkpoint_hint">分隔线以上的消息不再发送给模型，由这份摘要代替。删除摘要即可恢复发送完整历史。</string>
+  <string name="chat_page_compress_blocked_generating">请先停止生成再压缩上下文</string>
+  <string name="chat_page_compress_conversation_changed">对话在压缩期间发生变化，请重试</string>
+  <string name="chat_page_compress_pending_tools">请先处理待审批的工具调用，或保留包含它的最近消息后再压缩</string>
 </resources>

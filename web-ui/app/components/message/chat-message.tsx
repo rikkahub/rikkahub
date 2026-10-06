@@ -5,13 +5,16 @@ import { useTranslation } from "react-i18next";
 import {
   ArrowDown,
   ArrowUp,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Clock3,
   Copy,
   Ellipsis,
   FileDown,
   GitFork,
+  Package,
   Pencil,
   RefreshCw,
   Trash2,
@@ -511,6 +514,93 @@ const ChatMessageNerdLineRow = React.memo(({
   );
 });
 
+// Messages above the divider stay readable but are no longer sent to the model;
+// this summary replaces them. Collapsed by default so it does not interrupt the history.
+const ChatMessageContextCheckpoint = React.memo(({
+  message,
+  onEdit,
+  onDelete,
+}: {
+  message: MessageDto;
+  onEdit?: (message: MessageDto) => void | Promise<void>;
+  onDelete?: (messageId: string) => void | Promise<void>;
+}) => {
+  const { t } = useTranslation("message");
+  const [expanded, setExpanded] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const handleDelete = React.useCallback(async () => {
+    if (!onDelete) return;
+
+    const confirmed = window.confirm(t("chat_message.context_checkpoint_delete_confirm"));
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      await onDelete(message.id);
+    } finally {
+      setDeleting(false);
+    }
+  }, [message.id, onDelete, t]);
+
+  return (
+    <div className="flex w-full flex-col gap-2" data-message-role="context-checkpoint">
+      <button
+        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 py-2 text-xs text-muted-foreground hover:text-foreground"
+        onClick={() => setExpanded((value) => !value)}
+        type="button"
+      >
+        <span className="h-px flex-1 bg-border" />
+        <Package className="size-3.5" />
+        <span>{t("chat_message.context_checkpoint")}</span>
+        {expanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+        <span className="h-px flex-1 bg-border" />
+      </button>
+
+      {expanded && (
+        <div className="flex flex-col gap-2 rounded-lg bg-muted px-4 py-3 text-sm">
+          <p className="text-xs text-muted-foreground">{t("chat_message.context_checkpoint_hint")}</p>
+          <MessageParts parts={message.parts} />
+          {(onEdit || onDelete) && (
+            <div className="flex justify-end gap-1">
+              {onEdit && (
+                <Button
+                  disabled={deleting}
+                  onClick={() => {
+                    void onEdit(message);
+                  }}
+                  size="xs"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Pencil className="size-3.5" />
+                  {t("chat_message.edit")}
+                </Button>
+              )}
+              {onDelete && (
+                <Button
+                  className="text-destructive hover:text-destructive"
+                  disabled={deleting}
+                  onClick={() => {
+                    void handleDelete();
+                  }}
+                  size="xs"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Trash2 className="size-3.5" />
+                  {t("chat_message.delete")}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
 export const ChatMessage = React.memo(({
   node,
   message,
@@ -537,6 +627,10 @@ export const ChatMessage = React.memo(({
     },
     [citationUrlMap],
   );
+
+  if (message.isContextCheckpoint) {
+    return <ChatMessageContextCheckpoint message={message} onEdit={onEdit} onDelete={onDelete} />;
+  }
 
   return (
     <div

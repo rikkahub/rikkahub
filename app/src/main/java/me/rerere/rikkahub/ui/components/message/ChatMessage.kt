@@ -120,6 +120,15 @@ fun ChatMessage(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
+    if (message.isContextCheckpoint) {
+        ChatMessageContextCheckpoint(
+            message = message,
+            onEdit = onEdit,
+            onDelete = onDelete,
+            modifier = modifier,
+        )
+        return
+    }
     val settings = LocalSettings.current.displaySetting
     val chatFontFamily = LocalChatFontFamily.current ?: rememberChatFontFamily(settings)
     val textStyle = LocalTextStyle.current.copy(
