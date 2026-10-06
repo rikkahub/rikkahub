@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.dp
+import androidx.ink.strokes.Stroke
 
 internal object SketchDefaults {
     // 画纸固定是白色的：导出的图片不随应用的深浅色主题变化
@@ -45,11 +46,11 @@ private const val ERASER_WIDTH_SCALE = 4f
 
 /** 画板上的一步操作，撤销和重做以它为单位。 */
 internal sealed interface SketchStep {
-    /**
-     * 一笔。坐标和线宽都以画纸为准，原点在画纸正中，和画纸在屏幕上显示得多大无关。
-     * [erase] 的一笔是橡皮：不上色，而是把它经过的笔画擦掉。
-     */
-    class Line(val start: Offset, val color: Color, val width: Float, val erase: Boolean = false) : SketchStep {
+    /** 画笔的一笔。坐标和粗细都以画纸为准，原点在画纸正中，和画纸在屏幕上显示得多大无关。 */
+    class Ink(val stroke: Stroke) : SketchStep
+
+    /** 橡皮的一笔：不上色，而是把它经过的笔画擦掉。坐标和 [Ink] 一样以画纸为准。 */
+    class Erase(val start: Offset, val width: Float) : SketchStep {
         val path = Path().apply { moveTo(start.x, start.y) }
         private var last = start
 
@@ -109,11 +110,14 @@ internal class SketchState(aspectRatio: Float? = null) {
     /** 调色面板是否打开。 */
     var pickingColor by mutableStateOf(false)
 
+    var brush by mutableStateOf(SketchBrush.Pen)
+        private set
+
     var width by mutableStateOf(SketchDefaults.BrushWidths[1])
     var erasing by mutableStateOf(false)
         private set
 
-    // Path 的改动 Compose 观察不到，画的过程中靠它触发重绘
+    // Path 的改动 Compose 观察不到，擦的过程中靠它触发重绘
     var revision by mutableIntStateOf(0)
         private set
 
@@ -129,6 +133,12 @@ internal class SketchState(aspectRatio: Float? = null) {
     fun usePreset(color: Color) {
         this.color = color
         usingCustomColor = false
+        erasing = false
+        pickingColor = false
+    }
+
+    fun useBrush(brush: SketchBrush) {
+        this.brush = brush
         erasing = false
         pickingColor = false
     }
@@ -175,25 +185,25 @@ internal class SketchState(aspectRatio: Float? = null) {
         paperSize = available.fit(ratio) / scale
     }
 
-    fun begin(point: Offset, width: Float): SketchStep.Line {
-        val line = if (erasing) {
-            SketchStep.Line(point, Color.Black, width * ERASER_WIDTH_SCALE, erase = true)
-        } else {
-            SketchStep.Line(point, color, width)
-        }
+    /** 画笔画完的笔画记下来。几根手指同时画的会一起交过来，每一笔各算一步。 */
+    fun draw(strokes: List<Stroke>) {
+        strokes.forEach { steps += SketchStep.Ink(it) }
+        undone.clear()
+    }
+
+    fun erase(point: Offset, width: Float): SketchStep.Erase {
+        val line = SketchStep.Erase(point, width * ERASER_WIDTH_SCALE)
         steps += line
         undone.clear()
-        // 落笔说明颜色调好了
-        pickingColor = false
         return line
     }
 
-    fun extend(line: SketchStep.Line, point: Offset) {
+    fun extend(line: SketchStep.Erase, point: Offset) {
         line.extendTo(point)
         revision++
     }
 
-    fun finish(line: SketchStep.Line) {
+    fun finish(line: SketchStep.Erase) {
         line.finish()
         revision++
     }

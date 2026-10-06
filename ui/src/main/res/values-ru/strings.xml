@@ -12,4 +12,10 @@
   <string name="sketch_dialog_choose_image">Выберите изображение</string>
   <string name="sketch_dialog_remove_image">Удалить изображение</string>
   <string name="sketch_dialog_image_load_failed">Не удалось загрузить изображение</string>
+  <string name="sketch_dialog_brush_pen">Ручка</string>
+  <string name="sketch_dialog_brush_marker">Маркер</string>
+  <string name="sketch_dialog_brush_highlighter">Текстовыделитель</string>
+  <string name="sketch_dialog_brush_dashed">Пунктирная линия</string>
+  <string name="sketch_dialog_brush_calligraphy">Каллиграфическая кисть</string>
+  <string name="sketch_dialog_brush_flat">Плоское перо</string>
 </resources>

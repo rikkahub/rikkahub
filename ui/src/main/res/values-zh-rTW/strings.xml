@@ -12,4 +12,10 @@
   <string name="sketch_dialog_choose_image">選擇圖片</string>
   <string name="sketch_dialog_remove_image">移除圖片</string>
   <string name="sketch_dialog_image_load_failed">無法載入圖片</string>
+  <string name="sketch_dialog_brush_pen">鋼筆</string>
+  <string name="sketch_dialog_brush_marker">麥克筆</string>
+  <string name="sketch_dialog_brush_highlighter">螢光筆</string>
+  <string name="sketch_dialog_brush_dashed">虛線</string>
+  <string name="sketch_dialog_brush_calligraphy">毛筆</string>
+  <string name="sketch_dialog_brush_flat">平頭筆</string>
 </resources>

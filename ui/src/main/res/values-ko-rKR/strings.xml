@@ -12,4 +12,10 @@
   <string name="sketch_dialog_choose_image">이미지 선택</string>
   <string name="sketch_dialog_remove_image">이미지 제거</string>
   <string name="sketch_dialog_image_load_failed">이미지를 불러오지 못했습니다</string>
+  <string name="sketch_dialog_brush_pen">펜</string>
+  <string name="sketch_dialog_brush_marker">마커</string>
+  <string name="sketch_dialog_brush_highlighter">형광펜</string>
+  <string name="sketch_dialog_brush_dashed">파선</string>
+  <string name="sketch_dialog_brush_calligraphy">붓</string>
+  <string name="sketch_dialog_brush_flat">플랫 펜</string>
 </resources>

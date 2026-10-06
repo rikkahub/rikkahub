@@ -50,7 +50,7 @@ import me.rerere.hugeicons.stroke.Undo
 import me.rerere.ui.R
 
 /**
- * 全屏的画板：用手指画一张草图，确认后得到一张图片。
+ * 全屏的画板：用手指或触控笔画一张草图，确认后得到一张图片。
  *
  * @param image 垫在下面的图片，在它上面圈画标注；为空时是一张白纸
  * @param aspectRatio 白纸的宽高比，为空时占满屏幕。之后还可以在画板里改

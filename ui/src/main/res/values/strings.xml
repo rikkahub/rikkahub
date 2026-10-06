@@ -12,4 +12,10 @@
   <string name="sketch_dialog_choose_image">Choose image</string>
   <string name="sketch_dialog_remove_image">Remove image</string>
   <string name="sketch_dialog_image_load_failed">Couldn\'t load the image</string>
+  <string name="sketch_dialog_brush_pen">Pen</string>
+  <string name="sketch_dialog_brush_marker">Marker</string>
+  <string name="sketch_dialog_brush_highlighter">Highlighter</string>
+  <string name="sketch_dialog_brush_dashed">Dashed line</string>
+  <string name="sketch_dialog_brush_calligraphy">Calligraphy brush</string>
+  <string name="sketch_dialog_brush_flat">Flat pen</string>
 </resources>

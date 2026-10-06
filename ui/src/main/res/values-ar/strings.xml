@@ -12,4 +12,10 @@
   <string name="sketch_dialog_choose_image">اختر صورة</string>
   <string name="sketch_dialog_remove_image">إزالة الصورة</string>
   <string name="sketch_dialog_image_load_failed">تعذّر تحميل الصورة</string>
+  <string name="sketch_dialog_brush_pen">قلم</string>
+  <string name="sketch_dialog_brush_marker">قلم تحديد</string>
+  <string name="sketch_dialog_brush_highlighter">قلم تظليل</string>
+  <string name="sketch_dialog_brush_dashed">خط متقطع</string>
+  <string name="sketch_dialog_brush_calligraphy">فرشاة الخط</string>
+  <string name="sketch_dialog_brush_flat">قلم مسطح</string>
 </resources>

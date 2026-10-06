@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.exifinterface.media.ExifInterface
+import androidx.ink.rendering.android.canvas.CanvasStrokeRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -93,13 +94,14 @@ internal fun SketchState.toResult(): SketchResult {
     val width = (paperSize.width * scale).roundToInt().coerceAtLeast(1)
     val height = (paperSize.height * scale).roundToInt().coerceAtLeast(1)
     val bitmap = ImageBitmap(width, height)
+    val renderer = CanvasStrokeRenderer.create()
     CanvasDrawScope().draw(
         density = Density(1f),
         layoutDirection = LayoutDirection.Ltr,
         canvas = BitmapCanvas(bitmap),
         size = Size(width.toFloat(), height.toFloat()),
     ) {
-        drawSketch(this@toResult, scale)
+        drawSketch(this@toResult, scale, renderer)
     }
     return SketchResult(bitmap.asAndroidBitmap(), photo = background != null)
 }

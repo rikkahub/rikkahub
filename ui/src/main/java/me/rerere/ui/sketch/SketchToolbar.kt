@@ -33,7 +33,7 @@ import me.rerere.hugeicons.stroke.Eraser
 import me.rerere.ui.R
 
 /**
- * 画纸下方的工具栏：画笔粗细、橡皮和颜色。
+ * 画纸下方的工具栏：粗细、画笔、橡皮和颜色。
  */
 @Composable
 internal fun SketchToolbar(state: SketchState) {
@@ -60,6 +60,7 @@ internal fun SketchToolbar(state: SketchState) {
                 }
             }
             Spacer(Modifier.weight(1f))
+            SketchBrushMenu(state = state)
             FilledTonalIconToggleButton(
                 checked = state.erasing,
                 onCheckedChange = state::useEraser,
@@ -103,7 +104,7 @@ internal fun SketchToolbar(state: SketchState) {
     }
 }
 
-// 中间的圆点和画出来的线一样粗
+// 中间的圆点就是这一档的粗细。荧光笔画出来比它宽
 @Composable
 private fun WidthOption(width: Dp, selected: Boolean, onClick: () -> Unit) {
     Box(

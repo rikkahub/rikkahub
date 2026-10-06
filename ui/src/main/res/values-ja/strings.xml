@@ -12,4 +12,10 @@
   <string name="sketch_dialog_choose_image">画像を選択</string>
   <string name="sketch_dialog_remove_image">画像を削除</string>
   <string name="sketch_dialog_image_load_failed">画像を読み込めませんでした</string>
+  <string name="sketch_dialog_brush_pen">ペン</string>
+  <string name="sketch_dialog_brush_marker">マーカー</string>
+  <string name="sketch_dialog_brush_highlighter">ハイライター</string>
+  <string name="sketch_dialog_brush_dashed">破線</string>
+  <string name="sketch_dialog_brush_calligraphy">毛筆</string>
+  <string name="sketch_dialog_brush_flat">フラットペン</string>
 </resources>
