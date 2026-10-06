@@ -12,8 +12,10 @@ import me.rerere.mediagen.model.MediaKind
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.dao.MediaCreationDAO
 import me.rerere.rikkahub.data.model.MediaCreationDraft
+import me.rerere.rikkahub.data.model.MediaCreationOutput
 import me.rerere.rikkahub.data.model.MediaCreationRecord
 import me.rerere.rikkahub.data.model.MediaCreationSession
+import me.rerere.rikkahub.data.model.MediaCreationStatus
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -135,10 +137,35 @@ class MediaCreationRepositoryTest {
         assertNull(repository.getRecord(second.id))
     }
 
+    @Test
+    fun theCoverIsTheNewestShownResult() = runBlocking {
+        assertNull(cover())
+
+        val first = insert("a1", output = "a1.png")
+        assertEquals("a1.png", cover())
+
+        // 还没出结果的项不参与
+        insert("b1")
+        assertEquals("a1.png", cover())
+
+        // 封面跟着这一项显示的版本走
+        insert("a2", nodeId = first.nodeId, output = "a2.png")
+        assertEquals("a2.png", cover())
+        repository.switchVersion(first.nodeId, -1)
+        assertEquals("a1.png", cover())
+
+        insert("c1", output = "c1.png")
+        assertEquals("c1.png", cover())
+    }
+
+    private suspend fun cover(): String? = repository.observeSessions().first().single().cover?.path
+
+    // 给了 [output] 的记录是已经成功、带这一项产出的，否则还在进行中
     private suspend fun insert(
         prompt: String,
         nodeId: Uuid = Uuid.random(),
         at: Long = ++clock,
+        output: String? = null,
     ): MediaCreationRecord {
         val record = MediaCreationRecord(
             sessionId = session.id,
@@ -148,6 +175,8 @@ class MediaCreationRepositoryTest {
             modelId = "model",
             kind = MediaKind.IMAGE,
             prompt = prompt,
+            status = if (output != null) MediaCreationStatus.SUCCEEDED else MediaCreationStatus.PREPARING,
+            outputs = listOfNotNull(output?.let { MediaCreationOutput(path = it, mimeType = "image/png") }),
             createAt = Instant.ofEpochMilli(at),
         )
         repository.insertRecord(record)

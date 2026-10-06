@@ -22,6 +22,8 @@ data class MediaCreationSession(
     /** 时间线上的项数，同一项的多个版本只算一次。 */
     val nodeCount: Int = 0,
     val activeCount: Int = 0,
+    /** 时间线上最新一项成功的生成的第一个产出，会话列表拿它当封面；还没有产出时为 null。 */
+    val cover: MediaCreationOutput? = null,
 )
 
 /**

@@ -14,17 +14,27 @@ import me.rerere.rikkahub.data.db.entity.MediaCreationSessionWithStats
 
 @Dao
 interface MediaCreationDAO {
+    /**
+     * cover_outputs 是时间线上最新一项成功的生成的产出（JSON），取的是那一项当前显示的版本。
+     */
     @Query(
         """
         SELECT s.*,
             (SELECT COUNT(*) FROM media_creation_node n WHERE n.session_id = s.id) AS node_count,
             (SELECT COUNT(*) FROM media_creation_record r
-                WHERE r.session_id = s.id AND r.status IN (:activeStatuses)) AS active_count
+                WHERE r.session_id = s.id AND r.status IN (:activeStatuses)) AS active_count,
+            (SELECT r.outputs FROM media_creation_node n
+                JOIN media_creation_record r ON r.id = n.selected_record_id
+                WHERE n.session_id = s.id AND r.status = :succeededStatus
+                ORDER BY n.create_at DESC, n.rowid DESC LIMIT 1) AS cover_outputs
         FROM media_creation_session s
         ORDER BY s.update_at DESC
         """
     )
-    fun observeSessions(activeStatuses: List<String>): Flow<List<MediaCreationSessionWithStats>>
+    fun observeSessions(
+        activeStatuses: List<String>,
+        succeededStatus: String,
+    ): Flow<List<MediaCreationSessionWithStats>>
 
     @Query("SELECT * FROM media_creation_session WHERE id = :id")
     fun observeSession(id: String): Flow<MediaCreationSessionEntity?>

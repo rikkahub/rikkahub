@@ -114,6 +114,8 @@ data class MediaCreationSessionWithStats(
     val nodeCount: Int,
     @ColumnInfo("active_count")
     val activeCount: Int,
+    @ColumnInfo("cover_outputs")
+    val coverOutputs: String?,
 )
 
 /**
