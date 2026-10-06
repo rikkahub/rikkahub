@@ -127,12 +127,14 @@ fun ReasoningPicker(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            PickerHeader(
+            PickerValueHeader(
                 title = stringResource(R.string.reasoning_picker_title),
+                value = previewLevel,
                 hint = stringResource(R.string.reasoning_picker_hint),
+                label = { it.label() },
             ) {
                 // 等级越高形状越「激烈」
                 PickerHero(
@@ -152,34 +154,31 @@ fun ReasoningPicker(
                 )
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                PickerValueLabel(value = previewLevel) { it.label() }
-                Slider(
-                    state = sliderState,
-                    onValueChange = { sliderState.value = it },
-                    onValueChangeFinished = {
-                        val snappedIndex = sliderState.value.roundToInt().coerceIn(0, levelCount - 1)
-                        sliderState.value = snappedIndex.toFloat()
-                        onUpdateReasoningLevel(levels[snappedIndex])
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    interactionSource = interactionSource,
-                    thumb = {
-                        SliderDefaults.Thumb(
-                            interactionSource = interactionSource,
-                            isVertical = false,
-                            thumbSize = DpSize(4.dp, 52.dp),
-                        )
-                    },
-                    track = { sliderState ->
-                        SliderDefaults.Track(
-                            sliderState = sliderState,
-                            trackCornerSize = 12.dp,
-                            modifier = Modifier.height(40.dp),
-                        )
-                    }
-                )
-            }
+            Slider(
+                state = sliderState,
+                onValueChange = { sliderState.value = it },
+                onValueChangeFinished = {
+                    val snappedIndex = sliderState.value.roundToInt().coerceIn(0, levelCount - 1)
+                    sliderState.value = snappedIndex.toFloat()
+                    onUpdateReasoningLevel(levels[snappedIndex])
+                },
+                modifier = Modifier.fillMaxWidth(),
+                interactionSource = interactionSource,
+                thumb = {
+                    SliderDefaults.Thumb(
+                        interactionSource = interactionSource,
+                        isVertical = false,
+                        thumbSize = DpSize(4.dp, 52.dp),
+                    )
+                },
+                track = { sliderState ->
+                    SliderDefaults.Track(
+                        sliderState = sliderState,
+                        trackCornerSize = 12.dp,
+                        modifier = Modifier.height(40.dp),
+                    )
+                }
+            )
         }
     }
 }
