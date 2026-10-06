@@ -388,31 +388,6 @@ private fun SearchMode.shape(): RoundedPolygon = when (this) {
 }
 
 @Composable
-private fun SheetHeader(
-    title: String,
-    navigationIcon: (@Composable () -> Unit)? = null,
-    actions: @Composable () -> Unit = {},
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .padding(bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        navigationIcon?.invoke()
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = if (navigationIcon == null) 8.dp else 4.dp),
-        )
-        actions()
-    }
-}
-
-@Composable
 private fun SearchProviderPicker(
     settings: Settings,
     onUpdateSearchService: (Int) -> Unit,

@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Icon
@@ -170,5 +172,31 @@ internal fun <T : Comparable<T>> PickerValueLabel(
             text = label(it),
             style = MaterialTheme.typography.headlineSmallEmphasized,
         )
+    }
+}
+
+// sheet 内子页面的头部：返回按钮加标题
+@Composable
+internal fun SheetHeader(
+    title: String,
+    navigationIcon: (@Composable () -> Unit)? = null,
+    actions: @Composable () -> Unit = {},
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .padding(bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        navigationIcon?.invoke()
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = if (navigationIcon == null) 8.dp else 4.dp),
+        )
+        actions()
     }
 }

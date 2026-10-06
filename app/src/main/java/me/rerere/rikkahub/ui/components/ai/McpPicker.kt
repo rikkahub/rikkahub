@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.ui.components.ai
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,18 +13,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ListItemShapes
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.SheetValue
@@ -44,6 +43,7 @@ import androidx.compose.ui.util.fastFilter
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Alert01
+import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.Icon1stBracket
 import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.rikkahub.R
@@ -165,110 +165,91 @@ fun McpPickerListItem(
     assistant: Assistant,
     servers: List<McpServerConfig>,
     mcpManager: McpManager,
+    shapes: ListItemShapes,
     modifier: Modifier = Modifier,
-    onUpdateAssistant: (Assistant) -> Unit
+    onClick: () -> Unit,
 ) {
-    var showMcpPicker by remember { mutableStateOf(false) }
     val status by mcpManager.syncingStatus.collectAsStateWithLifecycle()
     val loading = status.values.any { it == McpStatus.Connecting }
     val enabledServers = servers.fastFilter {
         it.commonOptions.enable && assistant.mcpServers.contains(it.id)
     }
 
-    ListItem(
+    SegmentedListItem(
+        onClick = onClick,
+        shapes = shapes,
+        modifier = modifier,
         leadingContent = {
             if (loading) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp))
             } else {
                 Icon(
                     imageVector = HugeIcons.McpServer,
-                    contentDescription = stringResource(R.string.mcp_picker_title),
+                    contentDescription = null,
                 )
             }
-        },
-        headlineContent = {
-            Text(stringResource(R.string.mcp_picker_title))
         },
         trailingContent = {
             if (enabledServers.isNotEmpty()) {
-                Text(
-                    text = enabledServers.size.toString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                CountBadge(count = enabledServers.size)
             }
         },
-        colors = ListItemDefaults.colors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        ),
-        modifier = modifier
-            .clip(MaterialTheme.shapes.large)
-            .clickable {
-                showMcpPicker = true
-            },
-    )
-
-    if (showMcpPicker) {
-        McpPickerSheet(
-            assistant = assistant,
-            servers = servers,
-            loading = loading,
-            onUpdateAssistant = onUpdateAssistant,
-            onDismiss = { showMcpPicker = false },
-        )
+    ) {
+        Text(stringResource(R.string.mcp_picker_title))
     }
 }
 
+// MCP 选择页，作为子页面嵌在加号 sheet 里
 @Composable
-private fun McpPickerSheet(
+internal fun McpPickerPage(
     assistant: Assistant,
     servers: List<McpServerConfig>,
-    loading: Boolean,
+    mcpManager: McpManager,
     onUpdateAssistant: (Assistant) -> Unit,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit,
 ) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
+    val status by mcpManager.syncingStatus.collectAsStateWithLifecycle()
+    val loading = status.values.any { it == McpStatus.Connecting }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(0.7f)
+            .padding(horizontal = 16.dp),
     ) {
-        Column(
+        SheetHeader(
+            title = stringResource(R.string.mcp_picker_title),
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(HugeIcons.ArrowLeft01, contentDescription = stringResource(R.string.back))
+                }
+            },
+        )
+        AnimatedVisibility(
+            visible = loading,
+            modifier = Modifier.align(Alignment.CenterHorizontally),
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(bottom = 16.dp)
+            ) {
+                LinearWavyProgressIndicator()
+                Text(
+                    text = stringResource(id = R.string.mcp_picker_syncing),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+        }
+        McpPicker(
+            assistant = assistant,
+            servers = servers,
+            onUpdateAssistant = onUpdateAssistant,
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.7f)
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = stringResource(id = R.string.mcp_picker_title),
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Bold
-                )
-            )
-            AnimatedVisibility(loading) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(vertical = 4.dp)
-                ) {
-                    LinearWavyProgressIndicator()
-                    Text(
-                        text = stringResource(id = R.string.mcp_picker_syncing),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
-            }
-            McpPicker(
-                assistant = assistant,
-                servers = servers,
-                onUpdateAssistant = {
-                    onUpdateAssistant(it)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            )
-        }
+                .weight(1f),
+            contentPadding = PaddingValues(bottom = 16.dp),
+        )
     }
 }
 
