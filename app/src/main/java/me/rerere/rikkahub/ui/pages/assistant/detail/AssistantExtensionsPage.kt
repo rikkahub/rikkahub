@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -8,6 +9,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Tab
@@ -20,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import kotlinx.coroutines.launch
@@ -45,6 +49,11 @@ fun AssistantExtensionsPage(id: String) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState { 4 }
+    val listPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+    // 页面背景比 sheet 深，列表项用更亮的容器色才分得开
+    val listColors = ListItemDefaults.segmentedColors(
+        containerColor = MaterialTheme.colorScheme.surfaceBright,
+    )
 
     Scaffold(
         topBar = {
@@ -107,6 +116,8 @@ fun AssistantExtensionsPage(id: String) {
                             Column {
                                 QuickMessagesContent(
                                     modifier = Modifier.weight(1f),
+                                    contentPadding = listPadding,
+                                    colors = listColors,
                                     quickMessages = settings.quickMessages,
                                     selectedIds = assistant.quickMessageIds,
                                     onToggle = { quickMessageId, checked ->
@@ -136,6 +147,8 @@ fun AssistantExtensionsPage(id: String) {
                             Column {
                                 ModeInjectionsContent(
                                     modifier = Modifier.weight(1f),
+                                    contentPadding = listPadding,
+                                    colors = listColors,
                                     modeInjections = settings.modeInjections,
                                     selectedIds = assistant.modeInjectionIds,
                                     onToggle = { injId, checked ->
@@ -165,6 +178,8 @@ fun AssistantExtensionsPage(id: String) {
                             Column {
                                 LorebooksContent(
                                     modifier = Modifier.weight(1f),
+                                    contentPadding = listPadding,
+                                    colors = listColors,
                                     lorebooks = settings.lorebooks,
                                     selectedIds = assistant.lorebookIds,
                                     onToggle = { injId, checked ->
@@ -194,6 +209,8 @@ fun AssistantExtensionsPage(id: String) {
                             Column {
                                 SkillsContent(
                                     modifier = Modifier.weight(1f),
+                                    contentPadding = listPadding,
+                                    colors = listColors,
                                     skills = skills,
                                     enabledSkills = assistant.enabledSkills,
                                     onToggle = { name, checked ->
