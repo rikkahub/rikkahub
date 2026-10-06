@@ -37,11 +37,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.webview.WEB_VIEW_BASE_URL
-import me.rerere.rikkahub.ui.components.webview.WebView
-import me.rerere.rikkahub.ui.components.webview.WebViewContentCache
-import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
+import me.rerere.ui.webview.WEB_VIEW_BASE_URL
+import me.rerere.ui.webview.WebView
+import me.rerere.ui.webview.WebViewContentCache
+import me.rerere.ui.webview.rememberWebViewState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

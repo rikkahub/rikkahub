@@ -122,11 +122,11 @@ import me.rerere.rikkahub.data.model.canSubmit
 import me.rerere.rikkahub.data.model.mixesFramesWithReferences
 import me.rerere.rikkahub.data.model.withRequired
 import me.rerere.rikkahub.ui.components.ai.PickerHeader
+import me.rerere.ui.components.FormItem
+import me.rerere.ui.components.Tooltip
 import me.rerere.ui.sketch.SketchDialog
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
-import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Tag
-import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.pages.setting.components.label
 import me.rerere.rikkahub.ui.pages.setting.components.typeName
 import java.io.File

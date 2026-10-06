@@ -20,4 +20,8 @@
   <string name="sketch_dialog_brush_flat">Плоское перо</string>
   <string name="sketch_dialog_text">Текст</string>
   <string name="sketch_dialog_select">Выбрать</string>
+  <string name="chart_mode_chart">Диаграмма</string>
+  <string name="chart_mode_table">Таблица</string>
+  <string name="chart_series">Ряд</string>
+  <string name="chart_series_name">Ряд %1$d</string>
 </resources>

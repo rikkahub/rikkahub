@@ -20,4 +20,8 @@
   <string name="sketch_dialog_brush_flat">Flat pen</string>
   <string name="sketch_dialog_text">Text</string>
   <string name="sketch_dialog_select">Select</string>
+  <string name="chart_mode_chart">Chart</string>
+  <string name="chart_mode_table">Table</string>
+  <string name="chart_series">Series</string>
+  <string name="chart_series_name">Series %1$d</string>
 </resources>

@@ -1393,10 +1393,6 @@
   <string name="assistant_page_local_tools_chart_display_desc">السماح للذكاء الاصطناعي بعرض المخططات الخطية والشريطية والمبعثرة</string>
   <string name="chat_message_tool_chart_display">عرض المخطط</string>
   <string name="chat_message_tool_chart_display_with_title">عرض المخطط: %1$s</string>
-  <string name="chart_mode_chart">مخطط</string>
-  <string name="chart_mode_table">جدول</string>
-  <string name="chart_series">سلسلة</string>
-  <string name="chart_series_name">سلسلة %1$d</string>
   <string name="error_fast_model_not_found">لم يتم العثور على النموذج السريع. يرجى اختيار واحد في الإعدادات.</string>
   <string name="error_fast_model_provider_not_found">لم يتم العثور على مزوّد النموذج السريع</string>
   <string name="assistant_page_clone_with_memories">نسخ الذاكرة أيضًا</string>

@@ -20,4 +20,8 @@
   <string name="sketch_dialog_brush_flat">フラットペン</string>
   <string name="sketch_dialog_text">テキスト</string>
   <string name="sketch_dialog_select">選択</string>
+  <string name="chart_mode_chart">チャート</string>
+  <string name="chart_mode_table">表</string>
+  <string name="chart_series">系列</string>
+  <string name="chart_series_name">系列 %1$d</string>
 </resources>

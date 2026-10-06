@@ -23,10 +23,10 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.ui.components.ui.FormItem
-import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
-import me.rerere.rikkahub.ui.components.ui.SelectTextField
 import me.rerere.tts.provider.TTSProviderSetting
+import me.rerere.ui.components.FormItem
+import me.rerere.ui.components.OutlinedNumberInput
+import me.rerere.ui.components.SelectTextField
 
 @Composable
 fun TTSProviderConfigure(

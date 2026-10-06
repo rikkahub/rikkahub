@@ -69,9 +69,6 @@ import me.rerere.hugeicons.stroke.Eye
 import me.rerere.hugeicons.stroke.View
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.ui.components.webview.WebView
-import me.rerere.rikkahub.ui.components.webview.WebViewContentCache
-import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.Navigator
@@ -81,6 +78,9 @@ import me.rerere.rikkahub.ui.theme.AtomOneLightPalette
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.utils.toDp
+import me.rerere.ui.webview.WebView
+import me.rerere.ui.webview.WebViewContentCache
+import me.rerere.ui.webview.rememberWebViewState
 import kotlin.time.Clock
 
 private const val COLLAPSE_LINES = 10

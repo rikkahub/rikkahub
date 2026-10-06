@@ -20,4 +20,8 @@
   <string name="sketch_dialog_brush_flat">平頭筆</string>
   <string name="sketch_dialog_text">文字</string>
   <string name="sketch_dialog_select">選擇</string>
+  <string name="chart_mode_chart">圖表</string>
+  <string name="chart_mode_table">表格</string>
+  <string name="chart_series">數列</string>
+  <string name="chart_series_name">數列 %1$d</string>
 </resources>

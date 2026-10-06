@@ -1395,10 +1395,6 @@
   <string name="assistant_page_local_tools_chart_display_desc">Let the AI display line, bar, and scatter charts</string>
   <string name="chat_message_tool_chart_display">Display chart</string>
   <string name="chat_message_tool_chart_display_with_title">Display chart: %1$s</string>
-  <string name="chart_mode_chart">Chart</string>
-  <string name="chart_mode_table">Table</string>
-  <string name="chart_series">Series</string>
-  <string name="chart_series_name">Series %1$d</string>
   <string name="error_fast_model_not_found">Fast model not found. Please select one in settings.</string>
   <string name="error_fast_model_provider_not_found">Provider of the fast model not found</string>
   <string name="assistant_page_clone_with_memories">Also copy memories</string>

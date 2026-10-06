@@ -1393,10 +1393,6 @@
   <string name="assistant_page_local_tools_chart_display_desc">讓 AI 顯示折線圖、長條圖和散佈圖</string>
   <string name="chat_message_tool_chart_display">顯示圖表</string>
   <string name="chat_message_tool_chart_display_with_title">顯示圖表：%1$s</string>
-  <string name="chart_mode_chart">圖表</string>
-  <string name="chart_mode_table">表格</string>
-  <string name="chart_series">數列</string>
-  <string name="chart_series_name">數列 %1$d</string>
   <string name="error_fast_model_not_found">找不到快速模型。請在設定中選擇一個。</string>
   <string name="error_fast_model_provider_not_found">找不到快速模型的供應商</string>
   <string name="assistant_page_clone_with_memories">同時複製記憶</string>

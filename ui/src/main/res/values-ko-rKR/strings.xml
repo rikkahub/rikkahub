@@ -20,4 +20,8 @@
   <string name="sketch_dialog_brush_flat">플랫 펜</string>
   <string name="sketch_dialog_text">텍스트</string>
   <string name="sketch_dialog_select">선택</string>
+  <string name="chart_mode_chart">차트</string>
+  <string name="chart_mode_table">표</string>
+  <string name="chart_series">계열</string>
+  <string name="chart_series_name">계열 %1$d</string>
 </resources>

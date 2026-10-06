@@ -53,7 +53,7 @@ import me.rerere.rikkahub.data.ai.mcp.McpStatus
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
-import me.rerere.rikkahub.ui.components.ui.ToggleSurface
+import me.rerere.ui.components.ToggleSurface
 import org.koin.compose.koinInject
 
 @Composable

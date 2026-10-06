@@ -33,10 +33,10 @@ import me.rerere.ai.provider.CustomHeader
 import me.rerere.highlight.LocalCodeHighlighter
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.CardGroup
-import me.rerere.rikkahub.ui.components.ui.SelectTextField
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeVisualTransformation
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
+import me.rerere.ui.components.SelectTextField
 
 private val jsonLenient = Json {
     ignoreUnknownKeys = true

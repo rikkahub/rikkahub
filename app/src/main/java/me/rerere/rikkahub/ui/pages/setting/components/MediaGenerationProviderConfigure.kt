@@ -26,7 +26,7 @@ import me.rerere.mediagen.model.MediaGenerationModel
 import me.rerere.mediagen.model.MediaKind
 import me.rerere.mediagen.provider.MediaGenerationProviderSetting
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.ui.components.FormItem
 
 val MediaGenerationProviderSetting.typeName: String
     @Composable get() = when (this) {

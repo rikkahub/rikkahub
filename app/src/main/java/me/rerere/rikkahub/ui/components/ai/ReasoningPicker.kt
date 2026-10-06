@@ -42,10 +42,10 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Idea
 import me.rerere.hugeicons.stroke.Idea01
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.ui.components.ui.ToggleSurface
-import me.rerere.rikkahub.ui.components.ui.icons.ReasoningHigh
-import me.rerere.rikkahub.ui.components.ui.icons.ReasoningLow
-import me.rerere.rikkahub.ui.components.ui.icons.ReasoningMedium
+import me.rerere.ui.components.ToggleSurface
+import me.rerere.ui.icons.ReasoningHigh
+import me.rerere.ui.icons.ReasoningLow
+import me.rerere.ui.icons.ReasoningMedium
 import kotlin.math.roundToInt
 
 private val levels = ReasoningLevel.entries

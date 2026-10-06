@@ -1395,10 +1395,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_local_tools_chart_display_desc">AI가 꺾은선형, 막대형, 산점도 차트를 표시하도록 허용</string>
   <string name="chat_message_tool_chart_display">차트 표시</string>
   <string name="chat_message_tool_chart_display_with_title">차트 표시: %1$s</string>
-  <string name="chart_mode_chart">차트</string>
-  <string name="chart_mode_table">표</string>
-  <string name="chart_series">계열</string>
-  <string name="chart_series_name">계열 %1$d</string>
   <string name="error_fast_model_not_found">빠른 모델을 찾을 수 없습니다. 설정에서 하나를 선택해 주세요.</string>
   <string name="error_fast_model_provider_not_found">빠른 모델의 제공자를 찾을 수 없습니다</string>
   <string name="assistant_page_clone_with_memories">기억도 함께 복사</string>
