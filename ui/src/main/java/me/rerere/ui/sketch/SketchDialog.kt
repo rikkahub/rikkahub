@@ -12,7 +12,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -117,7 +121,8 @@ fun SketchDialog(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .safeDrawingPadding(),
+                    // 只避开系统栏和挖孔，不管键盘：写字时键盘弹出来，画纸的大小不能跟着变
+                    .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)),
             ) {
                 SketchTopBar(
                     state = state,
@@ -149,6 +154,10 @@ fun SketchDialog(
                 SketchToolbar(state = state)
             }
         }
+    }
+
+    if (state.writingAt != null) {
+        SketchTextInput(onConfirm = state::write, onDismiss = state::cancelText)
     }
 
     if (confirmDiscard) {

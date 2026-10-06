@@ -3,6 +3,7 @@ package me.rerere.ui.sketch
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,12 +39,13 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.toSize
+import androidx.core.graphics.withTranslation
 import androidx.ink.authoring.compose.InProgressStrokes
 import androidx.ink.rendering.android.canvas.CanvasStrokeRenderer
 import kotlin.math.roundToInt
 
 /**
- * 画纸：跟着手指或触控笔落笔，并把 [state] 里的笔画画出来。画纸按自己的比例放进可用区域的正中。
+ * 画纸：跟着手指或触控笔落笔，并把 [state] 里的笔画和文字画出来。画纸按自己的比例放进可用区域的正中。
  *
  * 画笔交给 Ink：正在画的一笔由它的落笔层低延迟地画出来；画完再交回来，和橡皮、底图一起画在下面的画布上。
  */
@@ -71,12 +73,23 @@ internal fun SketchCanvas(state: SketchState, modifier: Modifier = Modifier) {
                             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                             // 落笔说明颜色调好了
                             state.pickingColor = false
-                            // 画笔的一笔由落笔层接手，这里只管橡皮
-                            if (!state.erasing) return@awaitEachGesture
+                            // 画笔的一笔由落笔层接手，这里管橡皮、文字和选择
+                            if (state.tool == SketchTool.Brush) return@awaitEachGesture
                             down.consume()
                             val scale = size.width / paper.width
                             // 画纸坐标的原点在正中
                             val center = Offset(size.width / 2f, size.height / 2f)
+                            if (state.tool == SketchTool.Text) {
+                                // 手指抬起的地方就是文字的位置，划出画纸或者被打断就不算
+                                val up = waitForUpOrCancellation(PointerEventPass.Initial) ?: return@awaitEachGesture
+                                up.consume()
+                                state.beginText((up.position - center) / scale, state.width.toPx() / scale)
+                                return@awaitEachGesture
+                            }
+                            if (state.tool == SketchTool.Select) {
+                                selectGesture(state, down, scale) { (it - center) / scale }
+                                return@awaitEachGesture
+                            }
                             val line = state.erase((down.position - center) / scale, state.width.toPx() / scale)
                             try {
                                 // 只跟随落下的那根手指，其余的忽略
@@ -97,9 +110,11 @@ internal fun SketchCanvas(state: SketchState, modifier: Modifier = Modifier) {
                     },
             ) {
                 val renderer = remember { CanvasStrokeRenderer.create() }
+                val selectionColor = MaterialTheme.colorScheme.primary
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     state.revision
                     drawSketch(state, size.width / paper.width, renderer)
+                    drawSelection(state, size.width / paper.width, selectionColor)
                 }
                 if (canvasSize != IntSize.Zero) {
                     val scale = canvasSize.width / paper.width
@@ -114,8 +129,8 @@ internal fun SketchCanvas(state: SketchState, modifier: Modifier = Modifier) {
                             translate(-canvasSize.width / 2f, -canvasSize.height / 2f)
                         }
                     }
-                    // 用橡皮时不出墨。落笔层本身留着，来回切换不用重新初始化
-                    val currentBrush by rememberUpdatedState(if (state.erasing) null else brush)
+                    // 不在用画笔时不出墨。落笔层本身留着，来回切换不用重新初始化
+                    val currentBrush by rememberUpdatedState(if (state.tool == SketchTool.Brush) brush else null)
                     InProgressStrokes(
                         defaultBrush = currentBrush,
                         // 落笔层拿到的取笔刷的函数不会跟着重组更新，换了颜色和粗细要让它每次落笔时来读最新的
@@ -140,16 +155,34 @@ internal fun DrawScope.drawSketch(state: SketchState, scale: Float, renderer: Ca
     val steps = state.steps
     // 清空之前的笔画已经看不到了
     val first = steps.indexOfLast { it is SketchStep.Clear } + 1
+    val placements = state.placements()
     // Ink 按最终的缩放来决定笔画边缘画得多细，画布上已有的变换它不会自己去读
-    val strokeTransform = android.graphics.Matrix().apply { setScale(scale, scale) }
+    val strokeTransform = android.graphics.Matrix()
     // 笔画单独画在一层上：橡皮擦掉的只是这一层，下面的画纸和底图不受影响
     drawIntoCanvas { it.saveLayer(Rect(Offset.Zero, size), LayerPaint) }
     translate(size.width / 2, size.height / 2) {
         scale(scale, pivot = Offset.Zero) {
             for (index in first until steps.size) {
                 when (val step = steps[index]) {
-                    is SketchStep.Ink -> drawIntoCanvas {
-                        renderer.draw(it.nativeCanvas, step.stroke, strokeTransform)
+                    is SketchStep.Item -> {
+                        val placement = placements[step] ?: continue
+                        translate(placement.offset.x, placement.offset.y) {
+                            scale(placement.scale, pivot = Offset.Zero) {
+                                drawIntoCanvas {
+                                    when (step) {
+                                        is SketchStep.Ink -> {
+                                            strokeTransform.setScale(scale * placement.scale, scale * placement.scale)
+                                            renderer.draw(it.nativeCanvas, step.stroke, strokeTransform)
+                                        }
+
+                                        is SketchStep.Text -> it.nativeCanvas.withTranslation(
+                                            step.position.x,
+                                            step.position.y,
+                                        ) { step.layout.draw(this) }
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     is SketchStep.Erase -> if (step.moved) {
@@ -168,7 +201,7 @@ internal fun DrawScope.drawSketch(state: SketchState, scale: Float, renderer: Ca
                         )
                     }
 
-                    SketchStep.Clear -> {}
+                    is SketchStep.Transform, SketchStep.Clear -> {}
                 }
             }
         }

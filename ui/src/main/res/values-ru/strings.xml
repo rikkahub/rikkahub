@@ -18,4 +18,6 @@
   <string name="sketch_dialog_brush_dashed">Пунктирная линия</string>
   <string name="sketch_dialog_brush_calligraphy">Каллиграфическая кисть</string>
   <string name="sketch_dialog_brush_flat">Плоское перо</string>
+  <string name="sketch_dialog_text">Текст</string>
+  <string name="sketch_dialog_select">Выбрать</string>
 </resources>

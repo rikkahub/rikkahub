@@ -29,11 +29,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.CursorRectangleSelection01
 import me.rerere.hugeicons.stroke.Eraser
+import me.rerere.hugeicons.stroke.Type
 import me.rerere.ui.R
 
 /**
- * 画纸下方的工具栏：粗细、画笔、橡皮和颜色。
+ * 画纸下方的工具栏：粗细、画笔、文字、选择、橡皮和颜色。
  */
 @Composable
 internal fun SketchToolbar(state: SketchState) {
@@ -61,6 +63,21 @@ internal fun SketchToolbar(state: SketchState) {
             }
             Spacer(Modifier.weight(1f))
             SketchBrushMenu(state = state)
+            FilledTonalIconToggleButton(
+                checked = state.tool == SketchTool.Text,
+                onCheckedChange = state::useText,
+            ) {
+                Icon(HugeIcons.Type, contentDescription = stringResource(R.string.sketch_dialog_text))
+            }
+            FilledTonalIconToggleButton(
+                checked = state.tool == SketchTool.Select,
+                onCheckedChange = state::useSelect,
+            ) {
+                Icon(
+                    HugeIcons.CursorRectangleSelection01,
+                    contentDescription = stringResource(R.string.sketch_dialog_select),
+                )
+            }
             FilledTonalIconToggleButton(
                 checked = state.erasing,
                 onCheckedChange = state::useEraser,
@@ -104,7 +121,7 @@ internal fun SketchToolbar(state: SketchState) {
     }
 }
 
-// 中间的圆点就是这一档的粗细。荧光笔画出来比它宽
+// 中间的圆点就是这一档的粗细。荧光笔画出来比它宽，文字的字号也跟着这一档走
 @Composable
 private fun WidthOption(width: Dp, selected: Boolean, onClick: () -> Unit) {
     Box(

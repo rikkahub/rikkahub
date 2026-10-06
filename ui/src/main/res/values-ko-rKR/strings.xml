@@ -18,4 +18,6 @@
   <string name="sketch_dialog_brush_dashed">파선</string>
   <string name="sketch_dialog_brush_calligraphy">붓</string>
   <string name="sketch_dialog_brush_flat">플랫 펜</string>
+  <string name="sketch_dialog_text">텍스트</string>
+  <string name="sketch_dialog_select">선택</string>
 </resources>

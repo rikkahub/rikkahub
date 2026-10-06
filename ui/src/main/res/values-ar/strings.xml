@@ -18,4 +18,6 @@
   <string name="sketch_dialog_brush_dashed">خط متقطع</string>
   <string name="sketch_dialog_brush_calligraphy">فرشاة الخط</string>
   <string name="sketch_dialog_brush_flat">قلم مسطح</string>
+  <string name="sketch_dialog_text">نص</string>
+  <string name="sketch_dialog_select">تحديد</string>
 </resources>

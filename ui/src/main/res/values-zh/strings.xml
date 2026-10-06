@@ -18,4 +18,6 @@
   <string name="sketch_dialog_brush_dashed">虚线</string>
   <string name="sketch_dialog_brush_calligraphy">毛笔</string>
   <string name="sketch_dialog_brush_flat">平头笔</string>
+  <string name="sketch_dialog_text">文字</string>
+  <string name="sketch_dialog_select">选择</string>
 </resources>

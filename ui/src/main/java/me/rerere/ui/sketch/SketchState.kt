@@ -1,5 +1,8 @@
 package me.rerere.ui.sketch
 
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -7,14 +10,20 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.geometry.isUnspecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import androidx.ink.geometry.ImmutableBox
+import androidx.ink.geometry.ImmutableVec
 import androidx.ink.strokes.Stroke
+import kotlin.math.ceil
+import kotlin.math.min
 
 internal object SketchDefaults {
     // 画纸固定是白色的：导出的图片不随应用的深浅色主题变化
@@ -44,10 +53,38 @@ internal object SketchDefaults {
 // 橡皮比同一档的画笔粗
 private const val ERASER_WIDTH_SCALE = 4f
 
+// 字号是所选粗细的多少倍
+private const val TEXT_SIZE_SCALE = 4f
+
+/** 手指落在画纸上时做什么。 */
+internal enum class SketchTool { Brush, Eraser, Text, Select }
+
 /** 画板上的一步操作，撤销和重做以它为单位。 */
 internal sealed interface SketchStep {
+    /** 画纸上可以选中、挪动和缩放的东西：笔画和文字。 */
+    sealed interface Item : SketchStep {
+        /** 落下时占的范围，之后的挪动和缩放不算在内。 */
+        val bounds: Rect
+
+        /** 是不是碰到了 [area]。[area] 和 [bounds] 一样是落下时的坐标。 */
+        fun touches(area: Rect): Boolean
+    }
+
     /** 画笔的一笔。坐标和粗细都以画纸为准，原点在画纸正中，和画纸在屏幕上显示得多大无关。 */
-    class Ink(val stroke: Stroke) : SketchStep
+    class Ink(val stroke: Stroke) : Item {
+        override val bounds: Rect =
+            stroke.shape.computeBoundingBox()?.let { Rect(it.xMin, it.yMin, it.xMax, it.yMax) } ?: Rect.Zero
+
+        // 一条斜线占的范围是一大块，光看范围的话在它旁边的空白处拉框也会选中它，要看笔画本身碰没碰到
+        override fun touches(area: Rect): Boolean = bounds.overlaps(area) &&
+            stroke.shape.computeCoverageIsGreaterThan(
+                ImmutableBox.fromTwoPoints(ImmutableVec(area.left, area.top), ImmutableVec(area.right, area.bottom)),
+                0f,
+            )
+    }
+
+    /** 把 [items] 一起挪动、缩放了一次。它们本身不变，画的时候再把经历过的变换叠上去，撤销就是少叠这一次。 */
+    class Transform(val items: List<Item>, val placement: SketchPlacement) : SketchStep
 
     /** 橡皮的一笔：不上色，而是把它经过的笔画擦掉。坐标和 [Ink] 一样以画纸为准。 */
     class Erase(val start: Offset, val width: Float) : SketchStep {
@@ -70,6 +107,34 @@ internal sealed interface SketchStep {
         fun finish() {
             if (moved) path.lineTo(last.x, last.y)
         }
+    }
+
+    /**
+     * 一段文字。位置和字号都以画纸为准。
+     *
+     * @param start 第一行左端的中点
+     * @param maxWidth 超过这个宽度就换行
+     */
+    class Text(val text: String, start: Offset, color: Color, size: Float, maxWidth: Float) : Item {
+        // 排版只做这一次，屏幕上和导出时画的是同一份，换行的位置才不会不一样
+        val layout: StaticLayout = run {
+            // 排好的字会被整体缩放着画出来，字距要能跟着等比例缩放
+            val flags = TextPaint.ANTI_ALIAS_FLAG or TextPaint.SUBPIXEL_TEXT_FLAG or TextPaint.LINEAR_TEXT_FLAG
+            val paint = TextPaint(flags).apply {
+                textSize = size
+                this.color = color.toArgb()
+            }
+            // 没到宽度上限时只占文字本身那么宽
+            val width = ceil(min(maxWidth, Layout.getDesiredWidth(text, paint))).toInt().coerceAtLeast(1)
+            StaticLayout.Builder.obtain(text, 0, text.length, paint, width).build()
+        }
+
+        /** 文字左上角的位置。 */
+        val position = Offset(start.x, start.y - layout.getLineBottom(0) / 2f)
+
+        override val bounds = Rect(position, Size(layout.width.toFloat(), layout.height.toFloat()))
+
+        override fun touches(area: Rect): Boolean = bounds.overlaps(area)
     }
 
     /** 清空画纸。它也是一步操作，可以撤销。 */
@@ -114,8 +179,25 @@ internal class SketchState(aspectRatio: Float? = null) {
         private set
 
     var width by mutableStateOf(SketchDefaults.BrushWidths[1])
-    var erasing by mutableStateOf(false)
+
+    var tool by mutableStateOf(SketchTool.Brush)
         private set
+    val erasing: Boolean get() = tool == SketchTool.Eraser
+
+    /** 点了画纸、正等着输入文字时，文字要放的位置（画纸坐标）。 */
+    var writingAt by mutableStateOf<Offset?>(null)
+        private set
+    private var writingSize = 0f
+
+    /** 选中的笔画和文字。 */
+    var selection by mutableStateOf<List<SketchStep.Item>>(emptyList())
+        private set
+
+    /** 选中的东西正被拖着挪动或缩放、还没松手时的变换。 */
+    var moving by mutableStateOf(SketchPlacement.None)
+
+    /** 正在拉的选框（画纸坐标）。 */
+    var marquee by mutableStateOf<Rect?>(null)
 
     // Path 的改动 Compose 观察不到，擦的过程中靠它触发重绘
     var revision by mutableIntStateOf(0)
@@ -129,30 +211,36 @@ internal class SketchState(aspectRatio: Float? = null) {
     val canUndo: Boolean get() = steps.isNotEmpty()
     val canRedo: Boolean get() = undone.isNotEmpty()
 
-    // 选颜色就是要接着画，橡皮跟着收起来
+    // 选颜色就是要接着画，橡皮跟着收起来。正在写字的话还是写字，文字用的也是这个颜色
     fun usePreset(color: Color) {
         this.color = color
         usingCustomColor = false
-        erasing = false
+        if (erasing) tool = SketchTool.Brush
         pickingColor = false
     }
 
     fun useBrush(brush: SketchBrush) {
         this.brush = brush
-        erasing = false
-        pickingColor = false
+        use(SketchTool.Brush)
     }
 
-    fun useEraser(enabled: Boolean) {
-        erasing = enabled
+    fun useEraser(enabled: Boolean) = use(if (enabled) SketchTool.Eraser else SketchTool.Brush)
+
+    fun useText(enabled: Boolean) = use(if (enabled) SketchTool.Text else SketchTool.Brush)
+
+    fun useSelect(enabled: Boolean) = use(if (enabled) SketchTool.Select else SketchTool.Brush)
+
+    private fun use(tool: SketchTool) {
+        this.tool = tool
         pickingColor = false
+        deselect()
     }
 
     fun useCustom(color: Color) {
         customColor = color
         this.color = color
         usingCustomColor = true
-        erasing = false
+        if (erasing) tool = SketchTool.Brush
     }
 
     fun fit(available: Size) {
@@ -191,6 +279,31 @@ internal class SketchState(aspectRatio: Float? = null) {
         undone.clear()
     }
 
+    /** 在 [point] 处开始写字，[width] 是所选的粗细。文字输入完再用 [write] 落到画纸上。 */
+    fun beginText(point: Offset, width: Float) {
+        writingAt = point
+        writingSize = width * TEXT_SIZE_SCALE
+    }
+
+    fun write(text: String) {
+        val start = writingAt ?: return
+        writingAt = null
+        if (text.isBlank()) return
+        steps += SketchStep.Text(
+            text = text.trim(),
+            start = start,
+            color = color,
+            size = writingSize,
+            // 写到画纸右边就换行，太靠边时也至少留出一个字的宽度
+            maxWidth = (paperSize.width / 2 - start.x).coerceAtLeast(writingSize),
+        )
+        undone.clear()
+    }
+
+    fun cancelText() {
+        writingAt = null
+    }
+
     fun erase(point: Offset, width: Float): SketchStep.Erase {
         val line = SketchStep.Erase(point, width * ERASER_WIDTH_SCALE)
         steps += line
@@ -208,17 +321,80 @@ internal class SketchState(aspectRatio: Float? = null) {
         revision++
     }
 
+    /** 画纸上现有的笔画和文字，从下到上，连同它们各自被挪动、缩放成了什么样。 */
+    fun placements(): Map<SketchStep.Item, SketchPlacement> {
+        val placements = LinkedHashMap<SketchStep.Item, SketchPlacement>()
+        // 清空之前的已经看不到了
+        for (index in steps.indexOfLast { it is SketchStep.Clear } + 1 until steps.size) {
+            when (val step = steps[index]) {
+                is SketchStep.Item -> placements[step] = SketchPlacement.None
+                is SketchStep.Transform -> step.items.forEach { item ->
+                    placements[item]?.let { placements[item] = it.then(step.placement) }
+                }
+
+                else -> {}
+            }
+        }
+        // 正被拖着的也算上，松手之前画出来的就是最后的样子
+        if (moving != SketchPlacement.None) {
+            selection.forEach { item -> placements[item]?.let { placements[item] = it.then(moving) } }
+        }
+        return placements
+    }
+
+    /** 选中的东西合起来占的范围，没有选中时为空。 */
+    val selectionBounds: Rect?
+        get() {
+            if (selection.isEmpty()) return null
+            val placements = placements()
+            return selection
+                .mapNotNull { item -> placements[item]?.apply(item.bounds) }
+                .reduceOrNull { all, next ->
+                    Rect(
+                        minOf(all.left, next.left),
+                        minOf(all.top, next.top),
+                        maxOf(all.right, next.right),
+                        maxOf(all.bottom, next.bottom),
+                    )
+                }
+        }
+
+    /** 选中碰到 [area] 的笔画和文字。[topmost] 时只选最上面的一个，用在点一下的时候。 */
+    fun select(area: Rect, topmost: Boolean) {
+        val touched = placements().filter { (item, placement) -> item.touches(placement.invert(area)) }.keys.toList()
+        selection = if (topmost) listOfNotNull(touched.lastOrNull()) else touched
+    }
+
+    fun deselect() {
+        selection = emptyList()
+        moving = SketchPlacement.None
+        marquee = null
+    }
+
+    /** 松手：把拖出来的变换记成一步。 */
+    fun settle() {
+        val placement = moving
+        moving = SketchPlacement.None
+        if (placement == SketchPlacement.None || selection.isEmpty()) return
+        steps += SketchStep.Transform(selection, placement)
+        undone.clear()
+    }
+
     fun clear() {
         if (isBlank) return
+        deselect()
         steps += SketchStep.Clear
         undone.clear()
     }
 
+    // 撤销和重做之后选中的东西可能已经不在了，一律取消选中
     fun undo() {
+        deselect()
         steps.removeLastOrNull()?.let { undone += it }
     }
 
     fun redo() {
+        deselect()
         undone.removeLastOrNull()?.let { steps += it }
     }
 }

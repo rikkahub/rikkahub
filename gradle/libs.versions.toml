@@ -76,6 +76,7 @@ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = 
 androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version = "1.4.2" }
 androidx-ink-authoring-compose = { group = "androidx.ink", name = "ink-authoring-compose", version.ref = "ink" }
 androidx-ink-brush = { group = "androidx.ink", name = "ink-brush", version.ref = "ink" }
+androidx-ink-geometry = { group = "androidx.ink", name = "ink-geometry", version.ref = "ink" }
 androidx-ink-rendering = { group = "androidx.ink", name = "ink-rendering", version.ref = "ink" }
 androidx-ink-strokes = { group = "androidx.ink", name = "ink-strokes", version.ref = "ink" }
 androidx-media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
