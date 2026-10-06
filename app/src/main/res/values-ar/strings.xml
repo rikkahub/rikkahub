@@ -1559,4 +1559,5 @@
   <string name="chat_page_compress_pending_tools">تعامل مع استدعاءات الأدوات المعلّقة أولًا، أو احتفظ بالرسائل الحديثة التي تحتوي عليها</string>
   <string name="sketch">رسم</string>
   <string name="sketch_draw_on_image">ارسم على الصورة</string>
+  <string name="imggen_page_deprecated_warning">هذه الميزة مهملة وستُزال في إصدار مستقبلي. استخدم %1$s بدلاً من ذلك</string>
 </resources>

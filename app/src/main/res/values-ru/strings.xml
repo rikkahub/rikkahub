@@ -1561,4 +1561,5 @@
   <string name="chat_page_compress_pending_tools">Сначала обработайте ожидающие вызовы инструментов или сохраните последние сообщения, содержащие их</string>
   <string name="sketch">Эскиз</string>
   <string name="sketch_draw_on_image">Рисовать на изображении</string>
+  <string name="imggen_page_deprecated_warning">Эта функция устарела и будет удалена в будущей версии. Вместо неё используйте %1$s</string>
 </resources>

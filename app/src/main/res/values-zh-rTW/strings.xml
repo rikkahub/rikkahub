@@ -1559,4 +1559,5 @@
   <string name="chat_page_compress_pending_tools">請先處理待處理的工具呼叫，或保留包含這些呼叫的近期訊息</string>
   <string name="sketch">草圖</string>
   <string name="sketch_draw_on_image">在圖片上繪圖</string>
+  <string name="imggen_page_deprecated_warning">此功能已棄用，將在未來版本中移除。請改用 %1$s</string>
 </resources>

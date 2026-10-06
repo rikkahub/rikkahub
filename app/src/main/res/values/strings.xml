@@ -1559,4 +1559,5 @@
   <string name="chat_page_compress_pending_tools">Handle the pending tool calls first, or keep the recent messages that contain them</string>
   <string name="sketch">Sketch</string>
   <string name="sketch_draw_on_image">Draw on image</string>
+  <string name="imggen_page_deprecated_warning">This feature is deprecated and will be removed in a future version. Use %1$s instead</string>
 </resources>

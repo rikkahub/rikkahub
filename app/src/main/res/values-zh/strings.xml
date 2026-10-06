@@ -1561,4 +1561,5 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_compress_pending_tools">请先处理待审批的工具调用，或保留包含它的最近消息后再压缩</string>
   <string name="sketch">草图</string>
   <string name="sketch_draw_on_image">在图片上绘制</string>
+  <string name="imggen_page_deprecated_warning">此功能已弃用，并将在未来版本中移除。请改用 %1$s</string>
 </resources>

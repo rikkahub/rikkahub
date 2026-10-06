@@ -1561,4 +1561,5 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_page_compress_pending_tools">대기 중인 도구 호출을 먼저 처리하거나, 해당 호출이 포함된 최근 메시지를 유지하세요</string>
   <string name="sketch">스케치</string>
   <string name="sketch_draw_on_image">이미지에 그리기</string>
+  <string name="imggen_page_deprecated_warning">이 기능은 더 이상 사용되지 않으며 향후 버전에서 제거될 예정입니다. 대신 %1$s을(를) 사용하세요.</string>
 </resources>
