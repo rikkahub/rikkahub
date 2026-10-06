@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.theme
 
 import androidx.compose.material3.ColorScheme
+import dynamiccolor.ColorSpec
 import dynamiccolor.ColorSpecs
 import dynamiccolor.DynamicScheme
 import dynamiccolor.Variant
@@ -20,7 +21,7 @@ data class CustomTheme(
 ) {
     fun generateColorScheme(dark: Boolean): ColorScheme {
         val sourceHct = Hct.fromInt(primaryColorArgb.toInt())
-        val specVersion = DynamicScheme.DEFAULT_SPEC_VERSION
+        val specVersion = ColorSpec.SpecVersion.SPEC_2025
         val platform = DynamicScheme.DEFAULT_PLATFORM
         val contrastLevel = 0.0
         val colorSpec = ColorSpecs.get(specVersion)
