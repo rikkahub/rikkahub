@@ -1,27 +1,27 @@
 package me.rerere.rikkahub.ui.components.message
 
-import androidx.compose.foundation.LocalIndication
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ProvideTextStyle
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -30,10 +30,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastForEachIndexed
 import kotlinx.coroutines.delay
 import kotlinx.datetime.toJavaLocalDateTime
 import me.rerere.ai.core.MessageRole
@@ -90,109 +91,81 @@ fun ColumnScope.ChatMessageActionButtons(
     }
 
     FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        val actionIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-
-        Icon(
-            imageVector = HugeIcons.Copy01,
+        ChatMessageActionButton(
+            icon = HugeIcons.Copy01,
             contentDescription = stringResource(R.string.copy),
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable { context.copyMessageToClipboard(message) }
-                .padding(8.dp)
-                .size(16.dp),
-            tint = actionIconColor
+            onClick = { context.copyMessageToClipboard(message) },
         )
 
-        Icon(
-            imageVector = HugeIcons.Refresh03,
+        ChatMessageActionButton(
+            icon = HugeIcons.Refresh03,
             contentDescription = stringResource(R.string.regenerate),
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable {
-                    if (message.role == MessageRole.USER) {
-                        showRegenerateConfirm = true
-                    } else {
-                        onRegenerate()
-                    }
+            onClick = {
+                if (message.role == MessageRole.USER) {
+                    showRegenerateConfirm = true
+                } else {
+                    onRegenerate()
                 }
-                .padding(8.dp)
-                .size(16.dp),
-            tint = actionIconColor
+            },
         )
 
         if (message.role == MessageRole.ASSISTANT) {
             val tts = LocalTTSState.current
             val isSpeaking by tts.isSpeaking.collectAsState()
             val isAvailable by tts.isAvailable.collectAsState()
-            Icon(
-                imageVector = if (isSpeaking) HugeIcons.StopCircle else HugeIcons.VolumeHigh,
-                contentDescription = stringResource(R.string.tts),
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable(
-                        enabled = isAvailable,
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = LocalIndication.current,
-                        onClick = {
-                            if (!isSpeaking) {
-                                val text = message.toText()
-                                var textToSpeak = text
-                                if (settings.displaySetting.ttsOnlyReadQuoted) {
-                                    textToSpeak = textToSpeak.extractQuotedContentAsText() ?: textToSpeak
-                                }
-                                if (settings.displaySetting.ttsOnlyReadOutsideBrackets) {
-                                    textToSpeak = textToSpeak.removeBracketedContent() ?: textToSpeak
-                                }
-                                tts.speak(textToSpeak)
-                            } else {
-                                tts.stop()
+            // 朗读中换成带底色的方角按钮
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+                IconToggleButton(
+                    checked = isSpeaking,
+                    onCheckedChange = { speak ->
+                        if (speak) {
+                            val text = message.toText()
+                            var textToSpeak = text
+                            if (settings.displaySetting.ttsOnlyReadQuoted) {
+                                textToSpeak = textToSpeak.extractQuotedContentAsText() ?: textToSpeak
                             }
+                            if (settings.displaySetting.ttsOnlyReadOutsideBrackets) {
+                                textToSpeak = textToSpeak.removeBracketedContent() ?: textToSpeak
+                            }
+                            tts.speak(textToSpeak)
+                        } else {
+                            tts.stop()
                         }
+                    },
+                    shapes = IconButtonDefaults.toggleableShapes(),
+                    modifier = Modifier.size(IconButtonDefaults.extraSmallContainerSize()),
+                    enabled = isAvailable,
+                    colors = IconButtonDefaults.iconToggleButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    ),
+                ) {
+                    Icon(
+                        imageVector = if (isSpeaking) HugeIcons.StopCircle else HugeIcons.VolumeHigh,
+                        contentDescription = stringResource(R.string.tts),
+                        modifier = Modifier.size(ActionIconSize),
                     )
-                    .padding(8.dp)
-                    .size(16.dp),
-                tint = if (isAvailable) actionIconColor else actionIconColor.copy(alpha = 0.38f)
-            )
+                }
+            }
 
             // Translation button
             if (onTranslate != null) {
-                Icon(
-                    imageVector = HugeIcons.Translate,
+                ChatMessageActionButton(
+                    icon = HugeIcons.Translate,
                     contentDescription = stringResource(R.string.translate),
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = LocalIndication.current,
-                            onClick = {
-                                showTranslateDialog = true
-                            }
-                        )
-                        .padding(8.dp)
-                        .size(16.dp),
-                    tint = actionIconColor
+                    onClick = { showTranslateDialog = true },
                 )
             }
         }
 
-        Icon(
-            imageVector = HugeIcons.MoreVertical,
+        ChatMessageActionButton(
+            icon = HugeIcons.MoreVertical,
             contentDescription = stringResource(R.string.more_options),
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = LocalIndication.current,
-                    onClick = {
-                        onOpenActionSheet()
-                    }
-                )
-                .padding(8.dp)
-                .size(16.dp),
-            tint = actionIconColor
+            onClick = onOpenActionSheet,
         )
 
         ChatMessageBranchSelector(
@@ -206,6 +179,7 @@ fun ColumnScope.ChatMessageActionButtons(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 maxLines = 1,
+                modifier = Modifier.padding(horizontal = 4.dp),
             )
         }
     }
@@ -242,6 +216,44 @@ fun ColumnScope.ChatMessageActionButtons(
     )
 }
 
+private val ActionIconSize = 18.dp
+
+// 消息下方的小号图标按钮，按下时圆形收成方角
+@Composable
+internal fun ChatMessageActionButton(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    // 按钮排得密，不让 48dp 的最小触控尺寸把间距撑开
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+        IconButton(
+            onClick = onClick,
+            shapes = IconButtonDefaults.shapes(),
+            modifier = modifier.size(IconButtonDefaults.extraSmallContainerSize()),
+            enabled = enabled,
+            colors = IconButtonDefaults.iconButtonColors(
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = contentDescription,
+                modifier = Modifier.size(ActionIconSize),
+            )
+        }
+    }
+}
+
+private class MessageSheetAction(
+    val icon: ImageVector,
+    val label: String,
+    val destructive: Boolean = false,
+    val onClick: () -> Unit,
+)
+
 @Composable
 fun ChatMessageActionsSheet(
     message: UIMessage,
@@ -260,219 +272,77 @@ fun ChatMessageActionsSheet(
         onDismissRequest = onDismissRequest,
         sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)),
     ) {
+        // WebView Preview (only show if message has text content)
+        val hasTextContent = message.parts.filterIsInstance<UIMessagePart.Text>()
+            .any { it.text.isNotBlank() }
+        val actions = buildList {
+            add(MessageSheetAction(HugeIcons.TextSelection, stringResource(R.string.select_and_copy), onClick = onSelectAndCopy))
+            if (hasTextContent) {
+                add(MessageSheetAction(HugeIcons.WebDesign01, stringResource(R.string.render_with_webview), onClick = onWebViewPreview))
+            }
+            add(MessageSheetAction(HugeIcons.Edit01, stringResource(R.string.edit), onClick = onEdit))
+            add(MessageSheetAction(HugeIcons.Share04, stringResource(R.string.share), onClick = onShare))
+            add(MessageSheetAction(HugeIcons.GitFork, stringResource(R.string.create_fork), onClick = onFork))
+            if (onToggleFavorite != null) {
+                add(
+                    MessageSheetAction(
+                        icon = HugeIcons.FavouriteCircle,
+                        label = stringResource(
+                            if (isFavorite) R.string.chat_message_remove_favorite
+                            else R.string.chat_message_add_favorite
+                        ),
+                        onClick = onToggleFavorite,
+                    )
+                )
+            }
+            add(MessageSheetAction(HugeIcons.Delete01, stringResource(R.string.delete), destructive = true, onClick = onDelete))
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Select and Copy
-            Card(
-                onClick = {
-                    onDismissRequest()
-                    onSelectAndCopy()
-                },
-                shape = MaterialTheme.shapes.medium
+            Column(
+                verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.TextSelection,
-                        contentDescription = null,
-                        modifier = Modifier.padding(4.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.select_and_copy),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
-            }
-
-            // WebView Preview (only show if message has text content)
-            val hasTextContent = message.parts.filterIsInstance<UIMessagePart.Text>()
-                .any { it.text.isNotBlank() }
-
-            if (hasTextContent) {
-                Card(
-                    onClick = {
-                        onDismissRequest()
-                        onWebViewPreview()
-                    },
-                    shape = MaterialTheme.shapes.medium
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth()
+                actions.fastForEachIndexed { index, action ->
+                    SegmentedListItem(
+                        onClick = {
+                            onDismissRequest()
+                            action.onClick()
+                        },
+                        shapes = ListItemDefaults.segmentedShapes(index = index, count = actions.size),
+                        colors = if (action.destructive) {
+                            ListItemDefaults.segmentedColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                leadingContentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        } else {
+                            ListItemDefaults.segmentedColors()
+                        },
+                        leadingContent = {
+                            Icon(
+                                imageVector = action.icon,
+                                contentDescription = null,
+                            )
+                        },
                     ) {
-                        Icon(
-                            imageVector = HugeIcons.WebDesign01,
-                            contentDescription = null,
-                            modifier = Modifier.padding(4.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.render_with_webview),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
+                        Text(action.label)
                     }
-                }
-            }
-
-            // Edit
-            Card(
-                onClick = {
-                    onDismissRequest()
-                    onEdit()
-                },
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.Edit01,
-                        contentDescription = null,
-                        modifier = Modifier.padding(4.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.edit),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
-            }
-
-            // Share
-            Card(
-                onClick = {
-                    onDismissRequest()
-                    onShare()
-                },
-                shape = MaterialTheme.shapes.medium,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.Share04,
-                        contentDescription = null,
-                        modifier = Modifier.padding(4.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.share),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
-            }
-
-            // Create a Fork
-            Card(
-                onClick = {
-                    onDismissRequest()
-                    onFork()
-                },
-                shape = MaterialTheme.shapes.medium,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.GitFork,
-                        contentDescription = null,
-                        modifier = Modifier.padding(4.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.create_fork),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                }
-            }
-
-            if (onToggleFavorite != null) {
-                Card(
-                    onClick = {
-                        onDismissRequest()
-                        onToggleFavorite()
-                    },
-                    shape = MaterialTheme.shapes.medium,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.FavouriteCircle,
-                            contentDescription = null,
-                            modifier = Modifier.padding(4.dp)
-                        )
-                        Text(
-                            text = stringResource(
-                                if (isFavorite) R.string.chat_message_remove_favorite
-                                else R.string.chat_message_add_favorite
-                            ),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
-                }
-            }
-
-            // Delete
-            Card(
-                onClick = {
-                    onDismissRequest()
-                    onDelete()
-                },
-                shape = MaterialTheme.shapes.medium,
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth()
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.Delete01,
-                        contentDescription = null,
-                        modifier = Modifier.padding(4.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.delete),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
                 }
             }
 
             // Message Info
-            ProvideTextStyle(MaterialTheme.typography.labelSmall) {
-                Text(message.createdAt.toJavaLocalDateTime().toLocalString())
-                if (model != null) {
-                    Text(model.displayName)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                ProvideTextStyle(MaterialTheme.typography.labelSmall) {
+                    Text(message.createdAt.toJavaLocalDateTime().toLocalString())
+                    if (model != null) {
+                        Text(model.displayName)
+                    }
                 }
             }
         }
