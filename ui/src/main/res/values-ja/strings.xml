@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="sketch_dialog_undo">元に戻す</string>
+  <string name="sketch_dialog_redo">やり直す</string>
+  <string name="sketch_dialog_clear">クリア</string>
+  <string name="sketch_dialog_eraser">消しゴム</string>
+  <string name="sketch_dialog_discard_title">スケッチを破棄しますか？</string>
+  <string name="sketch_dialog_discard_message">描画内容は失われます。</string>
+  <string name="sketch_dialog_custom_color">カスタムカラー</string>
+  <string name="sketch_dialog_paper">キャンバス</string>
+  <string name="sketch_dialog_paper_auto">画面に合わせる</string>
+  <string name="sketch_dialog_choose_image">画像を選択</string>
+  <string name="sketch_dialog_remove_image">画像を削除</string>
+  <string name="sketch_dialog_image_load_failed">画像を読み込めませんでした</string>
+</resources>

@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="sketch_dialog_undo">復原</string>
+  <string name="sketch_dialog_redo">重做</string>
+  <string name="sketch_dialog_clear">清除</string>
+  <string name="sketch_dialog_eraser">橡皮擦</string>
+  <string name="sketch_dialog_discard_title">要捨棄草圖嗎？</string>
+  <string name="sketch_dialog_discard_message">您的繪圖將會遺失。</string>
+  <string name="sketch_dialog_custom_color">自訂顏色</string>
+  <string name="sketch_dialog_paper">畫布</string>
+  <string name="sketch_dialog_paper_auto">符合螢幕</string>
+  <string name="sketch_dialog_choose_image">選擇圖片</string>
+  <string name="sketch_dialog_remove_image">移除圖片</string>
+  <string name="sketch_dialog_image_load_failed">無法載入圖片</string>
+</resources>

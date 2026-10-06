@@ -34,6 +34,11 @@ modules:
     source_patterns:
       - "oauth/src/main/java/**/*.kt"
       - "oauth/src/main/AndroidManifest.xml"
+  - name: "ui"
+    res_path: "ui/src/main/res"
+    source_patterns:
+      - "ui/src/main/java/**/*.kt"
+      - "ui/src/main/AndroidManifest.xml"
   - name: "rag"
     res_path: "rag/src/main/res"
     source_patterns:

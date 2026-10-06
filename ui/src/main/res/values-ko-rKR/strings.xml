@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="sketch_dialog_undo">실행 취소</string>
+  <string name="sketch_dialog_redo">다시 실행</string>
+  <string name="sketch_dialog_clear">지우기</string>
+  <string name="sketch_dialog_eraser">지우개</string>
+  <string name="sketch_dialog_discard_title">스케치를 버리시겠습니까?</string>
+  <string name="sketch_dialog_discard_message">그림이 손실됩니다.</string>
+  <string name="sketch_dialog_custom_color">사용자 지정 색상</string>
+  <string name="sketch_dialog_paper">캔버스</string>
+  <string name="sketch_dialog_paper_auto">화면에 맞추기</string>
+  <string name="sketch_dialog_choose_image">이미지 선택</string>
+  <string name="sketch_dialog_remove_image">이미지 제거</string>
+  <string name="sketch_dialog_image_load_failed">이미지를 불러오지 못했습니다</string>
+</resources>

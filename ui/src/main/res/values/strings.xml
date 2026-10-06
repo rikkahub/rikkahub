@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="sketch_dialog_undo">Undo</string>
+  <string name="sketch_dialog_redo">Redo</string>
+  <string name="sketch_dialog_clear">Clear</string>
+  <string name="sketch_dialog_eraser">Eraser</string>
+  <string name="sketch_dialog_discard_title">Discard sketch?</string>
+  <string name="sketch_dialog_discard_message">Your drawing will be lost.</string>
+  <string name="sketch_dialog_custom_color">Custom color</string>
+  <string name="sketch_dialog_paper">Canvas</string>
+  <string name="sketch_dialog_paper_auto">Fit screen</string>
+  <string name="sketch_dialog_choose_image">Choose image</string>
+  <string name="sketch_dialog_remove_image">Remove image</string>
+  <string name="sketch_dialog_image_load_failed">Couldn\'t load the image</string>
+</resources>

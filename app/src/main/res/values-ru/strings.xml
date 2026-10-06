@@ -1563,4 +1563,6 @@
   <string name="chat_page_compress_blocked_generating">Остановите генерацию перед сжатием контекста</string>
   <string name="chat_page_compress_conversation_changed">Диалог изменился во время сжатия. Повторите попытку.</string>
   <string name="chat_page_compress_pending_tools">Сначала обработайте ожидающие вызовы инструментов или сохраните последние сообщения, содержащие их</string>
+  <string name="sketch">Эскиз</string>
+  <string name="sketch_draw_on_image">Рисовать на изображении</string>
 </resources>

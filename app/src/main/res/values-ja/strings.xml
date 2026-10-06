@@ -1563,4 +1563,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_compress_blocked_generating">コンテキストを圧縮する前に生成を停止してください</string>
   <string name="chat_page_compress_conversation_changed">圧縮中に会話が変更されました。もう一度お試しください。</string>
   <string name="chat_page_compress_pending_tools">保留中のツール呼び出しを先に処理するか、それらを含む最近のメッセージを保持してください</string>
+  <string name="sketch">スケッチ</string>
+  <string name="sketch_draw_on_image">画像に描画</string>
 </resources>

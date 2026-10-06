@@ -1561,4 +1561,6 @@
   <string name="chat_page_compress_blocked_generating">أوقف التوليد قبل ضغط السياق</string>
   <string name="chat_page_compress_conversation_changed">تغيّرت المحادثة أثناء الضغط. يرجى المحاولة مرة أخرى.</string>
   <string name="chat_page_compress_pending_tools">تعامل مع استدعاءات الأدوات المعلّقة أولًا، أو احتفظ بالرسائل الحديثة التي تحتوي عليها</string>
+  <string name="sketch">رسم</string>
+  <string name="sketch_draw_on_image">ارسم على الصورة</string>
 </resources>

@@ -58,6 +58,7 @@ import me.rerere.rikkahub.data.model.withRequired
 import me.rerere.rikkahub.data.repository.MediaCreationRepository
 import me.rerere.rikkahub.service.MediaCreationService
 import me.rerere.rikkahub.service.MediaCreationSubmission
+import me.rerere.ui.sketch.SketchResult
 import java.io.File
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.Uuid
@@ -263,6 +264,37 @@ class MediaCreationVM(
                 )
             }
             files.forEach { addAsset(MediaCreationAsset(repository.relativePath(it), type, role)) }
+        }
+    }
+
+    /**
+     * 把画板上画的图放进草稿。[replacing] 是画的时候垫在下面的那项素材，画好的图换掉它。
+     */
+    fun addSketch(result: SketchResult, role: ImageRole, replacing: MediaCreationAsset? = null) {
+        if (draftState.value == null) return
+        viewModelScope.launch {
+            val file = withContext(Dispatchers.IO) {
+                runCatching {
+                    val dir = repository.draftDir(sessionId).apply { mkdirs() }
+                    File(dir, "${Uuid.random()}.${result.extension}").also { it.writeBytes(result.encode()) }
+                }.onFailure {
+                    Log.e(TAG, "Failed to save sketch", it)
+                }.getOrNull()
+            }
+            if (file == null) {
+                _events.send(MediaCreationEvent.Error(context.getString(R.string.media_creation_page_asset_add_failed)))
+                return@launch
+            }
+            val asset = MediaCreationAsset(repository.relativePath(file), MediaCreationAssetType.IMAGE, role)
+            updateDraft { draft ->
+                // 原来那项在保存的这会儿被移走了的话，画好的图照常加进来
+                val assets = if (replacing != null && replacing in draft.assets) {
+                    draft.assets.map { if (it == replacing) asset else it }
+                } else {
+                    draft.assets + asset
+                }
+                draft.withAssets(assets)
+            }
         }
     }
 

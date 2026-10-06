@@ -1561,4 +1561,6 @@
   <string name="chat_page_compress_blocked_generating">Stop the generation before compressing the context</string>
   <string name="chat_page_compress_conversation_changed">The conversation changed during compression. Please try again.</string>
   <string name="chat_page_compress_pending_tools">Handle the pending tool calls first, or keep the recent messages that contain them</string>
+  <string name="sketch">Sketch</string>
+  <string name="sketch_draw_on_image">Draw on image</string>
 </resources>

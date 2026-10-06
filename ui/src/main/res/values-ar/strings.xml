@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="sketch_dialog_undo">تراجع</string>
+  <string name="sketch_dialog_redo">إعادة</string>
+  <string name="sketch_dialog_clear">مسح</string>
+  <string name="sketch_dialog_eraser">ممحاة</string>
+  <string name="sketch_dialog_discard_title">هل تريد تجاهل الرسم؟</string>
+  <string name="sketch_dialog_discard_message">سيُفقد رسمك.</string>
+  <string name="sketch_dialog_custom_color">لون مخصص</string>
+  <string name="sketch_dialog_paper">لوحة الرسم</string>
+  <string name="sketch_dialog_paper_auto">ملاءمة الشاشة</string>
+  <string name="sketch_dialog_choose_image">اختر صورة</string>
+  <string name="sketch_dialog_remove_image">إزالة الصورة</string>
+  <string name="sketch_dialog_image_load_failed">تعذّر تحميل الصورة</string>
+</resources>

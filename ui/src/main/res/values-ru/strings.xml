@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="sketch_dialog_undo">Отменить</string>
+  <string name="sketch_dialog_redo">Повторить</string>
+  <string name="sketch_dialog_clear">Очистить</string>
+  <string name="sketch_dialog_eraser">Ластик</string>
+  <string name="sketch_dialog_discard_title">Удалить набросок?</string>
+  <string name="sketch_dialog_discard_message">Ваш рисунок будет потерян.</string>
+  <string name="sketch_dialog_custom_color">Пользовательский цвет</string>
+  <string name="sketch_dialog_paper">Холст</string>
+  <string name="sketch_dialog_paper_auto">По размеру экрана</string>
+  <string name="sketch_dialog_choose_image">Выберите изображение</string>
+  <string name="sketch_dialog_remove_image">Удалить изображение</string>
+  <string name="sketch_dialog_image_load_failed">Не удалось загрузить изображение</string>
+</resources>

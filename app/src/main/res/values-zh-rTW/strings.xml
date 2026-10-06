@@ -1561,4 +1561,6 @@
   <string name="chat_page_compress_blocked_generating">請先停止生成，再壓縮上下文</string>
   <string name="chat_page_compress_conversation_changed">對話在壓縮期間已變更。請再試一次。</string>
   <string name="chat_page_compress_pending_tools">請先處理待處理的工具呼叫，或保留包含這些呼叫的近期訊息</string>
+  <string name="sketch">草圖</string>
+  <string name="sketch_draw_on_image">在圖片上繪圖</string>
 </resources>
