@@ -40,7 +40,10 @@ class MediaGenerationProviderSettingTest {
         assertEquals(setting.id, copy.id)
         assertEquals("sk-test", copy.apiKey)
         assertEquals("中转", copy.name)
-        assertEquals(listOf("gpt-image-2", "gpt-image-1"), copy.models.map { it.modelId })
+        assertEquals(
+            listOf("gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-1"),
+            copy.models.map { it.modelId }
+        )
     }
 
     @Test

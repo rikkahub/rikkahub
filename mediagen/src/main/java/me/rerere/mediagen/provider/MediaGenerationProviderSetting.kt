@@ -43,7 +43,8 @@ sealed class MediaGenerationProviderSetting {
         override val apiKey: String = "",
         override val baseUrl: String = "https://api.openai.com/v1",
         override val models: List<MediaGenerationModel> = listOf(
-            MediaGenerationModel(modelId = "gpt-image-2", kind = MediaKind.IMAGE),
+            MediaGenerationModel(modelId = "gpt-image-2.5-sunburst", kind = MediaKind.IMAGE),
+            MediaGenerationModel(modelId = "gpt-image-2.5-flare", kind = MediaKind.IMAGE),
         ),
     ) : MediaGenerationProviderSetting() {
         override val supportedKinds: Set<MediaKind>
@@ -79,7 +80,7 @@ sealed class MediaGenerationProviderSetting {
         val workspaceId: String = "",
         override val baseUrl: String = "https://$WORKSPACE_PLACEHOLDER.cn-beijing.maas.aliyuncs.com/api/v1",
         override val models: List<MediaGenerationModel> = listOf(
-            MediaGenerationModel(modelId = "wan2.7-image-pro", kind = MediaKind.IMAGE),
+            MediaGenerationModel(modelId = "qwen-image-3.0", kind = MediaKind.IMAGE),
             MediaGenerationModel(modelId = "wan3.0-video", kind = MediaKind.VIDEO),
         ),
     ) : MediaGenerationProviderSetting() {
@@ -116,7 +117,7 @@ sealed class MediaGenerationProviderSetting {
         override val baseUrl: String = "https://ark.cn-beijing.volces.com/api/v3",
         override val models: List<MediaGenerationModel> = listOf(
             MediaGenerationModel(modelId = "doubao-seedream-5-0-pro-260628", kind = MediaKind.IMAGE),
-            MediaGenerationModel(modelId = "doubao-seedance-2-0-260128", kind = MediaKind.VIDEO),
+            MediaGenerationModel(modelId = "doubao-seedance-2-5-260628", kind = MediaKind.VIDEO),
         ),
     ) : MediaGenerationProviderSetting() {
         override val supportedKinds: Set<MediaKind>
@@ -178,7 +179,8 @@ sealed class MediaGenerationProviderSetting {
         override val apiKey: String = "",
         override val baseUrl: String = "https://openrouter.ai/api/v1",
         override val models: List<MediaGenerationModel> = listOf(
-            MediaGenerationModel(modelId = "openai/gpt-image-2", kind = MediaKind.IMAGE),
+            MediaGenerationModel(modelId = "openai/gpt-image-2.5-sunburst", kind = MediaKind.IMAGE),
+            MediaGenerationModel(modelId = "openai/gpt-image-2.5-flare", kind = MediaKind.IMAGE),
             MediaGenerationModel(modelId = "google/veo-3.1", kind = MediaKind.VIDEO),
         ),
     ) : MediaGenerationProviderSetting() {

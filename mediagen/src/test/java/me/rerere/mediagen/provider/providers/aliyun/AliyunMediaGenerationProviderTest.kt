@@ -148,6 +148,18 @@ class AliyunMediaGenerationProviderTest {
         )
         assertEquals("1024x2048", qwenTask.outputs.single().resolution)
 
+        val qwen3Task = generation.parseTask(
+            parse(
+                """
+                {
+                  "output": {"choices": [{"message": {"content": [{"image": "https://oss.example.com/d.png"}]}}]},
+                  "usage": {"output_width": 1536, "output_height": 1024, "output_image_count": 1}
+                }
+                """.trimIndent()
+            ),
+        )
+        assertEquals("1536x1024", qwen3Task.outputs.single().resolution)
+
         val empty = generation.parseTask(parse("""{"output":{"choices":[]},"request_id":"r1"}"""))
         assertEquals(MediaGenerationStatus.FAILED, empty.status)
         assertEquals("Aliyun returned no image", empty.error?.message)

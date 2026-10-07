@@ -127,11 +127,11 @@ internal class AliyunImageGeneration(
     private fun String.toAliyunSize(): String =
         PIXEL_SIZE.matchEntire(trim())?.let { "${it.groupValues[1]}*${it.groupValues[2]}" } ?: this
 
-    // 万相返回 size（1488*704），千问返回 width / height
+    // 万相返回 size（1488*704），千问返回 width / height，千问 3.0 起是 output_width / output_height
     private fun JsonObject.resolution(): String? {
         string("size")?.let { return it.replace('*', 'x') }
-        val width = int("width") ?: return null
-        val height = int("height") ?: return null
+        val width = int("output_width") ?: int("width") ?: return null
+        val height = int("output_height") ?: int("height") ?: return null
         return "${width}x$height"
     }
 

@@ -124,7 +124,8 @@ setting 是厂商级的，只保存凭据（`apiKey` / `baseUrl`）和该厂商�
   `input.messages[0].content` 里，其余参数在 `parameters` 下；
 - 适用于 `wan2.7-image` / `wan2.6-image` 和 `qwen-image` 系列。只提供旧版异步接口的模型（如 `wan2.5-t2i-preview`）不支持；
 - `negative_prompt`、`thinking_mode`、`enable_sequential` 等走 `extraParameters`；
-- 响应里的 `usage.size`（`1488*704`）或 `width` / `height` 统一成 `1488x704` 放进 `output.resolution`。
+- 响应里的 `usage.size`（`1488*704`）、`width` / `height` 或千问 3.0 的 `output_width` / `output_height` 统一成
+  `1488x704` 放进 `output.resolution`。
 
 ### OpenRouter
 
@@ -213,6 +214,7 @@ manager.generate(
 - [阿里云百炼 Base URL 总览](https://help.aliyun.com/zh/model-studio/base-url)
 - [阿里云百炼万相图像生成与编辑 2.7](https://help.aliyun.com/zh/model-studio/wan-image-generation-and-editing-api-reference)
 - [阿里云百炼千问文生图](https://help.aliyun.com/zh/model-studio/qwen-image-api)
+- [阿里云百炼千问图像生成与编辑 3.0](https://help.aliyun.com/zh/model-studio/qwen-image-generation-and-editing-api-reference)
 - [阿里云百炼万相 3.0 视频](https://help.aliyun.com/zh/model-studio/wan3-video-generation-api-reference)
 - [火山方舟图片生成 API](https://www.volcengine.com/docs/82379/1541523)
 - [火山方舟视频生成 API](https://www.volcengine.com/docs/82379/1520757)

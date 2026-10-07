@@ -152,7 +152,11 @@ internal fun MediaGenerationProviderSetting.presets(kind: MediaKind): MediaCreat
     }
 
     is MediaGenerationProviderSetting.Aliyun -> when (kind) {
-        MediaKind.IMAGE -> MediaCreationPresets(resolutions = listOf("1K", "2K"), counts = IMAGE_COUNTS)
+        // 千问 3.0 的 size 只接受像素尺寸，万相 2.7 另外还接受 1K、2K 档位
+        MediaKind.IMAGE -> MediaCreationPresets(
+            resolutions = listOf("1024x1024", "1536x1024", "1024x1536", "2048x2048"),
+            counts = IMAGE_COUNTS,
+        )
         MediaKind.VIDEO -> MediaCreationPresets(
             resolutions = listOf("480P", "720P", "1080P"),
             aspectRatios = VIDEO_ASPECT_RATIOS,

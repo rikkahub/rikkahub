@@ -293,7 +293,7 @@ class ResponseAPI(
                             BuiltInTools.ImageGeneration -> {
                                 add(buildJsonObject {
                                     put("type", "image_generation")
-                                    put("model", "gpt-image-2")
+                                    put("model", "gpt-image-2.5-sunburst")
                                 })
                             }
                         }
