@@ -6,14 +6,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -38,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import java.security.MessageDigest
 import kotlin.math.abs
 import androidx.compose.ui.layout.ContentScale
@@ -96,6 +100,7 @@ fun UIAvatar(
     value: Avatar,
     modifier: Modifier = Modifier,
     loading: Boolean = false,
+    shape: Shape = rememberAvatarShape(loading),
     onUpdate: ((Avatar) -> Unit)? = null,
     onClick: (() -> Unit)? = null
 ) {
@@ -147,7 +152,7 @@ fun UIAvatar(
 
     Box(modifier = modifier.then(Modifier.size(32.dp))) {
         Surface(
-            shape = rememberAvatarShape(loading),
+            shape = shape,
             modifier = Modifier.fillMaxSize(),
             onClick = {
                 onClick?.invoke()
@@ -156,7 +161,7 @@ fun UIAvatar(
             tonalElevation = 4.dp,
             color = MaterialTheme.colorScheme.secondaryContainer,
         ) {
-            Box(
+            BoxWithConstraints(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.fillMaxSize()
             ) {
@@ -175,7 +180,8 @@ fun UIAvatar(
                             text = value.content,
                             autoSize = TextAutoSize.StepBased(
                                 minFontSize = 15.sp,
-                                maxFontSize = 30.sp,
+                                // 大头像里表情跟着放大，小头像保持原来的 30sp 上限
+                                maxFontSize = maxOf(30f, maxWidth.value * 0.45f).sp,
                             ),
                             lineHeight = 0.8.em,
                             textAlign = TextAlign.Center,
@@ -198,17 +204,17 @@ fun UIAvatar(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .size(14.dp)
-                    .clip(MaterialTheme.shapes.small)
+                    // 角标跟着头像一起变大，小头像保底 14dp
+                    .sizeIn(minWidth = 14.dp, minHeight = 14.dp)
+                    .fillMaxSize(0.3f)
+                    .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.tertiaryContainer),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = HugeIcons.Edit03,
                     contentDescription = "Edit",
-                    modifier = Modifier
-                        .size(10.dp)
-                        .padding(1.dp),
+                    modifier = Modifier.fillMaxSize(0.6f),
                     tint = MaterialTheme.colorScheme.onTertiaryContainer
                 )
             }

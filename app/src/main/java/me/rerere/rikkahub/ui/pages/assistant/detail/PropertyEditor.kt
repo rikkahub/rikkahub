@@ -1,16 +1,11 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Delete01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
@@ -21,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -69,21 +65,34 @@ private fun commonHeaderNames(input: String): List<String> {
 @Composable
 fun CustomHeaders(headers: List<CustomHeader>, onUpdate: (List<CustomHeader>) -> Unit) {
     Column(
-        modifier = Modifier.padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(stringResource(R.string.assistant_page_custom_headers))
-        Spacer(Modifier.height(8.dp))
+        SectionHeader(
+            title = stringResource(R.string.assistant_page_custom_headers),
+            action = {
+                SectionAddButton(
+                    onClick = {
+                        val updatedHeaders = headers.toMutableList()
+                        updatedHeaders.add(CustomHeader("", ""))
+                        onUpdate(updatedHeaders)
+                    },
+                    contentDescription = stringResource(R.string.assistant_page_add_header),
+                )
+            },
+        )
 
-        headers.forEachIndexed { index, header ->
-            var headerName by remember(header.name) { mutableStateOf(header.name) }
-            var headerValue by remember(header.value) { mutableStateOf(header.value) }
+        CardGroup {
+            headers.forEachIndexed { index, header ->
+                formItem {
+                    var headerName by remember(header.name) { mutableStateOf(header.name) }
+                    var headerValue by remember(header.value) { mutableStateOf(header.value) }
 
-            CardGroup {
-                item(
-                    supportingContent = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         Column(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             val updateHeaderName = { name: String ->
@@ -113,8 +122,6 @@ fun CustomHeaders(headers: List<CustomHeader>, onUpdate: (List<CustomHeader>) ->
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
-                    },
-                    trailingContent = {
                         IconButton(onClick = {
                             val updatedHeaders = headers.toMutableList()
                             updatedHeaders.removeAt(index)
@@ -125,23 +132,9 @@ fun CustomHeaders(headers: List<CustomHeader>, onUpdate: (List<CustomHeader>) ->
                                 contentDescription = stringResource(R.string.assistant_page_delete_header)
                             )
                         }
-                    },
-                    headlineContent = {},
-                )
+                    }
+                }
             }
-        }
-
-        Button(
-            onClick = {
-                val updatedHeaders = headers.toMutableList()
-                updatedHeaders.add(CustomHeader("", ""))
-                onUpdate(updatedHeaders)
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.assistant_page_add_header))
-            Spacer(Modifier.width(4.dp))
-            Text(stringResource(R.string.assistant_page_add_header))
         }
     }
 }
@@ -150,24 +143,37 @@ fun CustomHeaders(headers: List<CustomHeader>, onUpdate: (List<CustomHeader>) ->
 fun CustomBodies(customBodies: List<CustomBody>, onUpdate: (List<CustomBody>) -> Unit) {
     val context = LocalContext.current
     Column(
-        modifier = Modifier.padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(stringResource(R.string.assistant_page_custom_bodies))
-        Spacer(Modifier.height(8.dp))
+        SectionHeader(
+            title = stringResource(R.string.assistant_page_custom_bodies),
+            action = {
+                SectionAddButton(
+                    onClick = {
+                        val updatedBodies = customBodies.toMutableList()
+                        updatedBodies.add(CustomBody("", JsonPrimitive("")))
+                        onUpdate(updatedBodies)
+                    },
+                    contentDescription = stringResource(R.string.assistant_page_add_body),
+                )
+            },
+        )
 
-        customBodies.forEachIndexed { index, body ->
-            var bodyKey by remember(body.key) { mutableStateOf(body.key) }
-            var bodyValueString by remember(body.value) {
-                mutableStateOf(jsonLenient.encodeToString(JsonElement.serializer(), body.value))
-            }
-            var jsonParseError by remember { mutableStateOf<String?>(null) }
+        CardGroup {
+            customBodies.forEachIndexed { index, body ->
+                formItem {
+                    var bodyKey by remember(body.key) { mutableStateOf(body.key) }
+                    var bodyValueString by remember(body.value) {
+                        mutableStateOf(jsonLenient.encodeToString(JsonElement.serializer(), body.value))
+                    }
+                    var jsonParseError by remember { mutableStateOf<String?>(null) }
 
-            CardGroup {
-                item(
-                    supportingContent = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                         Column(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             OutlinedTextField(
@@ -218,8 +224,6 @@ fun CustomBodies(customBodies: List<CustomBody>, onUpdate: (List<CustomBody>) ->
                                 textStyle = LocalTextStyle.current.merge(fontFamily = JetbrainsMono),
                             )
                         }
-                    },
-                    trailingContent = {
                         IconButton(onClick = {
                             val updatedBodies = customBodies.toMutableList()
                             updatedBodies.removeAt(index)
@@ -230,23 +234,9 @@ fun CustomBodies(customBodies: List<CustomBody>, onUpdate: (List<CustomBody>) ->
                                 contentDescription = stringResource(R.string.assistant_page_delete_body)
                             )
                         }
-                    },
-                    headlineContent = {},
-                )
+                    }
+                }
             }
-        }
-
-        Button(
-            onClick = {
-                val updatedBodies = customBodies.toMutableList()
-                updatedBodies.add(CustomBody("", JsonPrimitive("")))
-                onUpdate(updatedBodies)
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.assistant_page_add_body))
-            Spacer(Modifier.width(4.dp))
-            Text(stringResource(R.string.assistant_page_add_body))
         }
     }
 }

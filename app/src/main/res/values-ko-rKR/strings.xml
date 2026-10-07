@@ -23,10 +23,6 @@
   <string name="assistant_extensions_page_empty_skills">사용 가능한 스킬이 없습니다. Extensions에서 설치하세요.</string>
   <string name="assistant_extensions_page_goto_extensions">확장 프로그램으로 이동</string>
   <string name="assistant_extensions_page_goto_prompts">프롬프트로 이동</string>
-  <string name="assistant_extensions_page_tab_lorebooks">Lorebooks</string>
-  <string name="assistant_extensions_page_tab_mode_injections">모드 주입</string>
-  <string name="assistant_extensions_page_tab_quick_messages">빠른 메시지</string>
-  <string name="assistant_extensions_page_tab_skills">스킬</string>
   <string name="assistant_extensions_page_title">확장 프로그램</string>
   <string name="assistant_importer_import_failed">가져오기 실패</string>
   <string name="assistant_importer_import_tavern_json">타번 캐릭터 카드 가져오기 (JSON)</string>
@@ -48,7 +44,6 @@
   <string name="assistant_page_background_opacity">배경 투명도</string>
   <string name="assistant_page_background_opacity_desc">채팅 배경 이미지의 표시 투명도를 조절합니다</string>
   <string name="assistant_page_background_opacity_value">투명도: %1$d%%</string>
-  <string name="assistant_page_background_set">배경 이미지 설정됨</string>
   <string name="assistant_page_balanced">균형</string>
   <string name="assistant_page_body_key">본문 키</string>
   <string name="assistant_page_body_value">본문 값 (JSON)</string>

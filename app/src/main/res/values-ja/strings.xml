@@ -23,10 +23,6 @@
   <string name="assistant_extensions_page_empty_skills">利用可能なスキルがありません。Extensionsでインストールしてください</string>
   <string name="assistant_extensions_page_goto_extensions">拡張機能へ移動</string>
   <string name="assistant_extensions_page_goto_prompts">プロンプトへ移動</string>
-  <string name="assistant_extensions_page_tab_lorebooks">Lorebooks</string>
-  <string name="assistant_extensions_page_tab_mode_injections">モードインジェクション</string>
-  <string name="assistant_extensions_page_tab_quick_messages">クイックメッセージ</string>
-  <string name="assistant_extensions_page_tab_skills">スキル</string>
   <string name="assistant_extensions_page_title">拡張機能</string>
   <string name="assistant_importer_import_failed">インポートに失敗しました</string>
   <string name="assistant_importer_import_tavern_json">タバーンキャラクターカードをインポート (JSON)</string>
@@ -48,7 +44,6 @@
   <string name="assistant_page_background_opacity">背景の透明度</string>
   <string name="assistant_page_background_opacity_desc">チャット背景画像の表示透明度を調整します</string>
   <string name="assistant_page_background_opacity_value">透明度: %1$d%%</string>
-  <string name="assistant_page_background_set">背景画像が設定されました</string>
   <string name="assistant_page_balanced">バランス</string>
   <string name="assistant_page_body_key">ボディキー</string>
   <string name="assistant_page_body_value">ボディ値 (JSON)</string>

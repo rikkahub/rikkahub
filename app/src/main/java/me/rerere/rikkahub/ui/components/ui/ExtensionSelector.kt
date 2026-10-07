@@ -9,6 +9,7 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -60,7 +61,7 @@ import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.components.ai.SkillsContent
 import org.koin.compose.koinInject
 
-private enum class ExtensionTab(val icon: ImageVector, @param:StringRes val label: Int) {
+internal enum class ExtensionTab(val icon: ImageVector, @param:StringRes val label: Int) {
     QUICK_MESSAGES(HugeIcons.Zap, R.string.extension_selector_tab_quick_messages),
     MODE_INJECTIONS(HugeIcons.MagicWand01, R.string.extension_selector_tab_mode_injections),
     LOREBOOKS(HugeIcons.Book01, R.string.extension_selector_tab_lorebooks),
@@ -211,9 +212,10 @@ fun ExtensionSelector(
 
 // 分类切换：可横向滚动的切换按钮，选中项带图标
 @Composable
-private fun ExtensionTabs(
+internal fun ExtensionTabs(
     pagerState: PagerState,
     modifier: Modifier = Modifier,
+    contentPadding: PaddingValues = PaddingValues(0.dp),
 ) {
     val scope = rememberCoroutineScope()
     val tabs = ExtensionTab.entries
@@ -230,6 +232,7 @@ private fun ExtensionTabs(
         modifier = modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
+            .padding(contentPadding)
             .selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {

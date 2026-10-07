@@ -23,10 +23,6 @@
   <string name="assistant_extensions_page_empty_skills">Навыки отсутствуют, установите один в Extensions</string>
   <string name="assistant_extensions_page_goto_extensions">Перейти к расширениям</string>
   <string name="assistant_extensions_page_goto_prompts">Перейти к подсказкам</string>
-  <string name="assistant_extensions_page_tab_lorebooks">Лорбуки</string>
-  <string name="assistant_extensions_page_tab_mode_injections">Внедрения режима</string>
-  <string name="assistant_extensions_page_tab_quick_messages">Быстрые сообщения</string>
-  <string name="assistant_extensions_page_tab_skills">Навыки</string>
   <string name="assistant_extensions_page_title">Расширения</string>
   <string name="assistant_importer_import_failed">Импорт не удался</string>
   <string name="assistant_importer_import_tavern_json">Импортировать карточку персонажа Tavern (JSON)</string>
@@ -48,7 +44,6 @@
   <string name="assistant_page_background_opacity">Прозрачность фона</string>
   <string name="assistant_page_background_opacity_desc">Настройте видимость фонового изображения чата</string>
   <string name="assistant_page_background_opacity_value">Прозрачность: %1$d%%</string>
-  <string name="assistant_page_background_set">Фоновое изображение установлено</string>
   <string name="assistant_page_balanced">Сбалансированный</string>
   <string name="assistant_page_body_key">Ключ тела</string>
   <string name="assistant_page_body_value">Значение тела (JSON)</string>

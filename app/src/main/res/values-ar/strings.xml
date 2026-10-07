@@ -23,10 +23,6 @@
   <string name="assistant_extensions_page_empty_skills">لا توجد مهارات متاحة، قم بتثبيت واحدة في الإضافات</string>
   <string name="assistant_extensions_page_goto_extensions">انتقل إلى الإضافات</string>
   <string name="assistant_extensions_page_goto_prompts">انتقل إلى المطالبات</string>
-  <string name="assistant_extensions_page_tab_lorebooks">كتب المعرفة</string>
-  <string name="assistant_extensions_page_tab_mode_injections">حقن الأوضاع</string>
-  <string name="assistant_extensions_page_tab_quick_messages">الرسائل السريعة</string>
-  <string name="assistant_extensions_page_tab_skills">المهارات</string>
   <string name="assistant_extensions_page_title">الإضافات</string>
   <string name="assistant_importer_import_failed">فشل الاستيراد</string>
   <string name="assistant_importer_import_tavern_json">استيراد بطاقة شخصية Tavern (JSON)</string>
@@ -48,7 +44,6 @@
   <string name="assistant_page_background_opacity">عتامة الخلفية</string>
   <string name="assistant_page_background_opacity_desc">اضبط ظهور صورة خلفية الدردشة</string>
   <string name="assistant_page_background_opacity_value">العتامة: %1$d%%</string>
-  <string name="assistant_page_background_set">تم تعيين صورة الخلفية</string>
   <string name="assistant_page_balanced">متوازن</string>
   <string name="assistant_page_body_key">مفتاح Body</string>
   <string name="assistant_page_body_value">قيمة Body (JSON)</string>

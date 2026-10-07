@@ -23,10 +23,6 @@
   <string name="assistant_extensions_page_empty_skills">No skills available, install one in Extensions</string>
   <string name="assistant_extensions_page_goto_extensions">Go to Extensions</string>
   <string name="assistant_extensions_page_goto_prompts">Go to Prompts</string>
-  <string name="assistant_extensions_page_tab_lorebooks">Lorebooks</string>
-  <string name="assistant_extensions_page_tab_mode_injections">Mode Injections</string>
-  <string name="assistant_extensions_page_tab_quick_messages">Quick Messages</string>
-  <string name="assistant_extensions_page_tab_skills">Skills</string>
   <string name="assistant_extensions_page_title">Extensions</string>
   <string name="assistant_importer_import_failed">Import failed</string>
   <string name="assistant_importer_import_tavern_json">Import Tavern Character Card (JSON)</string>
@@ -48,7 +44,6 @@
   <string name="assistant_page_background_opacity">Background Opacity</string>
   <string name="assistant_page_background_opacity_desc">Adjust chat background image visibility</string>
   <string name="assistant_page_background_opacity_value">Opacity: %1$d%%</string>
-  <string name="assistant_page_background_set">Background image set</string>
   <string name="assistant_page_balanced">Balanced</string>
   <string name="assistant_page_body_key">Body Key</string>
   <string name="assistant_page_body_value">Body Value (JSON)</string>

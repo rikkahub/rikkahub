@@ -23,10 +23,6 @@
   <string name="assistant_extensions_page_empty_skills">沒有可用的技能，請在 Extensions 中安裝一個</string>
   <string name="assistant_extensions_page_goto_extensions">前往擴充功能</string>
   <string name="assistant_extensions_page_goto_prompts">前往提示</string>
-  <string name="assistant_extensions_page_tab_lorebooks">Lorebooks</string>
-  <string name="assistant_extensions_page_tab_mode_injections">模式注入</string>
-  <string name="assistant_extensions_page_tab_quick_messages">快速訊息</string>
-  <string name="assistant_extensions_page_tab_skills">技能</string>
   <string name="assistant_extensions_page_title">擴充功能</string>
   <string name="assistant_importer_import_failed">匯入失敗</string>
   <string name="assistant_importer_import_tavern_json">匯入酒館角色卡 (JSON)</string>
@@ -48,7 +44,6 @@
   <string name="assistant_page_background_opacity">背景透明度</string>
   <string name="assistant_page_background_opacity_desc">調整聊天背景圖片顯示透明度</string>
   <string name="assistant_page_background_opacity_value">透明度：%1$d%%</string>
-  <string name="assistant_page_background_set">已設定背景圖片</string>
   <string name="assistant_page_balanced">平衡</string>
   <string name="assistant_page_body_key">Body Key</string>
   <string name="assistant_page_body_value">Body 值 (JSON)</string>
