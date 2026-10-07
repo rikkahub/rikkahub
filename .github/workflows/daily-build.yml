@@ -44,7 +44,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive # 拉取子模块
 
-      # 与 gradle/gradle-daemon-jvm.properties 要求的 JetBrains 21 保持一致，避免 Gradle 再去 foojay 下载 JDK
+      # 与 Android Studio 自带的 JetBrains Runtime 21 保持一致
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
