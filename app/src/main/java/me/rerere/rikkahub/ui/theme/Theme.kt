@@ -102,7 +102,7 @@ fun RikkahubTheme(
     CompositionLocalProvider(
         LocalDarkMode provides darkTheme,
         LocalExtendColors provides extendColors,
-        LocalOverscrollFactory provides null
+        // LocalOverscrollFactory provides null
     ) {
         MaterialExpressiveTheme(
             colorScheme = colorSchemeConverted,
