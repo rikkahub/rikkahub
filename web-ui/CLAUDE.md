@@ -136,7 +136,7 @@ app/
 | `MessageNode` | `MessageNode` | `app/src/main/java/me/rerere/rikkahub/data/model/Conversation.kt` |
 | `Conversation` | `Conversation` | `app/src/main/java/me/rerere/rikkahub/data/model/Conversation.kt` |
 | `ConversationDto` | `ConversationDto` | `app/src/main/java/me/rerere/rikkahub/web/dto/WebDto.kt` |
-| `Settings` | `Settings` | `app/src/main/java/me/rerere/rikkahub/data/datastore/PreferencesStore.kt` |
+| `Settings` | `Settings` | `app/src/main/java/me/rerere/rikkahub/data/datastore/Settings.kt` |
 
 **类型更新时需同步修改前后端！**
 
