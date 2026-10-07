@@ -24,7 +24,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.first
 import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.di.appModule
 import me.rerere.rikkahub.di.dataSourceModule
@@ -194,7 +193,7 @@ class RikkaHubApp : Application() {
         get<AppScope>().launch {
             runCatching {
                 delay(500)
-                val settings = get<SettingsStore>().settingsFlow.first { !it.init }
+                val settings = get<SettingsStore>().awaitLoaded()
                 if (settings.webServerEnabled) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                         ContextCompat.checkSelfPermission(

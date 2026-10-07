@@ -60,7 +60,6 @@ import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
 import me.rerere.rikkahub.data.ai.transformers.WorkspaceReminderTransformer
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
-import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -297,7 +296,7 @@ class ChatService(
     suspend fun initializeConversation(conversationId: Uuid) {
         sessionManager.withSession(conversationId) { session ->
             ensureInitialized(session)
-            settingsStore.updateAssistant(session.state.value.assistantId)
+            settingsStore.selectAssistant(session.state.value.assistantId)
         }
     }
 
@@ -305,8 +304,7 @@ class ChatService(
         session.initialize {
             loadConversation(session.id) ?: run {
                 // 新建对话, 并添加预设消息
-                // 当前助手要读已落盘的值：updateAssistant 只写盘，settingsFlow 要等解码完才跟上
-                val assistant = settingsStore.settingsFlowRaw.first().getCurrentAssistant()
+                val assistant = settingsStore.awaitLoaded().getCurrentAssistant()
                 Conversation.ofId(
                     id = session.id,
                     assistantId = assistant.id,
@@ -319,14 +317,11 @@ class ChatService(
     // 引入会话配置之前创建的会话没有固定配置，加载时按助手当前的值补上，之后不再随助手变化。
     private suspend fun loadConversation(conversationId: Uuid): Conversation? {
         val conversation = conversationRepo.getConversationById(conversationId) ?: return null
-        val bound = conversation.bindConfig(loadedSettings())
+        // settingsFlow 在启动初期还是占位值，固定配置必须基于真实设置
+        val bound = conversation.bindConfig(settingsStore.awaitLoaded())
         if (bound !== conversation) conversationRepo.updateConversationConfig(bound)
         return bound
     }
-
-    // settingsFlow 在启动初期还是占位值，固定配置必须基于真实设置。
-    // 不读 settingsFlowRaw：它落后于还没写完盘的修改，刚在新会话里切的模型会被漏掉。
-    private suspend fun loadedSettings(): Settings = settingsStore.settingsFlow.first { !it.init }
 
     // ---- 发送消息 ----
 
@@ -1247,7 +1242,7 @@ class ChatService(
         }
 
         // 会话落库即视为开始，此时把助手的配置固定到会话上
-        val settings = loadedSettings()
+        val settings = settingsStore.awaitLoaded()
         val updatedConversation = conversation.bindConfig(settings).fillModelSnapshots(settings)
         updateConversation(conversationId, updatedConversation)
 

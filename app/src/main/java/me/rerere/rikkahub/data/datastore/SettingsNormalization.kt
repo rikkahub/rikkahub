@@ -2,6 +2,10 @@ package me.rerere.rikkahub.data.datastore
 
 import me.rerere.ai.provider.ProviderSetting
 
+/** 读盘后和每次修改后都要过一遍，保证内存里的设置始终是规整的。 */
+internal fun Settings.normalized(): Settings =
+    withBuiltInDefaults().withoutInvalidReferences().withValuesInRange()
+
 // 补齐缺失的内置提供商/助手/TTS，内置提供商的描述信息始终以代码里的为准
 internal fun Settings.withBuiltInDefaults(): Settings {
     var providers = this.providers.ifEmpty { DEFAULT_PROVIDERS }.toMutableList()
@@ -46,6 +50,7 @@ internal fun Settings.withoutInvalidReferences(): Settings {
     val validModeInjectionIds = settings.modeInjections.map { it.id }.toSet()
     val validLorebookIds = settings.lorebooks.map { it.id }.toSet()
     val validQuickMessageIds = settings.quickMessages.map { it.id }.toSet()
+    val validModelIds by lazy { settings.providers.flatMap { it.models }.mapTo(HashSet()) { it.id } }
     val asrProviders = settings.asrProviders.distinctBy { it.id }
     return settings.copy(
         providers = settings.providers.distinctBy { it.id }.map { provider ->
@@ -88,11 +93,15 @@ internal fun Settings.withoutInvalidReferences(): Settings {
         selectedASRProviderId = settings.selectedASRProviderId
             ?.takeIf { id -> asrProviders.any { provider -> provider.id == id } }
             ?: asrProviders.firstOrNull()?.id,
-        favoriteModels = settings.favoriteModels.filter { uuid ->
-            settings.providers.flatMap { it.models }.any { it.id == uuid }
-        },
+        favoriteModels = settings.favoriteModels.filter { it in validModelIds },
         modeInjections = settings.modeInjections.distinctBy { it.id },
         lorebooks = settings.lorebooks.distinctBy { it.id },
         quickMessages = settings.quickMessages.distinctBy { it.id },
     )
 }
+
+// 把取值收回合法范围，比如删掉搜索服务后选中的下标可能越界
+private fun Settings.withValuesInRange(): Settings = copy(
+    searchServiceSelected = searchServiceSelected.coerceIn(0, (searchServices.size - 1).coerceAtLeast(0)),
+    defaultTTSPlaybackSpeed = defaultTTSPlaybackSpeed.coerceIn(0.5f, 2.0f),
+)

@@ -321,7 +321,7 @@ class ChatVM(
         viewModelScope.launch {
             chatService.moveConversationToAssistant(conversation.id, targetAssistantId)
             if (conversation.id == _conversationId) {
-                settingsStore.updateAssistant(targetAssistantId)
+                settingsStore.selectAssistant(targetAssistantId)
             }
         }
     }

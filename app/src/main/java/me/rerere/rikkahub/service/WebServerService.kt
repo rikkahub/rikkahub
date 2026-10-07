@@ -14,7 +14,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.WEB_SERVER_NOTIFICATION_CHANNEL_ID
@@ -70,7 +69,7 @@ class WebServerService : Service() {
                     return START_NOT_STICKY
                 }
                 serviceScope.launch {
-                    val settings = settingsStore.settingsFlowRaw.first()
+                    val settings = settingsStore.awaitLoaded()
                     if (settings.webServerEnabled) {
                         startObservingState()
                         webServerManager.start(

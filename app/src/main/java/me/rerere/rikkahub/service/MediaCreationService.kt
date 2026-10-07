@@ -17,7 +17,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -247,7 +246,7 @@ class MediaCreationService(
 
     private suspend fun generate(recordId: Uuid) {
         val record = repository.getRecord(recordId) ?: return
-        val setting = settingsStore.settingsFlow.first { !it.init }
+        val setting = settingsStore.awaitLoaded()
             .mediaGenerationProviders.find { it.id == record.providerId }
             ?: error(context.getString(R.string.media_creation_error_provider_deleted, record.providerName))
         val model = MediaGenerationModel(modelId = record.modelId, kind = record.kind)

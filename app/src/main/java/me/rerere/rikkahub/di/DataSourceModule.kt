@@ -5,6 +5,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.http.HttpHeaders
 import io.pebbletemplates.pebble.PebbleEngine
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
@@ -57,11 +58,17 @@ val dataSourceModule = module {
     }
 
     single {
-        PebbleEngine.Builder()
+        val engine = PebbleEngine.Builder()
             .loader(get<AssistantTemplateLoader>())
             .defaultLocale(Locale.getDefault())
             .autoEscaping(false)
             .build()
+        // 消息模板按助手 ID 缓存，内容取自设置，设置变了就让已编译的模板失效
+        val settingsStore = get<SettingsStore>()
+        get<AppScope>().launch {
+            settingsStore.settingsFlow.collect { engine.templateCache.invalidateAll() }
+        }
+        engine
     }
 
     single { TemplateTransformer(engine = get(), settingsStore = get()) }

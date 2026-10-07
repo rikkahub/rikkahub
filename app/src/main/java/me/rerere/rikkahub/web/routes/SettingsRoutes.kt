@@ -31,7 +31,7 @@ fun Route.settingsRoutes(
             val request = call.receive<UpdateAssistantRequest>()
             val assistantId = request.assistantId.toUuid("assistantId")
 
-            settingsStore.updateAssistant(assistantId)
+            settingsStore.selectAssistant(assistantId)
             call.respond(HttpStatusCode.OK, mapOf("status" to "ok"))
         }
 

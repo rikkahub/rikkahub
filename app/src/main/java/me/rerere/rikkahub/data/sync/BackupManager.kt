@@ -46,7 +46,7 @@ class BackupManager(
         val archive = File.createTempFile("backup_${timestamp}_", ".zip", context.cacheDir)
         val staging = Files.createTempDirectory(context.cacheDir.toPath(), "backup-").toFile()
         try {
-            val settings = settingsStore.settingsFlowRaw.first()
+            val settings = settingsStore.awaitLoaded()
             ZipOutputStream(FileOutputStream(archive)).use { zip ->
                 zip.putNextEntry(ZipEntry("settings.json"))
                 val settingsJson = json.encodeSettings(settings, settingsStore.launchCountFlow.first())

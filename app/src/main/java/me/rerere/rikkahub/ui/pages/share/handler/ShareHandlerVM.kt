@@ -17,6 +17,6 @@ class ShareHandlerVM(
         .stateIn(viewModelScope, SharingStarted.Eagerly, Settings.dummy())
 
     suspend fun updateAssistant(assistantId: Uuid) {
-        settingsStore.updateAssistant(assistantId)
+        settingsStore.selectAssistant(assistantId)
     }
 }

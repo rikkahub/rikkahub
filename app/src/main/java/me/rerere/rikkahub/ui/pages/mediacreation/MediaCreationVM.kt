@@ -184,7 +184,7 @@ class MediaCreationVM(
 
     private suspend fun load() {
         val session = repository.getSession(sessionId) ?: return
-        val providers = settingsStore.settingsFlow.first { !it.init }.mediaGenerationProviders
+        val providers = settingsStore.awaitLoaded().mediaGenerationProviders
         val assets = withContext(Dispatchers.IO) {
             val assets = session.draft.assets.filter { repository.resolve(it.path).isFile }
             // 草稿目录里不再被引用的文件是之前移除的素材
