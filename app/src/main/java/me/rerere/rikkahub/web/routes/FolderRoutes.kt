@@ -27,7 +27,7 @@ fun Route.folderRoutes(
     route("/folders") {
         // GET /api/folders - List folders of current assistant
         get {
-            val settings = settingsStore.settingsFlow.first()
+            val settings = settingsStore.awaitLoaded()
             val folders = folderRepo.getFoldersOfAssistant(settings.assistantId).first()
             call.respond(folders.map { it.toDto() })
         }
@@ -40,7 +40,7 @@ fun Route.folderRoutes(
                 throw BadRequestException("Folder name must not be blank")
             }
 
-            val settings = settingsStore.settingsFlow.first()
+            val settings = settingsStore.awaitLoaded()
             val folder = folderRepo.createFolder(settings.assistantId, name)
             call.respond(HttpStatusCode.Created, folder.toDto())
         }

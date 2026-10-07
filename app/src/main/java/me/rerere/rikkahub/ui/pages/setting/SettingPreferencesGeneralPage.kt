@@ -48,7 +48,7 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
 
     fun updateDisplaySetting(setting: DisplaySetting) {
         displaySetting = setting
-        vm.updateSettings(settings.copy(displaySetting = setting))
+        vm.updateSettings { it.copy(displaySetting = setting) }
     }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -308,9 +308,9 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                                             ttsPlaybackSpeed = (it * 10).roundToInt() / 10f
                                         },
                                         onValueChangeFinished = {
-                                            vm.updateSettings(
-                                                settings.copy(defaultTTSPlaybackSpeed = ttsPlaybackSpeed)
-                                            )
+                                            vm.updateSettings {
+                                                it.copy(defaultTTSPlaybackSpeed = ttsPlaybackSpeed)
+                                            }
                                         },
                                         valueRange = 0.5f..2.0f,
                                         steps = 14,

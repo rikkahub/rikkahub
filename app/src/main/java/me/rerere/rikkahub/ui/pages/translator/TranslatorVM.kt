@@ -45,9 +45,9 @@ class TranslatorVM(
     // 当前任务
     private var currentJob: Job? = null
 
-    fun updateSettings(settings: Settings) {
+    fun updateSettings(fn: (Settings) -> Settings) {
         viewModelScope.launch {
-            settingsStore.update(settings)
+            settingsStore.update(fn)
         }
     }
 

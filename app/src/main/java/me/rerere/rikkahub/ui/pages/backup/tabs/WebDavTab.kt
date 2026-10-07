@@ -84,7 +84,7 @@ fun WebDavTab(
     var isBackingUp by remember { mutableStateOf(false) }
 
     fun updateWebDavConfig(newConfig: WebDavConfig) {
-        vm.updateSettings(settings.copy(webDavConfig = newConfig))
+        vm.updateSettings { it.copy(webDavConfig = newConfig) }
     }
 
     val lastBackupText = if (settings.backupReminderConfig.lastBackupTime == 0L) {

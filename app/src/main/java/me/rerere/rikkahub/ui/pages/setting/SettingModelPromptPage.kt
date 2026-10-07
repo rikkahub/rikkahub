@@ -49,10 +49,10 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 title = stringResource(R.string.setting_model_page_prompt_translation),
                 promptDescription = stringResource(R.string.setting_model_page_translate_prompt_vars),
                 promptValue = settings.translatePrompt,
-                onPromptChange = { vm.updateSettings(settings.copy(translatePrompt = it)) },
-                onResetPrompt = { vm.updateSettings(settings.copy(translatePrompt = DEFAULT_TRANSLATION_PROMPT)) },
+                onPromptChange = { vm.updateSettings { latest -> latest.copy(translatePrompt = it) } },
+                onResetPrompt = { vm.updateSettings { it.copy(translatePrompt = DEFAULT_TRANSLATION_PROMPT) } },
                 reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
-                onUpdateReasoningLevel = { vm.updateSettings(settings.copy(translateThinkingBudget = it.budgetTokens)) },
+                onUpdateReasoningLevel = { vm.updateSettings { latest -> latest.copy(translateThinkingBudget = it.budgetTokens) } },
             )
         }
         item {
@@ -60,8 +60,8 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 title = stringResource(R.string.setting_model_page_prompt_title),
                 promptDescription = stringResource(R.string.setting_model_page_suggestion_prompt_vars),
                 promptValue = settings.titlePrompt,
-                onPromptChange = { vm.updateSettings(settings.copy(titlePrompt = it)) },
-                onResetPrompt = { vm.updateSettings(settings.copy(titlePrompt = DEFAULT_TITLE_PROMPT)) },
+                onPromptChange = { vm.updateSettings { latest -> latest.copy(titlePrompt = it) } },
+                onResetPrompt = { vm.updateSettings { it.copy(titlePrompt = DEFAULT_TITLE_PROMPT) } },
             )
         }
         item {
@@ -69,8 +69,8 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 title = stringResource(R.string.setting_model_page_prompt_suggestion),
                 promptDescription = stringResource(R.string.setting_model_page_suggestion_prompt_vars),
                 promptValue = settings.suggestionPrompt,
-                onPromptChange = { vm.updateSettings(settings.copy(suggestionPrompt = it)) },
-                onResetPrompt = { vm.updateSettings(settings.copy(suggestionPrompt = DEFAULT_SUGGESTION_PROMPT)) },
+                onPromptChange = { vm.updateSettings { latest -> latest.copy(suggestionPrompt = it) } },
+                onResetPrompt = { vm.updateSettings { it.copy(suggestionPrompt = DEFAULT_SUGGESTION_PROMPT) } },
             )
         }
         item {
@@ -78,8 +78,8 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 title = stringResource(R.string.setting_model_page_prompt_ocr),
                 promptDescription = stringResource(R.string.setting_model_page_ocr_prompt_vars),
                 promptValue = settings.ocrPrompt,
-                onPromptChange = { vm.updateSettings(settings.copy(ocrPrompt = it)) },
-                onResetPrompt = { vm.updateSettings(settings.copy(ocrPrompt = DEFAULT_OCR_PROMPT)) },
+                onPromptChange = { vm.updateSettings { latest -> latest.copy(ocrPrompt = it) } },
+                onResetPrompt = { vm.updateSettings { it.copy(ocrPrompt = DEFAULT_OCR_PROMPT) } },
             )
         }
         item {
@@ -87,8 +87,8 @@ internal fun PromptSettingsPage(settings: Settings, vm: SettingVM, contentPaddin
                 title = stringResource(R.string.setting_model_page_prompt_compress),
                 promptDescription = stringResource(R.string.setting_model_page_compress_prompt_vars),
                 promptValue = settings.compressPrompt,
-                onPromptChange = { vm.updateSettings(settings.copy(compressPrompt = it)) },
-                onResetPrompt = { vm.updateSettings(settings.copy(compressPrompt = DEFAULT_COMPRESS_PROMPT)) },
+                onPromptChange = { vm.updateSettings { latest -> latest.copy(compressPrompt = it) } },
+                onResetPrompt = { vm.updateSettings { it.copy(compressPrompt = DEFAULT_COMPRESS_PROMPT) } },
             )
         }
     }

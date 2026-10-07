@@ -104,12 +104,7 @@ class AssistantDetailVM(
 
     fun updateTags(tagIds: List<Uuid>, tags: List<Tag>) {
         viewModelScope.launch {
-            val settings = settings.value
-            settingsStore.update(
-                settings = settings.copy(
-                    assistantTags = tags
-                )
-            )
+            settingsStore.update { it.copy(assistantTags = tags) }
             update(
                 assistant.value.copy(
                     tags = tagIds.toList()
@@ -122,59 +117,63 @@ class AssistantDetailVM(
 
     fun cleanupUnusedTags() {
         viewModelScope.launch {
-            val settings = settings.value
-            val validTagIds = settings.assistantTags.map { it.id }.toSet()
+            settingsStore.update { settings ->
+                val validTagIds = settings.assistantTags.map { it.id }.toSet()
 
-            // 清理 assistant 中的无效 tag id
-            val cleanedAssistants = settings.assistants.map { assistant ->
-                val validTags = assistant.tags.filter { tagId ->
-                    validTagIds.contains(tagId)
+                // 清理 assistant 中的无效 tag id
+                val cleanedAssistants = settings.assistants.map { assistant ->
+                    val validTags = assistant.tags.filter { tagId ->
+                        validTagIds.contains(tagId)
+                    }
+                    if (validTags.size != assistant.tags.size) {
+                        assistant.copy(tags = validTags)
+                    } else {
+                        assistant
+                    }
                 }
-                if (validTags.size != assistant.tags.size) {
-                    assistant.copy(tags = validTags)
-                } else {
-                    assistant
+
+                // 获取清理后的 assistant 中使用的 tag id
+                val usedTagIds = cleanedAssistants.flatMap { it.tags }.toSet()
+
+                // 清理未使用的 tags
+                val cleanedTags = settings.assistantTags.filter { tag ->
+                    usedTagIds.contains(tag.id)
                 }
-            }
 
-            // 获取清理后的 assistant 中使用的 tag id
-            val usedTagIds = cleanedAssistants.flatMap { it.tags }.toSet()
+                // 检查是否需要更新
+                val needUpdateAssistants = cleanedAssistants != settings.assistants
+                val needUpdateTags = cleanedTags.size != settings.assistantTags.size
 
-            // 清理未使用的 tags
-            val cleanedTags = settings.assistantTags.filter { tag ->
-                usedTagIds.contains(tag.id)
-            }
-
-            // 检查是否需要更新
-            val needUpdateAssistants = cleanedAssistants != settings.assistants
-            val needUpdateTags = cleanedTags.size != settings.assistantTags.size
-
-            if (needUpdateAssistants || needUpdateTags) {
-                settingsStore.update(
-                    settings = settings.copy(
+                if (needUpdateAssistants || needUpdateTags) {
+                    settings.copy(
                         assistants = cleanedAssistants,
                         assistantTags = cleanedTags
                     )
-                )
+                } else {
+                    settings
+                }
             }
         }
     }
 
     fun update(assistant: Assistant) {
         viewModelScope.launch {
-            val settings = settings.value
-            settingsStore.update(
-                settings = settings.copy(
+            var replaced: Assistant? = null
+            settingsStore.update { settings ->
+                settings.copy(
                     assistants = settings.assistants.map {
                         if (it.id == assistant.id) {
-                            checkAvatarDelete(old = it, new = assistant) // 删除旧头像
-                            checkBackgroundDelete(old = it, new = assistant) // 删除旧背景
+                            replaced = it
                             assistant
                         } else {
                             it
                         }
                     })
-            )
+            }
+            replaced?.let { old ->
+                checkAvatarDelete(old = old, new = assistant) // 删除旧头像
+                checkBackgroundDelete(old = old, new = assistant) // 删除旧背景
+            }
         }
     }
 

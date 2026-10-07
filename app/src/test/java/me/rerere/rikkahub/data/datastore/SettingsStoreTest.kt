@@ -63,9 +63,9 @@ class SettingsStoreTest {
 
         val typing = "hello world".map { char ->
             // 和输入框一样：在当前显示的值后面追加，不等上一次写盘
-            val shown = store.settingsFlow.value
+            val shown = store.settingsFlow.value.titlePrompt
             launch(start = CoroutineStart.UNDISPATCHED) {
-                store.update(shown.copy(titlePrompt = shown.titlePrompt + char))
+                store.update { it.copy(titlePrompt = shown + char) }
             }.also { delay(5) }
         }
         typing.joinAll()
@@ -169,6 +169,16 @@ class SettingsStoreTest {
         val stored = reopened()
         assertEquals("custom", stored.titlePrompt)
         assertEquals(assistantId, stored.assistantId)
+    }
+
+    @Test
+    fun `first launch offers the built-in mode injection until the user removes it`() = runBlocking {
+        val store = open().store
+        assertEquals(DEFAULT_MODE_INJECTIONS, store.awaitLoaded().modeInjections)
+
+        store.update { it.copy(modeInjections = emptyList()) }
+
+        assertEquals(emptyList<Any>(), reopened().modeInjections)
     }
 
     @Test

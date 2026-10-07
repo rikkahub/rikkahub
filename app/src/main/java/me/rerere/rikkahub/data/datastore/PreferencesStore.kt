@@ -238,16 +238,13 @@ class SettingsStore internal constructor(
         .map { preferences -> preferences[LAUNCH_COUNT] ?: 0 }
         .distinctUntilChanged()
 
-    /** 用整份快照替换当前设置。快照之外的并发修改会被它覆盖，能用 lambda 版本时优先用那个。 */
-    suspend fun update(settings: Settings) {
-        update { settings }
-    }
-
     /**
      * 基于最新的设置做修改，返回时修改已经落盘。
      *
      * [fn] 拿到的一定是最新值，并发的修改不会互相覆盖。修改在调用线程上立即生效（[settingsFlow] 马上能读到），
      * 落盘在后台进行，调用方中途被取消也会写完。
+     *
+     * 没有「传入整份设置」的版本：界面手里的那份可能已经过时，整份写回会盖掉这期间别处的修改。
      */
     suspend fun update(fn: (Settings) -> Settings) {
         // 加载完成前的修改等真实设置出来再应用。已加载时这里不能挂起：输入框、slider 依赖修改同步生效

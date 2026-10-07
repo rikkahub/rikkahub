@@ -71,7 +71,7 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
 
     fun updateDisplaySetting(setting: DisplaySetting) {
         displaySetting = setting
-        vm.updateSettings(settings.copy(displaySetting = setting))
+        vm.updateSettings { it.copy(displaySetting = setting) }
     }
 
     val importSuccessMsg = stringResource(R.string.setting_display_page_custom_font_import_success)

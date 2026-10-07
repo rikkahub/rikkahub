@@ -97,14 +97,14 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
     if (!settings.init && launchCount > 100 && (launchCount - settings.sponsorAlertDismissedAt) >= 50) {
         AlertDialog(
             onDismissRequest = {
-                vm.updateSettings(settings.copy(sponsorAlertDismissedAt = launchCount))
+                vm.updateSettings { it.copy(sponsorAlertDismissedAt = launchCount) }
             },
             icon = { Icon(HugeIcons.WavingHand01, null) },
             title = { Text(stringResource(R.string.setting_page_sponsor_alert_title)) },
             text = { Text(stringResource(R.string.setting_page_sponsor_alert_desc)) },
             confirmButton = {
                 Button(onClick = {
-                    vm.updateSettings(settings.copy(sponsorAlertDismissedAt = launchCount))
+                    vm.updateSettings { it.copy(sponsorAlertDismissedAt = launchCount) }
                     navController.navigate(Screen.SettingDonate)
                 }) {
                     Text(stringResource(R.string.setting_page_sponsor_alert_confirm))
@@ -112,7 +112,7 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
             },
             dismissButton = {
                 TextButton(onClick = {
-                    vm.updateSettings(settings.copy(sponsorAlertDismissedAt = launchCount))
+                    vm.updateSettings { it.copy(sponsorAlertDismissedAt = launchCount) }
                 }) {
                     Text(stringResource(R.string.setting_page_sponsor_alert_dismiss))
                 }

@@ -162,7 +162,7 @@ fun SettingThemePage(vm: SettingVM = koinViewModel()) {
                                 themeId = settings.themeId,
                                 modifier = Modifier.fillMaxWidth(),
                                 onChangeTheme = {
-                                    vm.updateSettings(settings.copy(themeId = it))
+                                    vm.updateSettings { latest -> latest.copy(themeId = it) }
                                 }
                             )
                         }
@@ -226,7 +226,7 @@ fun SettingThemePage(vm: SettingVM = koinViewModel()) {
                         theme = theme,
                         isSelected = settings.themeId == theme.id,
                         onSelect = {
-                            vm.updateSettings(settings.copy(themeId = theme.id))
+                            vm.updateSettings { it.copy(themeId = theme.id) }
                         },
                         onExport = {
                             val json = themeJson.encodeToString(theme)
@@ -260,12 +260,12 @@ fun SettingThemePage(vm: SettingVM = koinViewModel()) {
                 } else {
                     settings.customThemes + theme
                 }
-                vm.updateSettings(
-                    settings.copy(
+                vm.updateSettings {
+                    it.copy(
                         customThemes = newThemes,
                         themeId = theme.id
                     )
-                )
+                }
                 showEditSheet = false
             }
         )
@@ -276,12 +276,12 @@ fun SettingThemePage(vm: SettingVM = koinViewModel()) {
             onDismiss = { showImportDialog = false },
             onImport = { theme ->
                 val importedTheme = theme.copy(id = Uuid.random().toString())
-                vm.updateSettings(
-                    settings.copy(
-                        customThemes = settings.customThemes + importedTheme,
+                vm.updateSettings {
+                    it.copy(
+                        customThemes = it.customThemes + importedTheme,
                         themeId = importedTheme.id
                     )
-                )
+                }
                 showImportDialog = false
                 toaster.show(importSuccessMsg, type = ToastType.Success)
             }
@@ -297,7 +297,7 @@ fun SettingThemePage(vm: SettingVM = koinViewModel()) {
             deletingTheme?.let { theme ->
                 val newThemes = settings.customThemes.filter { it.id != theme.id }
                 val newThemeId = if (settings.themeId == theme.id) "sakura" else settings.themeId
-                vm.updateSettings(settings.copy(customThemes = newThemes, themeId = newThemeId))
+                vm.updateSettings { it.copy(customThemes = newThemes, themeId = newThemeId) }
             }
             deletingTheme = null
         },

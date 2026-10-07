@@ -12,16 +12,16 @@ import me.rerere.rikkahub.data.model.Assistant
 @Composable
 fun rememberAssistantState(
     settings: Settings,
-    onUpdateSettings: (Settings) -> Unit
+    onSelectAssistant: (Assistant) -> Unit
 ): AssistantState {
-    return remember(settings, onUpdateSettings) {
-        AssistantState(settings, onUpdateSettings)
+    return remember(settings, onSelectAssistant) {
+        AssistantState(settings, onSelectAssistant)
     }
 }
 
 class AssistantState(
     private val settings: Settings,
-    private val onUpdateSettings: (Settings) -> Unit
+    private val onSelectAssistant: (Assistant) -> Unit
 ) {
     private var _currentAssistant by mutableStateOf(
         settings.getCurrentAssistant()
@@ -29,10 +29,6 @@ class AssistantState(
     val currentAssistant get() = _currentAssistant
 
     fun setSelectAssistant(assistant: Assistant) {
-        onUpdateSettings(
-            settings.copy(
-                assistantId = assistant.id
-            )
-        )
+        onSelectAssistant(assistant)
     }
 }

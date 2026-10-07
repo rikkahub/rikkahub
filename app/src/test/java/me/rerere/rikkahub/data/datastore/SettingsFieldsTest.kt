@@ -70,7 +70,7 @@ class SettingsFieldsTest {
         assertEquals(DEFAULT_AUTO_MODEL_ID, settings.fastModelId)
         assertEquals(DEFAULT_AUTO_MODEL_ID, settings.translateModeId)
         assertEquals(DEFAULT_AUTO_MODEL_ID, settings.compressModelId)
-        assertEquals(emptyList<PromptInjection.ModeInjection>(), settings.modeInjections)
+        assertEquals(DEFAULT_MODE_INJECTIONS, settings.modeInjections)
         assertEquals(DEFAULT_ASSISTANT_ID, settings.assistantId)
         assertEquals(DEFAULT_SYSTEM_TTS_ID, settings.selectedTTSProviderId)
         assertEquals(null, settings.selectedASRProviderId)
@@ -153,7 +153,7 @@ private val SAMPLE = Settings(
     defaultTTSPlaybackSpeed = 1.5f,
     asrProviders = listOf(ASRProviderSetting.OpenAIRealtime(id = id(11))),
     selectedASRProviderId = id(11),
-    modeInjections = DEFAULT_MODE_INJECTIONS,
+    modeInjections = listOf(PromptInjection.ModeInjection(id = id(14), name = "mode")),
     lorebooks = listOf(Lorebook(id = id(12), name = "lorebook")),
     quickMessages = listOf(QuickMessage(id = id(13), title = "hi")),
     webServerEnabled = true,

@@ -153,15 +153,13 @@ internal val SETTINGS_FIELDS: List<SettingsField<*, *>> = with(SettingsStore) {
 /**
  * key 不存在时各字段的取值。
  *
- * 有两处和 [Settings] 构造函数的默认值不同，沿用的是一直以来的读取行为：
- * 没选过的模型指向内置的自动模型，模式注入默认为空。
+ * 和 [Settings] 构造函数的默认值只有一处不同，沿用的是一直以来的读取行为：没选过的模型指向内置的自动模型。
  */
 private val MISSING_KEY_DEFAULTS = Settings(
     chatModelId = DEFAULT_AUTO_MODEL_ID,
     fastModelId = DEFAULT_AUTO_MODEL_ID,
     translateModeId = DEFAULT_AUTO_MODEL_ID,
     compressModelId = DEFAULT_AUTO_MODEL_ID,
-    modeInjections = emptyList(),
 )
 
 /** 解码出的是盘上的原始值，还没有经过 [normalized]。 */

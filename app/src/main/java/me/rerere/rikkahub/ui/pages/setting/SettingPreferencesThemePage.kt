@@ -75,7 +75,7 @@ fun SettingPreferencesThemePage(vm: SettingVM = koinViewModel()) {
                         trailingContent = {
                             Switch(
                                 checked = settings.dynamicColor,
-                                onCheckedChange = { vm.updateSettings(settings.copy(dynamicColor = it)) },
+                                onCheckedChange = { vm.updateSettings { latest -> latest.copy(dynamicColor = it) } },
                             )
                         },
                     )

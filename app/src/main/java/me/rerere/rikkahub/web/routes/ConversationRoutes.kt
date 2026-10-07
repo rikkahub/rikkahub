@@ -56,7 +56,7 @@ fun Route.conversationRoutes(
     route("/conversations") {
         // GET /api/conversations - List conversations of current assistant
         get {
-            val settings = settingsStore.settingsFlow.first()
+            val settings = settingsStore.awaitLoaded()
             val generationJobs = chatService.getConversationJobs().first()
             val conversations = conversationRepo
                 .getConversationsOfAssistant(settings.assistantId)
@@ -70,7 +70,7 @@ fun Route.conversationRoutes(
         // GET /api/conversations/paged?offset=0&limit=20&query=foo&folderId=none|<uuid>
         // folderId: absent = all conversations, "none" = unfiled only, <uuid> = that folder
         get("/paged") {
-            val settings = settingsStore.settingsFlow.first()
+            val settings = settingsStore.awaitLoaded()
             val offset = call.request.queryParameters["offset"]?.toIntOrNull() ?: 0
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
             val query = call.request.queryParameters["query"]?.trim().orEmpty()
@@ -206,7 +206,7 @@ fun Route.conversationRoutes(
             }
 
             val (modeInjectionIds, lorebookIds) = validateConversationInjectionIds(
-                settings = settingsStore.settingsFlow.first(),
+                settings = settingsStore.awaitLoaded(),
                 modeInjectionIds = request.modeInjectionIds,
                 lorebookIds = request.lorebookIds,
             )
@@ -227,7 +227,7 @@ fun Route.conversationRoutes(
                 throw NotFoundException("Conversation not found")
             }
 
-            val settings = settingsStore.settingsFlow.first()
+            val settings = settingsStore.awaitLoaded()
             val chatModelId = request.chatModelId?.toUuid("chatModelId")?.also { modelId ->
                 val model = settings.findModelById(modelId)
                     ?: throw NotFoundException("Model not found")
@@ -264,7 +264,7 @@ fun Route.conversationRoutes(
             val request = call.receive<MoveConversationRequest>()
             val targetAssistantId = request.assistantId.toUuid("assistant id")
 
-            val settings = settingsStore.settingsFlow.first()
+            val settings = settingsStore.awaitLoaded()
             if (settings.assistants.none { it.id == targetAssistantId }) {
                 throw BadRequestException("Assistant not found")
             }
