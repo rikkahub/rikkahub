@@ -44,11 +44,15 @@ jobs:
           fetch-depth: 0
           submodules: recursive # 拉取子模块
 
+      # 与 gradle/gradle-daemon-jvm.properties 要求的 JetBrains 21 保持一致，避免 Gradle 再去 foojay 下载 JDK
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: 'jetbrains'
+          java-version: '21'
+        env:
+          # jetbrains 安装器通过 GitHub API 查询版本，带上 token 避免被限流
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # web 模块的 preBuild 会执行 `pnpm run build` 构建前端，必须准备好 Node + pnpm
       - name: Set up pnpm
