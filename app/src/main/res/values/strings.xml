@@ -1558,4 +1558,7 @@
   <string name="sketch">Sketch</string>
   <string name="sketch_draw_on_image">Draw on image</string>
   <string name="imggen_page_deprecated_warning">This feature is deprecated and will be removed in a future version. Use %1$s instead</string>
+  <string name="chat_page_sort_conversations">Sort chats</string>
+  <string name="chat_page_sort_by_update_time">By last updated</string>
+  <string name="chat_page_sort_by_create_time">By date created</string>
 </resources>

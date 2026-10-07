@@ -666,6 +666,15 @@ enum class BackgroundEffectType {
 }
 
 @Serializable
+enum class ConversationSortOrder {
+    @SerialName("update_time")
+    UPDATE_TIME,
+
+    @SerialName("create_time")
+    CREATE_TIME,
+}
+
+@Serializable
 data class DisplaySetting(
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
@@ -705,6 +714,7 @@ data class DisplaySetting(
     val chatCustomFontName: String = "",
     val enableVolumeKeyScroll: Boolean = false,
     val volumeKeyScrollRatio: Float = 1.0f,
+    val conversationSortOrder: ConversationSortOrder = ConversationSortOrder.UPDATE_TIME,
 )
 
 @Serializable

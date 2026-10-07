@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.datastore.ConversationSortOrder
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.fts.MessageSearchSort
@@ -76,26 +77,42 @@ class ConversationRepository(
         }
     }
 
-    fun getUnfiledConversationsOfAssistantPaging(assistantId: Uuid): Flow<PagingData<Conversation>> = Pager(
+    fun getUnfiledConversationsOfAssistantPaging(
+        assistantId: Uuid,
+        sortOrder: ConversationSortOrder = ConversationSortOrder.UPDATE_TIME,
+    ): Flow<PagingData<Conversation>> = Pager(
         config = PagingConfig(
             pageSize = PAGE_SIZE,
             initialLoadSize = INITIAL_LOAD_SIZE,
             enablePlaceholders = false
         ),
-        pagingSourceFactory = { conversationDAO.getUnfiledConversationsOfAssistantPaging(assistantId.toString()) }
+        pagingSourceFactory = {
+            conversationDAO.getUnfiledConversationsOfAssistantPaging(
+                assistantId = assistantId.toString(),
+                sortByCreateTime = sortOrder == ConversationSortOrder.CREATE_TIME,
+            )
+        }
     ).flow.map { pagingData ->
         pagingData.map { entity ->
             conversationSummaryToConversation(entity)
         }
     }
 
-    fun getConversationsOfFolderPaging(folderId: Uuid): Flow<PagingData<Conversation>> = Pager(
+    fun getConversationsOfFolderPaging(
+        folderId: Uuid,
+        sortOrder: ConversationSortOrder = ConversationSortOrder.UPDATE_TIME,
+    ): Flow<PagingData<Conversation>> = Pager(
         config = PagingConfig(
             pageSize = PAGE_SIZE,
             initialLoadSize = INITIAL_LOAD_SIZE,
             enablePlaceholders = false
         ),
-        pagingSourceFactory = { conversationDAO.getConversationsOfFolderPaging(folderId.toString()) }
+        pagingSourceFactory = {
+            conversationDAO.getConversationsOfFolderPaging(
+                folderId = folderId.toString(),
+                sortByCreateTime = sortOrder == ConversationSortOrder.CREATE_TIME,
+            )
+        }
     ).flow.map { pagingData ->
         pagingData.map { entity ->
             conversationSummaryToConversation(entity)
@@ -173,7 +190,7 @@ class ConversationRepository(
         offset: Int,
         limit: Int,
     ): ConversationPageResult = loadConversationPage(
-        conversationDAO.getUnfiledConversationsOfAssistantPaging(assistantId.toString()),
+        conversationDAO.getUnfiledConversationsOfAssistantPaging(assistantId.toString(), sortByCreateTime = false),
         offset,
         limit,
     )
@@ -183,7 +200,7 @@ class ConversationRepository(
         offset: Int,
         limit: Int,
     ): ConversationPageResult = loadConversationPage(
-        conversationDAO.getConversationsOfFolderPaging(folderId.toString()),
+        conversationDAO.getConversationsOfFolderPaging(folderId.toString(), sortByCreateTime = false),
         offset,
         limit,
     )

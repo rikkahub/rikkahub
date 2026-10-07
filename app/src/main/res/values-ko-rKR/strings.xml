@@ -1560,4 +1560,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="sketch">스케치</string>
   <string name="sketch_draw_on_image">이미지에 그리기</string>
   <string name="imggen_page_deprecated_warning">이 기능은 더 이상 사용되지 않으며 향후 버전에서 제거될 예정입니다. 대신 %1$s을(를) 사용하세요.</string>
+  <string name="chat_page_sort_conversations">채팅 정렬</string>
+  <string name="chat_page_sort_by_update_time">최근 업데이트순</string>
+  <string name="chat_page_sort_by_create_time">생성 날짜순</string>
 </resources>

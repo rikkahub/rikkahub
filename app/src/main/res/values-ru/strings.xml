@@ -1560,4 +1560,7 @@
   <string name="sketch">Эскиз</string>
   <string name="sketch_draw_on_image">Рисовать на изображении</string>
   <string name="imggen_page_deprecated_warning">Эта функция устарела и будет удалена в будущей версии. Вместо неё используйте %1$s</string>
+  <string name="chat_page_sort_conversations">Сортировать чаты</string>
+  <string name="chat_page_sort_by_update_time">По последнему обновлению</string>
+  <string name="chat_page_sort_by_create_time">По дате создания</string>
 </resources>

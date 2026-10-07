@@ -1558,4 +1558,7 @@
   <string name="sketch">رسم</string>
   <string name="sketch_draw_on_image">ارسم على الصورة</string>
   <string name="imggen_page_deprecated_warning">هذه الميزة مهملة وستُزال في إصدار مستقبلي. استخدم %1$s بدلاً من ذلك</string>
+  <string name="chat_page_sort_conversations">ترتيب المحادثات</string>
+  <string name="chat_page_sort_by_update_time">حسب آخر تحديث</string>
+  <string name="chat_page_sort_by_create_time">حسب تاريخ الإنشاء</string>
 </resources>

@@ -67,10 +67,13 @@ import me.rerere.hugeicons.stroke.LookTop
 import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Sorting01
 import me.rerere.hugeicons.stroke.Sparkles
+import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.hugeicons.stroke.TransactionHistory
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.datastore.ConversationSortOrder
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
@@ -254,14 +257,38 @@ fun ChatDrawerContent(
 
             DrawerActions(navController = navController)
 
-            FolderBar(
-                folders = folders,
-                selectedFolderId = selectedFolderId,
-                onSelect = { drawerVm.selectFolder(it) },
-                onCreate = { showCreateFolderDialog = true },
-                onRename = { folderToRename = it },
-                onDelete = { folderToDelete = it },
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FolderBar(
+                    folders = folders,
+                    selectedFolderId = selectedFolderId,
+                    onSelect = { drawerVm.selectFolder(it) },
+                    onCreate = { showCreateFolderDialog = true },
+                    onRename = { folderToRename = it },
+                    onDelete = { folderToDelete = it },
+                    modifier = Modifier.weight(1f),
+                )
+
+                ConversationSortButton(
+                    sortOrder = settings.displaySetting.conversationSortOrder,
+                    onSortOrderChange = { sortOrder ->
+                        vm.updateSettings(
+                            settings.copy(
+                                displaySetting = settings.displaySetting.copy(
+                                    conversationSortOrder = sortOrder
+                                )
+                            )
+                        )
+                        // 换排序后回到顶部，否则会停留在原来滚动到的位置
+                        scope.launch { conversationListState.scrollToItem(0) }
+                    },
+                )
+            }
 
             ConversationList(
                 current = current,
@@ -792,11 +819,10 @@ private fun FolderBar(
     onCreate: () -> Unit,
     onRename: (Folder) -> Unit,
     onDelete: (Folder) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     LazyRow(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 4.dp),
+        modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -849,6 +875,61 @@ private fun FolderBar(
                 onClick = onCreate,
                 onLongClick = {},
             )
+        }
+    }
+}
+
+@Composable
+private fun ConversationSortButton(
+    sortOrder: ConversationSortOrder,
+    onSortOrderChange: (ConversationSortOrder) -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    Box {
+        Surface(
+            onClick = { menuExpanded = true },
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+        ) {
+            Tooltip(
+                tooltip = { Text(stringResource(R.string.chat_page_sort_conversations)) }
+            ) {
+                Icon(
+                    imageVector = HugeIcons.Sorting01,
+                    contentDescription = stringResource(R.string.chat_page_sort_conversations),
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .size(16.dp),
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+        ) {
+            ConversationSortOrder.entries.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            stringResource(
+                                when (option) {
+                                    ConversationSortOrder.UPDATE_TIME -> R.string.chat_page_sort_by_update_time
+                                    ConversationSortOrder.CREATE_TIME -> R.string.chat_page_sort_by_create_time
+                                }
+                            )
+                        )
+                    },
+                    trailingIcon = {
+                        if (option == sortOrder) {
+                            Icon(HugeIcons.Tick01, null, modifier = Modifier.size(18.dp))
+                        }
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        if (option != sortOrder) onSortOrderChange(option)
+                    }
+                )
+            }
         }
     }
 }
