@@ -5,10 +5,13 @@ import androidx.core.net.toUri
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.provider.Model
+import me.rerere.ai.ui.ModelSnapshot
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.util.InstantSerializer
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANT_ID
+import me.rerere.rikkahub.data.datastore.Settings
 import java.time.Instant
 import kotlin.uuid.Uuid
 
@@ -136,6 +139,27 @@ fun UIMessage.toMessageNode(): MessageNode {
         messages = listOf(this),
         selectIndex = 0
     )
+}
+
+/**
+ * 给还没有模型快照的消息补上快照，没有可补的消息时原样返回。
+ *
+ * 在保存会话时调用：新生成的消息由此带上快照，引入快照之前的旧消息也在会话下次保存时补齐。
+ * 模型已经被删除的旧消息无从补起，保持原样。
+ */
+fun Conversation.fillModelSnapshots(settings: Settings): Conversation {
+    val models = settings.providers.flatMap { it.models }.associateBy { it.id }
+    val nodes = messageNodes.map { node ->
+        val messages = node.messages.map { it.fillModelSnapshot(models) }
+        if (messages == node.messages) node else node.copy(messages = messages)
+    }
+    return if (nodes == messageNodes) this else copy(messageNodes = nodes)
+}
+
+private fun UIMessage.fillModelSnapshot(models: Map<Uuid, Model>): UIMessage {
+    if (modelSnapshot != null) return this
+    val model = modelId?.let(models::get) ?: return this
+    return copy(modelSnapshot = ModelSnapshot(modelId = model.modelId, displayName = model.displayName))
 }
 
 /** 本地附件引用，包含工具结果中的嵌套附件。 */

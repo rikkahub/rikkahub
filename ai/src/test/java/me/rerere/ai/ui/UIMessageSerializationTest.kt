@@ -1,9 +1,12 @@
 package me.rerere.ai.ui
 
 import kotlinx.serialization.json.Json
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.uuid.Uuid
 
 class UIMessageSerializationTest {
 
@@ -33,5 +36,27 @@ class UIMessageSerializationTest {
         val legacy = """{"id":"00000000-0000-0000-0000-000000000001","role":"user","parts":[]}"""
 
         assertFalse(Json.decodeFromString<UIMessage>(legacy).isContextCheckpoint)
+    }
+
+    @Test
+    fun `model snapshot survives serialization`() {
+        val modelId = Uuid.random()
+        val message = UIMessage.assistant("hi").copy(
+            modelId = modelId,
+            modelSnapshot = ModelSnapshot(modelId = "gpt-test", displayName = "GPT Test"),
+        )
+
+        val shown = Json.decodeFromString<UIMessage>(Json.encodeToString(message)).snapshotModel()
+
+        assertEquals(modelId, shown?.id)
+        assertEquals("gpt-test", shown?.modelId)
+        assertEquals("GPT Test", shown?.displayName)
+    }
+
+    @Test
+    fun `messages stored before model snapshots existed decode without one`() {
+        val legacy = """{"role":"assistant","parts":[],"modelId":"00000000-0000-0000-0000-000000000001"}"""
+
+        assertNull(Json.decodeFromString<UIMessage>(legacy).snapshotModel())
     }
 }

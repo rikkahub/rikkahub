@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.Transient
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.provider.Model
 import me.rerere.ai.util.json
 import kotlin.math.roundToInt
 import kotlin.time.Clock
@@ -23,6 +24,8 @@ data class UIMessage(
         .toLocalDateTime(TimeZone.currentSystemDefault()),
     val finishedAt: LocalDateTime? = null,
     val modelId: Uuid? = null,
+    // 模型名称的快照：modelId 指向的模型被删除后，靠它继续显示这条消息由谁生成
+    val modelSnapshot: ModelSnapshot? = null,
     val usage: TokenUsage? = null,
     val translation: String? = null,
     // 压缩检查点：此消息是它之前全部历史的摘要，组装请求时从最后一个检查点开始取
@@ -72,6 +75,17 @@ data class UIMessage(
         it is UIMessagePart.Image && it.url.startsWith("data:")
     }
 
+    /**
+     * 用快照还原出一个只用于展示名称和图标的 [Model]
+     *
+     * 仅在按 [modelId] 查不到模型时使用；其余字段都是默认值，不能拿它发起请求。
+     */
+    fun snapshotModel(): Model? {
+        val id = modelId ?: return null
+        val snapshot = modelSnapshot ?: return null
+        return Model(modelId = snapshot.modelId, displayName = snapshot.displayName, id = id)
+    }
+
     companion object {
         fun system(prompt: String) = UIMessage(
             role = MessageRole.SYSTEM,
@@ -89,6 +103,15 @@ data class UIMessage(
         )
     }
 }
+
+/**
+ * 消息上保存的模型名称快照, 对应 [Model.modelId] 与 [Model.displayName]
+ */
+@Serializable
+data class ModelSnapshot(
+    val modelId: String,
+    val displayName: String,
+)
 
 /**
  * 判断这个消息是否有有任何用户**可输入内容**

@@ -72,6 +72,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.bindConfig
+import me.rerere.rikkahub.data.model.fillModelSnapshots
 import me.rerere.rikkahub.data.model.getAssistantOf
 import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.model.getStoredAssistantOf
@@ -1246,7 +1247,8 @@ class ChatService(
         }
 
         // 会话落库即视为开始，此时把助手的配置固定到会话上
-        val updatedConversation = conversation.bindConfig(loadedSettings())
+        val settings = loadedSettings()
+        val updatedConversation = conversation.bindConfig(settings).fillModelSnapshots(settings)
         updateConversation(conversationId, updatedConversation)
 
         if (!exists) {
@@ -1346,7 +1348,8 @@ class ChatService(
             }
             edited = true
 
-            if (node.messages.first { it.id == messageId }.isContextCheckpoint) {
+            val original = node.messages.first { it.id == messageId }
+            if (original.isContextCheckpoint) {
                 // 摘要原地改写：新建分支会丢掉检查点标记，删除摘要时还会露出旧版本。
                 return@map node.copy(
                     messages = node.messages.map { message ->
@@ -1359,6 +1362,9 @@ class ChatService(
                 messages = node.messages + UIMessage(
                     role = node.role,
                     parts = processedParts,
+                    // 编辑的是原消息的内容，来源仍是生成它的模型
+                    modelId = original.modelId,
+                    modelSnapshot = original.modelSnapshot,
                 ),
                 selectIndex = node.messages.size
             )

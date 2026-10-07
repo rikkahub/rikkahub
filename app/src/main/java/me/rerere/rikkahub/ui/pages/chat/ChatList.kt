@@ -339,7 +339,8 @@ private fun ChatListNormal(
                     ) {
                         ChatMessage(
                             node = node,
-                            model = node.currentMessage.modelId?.let(modelById::get),
+                            model = node.currentMessage.modelId?.let(modelById::get)
+                                ?: node.currentMessage.snapshotModel(),
                             assistant = assistant,
                             loading = loading && index == lastMessageIndex,
                             onRegenerate = {

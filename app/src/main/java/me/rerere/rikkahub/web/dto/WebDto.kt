@@ -3,6 +3,7 @@ package me.rerere.rikkahub.web.dto
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
+import me.rerere.ai.ui.ModelSnapshot
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -225,6 +226,7 @@ data class MessageDto(
     val createdAt: String,
     val finishedAt: String? = null,
     val modelId: String? = null,
+    val modelSnapshot: ModelSnapshot? = null,
     val usage: TokenUsage? = null,
     val translation: String? = null,
     val isContextCheckpoint: Boolean = false,
@@ -366,6 +368,7 @@ fun UIMessage.toDto() = MessageDto(
     createdAt = createdAt.toString(),
     finishedAt = finishedAt?.toString(),
     modelId = modelId?.toString(),
+    modelSnapshot = modelSnapshot,
     usage = usage,
     translation = translation,
     isContextCheckpoint = isContextCheckpoint,
