@@ -31,6 +31,13 @@ class DebugVM(
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, Settings.dummy())
 
+    val launchCount: StateFlow<Int> = settingsStore.launchCountFlow
+        .stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
+    fun setLaunchCount(count: Int) {
+        viewModelScope.launch { settingsStore.setLaunchCount(count) }
+    }
+
     private val _conversationCount = MutableStateFlow<Int?>(null)
     val conversationCount: StateFlow<Int?> = _conversationCount.asStateFlow()
 

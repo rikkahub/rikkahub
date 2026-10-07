@@ -16,8 +16,11 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStoreFile
 import io.pebbletemplates.pebble.PebbleEngine
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
@@ -192,13 +195,19 @@ class SettingsStore(
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
 
         // Uses the same DataStore singleton without starting settings flows or requiring Koin.
-        internal suspend fun restoreBeforeInitialization(context: Context, settings: Settings) {
+        internal suspend fun restoreBeforeInitialization(context: Context, settings: Settings, launchCount: Int) {
             require(!settings.init) { "Cannot restore uninitialized settings" }
-            persistSettings(context.settingsStore, settings)
+            persistSettings(context.settingsStore, settings, launchCount)
         }
 
-        private suspend fun persistSettings(dataStore: DataStore<Preferences>, settings: Settings) {
+        // launchCount 只在恢复备份时传入，和设置在同一次写入里落盘
+        private suspend fun persistSettings(
+            dataStore: DataStore<Preferences>,
+            settings: Settings,
+            launchCount: Int? = null,
+        ) {
             dataStore.edit { preferences ->
+                if (launchCount != null) preferences[LAUNCH_COUNT] = launchCount
                 preferences[DYNAMIC_COLOR] = settings.dynamicColor
                 preferences[THEME_ID] = settings.themeId
                 preferences[CUSTOM_THEMES] = JsonInstant.encodeToString(settings.customThemes)
@@ -255,7 +264,6 @@ class SettingsStore(
                 preferences[WEB_SERVER_ACCESS_PASSWORD] = settings.webServerAccessPassword
                 preferences[WEB_SERVER_LOCALHOST_ONLY] = settings.webServerLocalhostOnly
                 preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
-                preferences[LAUNCH_COUNT] = settings.launchCount
                 preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
             }
         }
@@ -265,7 +273,7 @@ class SettingsStore(
 
     // 读取失败时绝不能回退为空配置, 否则默认值会被当成用户数据写回, 覆盖全部设置
     // 偶发 IO 错误重试, 仍失败则向上抛出 (文件损坏由 corruptionHandler 处理)
-    val settingsFlowRaw = dataStore.data
+    private val preferencesFlow = dataStore.data
         .retryWhen { cause, attempt ->
             val shouldRetry = cause is IOException && cause !is CorruptionException && attempt < READ_MAX_RETRIES
             if (shouldRetry) {
@@ -273,7 +281,12 @@ class SettingsStore(
                 delay((100L shl attempt.toInt()).milliseconds)
             }
             shouldRetry
-        }.map { preferences ->
+        }
+
+    val settingsFlowRaw = preferencesFlow
+        // 启动次数不属于 Settings，只有它变化时不用重新解码
+        .distinctUntilChanged { old, new -> old.asMap() - LAUNCH_COUNT == new.asMap() - LAUNCH_COUNT }
+        .map { preferences ->
             Settings(
                 favoriteModels = preferences[FAVORITE_MODELS]?.let {
                     JsonInstant.decodeFromString(it)
@@ -361,7 +374,6 @@ class SettingsStore(
                 backupReminderConfig = preferences[BACKUP_REMINDER_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: BackupReminderConfig(),
-                launchCount = preferences[LAUNCH_COUNT] ?: 0,
                 sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
             )
         }
@@ -459,9 +471,18 @@ class SettingsStore(
         .onEach {
             get<PebbleEngine>().templateCache.invalidateAll()
         }
+        // 整份设置的 JSON 解码很重，收集方多在主线程，不能让它们各自在自己的线程上解码
+        .flowOn(Dispatchers.Default)
+
+    // 启动次数每次启动都会变，不放进 Settings，否则刚进入应用所有读取设置的界面就要重组一遍
+    val launchCountFlow: Flow<Int> = preferencesFlow
+        .map { preferences -> preferences[LAUNCH_COUNT] ?: 0 }
+        .distinctUntilChanged()
 
     val settingsFlow = settingsFlowRaw
         .distinctUntilChanged()
+        // 整份设置的比较也留在后台线程
+        .flowOn(Dispatchers.Default)
         .toMutableStateFlow(scope, Settings.dummy())
 
     suspend fun update(settings: Settings) {
@@ -485,6 +506,10 @@ class SettingsStore(
             preferences[LAUNCH_COUNT] = count
         }
         return count
+    }
+
+    suspend fun setLaunchCount(count: Int) {
+        dataStore.edit { preferences -> preferences[LAUNCH_COUNT] = count }
     }
 
     suspend fun updateAssistant(assistantId: Uuid) {
@@ -625,7 +650,6 @@ data class Settings(
     val webServerAccessPassword: String = "",
     val webServerLocalhostOnly: Boolean = false,
     val backupReminderConfig: BackupReminderConfig = BackupReminderConfig(),
-    val launchCount: Int = 0,
     val sponsorAlertDismissedAt: Int = 0,
 ) {
     companion object {

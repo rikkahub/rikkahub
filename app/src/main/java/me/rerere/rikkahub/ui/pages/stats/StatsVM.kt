@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
@@ -67,7 +68,7 @@ class StatsVM(
         // json_each() + json_extract() 在 SQLite 侧聚合，不再加载完整 JSON 到 Kotlin
         val tokenStats = messageNodeDAO.getTokenStats()
 
-        val launchCount = settingsStore.settingsFlow.value.launchCount
+        val launchCount = settingsStore.launchCountFlow.first()
 
         _stats.value = AppStats(
             isLoading = false,

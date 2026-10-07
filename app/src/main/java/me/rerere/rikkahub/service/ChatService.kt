@@ -305,8 +305,8 @@ class ChatService(
         session.initialize {
             loadConversation(session.id) ?: run {
                 // 新建对话, 并添加预设消息
-                val currentSettings = settingsStore.settingsFlowRaw.first()
-                val assistant = currentSettings.getCurrentAssistant()
+                // 当前助手要读已落盘的值：updateAssistant 只写盘，settingsFlow 要等解码完才跟上
+                val assistant = settingsStore.settingsFlowRaw.first().getCurrentAssistant()
                 Conversation.ofId(
                     id = session.id,
                     assistantId = assistant.id,
