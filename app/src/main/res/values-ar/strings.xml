@@ -1263,7 +1263,6 @@
   <string name="tool_ui_delete_failed">تعذّر حذف %s</string>
   <string name="tool_ui_delete_file">حذف: %s</string>
   <string name="tool_ui_delete_file_default">حذف ملف</string>
-  <string name="tool_ui_delete_memory">حذف الذاكرة</string>
   <string name="tool_ui_deleted">تم حذف %s</string>
   <string name="tool_ui_edit_file">تعديل: %s</string>
   <string name="tool_ui_edit_file_default">تعديل ملف</string>

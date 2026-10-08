@@ -51,6 +51,9 @@ class SkillFrontmatter internal constructor(
 ) {
     operator fun get(key: String): String? = values[key] as? String
 
+    fun getList(key: String): List<String> =
+        (values[key] as? List<*>).orEmpty().mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }
+
     companion object {
         internal val Empty = SkillFrontmatter(emptyMap())
     }
