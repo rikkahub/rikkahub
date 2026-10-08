@@ -12,10 +12,14 @@ import androidx.compose.runtime.tooling.ComposeStackTraceMode
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ProcessLifecycleOwner
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.Lifecycle
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import me.rerere.rikkahub.data.ai.MemoryConsolidationScheduler
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.files.SkillManager
 import java.io.File
@@ -52,6 +56,7 @@ const val CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID = "chat_completed"
 const val CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID = "chat_live_update"
 const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 const val MEDIA_CREATION_NOTIFICATION_CHANNEL_ID = "media_creation"
+const val MEMORY_DREAM_NOTIFICATION_CHANNEL_ID = "memory_dream"
 
 class RikkaHubApp : Application() {
     override fun onCreate() {
@@ -105,6 +110,7 @@ class RikkaHubApp : Application() {
 
         // Resume media generations interrupted by the last process death
         resumeMediaCreations()
+        resumeMemoryConsolidation()
 
         // Increment launch count
         incrementLaunchCount()
@@ -118,6 +124,22 @@ class RikkaHubApp : Application() {
                 get<MediaCreationService>().resumePending()
             }.onFailure {
                 Log.e(TAG, "resumeMediaCreations failed", it)
+            }
+        }
+    }
+
+    private fun resumeMemoryConsolidation() {
+        // 应用被切走后进程随时可能被冻结，等不到空闲计时结束，这时直接开始整理
+        ProcessLifecycleOwner.get().lifecycle.addObserver(
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_STOP) get<MemoryConsolidationScheduler>().onAppHidden()
+            }
+        )
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                get<MemoryConsolidationScheduler>().resumePending()
+            }.onFailure {
+                Log.e(TAG, "resumeMemoryConsolidation failed", it)
             }
         }
     }
@@ -262,6 +284,14 @@ class RikkaHubApp : Application() {
             .setName(getString(R.string.media_creation_title))
             .build()
         notificationManager.createNotificationChannel(mediaCreationChannel)
+
+        val memoryDreamChannel = NotificationChannelCompat
+            .Builder(MEMORY_DREAM_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
+            .setName("Dreaming")
+            .setVibrationEnabled(false)
+            .setShowBadge(false)
+            .build()
+        notificationManager.createNotificationChannel(memoryDreamChannel)
     }
 
     override fun onTerminate() {

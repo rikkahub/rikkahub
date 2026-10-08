@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.di
 
 import android.content.Context
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ProcessLifecycleOwner
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.http.HttpHeaders
@@ -16,6 +18,7 @@ import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.GenerationLoop
+import me.rerere.rikkahub.data.ai.MemoryConsolidationScheduler
 import me.rerere.rikkahub.data.ai.MemoryConsolidator
 import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
@@ -37,6 +40,7 @@ import me.rerere.rikkahub.data.sync.S3Sync
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import me.rerere.rikkahub.service.memoryDreamKeepAlive
 import org.koin.dsl.module
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -83,6 +87,10 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().memoryConsolidationDao()
+    }
+
+    single {
         get<AppDatabase>().genMediaDao()
     }
 
@@ -125,7 +133,22 @@ val dataSourceModule = module {
     }
 
     single {
-        MemoryConsolidator(generationLoop = get(), memoryRepository = get())
+        MemoryConsolidator(
+            generationLoop = get(),
+            memoryRepository = get(),
+            conversationRepo = get(),
+            consolidationDao = get(),
+            settingsStore = get(),
+        )
+    }
+
+    single {
+        MemoryConsolidationScheduler(
+            scope = get<AppScope>(),
+            worker = get<MemoryConsolidator>(),
+            keepAlive = memoryDreamKeepAlive(get<Context>()),
+            isAppVisible = { ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) },
+        )
     }
 
     single {

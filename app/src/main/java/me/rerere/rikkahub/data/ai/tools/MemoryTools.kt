@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -203,6 +204,16 @@ fun buildMemoryTools(
         }
     ),
 )
+
+/** 这次工具调用成功改动的记忆文件路径；不是写工具、还没执行或写入被拒绝时返回 null */
+fun UIMessagePart.Tool.memoryWritePath(): String? {
+    if (toolName !in MemoryToolNames.WRITES || !isExecuted) return null
+    val result = runCatching {
+        Json.parseToJsonElement(output.filterIsInstance<UIMessagePart.Text>().joinToString("") { it.text })
+    }.getOrNull() as? JsonObject ?: return null
+    if ("error" in result) return null
+    return (result["path"] as? JsonPrimitive)?.contentOrNull
+}
 
 private fun stringSchema(description: String) = buildJsonObject {
     put("type", "string")

@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dokar.sonner.TextToastAction
 import com.dokar.sonner.ToastType
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -75,7 +76,9 @@ import me.rerere.rikkahub.ui.components.ai.SearchMode
 import me.rerere.rikkahub.ui.components.ai.completion.WorkspaceCompletionProvider
 import me.rerere.rikkahub.ui.components.ai.rememberChatAttachmentPickerActions
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.pages.memory.resultText
 import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
@@ -278,6 +281,25 @@ private fun ChatPageContent(
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val workspaceRepository: WorkspaceRepository = koinInject()
+
+    // 后台整理给这个对话写了记忆时提示一下，点开能看到改了什么
+    LaunchedEffect(vm, assistant.id) {
+        vm.memoryUpdates.collect { run ->
+            toaster.show(
+                message = run.resultText(),
+                action = TextToastAction("View") {
+                    val path = run.changedPaths.singleOrNull().takeIf { run.deletedPaths.isEmpty() }
+                    navController.navigate(
+                        if (path != null) {
+                            Screen.MemoryFile(run.memoryId, path)
+                        } else {
+                            Screen.AssistantMemory(assistant.id.toString())
+                        }
+                    )
+                },
+            )
+        }
+    }
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
     var showFilesSheet by remember { mutableStateOf(false) }

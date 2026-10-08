@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -35,16 +37,21 @@ import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.ai.MemoryConsolidationStatus
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.MemoryFile
 import me.rerere.rikkahub.data.model.groupByDirectory
 import me.rerere.rikkahub.data.model.memoryTitleOf
+import me.rerere.rikkahub.ui.components.message.ChatMessageToolStep
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 import me.rerere.rikkahub.ui.components.ui.ItemAction
 import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
+import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.pages.memory.resultText
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.ui.components.RikkaConfirmDialog
 import org.koin.androidx.compose.koinViewModel
@@ -59,6 +66,7 @@ fun AssistantMemoryPage(id: String) {
     )
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val memories by vm.memories.collectAsStateWithLifecycle()
+    val consolidation by vm.memoryConsolidation.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -82,6 +90,8 @@ fun AssistantMemoryPage(id: String) {
             innerPadding = innerPadding,
             assistant = assistant,
             memories = memories,
+            consolidation = consolidation,
+            onOrganizeMemory = { vm.organizeMemory() },
             onUpdateAssistant = { vm.update(it) },
             onDeleteMemory = { vm.deleteMemory(it) },
             onOpenMemory = { path -> navController.navigate(Screen.MemoryFile(vm.memoryId, path)) },
@@ -94,6 +104,8 @@ private fun AssistantMemoryContent(
     innerPadding: PaddingValues,
     assistant: Assistant,
     memories: List<MemoryFile>,
+    consolidation: MemoryConsolidationStatus,
+    onOrganizeMemory: () -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
     // path 为 null 时新建
     onOpenMemory: (path: String?) -> Unit,
@@ -227,6 +239,14 @@ private fun AssistantMemoryContent(
             }
         }
 
+        if (assistant.enableMemory) {
+            MemoryConsolidationSection(
+                status = consolidation,
+                assistant = assistant,
+                onOrganize = onOrganizeMemory,
+            )
+        }
+
         SectionHeader(
             title = stringResource(R.string.assistant_page_manage_memory_title),
             action = {
@@ -302,6 +322,48 @@ private fun AssistantMemoryContent(
             )
         }
     )
+}
+
+/** 后台整理的状态和手动入口，下面跟着上一次整理的工具调用记录 */
+@Composable
+private fun MemoryConsolidationSection(
+    status: MemoryConsolidationStatus,
+    assistant: Assistant,
+    onOrganize: () -> Unit,
+) {
+    val lastRun = status.lastRun
+    CardGroup {
+        item(
+            headlineContent = { Text("Dreaming") },
+            supportingContent = { Text(memoryConsolidationSummary(status)) },
+            trailingContent = {
+                if (status.running) {
+                    RabbitLoadingIndicator(modifier = Modifier.size(32.dp))
+                } else {
+                    FilledTonalButton(onClick = onOrganize) {
+                        Text(if (lastRun?.error != null) "Retry" else "Dream now")
+                    }
+                }
+            },
+        )
+    }
+    if (lastRun != null && lastRun.steps.isNotEmpty()) {
+        ChainOfThought(steps = lastRun.steps) { tool ->
+            ChatMessageToolStep(tool = tool, assistant = assistant)
+        }
+    }
+}
+
+private fun memoryConsolidationSummary(status: MemoryConsolidationStatus): String {
+    val lastRun = status.lastRun
+    return when {
+        status.running -> "Dreaming…"
+        lastRun?.error != null -> lastRun.resultText()
+        else -> listOfNotNull(
+            status.pendingTurns.takeIf { it > 0 }?.let { "$it new ${if (it == 1) "turn" else "turns"} waiting" },
+            lastRun?.let { "${relativeTimeOf(it.finishedAt)}: ${it.resultText()}" },
+        ).joinToString("\n").ifEmpty { "Turns your chats into memories once they pause" }
+    }
 }
 
 // 根目录下是 profile 和 preferences，都是关于用户本人的

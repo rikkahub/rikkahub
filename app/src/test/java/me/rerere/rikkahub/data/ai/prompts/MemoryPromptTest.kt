@@ -47,16 +47,38 @@ class MemoryPromptTest {
     }
 
     @Test
-    fun `consolidation input carries the memory state and the exchange`() {
+    fun `consolidation input carries the memory state and each conversation's new turns`() {
         val input = buildMemoryConsolidationInput(
             files = listOf(profile, food),
-            recentContext = "",
-            exchange = "[USER]: I moved to Hangzhou",
+            conversations = listOf(
+                MemoryConsolidationConversation(
+                    id = "c1",
+                    title = "Moving <to> \"Hangzhou\"",
+                    recentContext = "",
+                    newTurns = "[USER #4]: I moved to Hangzhou",
+                ),
+            ),
         )
 
         assertEquals("- [stated] Name is Lin", input.block("profile"))
         assertTrue(input.block("memory_listing").startsWith("/topics/food.md"))
-        assertTrue(input.block("recent_context").endsWith("(none)"))
-        assertEquals("[USER]: I moved to Hangzhou", input.block("exchange_to_review"))
+        // 标题里的引号和尖括号不能破坏标签
+        assertTrue(input.contains("<conversation id=\"c1\" title=\"Moving  to   Hangzhou\">"))
+        assertEquals("(none)", input.block("recent_context"))
+        assertEquals("[USER #4]: I moved to Hangzhou", input.block("new_turns"))
+    }
+
+    @Test
+    fun `consolidation input says so when there is nothing new`() {
+        val input = buildMemoryConsolidationInput(files = listOf(profile), conversations = emptyList())
+
+        assertTrue(input.endsWith("(no new conversation turns)"))
+        assertFalse(input.contains("<conversation"))
+    }
+
+    @Test
+    fun `whole-store tidying is only asked for in a full review`() {
+        assertFalse(buildMemoryConsolidationPrompt(fullReview = false).contains("## Full review"))
+        assertTrue(buildMemoryConsolidationPrompt(fullReview = true).contains("## Full review"))
     }
 }
