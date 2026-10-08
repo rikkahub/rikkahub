@@ -4,7 +4,19 @@
 
 RikkaHub is a native Android LLM chat client that supports switching between different AI providers
 for conversations.
-Built with Jetpack Compose, Kotlin, and follows Material Design 3 principles.
+Built with Jetpack Compose, Kotlin, and follows Material 3 Expressive (MD3 Expressive) design language.
+
+## Design Language
+
+The UI follows Material 3 Expressive. New and reworked screens should match it rather than the older baseline
+Material 3 look (cards with dividers, plain forms).
+
+- The app theme is `MaterialExpressiveTheme` (app/src/main/java/me/rerere/rikkahub/ui/theme/Theme.kt); prefer the
+  expressive variants of components, shapes (`MaterialShapes`), emphasized typography (e.g. `titleSmallEmphasized`)
+  and motion from `androidx.compose.material3` over hand-rolled equivalents.
+- Settings-style and form pages use segmented groups via `CardGroup` (
+  app/src/main/java/me/rerere/rikkahub/ui/components/ui/CardGroup.kt) instead of a card with dividers.
+- Favor larger corner radii, filled/tonal containers, and whole-row click targets.
 
 ## Build, Test, and Development Commands
 
