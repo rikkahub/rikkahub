@@ -13,6 +13,7 @@ import me.rerere.rikkahub.ui.pages.stats.StatsVM
 import me.rerere.rikkahub.ui.pages.imggen.ImgGenVM
 import me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationSessionsVM
 import me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationVM
+import me.rerere.rikkahub.ui.pages.memory.MemoryFileVM
 import me.rerere.rikkahub.ui.pages.extensions.PromptVM
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesVM
 import me.rerere.rikkahub.ui.pages.extensions.skills.SkillDetailVM
@@ -34,6 +35,7 @@ val viewModelModule = module {
             settingsStore = get(),
             conversationRepo = get(),
             chatService = get(),
+            memoryConsolidationScheduler = get(),
             updateChecker = get(),
             analytics = get(),
             filesManager = get(),
@@ -50,9 +52,17 @@ val viewModelModule = module {
             id = it.get(),
             settingsStore = get(),
             memoryRepository = get(),
+            memoryConsolidationScheduler = get(),
             filesManager = get(),
             skillManager = get(),
             workspaceRepository = get(),
+        )
+    }
+    viewModel<MemoryFileVM> {
+        MemoryFileVM(
+            memoryId = it[0],
+            path = it[1],
+            memoryRepository = get(),
         )
     }
     viewModelOf(::TranslatorVM)

@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.ai.MemoryConsolidationScheduler
+import me.rerere.rikkahub.data.ai.MemoryConsolidationStatus
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
@@ -20,7 +22,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.model.MemoryFile
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -33,6 +35,7 @@ class AssistantDetailVM(
     private val id: String,
     private val settingsStore: SettingsStore,
     private val memoryRepository: MemoryRepository,
+    private val memoryConsolidationScheduler: MemoryConsolidationScheduler,
     private val filesManager: FilesManager,
     private val skillManager: SkillManager,
     private val workspaceRepository: WorkspaceRepository,
@@ -68,14 +71,18 @@ class AssistantDetailVM(
 
     val memories = assistant
         .flatMapLatest { currentAssistant ->
-            if (currentAssistant.useGlobalMemory) {
-                memoryRepository.getGlobalMemoriesFlow()
-            } else {
-                memoryRepository.getMemoriesOfAssistantFlow(assistantId.toString())
-            }
+            memoryRepository.getFilesFlow(memoryIdOf(currentAssistant))
         }
         .stateIn(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
+        )
+
+    val memoryConsolidation: StateFlow<MemoryConsolidationStatus> = assistant
+        .flatMapLatest { currentAssistant ->
+            memoryConsolidationScheduler.statusOf(memoryIdOf(currentAssistant))
+        }
+        .stateIn(
+            scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = MemoryConsolidationStatus()
         )
 
     val providers = settingsStore
@@ -177,29 +184,24 @@ class AssistantDetailVM(
         }
     }
 
-    fun addMemory(memory: AssistantMemory) {
-        viewModelScope.launch {
-            val memoryAssistantId = if (assistant.value.useGlobalMemory) {
-                MemoryRepository.GLOBAL_MEMORY_ID
-            } else {
-                assistantId.toString()
-            }
-            memoryRepository.addMemory(
-                assistantId = memoryAssistantId,
-                content = memory.content
-            )
-        }
+    // 助手还没加载出来时 assistant 是个占位对象，记忆库要按页面拿到的 assistantId 来定位
+    private fun memoryIdOf(assistant: Assistant) = if (assistant.useGlobalMemory) {
+        MemoryRepository.GLOBAL_MEMORY_ID
+    } else {
+        assistantId.toString()
     }
 
-    fun updateMemory(memory: AssistantMemory) {
-        viewModelScope.launch {
-            memoryRepository.updateContent(id = memory.id, content = memory.content)
-        }
+    /** 当前助手读写的记忆库 */
+    val memoryId: String get() = memoryIdOf(assistant.value)
+
+    /** 整理所有待整理的对话，并把整个记忆库清理一遍 */
+    fun organizeMemory() {
+        memoryConsolidationScheduler.organize(memoryId)
     }
 
-    fun deleteMemory(memory: AssistantMemory) {
+    fun deleteMemory(memory: MemoryFile) {
         viewModelScope.launch {
-            memoryRepository.deleteMemory(id = memory.id)
+            memoryRepository.deleteFile(memoryIdOf(assistant.value), memory.path)
         }
     }
 

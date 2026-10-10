@@ -14,6 +14,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.repository.memoryId
 
 class AssistantVM(
     private val settingsStore: SettingsStore,
@@ -43,7 +44,7 @@ class AssistantVM(
             settingsStore.update { settings ->
                 settings.copy(assistants = settings.assistants.filter { it.id != assistant.id })
             }
-            memoryRepository.deleteMemoriesOfAssistant(assistant.id.toString())
+            memoryRepository.deleteFilesOfAssistant(assistant.id.toString())
             conversationRepo.deleteConversationOfAssistant(assistant.id)
         }
     }
@@ -68,7 +69,7 @@ class AssistantVM(
             )
             settingsStore.update { it.copy(assistants = it.assistants.plus(copiedAssistant)) }
             if (copyMemories) {
-                memoryRepository.copyMemories(
+                memoryRepository.copyFiles(
                     fromAssistantId = assistant.id.toString(),
                     toAssistantId = copiedAssistant.id.toString(),
                 )
@@ -76,10 +77,5 @@ class AssistantVM(
         }
     }
 
-    fun getMemories(assistant: Assistant) =
-        if (assistant.useGlobalMemory) {
-            memoryRepository.getGlobalMemoriesFlow()
-        } else {
-            memoryRepository.getMemoriesOfAssistantFlow(assistant.id.toString())
-        }
+    fun getMemories(assistant: Assistant) = memoryRepository.getFilesFlow(assistant.memoryId)
 }

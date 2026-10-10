@@ -19,6 +19,8 @@ class ConversationSessionManager(
     private val scope: CoroutineScope,
     private val createInitialConversation: (Uuid) -> Conversation,
     private val onGenerationFinished: (ConversationSession, Throwable?) -> Unit,
+    // 会话没有页面引用也不在生成，被回收了
+    private val onSessionRemoved: (Uuid) -> Unit = {},
 ) {
     private val lock = Any()
     private val sessions = MutableStateFlow<Map<Uuid, ConversationSession>>(emptyMap())
@@ -77,6 +79,7 @@ class ConversationSessionManager(
         }
         // Job completion can call back into the registry; never hold its lock during cleanup.
         removed.cleanup()
+        onSessionRemoved(removed.id)
     }
 
     fun cleanup() {

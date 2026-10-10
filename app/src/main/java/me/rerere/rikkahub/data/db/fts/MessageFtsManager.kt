@@ -64,15 +64,17 @@ class MessageFtsManager(private val database: AppDatabase) {
     suspend fun search(
         keyword: String,
         sort: MessageSearchSort = MessageSearchSort.RELEVANCE,
-        assistantId: String? = null,
+        // 只搜这些助手的对话，null 表示不限
+        assistantIds: Collection<String>? = null,
     ): List<MessageSearchResult> = withContext(Dispatchers.IO) {
         val results = mutableListOf<MessageSearchResult>()
-        val assistantFilter = if (assistantId != null) {
+        if (assistantIds != null && assistantIds.isEmpty()) return@withContext results
+        val assistantFilter = if (assistantIds != null) {
             """
             AND EXISTS (
                 SELECT 1 FROM conversationentity AS conversation
                 WHERE conversation.id = message_fts.conversation_id
-                  AND conversation.assistant_id = ?
+                  AND conversation.assistant_id IN (${assistantIds.joinToString { "?" }})
             )
             """.trimIndent()
         } else {
@@ -88,7 +90,7 @@ class MessageFtsManager(private val database: AppDatabase) {
             ORDER BY ${sort.orderBy}
             LIMIT 50
             """.trimIndent(),
-            if (assistantId != null) arrayOf(keyword, assistantId) else arrayOf(keyword)
+            arrayOf(keyword, *assistantIds.orEmpty().toTypedArray())
         )
         Log.i(TAG, "search: $keyword")
         cursor.use {

@@ -13,11 +13,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.analytics.FirebaseAnalytics
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -28,6 +30,8 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.MemoryConsolidationRun
+import me.rerere.rikkahub.data.ai.MemoryConsolidationScheduler
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FilesManager
@@ -57,6 +61,7 @@ class ChatVM(
     private val settingsStore: SettingsStore,
     private val conversationRepo: ConversationRepository,
     private val chatService: ChatService,
+    private val memoryConsolidationScheduler: MemoryConsolidationScheduler,
     val updateChecker: UpdateChecker,
     private val analytics: FirebaseAnalytics,
     private val filesManager: FilesManager,
@@ -342,6 +347,10 @@ class ChatVM(
             chatService.generateTitle(_conversationId, conversationFull, force)
         }
     }
+
+    /** 后台自动整理给这个对话写入了记忆时发出，用来在聊天页提示 */
+    val memoryUpdates: Flow<MemoryConsolidationRun> = memoryConsolidationScheduler.automaticRuns
+        .filter { _conversationId in it.conversationIds && it.error == null && it.hasChanges }
 
     fun generateSuggestion(conversation: Conversation) {
         viewModelScope.launch {
