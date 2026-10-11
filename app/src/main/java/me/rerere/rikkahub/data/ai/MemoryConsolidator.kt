@@ -188,7 +188,7 @@ class MemoryConsolidator(
         val touched = steps.mapNotNull { it.memoryWritePath() }
             .map { MemoryFile.normalizePath(it) ?: it }
             .distinct()
-        val remaining = memoryRepository.getFiles(memoryId).map { it.path }.toSet()
+        val remaining = memoryRepository.getFiles(memoryId).associateBy { it.path }
         return MemoryConsolidationRun(
             memoryId = memoryId,
             finishedAt = System.currentTimeMillis(),
@@ -197,6 +197,7 @@ class MemoryConsolidator(
             steps = steps,
             changedPaths = touched.filter { it in remaining },
             deletedPaths = touched.filterNot { it in remaining },
+            titles = touched.mapNotNull { path -> remaining[path]?.let { path to it.title } }.toMap(),
         )
     }
 

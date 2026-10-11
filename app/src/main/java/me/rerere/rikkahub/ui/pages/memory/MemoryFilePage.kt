@@ -107,7 +107,7 @@ fun MemoryFilePage(memoryId: String, path: String?) {
             LargeFlexibleTopAppBar(
                 title = {
                     Text(
-                        text = MemoryFile(path = path ?: draftPath, content = "", updatedAt = 0).title
+                        text = (file?.title ?: MemoryFile(path = path ?: draftPath, content = "", updatedAt = 0).title)
                             .ifEmpty { "New memory" },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

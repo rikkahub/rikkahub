@@ -12,13 +12,14 @@ private val MEMORY_FORMAT_PROMPT = """
 
         ---
         name: <path stem, e.g. food for /topics/food.md>
+        title: <what the app shows the user as this file's name: a few words in the language the user used>
         description: <one sentence on what the file covers, naming the people, projects and places most likely to be asked about; under 150 characters>
         aliases: [other names, short forms]
         ---
 
         - [stated] A fact the user stated directly
 
-    Write entries in the language the user used.
+    Write the title, description, aliases and entries in the language the user used. The path is only an identifier and can stay a short English slug; the title is what the user reads, so a user who writes in Chinese should see 饮食, not Food.
 
     ## Layout (one topic per file)
 

@@ -34,8 +34,8 @@ data class MemoryFile(
     /** 去掉目录和 .md 后缀的文件名 */
     val name: String get() = path.substringAfterLast('/').removeSuffix(".md")
 
-    /** 界面上显示的标题：frontend-tooling 显示成 Frontend Tooling */
-    val title: String get() = memoryTitleOf(name)
+    /** 界面上显示的标题：frontmatter 里的 title，没写时从文件名推出来（frontend-tooling 显示成 Frontend Tooling） */
+    val title: String get() = frontmatter["title"]?.trim()?.ifEmpty { null } ?: memoryTitleOf(name)
 
     companion object {
         const val PROFILE_PATH = "/profile.md"

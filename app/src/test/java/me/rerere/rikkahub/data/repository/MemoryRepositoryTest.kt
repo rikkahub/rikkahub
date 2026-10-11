@@ -181,6 +181,13 @@ class MemoryRepositoryTest {
     }
 
     @Test
+    fun `a title in the frontmatter takes precedence over the file name`() = runBlocking {
+        val food = create("/topics/food.md", "---\nname: food\ntitle: 饮食\n---\n\n- [stated] Likes noodles\n")
+        assertEquals("饮食", food.title)
+        assertEquals("Books", create("/topics/books.md", "---\nname: books\ntitle: \"\"\n---\n").title)
+    }
+
+    @Test
     fun `the stated marker is hidden from the displayed body`() = runBlocking {
         val file = create(
             "/topics/work.md",

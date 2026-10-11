@@ -43,6 +43,8 @@ data class MemoryConsolidationRun(
     val steps: List<UIMessagePart.Tool> = emptyList(),
     val changedPaths: List<String> = emptyList(),
     val deletedPaths: List<String> = emptyList(),
+    /** [changedPaths] 里各个文件在界面上显示的标题 */
+    val titles: Map<String, String> = emptyMap(),
     val error: String? = null,
 ) {
     val hasChanges: Boolean get() = changedPaths.isNotEmpty() || deletedPaths.isNotEmpty()
