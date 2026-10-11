@@ -287,7 +287,7 @@ class RikkaHubApp : Application() {
 
         val memoryDreamChannel = NotificationChannelCompat
             .Builder(MEMORY_DREAM_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
-            .setName("Dreaming")
+            .setName(getString(R.string.memory_dream_title))
             .setVibrationEnabled(false)
             .setShowBadge(false)
             .build()

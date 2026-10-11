@@ -291,7 +291,10 @@ private fun AssistantMemoryContent(
                                     )
                                 }
                                 Text(
-                                    text = "Updated ${relativeTimeOf(memory.updatedAt)}",
+                                    text = stringResource(
+                                        R.string.assistant_page_memory_updated_at,
+                                        relativeTimeOf(memory.updatedAt),
+                                    ),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline,
                                 )
@@ -332,14 +335,22 @@ private fun MemoryConsolidationSection(
     val lastRun = status.lastRun
     CardGroup {
         item(
-            headlineContent = { Text("Dreaming") },
+            headlineContent = { Text(stringResource(R.string.memory_dream_title)) },
             supportingContent = { Text(memoryConsolidationSummary(status)) },
             trailingContent = {
                 if (status.running) {
                     RabbitLoadingIndicator(modifier = Modifier.size(32.dp))
                 } else {
                     FilledTonalButton(onClick = onOrganize) {
-                        Text(if (lastRun?.error != null) "Retry" else "Dream now")
+                        Text(
+                            stringResource(
+                                if (lastRun?.error != null) {
+                                    R.string.assistant_page_memory_dream_retry
+                                } else {
+                                    R.string.assistant_page_memory_dream_now
+                                }
+                            )
+                        )
                     }
                 }
             },
@@ -347,24 +358,33 @@ private fun MemoryConsolidationSection(
     }
 }
 
+@Composable
 private fun memoryConsolidationSummary(status: MemoryConsolidationStatus): String {
     val lastRun = status.lastRun
     return when {
-        status.running -> "Dreaming…"
+        status.running -> stringResource(R.string.memory_dreaming)
         lastRun?.error != null -> lastRun.resultText()
         else -> listOfNotNull(
-            status.pendingTurns.takeIf { it > 0 }?.let { "$it new ${if (it == 1) "turn" else "turns"} waiting" },
+            status.pendingTurns.takeIf { it > 0 }?.let {
+                stringResource(R.string.assistant_page_memory_dream_pending, it)
+            },
             lastRun?.let { "${relativeTimeOf(it.finishedAt)}: ${it.resultText()} (${durationTextOf(it.duration)})" },
-        ).joinToString("\n").ifEmpty { "Turns your chats into memories once they pause" }
+        ).joinToString("\n").ifEmpty { stringResource(R.string.assistant_page_memory_dream_hint) }
     }
 }
 
 // 按整秒显示成 "42s"、"1m 5s"
 private fun durationTextOf(duration: Duration): String = duration.inWholeSeconds.coerceAtLeast(1).seconds.toString()
 
-// 根目录下是 profile 和 preferences，都是关于用户本人的
-private fun memorySectionTitle(directory: String): String =
-    if (directory == "/") "You" else memoryTitleOf(directory.removePrefix("/"))
+// 根目录下是 profile 和 preferences，都是关于用户本人的；记忆格式约定的几个目录有译名，其余的从目录名推
+@Composable
+private fun memorySectionTitle(directory: String): String = when (directory) {
+    "/" -> stringResource(R.string.assistant_page_memory_section_you)
+    "/topics" -> stringResource(R.string.assistant_page_memory_section_topics)
+    "/areas" -> stringResource(R.string.assistant_page_memory_section_areas)
+    "/people" -> stringResource(R.string.assistant_page_memory_section_people)
+    else -> memoryTitleOf(directory.removePrefix("/"))
+}
 
 // 一周内显示"41 分钟前"这样的相对时间，更早的显示日期
 private fun relativeTimeOf(time: Long): String = DateUtils.getRelativeTimeSpanString(

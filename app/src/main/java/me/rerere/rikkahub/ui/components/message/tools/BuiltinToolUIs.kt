@@ -180,8 +180,8 @@ class MemoryFileToolUI(override val toolName: String) : ToolUIRenderer {
 /** 记忆库工具的标题, 聊天消息与导出图片共用; 不是记忆库工具时返回 null */
 @Composable
 internal fun memoryToolTitle(toolName: String, arguments: JsonElement?): String? = when (toolName) {
-    MemoryToolNames.READ -> "Read memory"
-    MemoryToolNames.LIST -> "Listed memories"
+    MemoryToolNames.READ -> stringResource(R.string.chat_message_tool_read_memory)
+    MemoryToolNames.LIST -> stringResource(R.string.chat_message_tool_list_memory)
     MemoryToolNames.WRITE -> if (arguments.getStringContent("if_version") == MemoryRepository.NEW_FILE_VERSION) {
         stringResource(R.string.chat_message_tool_create_memory)
     } else {

@@ -83,6 +83,8 @@ fun MemoryFilePage(memoryId: String, path: String?) {
     var draftContent by rememberSaveable { mutableStateOf("") }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    val pathConflictMessage = stringResource(R.string.memory_file_page_path_conflict)
+
     val draftPathValid = MemoryFile.normalizePath(draftPath) != null
     val draftContentValid = draftContent.toByteArray().size <= MemoryFile.MAX_BYTES
     val canSave = draftContentValid && if (isNew) draftPathValid else draftContent != file?.content
@@ -91,7 +93,7 @@ fun MemoryFilePage(memoryId: String, path: String?) {
         when (result) {
             is MemoryWriteResult.Success -> if (isNew) navController.popBackStack() else editing = false
             is MemoryWriteResult.Conflict -> toaster.show(
-                message = "A memory already exists at this path",
+                message = pathConflictMessage,
                 type = ToastType.Error,
             )
 
@@ -108,7 +110,7 @@ fun MemoryFilePage(memoryId: String, path: String?) {
                 title = {
                     Text(
                         text = (file?.title ?: MemoryFile(path = path ?: draftPath, content = "", updatedAt = 0).title)
-                            .ifEmpty { "New memory" },
+                            .ifEmpty { stringResource(R.string.memory_file_page_new) },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -198,7 +200,7 @@ fun MemoryFilePage(memoryId: String, path: String?) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "This memory no longer exists",
+                    text = stringResource(R.string.memory_file_page_missing),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -237,18 +239,18 @@ private fun MemoryFileDetail(
     ) {
         CardGroup {
             item(
-                overlineContent = { Text("Last updated") },
+                overlineContent = { Text(stringResource(R.string.memory_file_page_last_updated)) },
                 headlineContent = { Text(Instant.ofEpochMilli(file.updatedAt).toLocalDateTime()) },
             )
             if (file.description.isNotEmpty()) {
                 item(
-                    overlineContent = { Text("Summary") },
+                    overlineContent = { Text(stringResource(R.string.memory_file_page_summary)) },
                     headlineContent = { Text(file.description) },
                 )
             }
             if (file.aliases.isNotEmpty()) {
                 item(
-                    overlineContent = { Text("Also known as") },
+                    overlineContent = { Text(stringResource(R.string.memory_file_page_aliases)) },
                     headlineContent = { Text(file.aliases.joinToString(", ")) },
                 )
             }
@@ -257,7 +259,7 @@ private fun MemoryFileDetail(
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         // 和上面几项的 overline 保持一致
                         Text(
-                            text = "Details",
+                            text = stringResource(R.string.memory_file_page_details),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -300,7 +302,7 @@ private fun MemoryFileEditor(
             OutlinedTextField(
                 value = path,
                 onValueChange = onPathChange,
-                label = { Text("Path") },
+                label = { Text(stringResource(R.string.memory_file_page_path)) },
                 placeholder = { Text("/topics/food.md") },
                 isError = path.isNotEmpty() && !pathValid,
                 singleLine = true,

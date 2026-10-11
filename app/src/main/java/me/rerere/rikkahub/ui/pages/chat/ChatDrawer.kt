@@ -809,7 +809,7 @@ private fun MemoryDreamingEntry(onClick: () -> Unit) {
         ) {
             RabbitLoadingIndicator(modifier = Modifier.size(18.dp))
             Text(
-                text = stringResource(R.string.chat_page_memory_dreaming),
+                text = stringResource(R.string.memory_dreaming),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )

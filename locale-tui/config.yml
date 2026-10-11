@@ -58,6 +58,7 @@ languages:
       context: "上下文"
       model: "模型"
       inference: "推理"
+      dreaming: "做梦（后台整理记忆的功能名）"
   - code: "values-zh-rTW"
     name: "Chinese (Traditional)"
     glossary:
@@ -65,10 +66,17 @@ languages:
       context: "上下文"
       model: "模型"
       inference: "推理"
+      dreaming: "做夢（背景整理記憶的功能名）"
   - code: "values-ja"
     name: "Japanese"
+    glossary:
+      memory: "記憶（「メモリ」としない）"
+      dreaming: "夢を見る（記憶を整理する機能の名称。「ドリーミング」と音訳しない）"
   - code: "values-ko-rKR"
     name: "Korean"
+    glossary:
+      memory: "기억 (메모리로 옮기지 않음)"
+      dreaming: "꿈꾸기 (기억을 정리하는 기능의 이름. 드리밍으로 음역하지 않음)"
   - code: "values-ru"
     name: "Russian"
   - code: "values-ar"
