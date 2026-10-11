@@ -82,6 +82,7 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.ui.components.ai.AssistantPicker
 import me.rerere.rikkahub.ui.components.ui.BackupReminderCard
 import me.rerere.rikkahub.ui.components.ui.Greeting
+import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.ui.UpdateCard
 import androidx.compose.ui.draw.clip
@@ -119,6 +120,7 @@ fun ChatDrawerContent(
     val conversations = drawerVm.conversations.collectAsLazyPagingItems()
     val folders by drawerVm.folders.collectAsStateWithLifecycle()
     val selectedFolderId by drawerVm.selectedFolderId.collectAsStateWithLifecycle()
+    val memoryDreaming by drawerVm.memoryDreaming.collectAsStateWithLifecycle()
     val conversationListState = rememberLazyListState(
         initialFirstVisibleItemIndex = drawerVm.scrollIndex,
         initialFirstVisibleItemScrollOffset = drawerVm.scrollOffset,
@@ -325,6 +327,12 @@ fun ChatDrawerContent(
                     showMoveToFolderSheet = true
                 }
             )
+
+            if (memoryDreaming) {
+                MemoryDreamingEntry(
+                    onClick = { navController.navigate(Screen.AssistantMemory(settings.assistantId.toString())) },
+                )
+            }
 
             // 助手选择器
             AssistantPicker(
@@ -774,6 +782,34 @@ private fun DrawerEntry(
             )
             Text(
                 text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+// 后台正在整理当前助手的记忆，点开是记忆页
+@Composable
+private fun MemoryDreamingEntry(onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            RabbitLoadingIndicator(modifier = Modifier.size(18.dp))
+            Text(
+                text = stringResource(R.string.memory_dreaming),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )

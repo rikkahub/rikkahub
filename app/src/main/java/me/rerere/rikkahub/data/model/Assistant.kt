@@ -60,12 +60,6 @@ data class QuickMessage(
 )
 
 @Serializable
-data class AssistantMemory(
-    val id: Int,
-    val content: String = "",
-)
-
-@Serializable
 enum class AssistantAffectScope {
     USER,
     ASSISTANT,

@@ -278,6 +278,7 @@ private fun ChatPageContent(
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val workspaceRepository: WorkspaceRepository = koinInject()
+
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
     var showFilesSheet by remember { mutableStateOf(false) }

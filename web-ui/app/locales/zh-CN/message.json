@@ -39,6 +39,8 @@
     "memory_create": "创建记忆",
     "memory_edit": "编辑记忆",
     "memory_delete": "删除记忆",
+    "memory_read": "读取记忆",
+    "memory_list": "列出记忆",
     "search_web_with_query": "联网搜索：{{query}}",
     "search_web": "联网搜索",
     "scrape_web": "网页抓取",

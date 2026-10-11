@@ -39,6 +39,8 @@
     "memory_create": "Create memory",
     "memory_edit": "Edit memory",
     "memory_delete": "Delete memory",
+    "memory_read": "Read memory",
+    "memory_list": "List memories",
     "search_web_with_query": "Web search: {{query}}",
     "search_web": "Web search",
     "scrape_web": "Web scrape",
