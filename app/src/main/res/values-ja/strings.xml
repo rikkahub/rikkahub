@@ -1557,4 +1557,5 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_sort_conversations">チャットを並べ替え</string>
   <string name="chat_page_sort_by_update_time">最終更新順</string>
   <string name="chat_page_sort_by_create_time">作成日時順</string>
+  <string name="chat_page_memory_dreaming">夢を見ています…</string>
 </resources>

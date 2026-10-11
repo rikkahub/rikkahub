@@ -1557,4 +1557,5 @@
   <string name="chat_page_sort_conversations">Сортировать чаты</string>
   <string name="chat_page_sort_by_update_time">По последнему обновлению</string>
   <string name="chat_page_sort_by_create_time">По дате создания</string>
+  <string name="chat_page_memory_dreaming">Сновидение…</string>
 </resources>

@@ -1557,4 +1557,5 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_sort_conversations">排序方式</string>
   <string name="chat_page_sort_by_update_time">按更新时间</string>
   <string name="chat_page_sort_by_create_time">按创建时间</string>
+  <string name="chat_page_memory_dreaming">做梦中…</string>
 </resources>

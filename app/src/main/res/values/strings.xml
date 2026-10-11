@@ -1555,4 +1555,5 @@
   <string name="chat_page_sort_conversations">Sort chats</string>
   <string name="chat_page_sort_by_update_time">By last updated</string>
   <string name="chat_page_sort_by_create_time">By date created</string>
+  <string name="chat_page_memory_dreaming">Dreaming…</string>
 </resources>
