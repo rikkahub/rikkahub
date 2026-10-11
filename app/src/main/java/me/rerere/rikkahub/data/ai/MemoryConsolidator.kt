@@ -35,8 +35,7 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "MemoryConsolidator"
 
-private const val MAX_STEPS = 16
-private const val FULL_REVIEW_MAX_STEPS = 32
+private const val MAX_STEPS = 32
 private const val MAX_CONVERSATIONS_PER_RUN = 8
 
 // 找待整理的对话时最多读这么多个候选：每个都要把消息读出来，刚开启记忆时候选可能有几百个
@@ -170,7 +169,7 @@ class MemoryConsolidator(
                 reasoningLevel = settings.fastModelReasoningLevel,
             ),
             tools = tools,
-            maxSteps = if (fullReview) FULL_REVIEW_MAX_STEPS else MAX_STEPS,
+            maxSteps = MAX_STEPS,
             // 只用来当请求的会话 ID：整次整理的每一步用同一个，服务端才能命中前面几步的缓存
             conversationId = Uuid.random(),
         ).collect { chunk ->
