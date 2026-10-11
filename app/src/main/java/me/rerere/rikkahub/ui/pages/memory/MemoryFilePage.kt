@@ -357,6 +357,12 @@ private fun MemoryFileEditor(
             .padding(bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // 紧跟在顶栏的标题下面，左边和标题对齐
+        Text(
+            text = stringResource(R.string.memory_file_page_edit_warning),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         CardGroup {
             if (path != null) {
                 formItem(
@@ -449,12 +455,6 @@ private fun MemoryFileEditor(
                 )
             }
         }
-        Text(
-            text = stringResource(R.string.memory_file_page_edit_warning),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
     }
 }
 
