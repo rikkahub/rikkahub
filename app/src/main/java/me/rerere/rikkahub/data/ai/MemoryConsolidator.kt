@@ -194,7 +194,6 @@ class MemoryConsolidator(
             finishedAt = System.currentTimeMillis(),
             conversationIds = batches.map { it.conversation.id }.toSet(),
             fullReview = fullReview,
-            steps = steps,
             changedPaths = touched.filter { it in remaining },
             deletedPaths = touched.filterNot { it in remaining },
             titles = touched.mapNotNull { path -> remaining[path]?.let { path to it.title } }.toMap(),

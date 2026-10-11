@@ -42,10 +42,8 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.MemoryFile
 import me.rerere.rikkahub.data.model.groupByDirectory
 import me.rerere.rikkahub.data.model.memoryTitleOf
-import me.rerere.rikkahub.ui.components.message.ChatMessageToolStep
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
-import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 import me.rerere.rikkahub.ui.components.ui.ItemAction
 import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
 import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
@@ -56,6 +54,8 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.ui.components.RikkaConfirmDialog
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 @Composable
 fun AssistantMemoryPage(id: String) {
@@ -242,7 +242,6 @@ private fun AssistantMemoryContent(
         if (assistant.enableMemory) {
             MemoryConsolidationSection(
                 status = consolidation,
-                assistant = assistant,
                 onOrganize = onOrganizeMemory,
             )
         }
@@ -324,11 +323,10 @@ private fun AssistantMemoryContent(
     )
 }
 
-/** 后台整理的状态和手动入口，下面跟着上一次整理的工具调用记录 */
+/** 后台整理的状态和手动入口 */
 @Composable
 private fun MemoryConsolidationSection(
     status: MemoryConsolidationStatus,
-    assistant: Assistant,
     onOrganize: () -> Unit,
 ) {
     val lastRun = status.lastRun
@@ -347,11 +345,6 @@ private fun MemoryConsolidationSection(
             },
         )
     }
-    if (lastRun != null && lastRun.steps.isNotEmpty()) {
-        ChainOfThought(steps = lastRun.steps) { tool ->
-            ChatMessageToolStep(tool = tool, assistant = assistant)
-        }
-    }
 }
 
 private fun memoryConsolidationSummary(status: MemoryConsolidationStatus): String {
@@ -361,10 +354,13 @@ private fun memoryConsolidationSummary(status: MemoryConsolidationStatus): Strin
         lastRun?.error != null -> lastRun.resultText()
         else -> listOfNotNull(
             status.pendingTurns.takeIf { it > 0 }?.let { "$it new ${if (it == 1) "turn" else "turns"} waiting" },
-            lastRun?.let { "${relativeTimeOf(it.finishedAt)}: ${it.resultText()}" },
+            lastRun?.let { "${relativeTimeOf(it.finishedAt)}: ${it.resultText()} (${durationTextOf(it.duration)})" },
         ).joinToString("\n").ifEmpty { "Turns your chats into memories once they pause" }
     }
 }
+
+// 按整秒显示成 "42s"、"1m 5s"
+private fun durationTextOf(duration: Duration): String = duration.inWholeSeconds.coerceAtLeast(1).seconds.toString()
 
 // 根目录下是 profile 和 preferences，都是关于用户本人的
 private fun memorySectionTitle(directory: String): String =

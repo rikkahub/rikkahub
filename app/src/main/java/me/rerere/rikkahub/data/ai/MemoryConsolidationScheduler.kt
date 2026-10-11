@@ -18,10 +18,10 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.TimeSource
 import kotlin.uuid.Uuid
 
 /** 一个对话里还没整理进记忆库 [memoryId] 的轮数 */
@@ -39,12 +39,12 @@ data class MemoryConsolidationRun(
     val conversationIds: Set<Uuid>,
     /** 是否顺带清理了整个记忆库 */
     val fullReview: Boolean,
-    /** 整理过程中的工具调用，按先后顺序 */
-    val steps: List<UIMessagePart.Tool> = emptyList(),
     val changedPaths: List<String> = emptyList(),
     val deletedPaths: List<String> = emptyList(),
     /** [changedPaths] 里各个文件在界面上显示的标题 */
     val titles: Map<String, String> = emptyMap(),
+    /** 这次整理花了多久，由调度器填 */
+    val duration: Duration = Duration.ZERO,
     val error: String? = null,
 ) {
     val hasChanges: Boolean get() = changedPaths.isNotEmpty() || deletedPaths.isNotEmpty()
@@ -213,8 +213,9 @@ class MemoryConsolidationScheduler(
         updateStatus(memoryId) { it.copy(running = true) }
         var run: MemoryConsolidationRun? = null
         val hold = keepAlive.acquire()
+        val started = TimeSource.Monotonic.markNow()
         try {
-            run = try {
+            val result = try {
                 worker.consolidate(memoryId, ids, fullReview)
             } catch (e: CancellationException) {
                 throw e
@@ -227,6 +228,7 @@ class MemoryConsolidationScheduler(
                     error = e.message ?: e.toString(),
                 )
             }
+            run = result?.copy(duration = started.elapsedNow())
             if (run?.error != null) {
                 synchronized(lock) { failed += memoryId }
             } else {
