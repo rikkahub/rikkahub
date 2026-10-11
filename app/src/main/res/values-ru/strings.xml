@@ -1583,4 +1583,6 @@
   <string name="memory_file_page_path">Путь</string>
   <string name="chat_message_tool_read_memory">Прочитал память</string>
   <string name="chat_message_tool_list_memory">Перечислил воспоминания</string>
+  <string name="memory_file_page_title">Заголовок</string>
+  <string name="memory_file_page_edit_warning">Постарайтесь не редактировать воспоминания вручную. Вместо этого попросите ИИ в чате запомнить или изменить что-то для вас.</string>
 </resources>

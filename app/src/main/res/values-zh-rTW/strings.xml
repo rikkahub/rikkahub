@@ -1581,4 +1581,6 @@
   <string name="assistant_page_memory_dream_no_changes">沒有新內容可記住</string>
   <string name="assistant_page_memory_dream_updated">記憶已更新：%s</string>
   <string name="assistant_page_memory_dream_removed">已移除 %s</string>
+  <string name="memory_file_page_title">標題</string>
+  <string name="memory_file_page_edit_warning">盡量避免手動編輯記憶，建議在聊天介面讓 AI 替你記住或更改記憶</string>
 </resources>

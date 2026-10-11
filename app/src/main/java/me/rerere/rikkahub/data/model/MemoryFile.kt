@@ -28,6 +28,12 @@ data class MemoryFile(
     /** 给用户看的正文：`[stated]` 是写给模型的标记，界面上不显示 */
     val displayBody: String get() = body.replace(statedMarkerRegex, "$1")
 
+    /**
+     * 编辑页里的正文。frontmatter 读不出来时（比如某个值里有没加引号的冒号）整段原文都算正文：
+     * 那一段在各个输入框里都看不到，不留在正文里的话一保存就被悄悄换掉了。
+     */
+    val editableBody: String get() = if (frontmatter.toMap().isEmpty()) content else body
+
     /** 所在目录，根目录下的文件是 "/" */
     val directory: String get() = path.substringBeforeLast('/').ifEmpty { "/" }
 
@@ -36,6 +42,20 @@ data class MemoryFile(
 
     /** 界面上显示的标题：frontmatter 里的 title，没写时从文件名推出来（frontend-tooling 显示成 Frontend Tooling） */
     val title: String get() = frontmatter["title"]?.trim()?.ifEmpty { null } ?: memoryTitleOf(name)
+
+    /**
+     * 用编辑页分开填的各项拼出新的文件内容。
+     *
+     * name 跟着路径走，不由用户填；留空的项不写；frontmatter 里其他的键原样保留。
+     */
+    fun contentWith(title: String, description: String, aliases: List<String>, body: String): String {
+        val values = linkedMapOf<String, Any?>("name" to name)
+        title.toSingleLine().takeIf { it.isNotEmpty() }?.let { values["title"] = it }
+        description.toSingleLine().takeIf { it.isNotEmpty() }?.let { values["description"] = it }
+        aliases.takeIf { it.isNotEmpty() }?.let { values["aliases"] = it }
+        frontmatter.toMap().forEach { (key, value) -> if (key !in editableKeys) values[key] = value }
+        return SkillFrontmatterParser.compose(values, body)
+    }
 
     companion object {
         const val PROFILE_PATH = "/profile.md"
@@ -54,6 +74,12 @@ data class MemoryFile(
         }
     }
 }
+
+// 编辑页有对应输入框的键，加上跟着路径走的 name
+private val editableKeys = setOf("name", "title", "description", "aliases")
+
+// 清单里一个文件占一行，标题和描述里不能有换行
+private fun String.toSingleLine(): String = replace(Regex("\\s+"), " ").trim()
 
 // 列表项开头的 [stated] 标记，保留前面的列表符号
 private val statedMarkerRegex = Regex("""(?m)^(\s*[-*+]\s+)\[stated\]\s*""", RegexOption.IGNORE_CASE)

@@ -1581,4 +1581,6 @@
   <string name="memory_file_page_path">Path</string>
   <string name="chat_message_tool_read_memory">Read memory</string>
   <string name="chat_message_tool_list_memory">Listed memories</string>
+  <string name="memory_file_page_title">Title</string>
+  <string name="memory_file_page_edit_warning">Try not to edit memories by hand. Ask the AI in chat to remember or change things for you instead.</string>
 </resources>

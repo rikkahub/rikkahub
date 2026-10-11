@@ -1581,4 +1581,6 @@
   <string name="assistant_page_memory_dream_no_changes">لا يوجد جديد للتذكر</string>
   <string name="assistant_page_memory_dream_updated">تم تحديث الذاكرة: %s</string>
   <string name="assistant_page_memory_dream_removed">تمت إزالة %s</string>
+  <string name="memory_file_page_title">العنوان</string>
+  <string name="memory_file_page_edit_warning">حاول ألا تحرر الذكريات يدويًا. بدلًا من ذلك، اطلب من الذكاء الاصطناعي في الدردشة أن يتذكر الأشياء أو يغيّرها نيابةً عنك.</string>
 </resources>

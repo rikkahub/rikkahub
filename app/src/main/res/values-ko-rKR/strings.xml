@@ -1583,4 +1583,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_memory_dream_no_changes">새로 기억할 내용이 없습니다</string>
   <string name="assistant_page_memory_dream_updated">기억 업데이트됨: %s</string>
   <string name="assistant_page_memory_dream_removed">%s 제거됨</string>
+  <string name="memory_file_page_title">제목</string>
+  <string name="memory_file_page_edit_warning">기억을 직접 편집하지 않는 것이 좋습니다. 대신 채팅에서 AI에게 기억하거나 변경해 달라고 요청하세요.</string>
 </resources>
