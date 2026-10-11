@@ -192,7 +192,6 @@ class MemoryConsolidator(
         return MemoryConsolidationRun(
             memoryId = memoryId,
             finishedAt = System.currentTimeMillis(),
-            conversationIds = batches.map { it.conversation.id }.toSet(),
             fullReview = fullReview,
             changedPaths = touched.filter { it in remaining },
             deletedPaths = touched.filterNot { it in remaining },

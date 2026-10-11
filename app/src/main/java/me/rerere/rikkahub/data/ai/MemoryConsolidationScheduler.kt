@@ -7,10 +7,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
@@ -35,8 +32,6 @@ data class PendingMemoryConversation(
 data class MemoryConsolidationRun(
     val memoryId: String,
     val finishedAt: Long,
-    /** 这次整理了哪些对话的新轮次 */
-    val conversationIds: Set<Uuid>,
     /** 是否顺带清理了整个记忆库 */
     val fullReview: Boolean,
     val changedPaths: List<String> = emptyList(),
@@ -115,11 +110,6 @@ class MemoryConsolidationScheduler(
     fun statusOf(memoryId: String): Flow<MemoryConsolidationStatus> =
         status.map { it[memoryId] ?: MemoryConsolidationStatus() }.distinctUntilChanged()
 
-    private val _automaticRuns = MutableSharedFlow<MemoryConsolidationRun>(extraBufferCapacity = 8)
-
-    /** 自动触发的整理结果；手动触发的结果体现在 [statusOf] 里 */
-    val automaticRuns: SharedFlow<MemoryConsolidationRun> = _automaticRuns.asSharedFlow()
-
     /** 一轮对话结束：空闲一段时间后整理，攒够轮数就不再等 */
     fun onTurnFinished(conversation: Conversation) {
         // 应用不在前台时，聊天生成的前台服务一释放进程就可能被冻结，空闲计时走不完。
@@ -194,7 +184,7 @@ class MemoryConsolidationScheduler(
 
     private suspend fun runAutomatically(memoryId: String) {
         cancelTimer(memoryId)
-        run(memoryId, fullReview = false)?.let { _automaticRuns.emit(it) }
+        run(memoryId, fullReview = false)
     }
 
     // 整理这个记忆库下所有待整理的对话
@@ -223,7 +213,6 @@ class MemoryConsolidationScheduler(
                 MemoryConsolidationRun(
                     memoryId = memoryId,
                     finishedAt = System.currentTimeMillis(),
-                    conversationIds = ids,
                     fullReview = fullReview,
                     error = e.message ?: e.toString(),
                 )

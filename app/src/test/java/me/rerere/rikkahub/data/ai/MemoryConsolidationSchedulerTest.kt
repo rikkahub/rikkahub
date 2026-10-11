@@ -2,7 +2,6 @@ package me.rerere.rikkahub.data.ai
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -65,7 +64,6 @@ class MemoryConsolidationSchedulerTest {
             return MemoryConsolidationRun(
                 memoryId = memoryId,
                 finishedAt = 0,
-                conversationIds = conversationIds,
                 fullReview = fullReview,
                 changedPaths = listOf("/profile.md"),
             )
@@ -330,24 +328,6 @@ class MemoryConsolidationSchedulerTest {
 
         assertEquals(1, worker.calls.size)
         assertFalse(scheduler.statusOf(memoryId).first().running)
-    }
-
-    @Test
-    fun `only automatic runs are announced`() = runTest {
-        val scheduler = scheduler()
-        val announced = mutableListOf<MemoryConsolidationRun>()
-        backgroundScope.launch { scheduler.automaticRuns.collect { announced += it } }
-        runCurrent()
-
-        worker.pending[chat.id] = 1
-        scheduler.organize(memoryId)
-        runCurrent()
-        assertEquals(1, worker.calls.size)
-        assertTrue(announced.isEmpty())
-
-        scheduler.finishTurn(chat, pendingTurns = 3)
-        runCurrent()
-        assertEquals(1, announced.size)
     }
 
     @Test
