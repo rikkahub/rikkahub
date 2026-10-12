@@ -85,6 +85,7 @@ interface CardGroupScope {
         modifier: Modifier = Modifier,
         headlineContent: (@Composable () -> Unit)? = null,
         supportingContent: (@Composable () -> Unit)? = null,
+        leadingContent: (@Composable () -> Unit)? = null,
         trailingContent: (@Composable () -> Unit)? = null,
         content: @Composable ColumnScope.() -> Unit,
     )
@@ -121,6 +122,7 @@ private class CardGroupScopeImpl : CardGroupScope {
         modifier: Modifier,
         headlineContent: (@Composable () -> Unit)?,
         supportingContent: (@Composable () -> Unit)?,
+        leadingContent: (@Composable () -> Unit)?,
         trailingContent: (@Composable () -> Unit)?,
         content: @Composable ColumnScope.() -> Unit,
     ) {
@@ -131,7 +133,7 @@ private class CardGroupScopeImpl : CardGroupScope {
                 overlineContent = null,
                 headlineContent = headlineContent,
                 supportingContent = supportingContent,
-                leadingContent = null,
+                leadingContent = leadingContent,
                 trailingContent = trailingContent,
                 colors = null,
                 formContent = content,
@@ -238,12 +240,13 @@ private fun CardGroupFormItem(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (item.headlineContent != null || item.trailingContent != null) {
+            if (item.headlineContent != null || item.leadingContent != null || item.trailingContent != null) {
                 Row(
-                    // 和 ListItem 一致：带说明文字时，右侧内容靠上对齐
+                    // 和 ListItem 一致：带说明文字时，两侧内容靠上对齐
                     verticalAlignment = if (item.supportingContent != null) Alignment.Top else Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
+                    item.leadingContent?.invoke()
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(2.dp),

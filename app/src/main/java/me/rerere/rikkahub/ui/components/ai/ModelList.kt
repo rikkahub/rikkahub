@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
@@ -257,6 +258,46 @@ internal fun ModelSelectorButton(
                     modifier = Modifier.size(20.dp)
                 )
             }
+        }
+    }
+}
+
+// 显示当前模型的胶囊按钮，样式和 Select 保持一致，点击后由调用方打开模型列表
+@Composable
+internal fun ModelField(
+    model: Model?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        tonalElevation = 4.dp,
+        shape = CircleShape,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (model != null) {
+                AutoAIIcon(
+                    name = model.modelId,
+                    modifier = Modifier.size(24.dp),
+                    color = Color.Transparent,
+                )
+            }
+            Text(
+                text = model?.displayName ?: stringResource(R.string.model_list_select_model),
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = HugeIcons.ArrowDown01,
+                contentDescription = null,
+            )
         }
     }
 }
