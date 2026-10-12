@@ -15,6 +15,13 @@
 -dontwarn java.beans.ConstructorProperties
 -dontwarn java.beans.Transient
 
+# SnakeYAML's JavaBean introspection references java.beans, which is unavailable on Android.
+-dontwarn java.beans.BeanInfo
+-dontwarn java.beans.FeatureDescriptor
+-dontwarn java.beans.IntrospectionException
+-dontwarn java.beans.Introspector
+-dontwarn java.beans.PropertyDescriptor
+
 # re2j has optional references that are unavailable on Android.
 -dontwarn com.google.re2j.**
 
