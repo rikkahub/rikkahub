@@ -6,17 +6,17 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -39,6 +39,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,16 +53,14 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.network.toProxyOrNull
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
-import me.rerere.ui.components.Switch
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 private const val PROXY_TEST_URL = "https://www.google.com/generate_204"
 
@@ -273,83 +273,65 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding(),
-            contentPadding = contentPadding + PaddingValues(8.dp),
+            contentPadding = contentPadding + PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                CardGroup(
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                ) {
-                    item(
-                        headlineContent = {
-                            Text(stringResource(R.string.setting_page_preferences_network_auto_retry))
+                CardGroup {
+                    switchItem(
+                        checked = settings.networkSetting.enableAutoRetry,
+                        onCheckedChange = { enabled ->
+                            vm.updateSettings {
+                                it.copy(
+                                    networkSetting = it.networkSetting.copy(
+                                        enableAutoRetry = enabled,
+                                    ),
+                                )
+                            }
                         },
                         supportingContent = {
                             Text(stringResource(R.string.setting_page_preferences_network_auto_retry_desc))
                         },
-                        trailingContent = {
-                            Switch(
-                                checked = settings.networkSetting.enableAutoRetry,
-                                onCheckedChange = { enabled ->
-                                    vm.updateSettings {
-                                        it.copy(
-                                            networkSetting = it.networkSetting.copy(
-                                                enableAutoRetry = enabled,
-                                            ),
-                                        )
-                                    }
-                                },
-                            )
+                        headlineContent = {
+                            Text(stringResource(R.string.setting_page_preferences_network_auto_retry))
                         },
                     )
                 }
             }
             item {
                 CardGroup(
-                    modifier = Modifier.padding(horizontal = 8.dp),
                     title = {
                         Text(stringResource(R.string.setting_page_preferences_network_user_agent))
                     },
                 ) {
-                    item(
-                        headlineContent = {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment = Alignment.End,
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                OutlinedTextField(
-                                    value = userAgent,
-                                    onValueChange = ::updateUserAgent,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    label = {
-                                        Text(stringResource(R.string.setting_page_preferences_network_user_agent))
-                                    },
-                                    placeholder = { Text(defaultUserAgent) },
-                                    supportingText = {
-                                        Text(
-                                            stringResource(
-                                                R.string.setting_page_preferences_network_user_agent_desc,
-                                                defaultUserAgent,
-                                            )
-                                        )
-                                    },
-                                    singleLine = true,
+                    formItem {
+                        OutlinedTextField(
+                            value = userAgent,
+                            onValueChange = ::updateUserAgent,
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text(defaultUserAgent) },
+                            supportingText = {
+                                Text(
+                                    stringResource(
+                                        R.string.setting_page_preferences_network_user_agent_desc,
+                                        defaultUserAgent,
+                                    )
                                 )
-                                TextButton(
-                                    onClick = { updateUserAgent("") },
-                                    enabled = userAgent.isNotEmpty(),
-                                ) {
-                                    Text(stringResource(R.string.setting_model_page_reset_to_default))
-                                }
-                            }
-                        },
-                    )
+                            },
+                            singleLine = true,
+                        )
+                        TextButton(
+                            onClick = { updateUserAgent("") },
+                            modifier = Modifier.align(Alignment.End),
+                            enabled = userAgent.isNotEmpty(),
+                        ) {
+                            Text(stringResource(R.string.setting_model_page_reset_to_default))
+                        }
+                    }
                 }
             }
             item {
                 CardGroup(
-                    modifier = Modifier.padding(horizontal = 8.dp),
                     title = {
                         Text(stringResource(R.string.setting_page_preferences_network_proxy))
                     },
@@ -385,15 +367,12 @@ fun SettingPreferencesNetworkPage(vm: SettingVM = koinViewModel()) {
                             Text(stringResource(R.string.setting_provider_page_test_connection))
                         },
                         trailingContent = {
-                            TextButton(
+                            FilledTonalButton(
                                 onClick = ::testProxy,
                                 enabled = proxyUrl.toProxyOrNull() != null && !proxyTesting,
                             ) {
                                 if (proxyTesting) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(18.dp),
-                                        strokeWidth = 2.dp,
-                                    )
+                                    LoadingIndicator(modifier = Modifier.size(24.dp))
                                 } else {
                                     Text(stringResource(R.string.setting_provider_page_test))
                                 }

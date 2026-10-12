@@ -200,6 +200,28 @@ fun CardGroupIcon(
     }
 }
 
+// 标题行右侧显示当前取值的小标签，比如滑块的数值
+@Composable
+fun CardGroupValue(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            // 等宽数字，拖动滑块时标签宽度不跳
+            style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
+            maxLines = 1,
+        )
+    }
+}
+
 @Composable
 private fun CardGroupFormItem(
     item: CardGroupItem,
