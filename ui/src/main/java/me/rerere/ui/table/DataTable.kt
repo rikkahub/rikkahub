@@ -46,6 +46,10 @@ fun DataTable(
     columnMinWidths: List<Dp> = emptyList(),
     columnMaxWidths: List<Dp> = emptyList(),
     cellAlignment: Alignment = Alignment.CenterStart,
+    // 按列覆盖 cellAlignment，缺省的列沿用 cellAlignment
+    columnAlignments: List<Alignment> = emptyList(),
+    // 按单元格覆盖所在列的对齐方式，row 是 rows 的下标；返回 null 时沿用列的对齐方式
+    bodyCellAlignment: ((row: Int, column: Int) -> Alignment?)? = null,
     outerBorder: BorderStroke? = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     shape: Shape = MaterialTheme.shapes.small,
     stretchToFillWidth: Boolean = true,
@@ -85,7 +89,7 @@ fun DataTable(
                         padding = cellPadding,
                         border = cellBorder,
                         background = headerBackground,
-                        alignment = cellAlignment
+                        alignment = columnAlignments.getOrNull(c) ?: cellAlignment
                     ) {
                         headers.getOrNull(c)?.invoke()
                     }
@@ -103,7 +107,12 @@ fun DataTable(
             fun subcomposeBodyOnce(r: Int, c: Int): Placeable {
                 val bg = if (zebraStriping && r % 2 == 1) surfaceContainer else Color.Transparent
                 val measurables = subcompose("b1_${r}_$c") {
-                    CellBox(padding = cellPadding, border = cellBorder, background = bg, alignment = cellAlignment) {
+                    CellBox(
+                        padding = cellPadding,
+                        border = cellBorder,
+                        background = bg,
+                        alignment = bodyCellAlignment?.invoke(r, c) ?: columnAlignments.getOrNull(c) ?: cellAlignment
+                    ) {
                         rows[r].getOrNull(c)?.invoke()
                     }
                 }
@@ -168,7 +177,7 @@ fun DataTable(
                         padding = cellPadding,
                         border = cellBorder,
                         background = headerBackground,
-                        alignment = cellAlignment
+                        alignment = columnAlignments.getOrNull(c) ?: cellAlignment
                     ) {
                         headers.getOrNull(c)?.invoke()
                     }
@@ -182,7 +191,12 @@ fun DataTable(
                 val bg =
                     if (zebraStriping && r % 2 == 1) surfaceContainer else Color.Transparent
                 val measurables = subcompose("b2_${r}_$c") {
-                    CellBox(padding = cellPadding, border = cellBorder, background = bg, alignment = cellAlignment) {
+                    CellBox(
+                        padding = cellPadding,
+                        border = cellBorder,
+                        background = bg,
+                        alignment = bodyCellAlignment?.invoke(r, c) ?: columnAlignments.getOrNull(c) ?: cellAlignment
+                    ) {
                         rows[r].getOrNull(c)?.invoke()
                     }
                 }

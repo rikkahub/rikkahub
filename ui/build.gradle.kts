@@ -27,6 +27,8 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.huge.icons)
+    implementation(libs.jetbrains.markdown)
+    implementation(libs.jsoup)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
 
