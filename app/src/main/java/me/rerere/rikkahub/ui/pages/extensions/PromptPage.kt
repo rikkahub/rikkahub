@@ -249,6 +249,7 @@ private fun ModeInjectionTab(
 
         HorizontalFloatingToolbar(
             expanded = expanded,
+            colors = CustomColors.floatingToolbarColors,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .offset(y = -ScreenOffset),
@@ -653,6 +654,7 @@ private fun LorebookTab(
 
         HorizontalFloatingToolbar(
             expanded = expanded,
+            colors = CustomColors.floatingToolbarColors,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .offset(y = -ScreenOffset),

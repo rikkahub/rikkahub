@@ -1,17 +1,11 @@
 package me.rerere.rikkahub.ui.pages.setting
 
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Package01
-import me.rerere.hugeicons.stroke.Connect
-import me.rerere.hugeicons.stroke.ArrowDown01
-import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.Refresh03
-import me.rerere.hugeicons.stroke.Tools
-import me.rerere.hugeicons.stroke.Share01
-import me.rerere.hugeicons.stroke.Delete01
-import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.hugeicons.stroke.Settings03
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,21 +13,25 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -41,31 +39,25 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset
 import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.MultiChoiceSegmentedButtonRow
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -77,15 +69,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFilter
+import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
+import kotlin.uuid.Uuid
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.BuiltInTools
@@ -98,7 +92,20 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Connect
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.FloppyDisk
+import me.rerere.hugeicons.stroke.Package01
+import me.rerere.hugeicons.stroke.Settings03
+import me.rerere.hugeicons.stroke.Share01
+import me.rerere.hugeicons.stroke.Tick01
+import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.ai.ModelAbilityTag
 import me.rerere.rikkahub.ui.components.ai.ModelModalityTag
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -106,12 +113,19 @@ import me.rerere.rikkahub.ui.components.ai.ModelTypeTag
 import me.rerere.rikkahub.ui.components.ai.ProviderBalanceText
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceButtons
+import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
+import me.rerere.rikkahub.ui.components.ui.ConnectedMultiChoiceButtons
 import me.rerere.rikkahub.ui.components.ui.ItemAction
 import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
+import me.rerere.rikkahub.ui.components.ui.PagerTab
+import me.rerere.rikkahub.ui.components.ui.PagerTabs
 import me.rerere.rikkahub.ui.components.ui.ShareSheet
 import me.rerere.rikkahub.ui.components.ui.SiliconFlowPowerByIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
+import me.rerere.rikkahub.ui.components.ui.cardGroupItemShape
 import me.rerere.rikkahub.ui.components.ui.longPressReorder
 import me.rerere.rikkahub.ui.components.ui.rememberShareSheetState
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -122,8 +136,6 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.CustomHeaders
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConnectionTester
 import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderBalanceOption
-import me.rerere.rikkahub.ui.pages.setting.components.isUsingDefaultBaseUrl
-import me.rerere.rikkahub.ui.pages.setting.components.resetBaseUrlToDefault
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.UiState
@@ -133,15 +145,31 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
-import kotlin.uuid.Uuid
+
+private enum class ProviderDetailTab(
+    override val icon: ImageVector,
+    @param:StringRes override val label: Int,
+) : PagerTab {
+    CONFIG(HugeIcons.Tools, R.string.setting_provider_page_configuration),
+    MODELS(HugeIcons.Package01, R.string.setting_provider_page_models),
+    ADVANCED(HugeIcons.Settings03, R.string.setting_provider_page_advanced_settings),
+}
+
+private enum class ModelFormTab(
+    override val icon: ImageVector,
+    @param:StringRes override val label: Int,
+) : PagerTab {
+    BASIC(HugeIcons.Package01, R.string.setting_provider_page_basic_settings),
+    ADVANCED(HugeIcons.Settings03, R.string.setting_provider_page_advanced_settings),
+    BUILT_IN_TOOLS(HugeIcons.Tools, R.string.setting_page_built_in_tools),
+}
 
 @Composable
 fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val provider = settings.providers.find { it.id == id } ?: return
-    val pager = rememberPagerState { 3 }
-    val scope = rememberCoroutineScope()
+    val pager = rememberPagerState { ProviderDetailTab.entries.size }
     val toaster = LocalToaster.current
     val context = LocalContext.current
 
@@ -195,78 +223,56 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                 }
             )
         },
-        bottomBar = {
-            NavigationBar(
-                containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor
-            ) {
-                NavigationBarItem(
-                    selected = pager.currentPage == 0,
-                    label = { Text(stringResource(id = R.string.setting_provider_page_configuration)) },
-                    icon = { Icon(HugeIcons.Tools, null) },
-                    onClick = {
-                        scope.launch {
-                            pager.animateScrollToPage(0)
-                        }
-                    }
-                )
-                NavigationBarItem(
-                    selected = pager.currentPage == 1,
-                    label = { Text(stringResource(id = R.string.setting_provider_page_models)) },
-                    icon = { Icon(HugeIcons.Package01, null) },
-                    onClick = {
-                        scope.launch {
-                            pager.animateScrollToPage(1)
-                        }
-                    }
-                )
-                NavigationBarItem(
-                    selected = pager.currentPage == 2,
-                    label = { Text(stringResource(id = R.string.setting_provider_page_advanced_settings)) },
-                    icon = { Icon(HugeIcons.Settings03, null) },
-                    onClick = {
-                        scope.launch {
-                            pager.animateScrollToPage(2)
-                        }
-                    }
-                )
-            }
-        }
     ) {
-        HorizontalPager(
-            state = pager,
+        Column(
             modifier = Modifier
+                .fillMaxSize()
                 .padding(it)
                 .consumeWindowInsets(it)
-        ) { page ->
-            when (page) {
-                0 -> {
-                    SettingProviderConfigPage(
-                        provider = provider,
-                        onEdit = {
-                            onEdit(it)
-                            toaster.show(
-                                context.getString(R.string.setting_provider_page_save_success),
-                                type = ToastType.Success
-                            )
-                        },
-                        onDelete = {
-                            onDelete()
-                        }
-                    )
-                }
+        ) {
+            PagerTabs(
+                pagerState = pager,
+                tabs = ProviderDetailTab.entries,
+                modifier = Modifier.padding(vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+            )
 
-                1 -> {
-                    SettingProviderModelPage(
-                        provider = provider,
-                        onEdit = onEdit
-                    )
-                }
+            HorizontalPager(
+                state = pager,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) { page ->
+                when (ProviderDetailTab.entries[page]) {
+                    ProviderDetailTab.CONFIG -> {
+                        SettingProviderConfigPage(
+                            provider = provider,
+                            onEdit = {
+                                onEdit(it)
+                                toaster.show(
+                                    context.getString(R.string.setting_provider_page_save_success),
+                                    type = ToastType.Success
+                                )
+                            },
+                            onDelete = {
+                                onDelete()
+                            }
+                        )
+                    }
 
-                2 -> {
-                    SettingProviderAdvancedPage(
-                        provider = provider,
-                        onEdit = onEdit
-                    )
+                    ProviderDetailTab.MODELS -> {
+                        SettingProviderModelPage(
+                            provider = provider,
+                            onEdit = onEdit
+                        )
+                    }
+
+                    ProviderDetailTab.ADVANCED -> {
+                        SettingProviderAdvancedPage(
+                            provider = provider,
+                            onEdit = onEdit
+                        )
+                    }
                 }
             }
         }
@@ -281,81 +287,106 @@ private fun SettingProviderConfigPage(
 ) {
     var internalProvider by remember(provider) { mutableStateOf(provider) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var expanded by rememberSaveable { mutableStateOf(true) }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .imePadding()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        ProviderConfigure(
-            provider = internalProvider,
-            onEdit = {
-                internalProvider = it
-            }
-        )
-
-        if (internalProvider is ProviderSetting.OpenAI) {
-            SettingProviderBalanceOption(
-                provider = internalProvider,
-                balanceOption = internalProvider.balanceOption,
-                onEdit = { internalProvider = internalProvider.copyProvider(balanceOption = it) }
-            )
-            ProviderBalanceText(providerSetting = provider, style = MaterialTheme.typography.labelSmall)
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .floatingToolbarVerticalNestedScroll(
+                    expanded = expanded,
+                    onExpand = { expanded = true },
+                    onCollapse = { expanded = false },
+                )
+                .verticalScroll(rememberScrollState())
+                // 底部留出悬浮工具栏的位置
+                .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 128.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            ProviderConnectionTester(
-                internalProvider = internalProvider,
+            ProviderConfigure(
+                provider = internalProvider,
+                onEdit = {
+                    internalProvider = it
+                }
             )
 
-            Spacer(Modifier.weight(1f))
-
-            if (!internalProvider.builtIn) {
-                IconButton(
-                    onClick = {
-                        showDeleteDialog = true
-                    },
-                ) {
-                    Icon(HugeIcons.Delete01, null)
-                }
-            }
-
-            IconButton(
-                onClick = {
-                    internalProvider = internalProvider.resetBaseUrlToDefault()
-                },
-                enabled = !internalProvider.isUsingDefaultBaseUrl(),
-            ) {
-                Icon(
-                    imageVector = HugeIcons.Refresh03,
-                    contentDescription = stringResource(R.string.setting_model_page_reset_to_default)
+            if (internalProvider is ProviderSetting.OpenAI) {
+                SettingProviderBalanceOption(
+                    provider = internalProvider,
+                    balanceOption = internalProvider.balanceOption,
+                    // 余额按已保存的配置查，没开就不留这一行
+                    supportingContent = if (provider.balanceOption.enabled) {
+                        { ProviderBalanceText(providerSetting = provider) }
+                    } else null,
+                    onEdit = { internalProvider = internalProvider.copyProvider(balanceOption = it) }
                 )
             }
 
-            Button(
-                onClick = {
-                    val providerToSave: ProviderSetting = internalProvider
-                    onEdit(providerToSave.copyProvider(name = providerToSave.name.trim()))
-                }
-            ) {
-                Text(stringResource(R.string.setting_provider_page_save))
+            // 硅基流动图标
+            if (provider is ProviderSetting.OpenAI && provider.baseUrl.contains("siliconflow.cn")) {
+                SiliconFlowPowerByIcon(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .padding(vertical = 16.dp)
+                )
             }
         }
 
-        // 硅基流动图标
-        if (provider is ProviderSetting.OpenAI && provider.baseUrl.contains("siliconflow.cn")) {
-            SiliconFlowPowerByIcon(
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(vertical = 16.dp)
-            )
+        // 键盘弹出时收起，不然会盖住正在输入的那一行
+        AnimatedVisibility(
+            visible = !WindowInsets.isImeVisible,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .offset(y = -ScreenOffset),
+            enter = fadeIn() + scaleIn(initialScale = 0.8f),
+            exit = fadeOut() + scaleOut(targetScale = 0.8f),
+        ) {
+            HorizontalFloatingToolbar(
+                expanded = expanded,
+                colors = CustomColors.floatingToolbarColors,
+                leadingContent = {
+                    ProviderConnectionTester(
+                        internalProvider = internalProvider,
+                    )
+
+                    if (!internalProvider.builtIn) {
+                        IconButton(
+                            onClick = {
+                                showDeleteDialog = true
+                            },
+                        ) {
+                            Icon(HugeIcons.Delete01, stringResource(R.string.delete))
+                        }
+                    }
+                },
+            ) {
+                Button(
+                    onClick = {
+                        val providerToSave: ProviderSetting = internalProvider
+                        onEdit(providerToSave.copyProvider(name = providerToSave.name.trim()))
+                    }
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            HugeIcons.FloppyDisk,
+                            contentDescription = stringResource(R.string.setting_provider_page_save)
+                        )
+                        AnimatedVisibility(expanded) {
+                            Row {
+                                Spacer(modifier = Modifier.size(8.dp))
+                                Text(stringResource(R.string.setting_provider_page_save))
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -445,42 +476,26 @@ private fun ModelList(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .floatingToolbarVerticalNestedScroll(
-                    expanded = expanded,
-                    onExpand = { expanded = true },
-                    onCollapse = { expanded = false },
-                ),
-            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 128.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            state = lazyListState
-        ) {
-            // 模型列表
-            if (providerSetting.models.isEmpty()) {
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillParentMaxHeight(0.8f)
-                            .fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = stringResource(R.string.setting_provider_page_no_models),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = stringResource(R.string.setting_provider_page_add_models_hint),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                        )
-                    }
-                }
-            } else {
+        if (providerSetting.models.isEmpty()) {
+            ExtensionEmptyState(
+                message = stringResource(R.string.setting_provider_page_no_models),
+                description = stringResource(R.string.setting_provider_page_add_models_hint),
+                icon = HugeIcons.Package01,
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .floatingToolbarVerticalNestedScroll(
+                        expanded = expanded,
+                        onExpand = { expanded = true },
+                        onCollapse = { expanded = false },
+                    ),
+                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 128.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                state = lazyListState
+            ) {
                 items(providerSetting.models, key = { it.id }) { item ->
                     ReorderableItem(
                         state = reorderableLazyListState,
@@ -503,6 +518,7 @@ private fun ModelList(
         }
         HorizontalFloatingToolbar(
             expanded = expanded,
+            colors = CustomColors.floatingToolbarColors,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .offset(y = -ScreenOffset),
@@ -531,8 +547,7 @@ private fun ModelSettingsForm(
     isEdit: Boolean,
     parentProvider: ProviderSetting? = null
 ) {
-    val pagerState = rememberPagerState { 3 }
-    val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState { ModelFormTab.entries.size }
 
     fun setModelId(id: String) {
         val inputModality = ModelRegistry.MODEL_INPUT_MODALITIES.getData(id)
@@ -550,45 +565,17 @@ private fun ModelSettingsForm(
     }
 
     Column {
-        SecondaryTabRow(
-            selectedTabIndex = pagerState.currentPage,
-            containerColor = Color.Transparent,
-        ) {
-            Tab(
-                selected = pagerState.currentPage == 0,
-                onClick = {
-                    scope.launch {
-                        pagerState.animateScrollToPage(0)
-                    }
-                },
-                text = { Text(stringResource(R.string.setting_provider_page_basic_settings)) }
-            )
-            Tab(
-                selected = pagerState.currentPage == 1,
-                onClick = {
-                    scope.launch {
-                        pagerState.animateScrollToPage(1)
-                    }
-                },
-                text = { Text(stringResource(R.string.setting_provider_page_advanced_settings)) }
-            )
-            Tab(
-                selected = pagerState.currentPage == 2,
-                onClick = {
-                    scope.launch {
-                        pagerState.animateScrollToPage(2)
-                    }
-                },
-                text = { Text(stringResource(R.string.setting_page_built_in_tools)) }
-            )
-        }
+        PagerTabs(
+            pagerState = pagerState,
+            tabs = ModelFormTab.entries,
+        )
 
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxWidth()
         ) { page ->
-            when (page) {
-                0 -> {
+            when (ModelFormTab.entries[page]) {
+                ModelFormTab.BASIC -> {
                     // 基本设置页面
                     Column(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -658,13 +645,13 @@ private fun ModelSettingsForm(
                     }
                 }
 
-                1 -> {
+                ModelFormTab.ADVANCED -> {
                     // 高级设置页面
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
-                            .padding(16.dp),
+                            .padding(vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         ProviderOverrideSettings(
@@ -691,7 +678,7 @@ private fun ModelSettingsForm(
                     }
                 }
 
-                2 -> {
+                ModelFormTab.BUILT_IN_TOOLS -> {
                     // 内置工具页面
                     BuiltInToolsSettings(
                         tools = model.tools,
@@ -783,11 +770,10 @@ private fun AddModelButton(
                     contentDescription = stringResource(R.string.setting_provider_page_add_model)
                 )
                 AnimatedVisibility(expanded) {
-                    Spacer(modifier = Modifier.size(8.dp))
-                    Text(
-                        stringResource(R.string.setting_provider_page_add_new_model),
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+                    Row {
+                        Spacer(modifier = Modifier.size(8.dp))
+                        Text(stringResource(R.string.setting_provider_page_add_new_model))
+                    }
                 }
             }
         }
@@ -852,7 +838,7 @@ private fun AddModelButton(
                         ) {
                             Text(stringResource(R.string.cancel))
                         }
-                        TextButton(
+                        Button(
                             onClick = {
                                 if (modelState.modelId.isNotBlank() && modelState.displayName.isNotBlank()) {
                                     dialogState.confirm()
@@ -942,19 +928,22 @@ private fun ModelPicker(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
                     contentPadding = PaddingValues(8.dp),
                 ) {
-                    items(filteredModels) {
-                        Card {
+                    itemsIndexed(filteredModels) { index, it ->
+                        Surface(
+                            shape = cardGroupItemShape(index, filteredModels.size),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(
-                                    8.dp
+                                    12.dp
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(8.dp),
+                                    .padding(start = 12.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
                             ) {
                                 AutoAIIcon(
                                     it.modelId,
@@ -990,22 +979,20 @@ private fun ModelPicker(
                                         )
                                     }
                                 }
-                                IconButton(
-                                    onClick = {
-                                        if (selectedModels.any { model -> model.modelId == it.modelId }) {
+                                val added = selectedModels.any { model -> model.modelId == it.modelId }
+                                FilledTonalIconToggleButton(
+                                    checked = added,
+                                    onCheckedChange = { checked ->
+                                        if (checked) {
+                                            onModelSelected(it)
+                                        } else {
                                             // 从selectedModels中计算出要删除的model，因为删除需要id匹配，而不是ModelId
                                             onModelDeselected(selectedModels.firstOrNull { model -> model.modelId == it.modelId }
                                                 ?: it)
-                                        } else {
-                                            onModelSelected(it)
                                         }
                                     }
                                 ) {
-                                    if (selectedModels.any { model -> model.modelId == it.modelId }) {
-                                        Icon(HugeIcons.Cancel01, null)
-                                    } else {
-                                        Icon(HugeIcons.Add01, null)
-                                    }
+                                    Icon(if (added) HugeIcons.Tick01 else HugeIcons.Add01, null)
                                 }
                             }
                         }
@@ -1053,27 +1040,21 @@ private fun ModelTypeSelector(
         stringResource(R.string.setting_provider_page_model_type),
         style = MaterialTheme.typography.titleSmall
     )
-    SingleChoiceSegmentedButtonRow(
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        ModelType.entries.forEachIndexed { index, type ->
-            SegmentedButton(
-                shape = SegmentedButtonDefaults.itemShape(index, ModelType.entries.size),
-                label = {
-                    Text(
-                        text = stringResource(
-                            when (type) {
-                                ModelType.CHAT -> R.string.setting_provider_page_chat_model
-                                ModelType.EMBEDDING -> R.string.setting_provider_page_embedding_model
-                                ModelType.IMAGE -> R.string.setting_provider_page_image_model
-                            }
-                        )
-                    )
-                },
-                selected = selectedType == type,
-                onClick = { onTypeSelected(type) }
-            )
-        }
+    ConnectedChoiceButtons(
+        options = ModelType.entries,
+        selected = selectedType,
+        onSelect = onTypeSelected,
+    ) { type, selected ->
+        ConnectedChoiceLabel(
+            text = stringResource(
+                when (type) {
+                    ModelType.CHAT -> R.string.setting_provider_page_chat_model
+                    ModelType.EMBEDDING -> R.string.setting_provider_page_embedding_model
+                    ModelType.IMAGE -> R.string.setting_provider_page_image_model
+                }
+            ),
+            selected = selected,
+        )
     }
 }
 
@@ -1090,62 +1071,46 @@ private fun ModelModalitySelector(
             stringResource(R.string.setting_provider_page_input_modality),
             style = MaterialTheme.typography.titleSmall
         )
-        MultiChoiceSegmentedButtonRow(
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Modality.entries.forEachIndexed { index, modality ->
-                SegmentedButton(
-                    checked = modality in inputModalities,
-                    shape = SegmentedButtonDefaults.itemShape(index, Modality.entries.size),
-                    onCheckedChange = {
-                        if (it) {
-                            onUpdateInputModalities(inputModalities + modality)
-                        } else {
-                            onUpdateInputModalities(inputModalities - modality)
-                        }
+        ConnectedMultiChoiceButtons(
+            options = Modality.entries,
+            selected = inputModalities,
+            onToggle = { modality, checked ->
+                onUpdateInputModalities(if (checked) inputModalities + modality else inputModalities - modality)
+            },
+        ) { modality, selected ->
+            ConnectedChoiceLabel(
+                text = stringResource(
+                    when (modality) {
+                        Modality.TEXT -> R.string.setting_provider_page_text
+                        Modality.IMAGE -> R.string.setting_provider_page_image
                     }
-                ) {
-                    Text(
-                        text = stringResource(
-                            when (modality) {
-                                Modality.TEXT -> R.string.setting_provider_page_text
-                                Modality.IMAGE -> R.string.setting_provider_page_image
-                            }
-                        )
-                    )
-                }
-            }
+                ),
+                selected = selected,
+                icon = HugeIcons.Tick01,
+            )
         }
 
         Text(
             stringResource(R.string.setting_provider_page_output_modality),
             style = MaterialTheme.typography.titleSmall
         )
-        MultiChoiceSegmentedButtonRow(
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Modality.entries.forEachIndexed { index, modality ->
-                SegmentedButton(
-                    checked = modality in outputModalities,
-                    shape = SegmentedButtonDefaults.itemShape(index, Modality.entries.size),
-                    onCheckedChange = {
-                        if (it) {
-                            onUpdateOutputModalities(outputModalities + modality)
-                        } else {
-                            onUpdateOutputModalities(outputModalities - modality)
-                        }
+        ConnectedMultiChoiceButtons(
+            options = Modality.entries,
+            selected = outputModalities,
+            onToggle = { modality, checked ->
+                onUpdateOutputModalities(if (checked) outputModalities + modality else outputModalities - modality)
+            },
+        ) { modality, selected ->
+            ConnectedChoiceLabel(
+                text = stringResource(
+                    when (modality) {
+                        Modality.TEXT -> R.string.setting_provider_page_text
+                        Modality.IMAGE -> R.string.setting_provider_page_image
                     }
-                ) {
-                    Text(
-                        text = stringResource(
-                            when (modality) {
-                                Modality.TEXT -> R.string.setting_provider_page_text
-                                Modality.IMAGE -> R.string.setting_provider_page_image
-                            }
-                        )
-                    )
-                }
-            }
+                ),
+                selected = selected,
+                icon = HugeIcons.Tick01,
+            )
         }
     }
 }
@@ -1159,32 +1124,23 @@ fun ModalAbilitySelector(
         stringResource(R.string.setting_provider_page_abilities),
         style = MaterialTheme.typography.titleSmall
     )
-    MultiChoiceSegmentedButtonRow(
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        ModelAbility.entries.forEachIndexed { index, ability ->
-            SegmentedButton(
-                checked = ability in abilities,
-                shape = SegmentedButtonDefaults.itemShape(index, ModelAbility.entries.size),
-                onCheckedChange = {
-                    if (it) {
-                        onUpdateAbilities(abilities + ability)
-                    } else {
-                        onUpdateAbilities(abilities - ability)
-                    }
-                },
-                label = {
-                    Text(
-                        text = stringResource(
-                            when (ability) {
-                                ModelAbility.TOOL -> R.string.setting_provider_page_tool
-                                ModelAbility.REASONING -> R.string.setting_provider_page_reasoning
-                            }
-                        )
-                    )
+    ConnectedMultiChoiceButtons(
+        options = ModelAbility.entries,
+        selected = abilities,
+        onToggle = { ability, checked ->
+            onUpdateAbilities(if (checked) abilities + ability else abilities - ability)
+        },
+    ) { ability, selected ->
+        ConnectedChoiceLabel(
+            text = stringResource(
+                when (ability) {
+                    ModelAbility.TOOL -> R.string.setting_provider_page_tool
+                    ModelAbility.REASONING -> R.string.setting_provider_page_reasoning
                 }
-            )
-        }
+            ),
+            selected = selected,
+            icon = HugeIcons.Tick01,
+        )
     }
 }
 
@@ -1267,7 +1223,7 @@ private fun ModelCard(
                         ) {
                             Text(stringResource(R.string.cancel))
                         }
-                        TextButton(
+                        Button(
                             onClick = {
                                 if (editingModel.displayName.isNotBlank()) {
                                     dialogState.confirm()
@@ -1282,14 +1238,18 @@ private fun ModelCard(
         }
     }
 
-    OutlinedCard(
+    Card(
         onClick = { dialogState.open(model.copy()) },
         modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor
+        ),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(start = 16.dp, top = 12.dp, end = 4.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1308,7 +1268,7 @@ private fun ModelCard(
             ) {
                 Text(
                     text = model.displayName,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1367,7 +1327,7 @@ private fun BuiltInToolsSettings(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
@@ -1396,43 +1356,22 @@ private fun BuiltInToolsSettings(
             )
         )
 
-        availableTools.forEach { (tool, info) ->
-            val (title, description) = info
-            Card(
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = tool in tools,
-                        onCheckedChange = { checked ->
-                            if (checked) {
-                                onUpdateTools(tools + tool)
-                            } else {
-                                onUpdateTools(tools - tool)
-                            }
-                        }
-                    )
+        // 弹窗底色和 CardGroup 默认的底色太接近，换一个深一档的
+        val itemColors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+        CardGroup {
+            availableTools.fastForEach { (tool, info) ->
+                val (title, description) = info
+                val checked = tool in tools
+                val toggle = { enabled: Boolean ->
+                    onUpdateTools(if (enabled) tools + tool else tools - tool)
                 }
+                item(
+                    onClick = { toggle(!checked) },
+                    colors = itemColors,
+                    supportingContent = { Text(description) },
+                    trailingContent = { Switch(checked = checked, onCheckedChange = toggle) },
+                    headlineContent = { Text(title) },
+                )
             }
         }
     }
@@ -1462,13 +1401,15 @@ private fun ProviderOverrideSettings(
         )
 
         if (providerOverride != null) {
-            OutlinedCard(
-                modifier = Modifier.fillMaxWidth()
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(start = 16.dp, top = 8.dp, end = 4.dp, bottom = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(
@@ -1528,7 +1469,9 @@ private fun ProviderOverrideSettings(
                     showProviderConfig = false
                     editingProvider = null
                 },
-                sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
+                sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)),
+                // 和服务商详情页同一个底色，里面的分段表单才分得开
+                containerColor = CustomColors.topBarColors.containerColor,
             ) {
                 var internalProvider by remember(editingProvider) { mutableStateOf(editingProvider!!) }
 
@@ -1568,7 +1511,7 @@ private fun ProviderOverrideSettings(
                         ) {
                             Text(stringResource(R.string.cancel))
                         }
-                        TextButton(
+                        Button(
                             onClick = {
                                 onUpdateProviderOverride(internalProvider.copyProvider(name = internalProvider.name.trim()))
                                 showProviderConfig = false

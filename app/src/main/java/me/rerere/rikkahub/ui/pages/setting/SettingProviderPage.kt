@@ -1,15 +1,6 @@
 package me.rerere.rikkahub.ui.pages.setting
 
 import android.net.Uri
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Camera01
-import me.rerere.hugeicons.stroke.Delete01
-import me.rerere.hugeicons.stroke.Image02
-import me.rerere.hugeicons.stroke.FileImport
-import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.Search01
-import me.rerere.hugeicons.stroke.Sparkles
-import me.rerere.hugeicons.stroke.Cancel01
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -29,23 +20,28 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
@@ -56,16 +52,30 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastForEachIndexed
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import io.github.g00fy2.quickie.QRResult
 import io.github.g00fy2.quickie.ScanQRCode
+import kotlin.uuid.Uuid
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Camera01
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.Image02
+import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Sparkles
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.RECOMMENDED_PROVIDERS
@@ -75,12 +85,11 @@ import me.rerere.rikkahub.ui.components.ui.ItemAction
 import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
+import me.rerere.rikkahub.ui.components.ui.cardGroupItemShape
 import me.rerere.rikkahub.ui.components.ui.decodeProviderSetting
 import me.rerere.rikkahub.ui.components.ui.longPressReorder
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.ui.hooks.useEditState
-import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.ImageUtils
 import me.rerere.rikkahub.utils.plus
@@ -88,7 +97,6 @@ import me.rerere.ui.components.RikkaConfirmDialog
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
-import kotlin.uuid.Uuid
 
 @Composable
 fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
@@ -139,12 +147,13 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                             )
                         }
                     }
-                    AddButton {
+                    AddButton { provider ->
                         vm.updateSettings { latest ->
                             latest.copy(
-                                providers = listOf(it) + latest.providers
+                                providers = listOf(provider) + latest.providers
                             )
                         }
+                        navController.navigate(Screen.SettingProviderDetail(providerId = provider.id.toString()))
                     }
                 },
                 scrollBehavior = scrollBehavior,
@@ -160,7 +169,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 .padding(top = innerPadding.calculateTopPadding())
         ) {
             // Search bar
-            OutlinedTextField(
+            TextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier
@@ -179,6 +188,12 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                 },
                 singleLine = true,
                 shape = CircleShape,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceBright,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceBright,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
             )
 
 
@@ -266,17 +281,20 @@ private fun RecommendProviderButton(
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
-                RECOMMENDED_PROVIDERS.forEach { provider ->
-                    RecommendProviderItem(
-                        provider = provider,
-                        onAdd = {
-                            onAdd(provider)
-                            toaster.show(
-                                importSuccessMessage,
-                                type = ToastType.Success
-                            )
-                        }
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+                    RECOMMENDED_PROVIDERS.fastForEachIndexed { index, provider ->
+                        RecommendProviderItem(
+                            provider = provider,
+                            shape = cardGroupItemShape(index, RECOMMENDED_PROVIDERS.size),
+                            onAdd = {
+                                onAdd(provider)
+                                toaster.show(
+                                    importSuccessMessage,
+                                    type = ToastType.Success
+                                )
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -286,17 +304,17 @@ private fun RecommendProviderButton(
 @Composable
 private fun RecommendProviderItem(
     provider: ProviderSetting,
+    shape: Shape,
     onAdd: () -> Unit
 ) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = CustomColors.listItemColors.containerColor
-        )
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(start = 16.dp, top = 12.dp, end = 8.dp, bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -310,7 +328,7 @@ private fun RecommendProviderItem(
             ) {
                 Text(
                     text = provider.name,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -320,7 +338,7 @@ private fun RecommendProviderItem(
                     }
                 }
             }
-            IconButton(onClick = onAdd) {
+            FilledTonalIconButton(onClick = onAdd) {
                 Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.setting_provider_page_add))
             }
         }
@@ -534,54 +552,73 @@ private fun handleImageQRCode(
 }
 
 
+// 新建时只选类型，其余配置到详情页里填
 @Composable
 private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
-    val dialogState = useEditState<ProviderSetting> {
-        onAdd(it.copyProvider(name = it.name.trim()))
+    var showSheet by remember { mutableStateOf(false) }
+    val templates = remember {
+        listOf(ProviderSetting.OpenAI(), ProviderSetting.Google(), ProviderSetting.Claude())
     }
 
     IconButton(
-        onClick = {
-            dialogState.open(ProviderSetting.OpenAI())
-        }
+        onClick = { showSheet = true }
     ) {
         Icon(HugeIcons.Add01, "Add")
     }
 
-    if (dialogState.isEditing) {
-        AlertDialog(
-            onDismissRequest = {
-                dialogState.dismiss()
-            },
-            title = {
-                Text(stringResource(R.string.setting_provider_page_add_provider))
-            },
-            text = {
-                dialogState.currentState?.let {
-                    ProviderConfigure(it) { newState ->
-                        dialogState.currentState = newState
+    if (showSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSheet = false },
+            sheetState = rememberBottomSheetState(
+                initialValue = SheetValue.Hidden,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+            )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.setting_provider_page_add_provider),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap)) {
+                    templates.fastForEachIndexed { index, template ->
+                        Surface(
+                            onClick = {
+                                showSheet = false
+                                onAdd(template.copyProvider(Uuid.random()))
+                            },
+                            shape = cardGroupItemShape(index, templates.size),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AutoAIIcon(
+                                    name = template.name,
+                                    modifier = Modifier.size(40.dp)
+                                )
+                                Text(
+                                    text = template.name,
+                                    style = MaterialTheme.typography.titleMediumEmphasized,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Icon(HugeIcons.ArrowRight01, contentDescription = null)
+                            }
+                        }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        dialogState.confirm()
-                    }
-                ) {
-                    Text(stringResource(R.string.setting_provider_page_add))
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        dialogState.dismiss()
-                    }
-                ) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-        )
+            }
+        }
     }
 }
 
@@ -594,6 +631,7 @@ private fun ProviderItem(
 ) {
     Card(
         modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (provider.enabled) {
                 CustomColors.listItemColors.containerColor
@@ -604,8 +642,8 @@ private fun ProviderItem(
         }
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 4.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AutoAIIcon(
@@ -618,7 +656,7 @@ private fun ProviderItem(
             ) {
                 Text(
                     text = provider.name,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

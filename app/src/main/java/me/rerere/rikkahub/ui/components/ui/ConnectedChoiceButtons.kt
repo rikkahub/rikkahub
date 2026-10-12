@@ -48,25 +48,73 @@ fun <T> ConnectedChoiceButtons(
     minHeight: Dp = 48.dp,
     content: @Composable (option: T, selected: Boolean) -> Unit,
 ) {
+    ConnectedButtons(
+        options = options,
+        isSelected = { it == selected },
+        onClick = { option, isSelected -> if (!isSelected) onSelect(option) },
+        role = Role.RadioButton,
+        growSelected = true,
+        modifier = modifier.selectableGroup(),
+        containerColor = containerColor,
+        minHeight = minHeight,
+        content = content,
+    )
+}
+
+// 连接式多选按钮组，每个按钮各自开关
+@Composable
+fun <T> ConnectedMultiChoiceButtons(
+    options: List<T>,
+    selected: Collection<T>,
+    onToggle: (option: T, checked: Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    minHeight: Dp = 48.dp,
+    content: @Composable (option: T, selected: Boolean) -> Unit,
+) {
+    ConnectedButtons(
+        options = options,
+        isSelected = { it in selected },
+        onClick = { option, isSelected -> onToggle(option, !isSelected) },
+        role = Role.Checkbox,
+        // 多选时可能同时选中好几个，都变宽没有意义
+        growSelected = false,
+        modifier = modifier,
+        containerColor = containerColor,
+        minHeight = minHeight,
+        content = content,
+    )
+}
+
+@Composable
+private fun <T> ConnectedButtons(
+    options: List<T>,
+    isSelected: (T) -> Boolean,
+    onClick: (option: T, isSelected: Boolean) -> Unit,
+    role: Role,
+    growSelected: Boolean,
+    modifier: Modifier,
+    containerColor: Color,
+    minHeight: Dp,
+    content: @Composable (option: T, selected: Boolean) -> Unit,
+) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .selectableGroup(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
     ) {
         options.fastForEachIndexed { index, option ->
-            val isSelected = option == selected
+            val selected = isSelected(option)
             val weight by animateFloatAsState(
-                targetValue = if (isSelected) 1.3f else 1f,
+                targetValue = if (selected && growSelected) 1.3f else 1f,
                 animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
             )
             ToggleButton(
-                checked = isSelected,
-                onCheckedChange = { if (!isSelected) onSelect(option) },
+                checked = selected,
+                onCheckedChange = { onClick(option, selected) },
                 modifier = Modifier
                     .weight(weight)
                     .heightIn(min = minHeight)
-                    .semantics { role = Role.RadioButton },
+                    .semantics { this.role = role },
                 shapes = when (index) {
                     0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
                     options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
@@ -75,7 +123,7 @@ fun <T> ConnectedChoiceButtons(
                 colors = ToggleButtonDefaults.colors(containerColor = containerColor),
                 contentPadding = PaddingValues(horizontal = 8.dp),
             ) {
-                content(option, isSelected)
+                content(option, selected)
             }
         }
     }

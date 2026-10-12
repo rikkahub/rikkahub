@@ -2,6 +2,8 @@ package me.rerere.rikkahub.ui.theme
 
 import androidx.compose.material3.CardColors
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FloatingToolbarColors
+import androidx.compose.material3.FloatingToolbarDefaults
 import androidx.compose.material3.ListItemColors
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme.colorScheme
@@ -188,4 +190,8 @@ object CustomColors {
 
     val listItemColors: ListItemColors
         @Composable get() = ListItemDefaults.colors(containerColor = colorScheme.surfaceBright)
+
+    // 浅色模式下页面背景和悬浮工具栏默认的底色相同，用强调色的版本才分得开
+    val floatingToolbarColors: FloatingToolbarColors
+        @Composable get() = FloatingToolbarDefaults.vibrantFloatingToolbarColors()
 }
