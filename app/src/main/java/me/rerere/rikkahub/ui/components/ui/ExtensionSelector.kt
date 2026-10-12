@@ -1,49 +1,21 @@
 package me.rerere.rikkahub.ui.components.ui
 
 import androidx.annotation.StringRes
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.ToggleButton
-import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastForEachIndexed
-import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Book01
 import me.rerere.hugeicons.stroke.MagicWand01
@@ -61,7 +33,10 @@ import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.components.ai.SkillsContent
 import org.koin.compose.koinInject
 
-internal enum class ExtensionTab(val icon: ImageVector, @param:StringRes val label: Int) {
+internal enum class ExtensionTab(
+    override val icon: ImageVector,
+    @param:StringRes override val label: Int,
+) : PagerTab {
     QUICK_MESSAGES(HugeIcons.Zap, R.string.extension_selector_tab_quick_messages),
     MODE_INJECTIONS(HugeIcons.MagicWand01, R.string.extension_selector_tab_mode_injections),
     LOREBOOKS(HugeIcons.Book01, R.string.extension_selector_tab_lorebooks),
@@ -93,8 +68,9 @@ fun ExtensionSelector(
     Column(
         modifier = modifier
     ) {
-        ExtensionTabs(
+        PagerTabs(
             pagerState = pagerState,
+            tabs = ExtensionTab.entries,
             modifier = Modifier.padding(bottom = 12.dp),
         )
 
@@ -205,70 +181,6 @@ fun ExtensionSelector(
                         )
                     }
                 }
-            }
-        }
-    }
-}
-
-// 分类切换：可横向滚动的切换按钮，选中项带图标
-@Composable
-internal fun ExtensionTabs(
-    pagerState: PagerState,
-    modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(0.dp),
-) {
-    val scope = rememberCoroutineScope()
-    val tabs = ExtensionTab.entries
-    // 用 targetPage 而不是 currentPage，跨多页跳转时中间的按钮不会依次闪过
-    val selectedIndex = pagerState.targetPage
-    val requesters = remember { tabs.map { BringIntoViewRequester() } }
-
-    // 滑动翻页后，把选中的按钮滚进可视范围
-    LaunchedEffect(selectedIndex) {
-        requesters[selectedIndex].bringIntoView()
-    }
-
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(contentPadding)
-            .selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        tabs.fastForEachIndexed { index, tab ->
-            val selected = index == selectedIndex
-            ToggleButton(
-                checked = selected,
-                onCheckedChange = {
-                    if (!selected) scope.launch { pagerState.animateScrollToPage(index) }
-                },
-                modifier = Modifier
-                    .bringIntoViewRequester(requesters[index])
-                    .semantics { role = Role.Tab },
-                colors = ToggleButtonDefaults.colors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                ),
-            ) {
-                AnimatedVisibility(
-                    visible = selected,
-                    enter = expandHorizontally(MaterialTheme.motionScheme.fastSpatialSpec()) + fadeIn(),
-                    exit = shrinkHorizontally(MaterialTheme.motionScheme.fastSpatialSpec()) + fadeOut(),
-                ) {
-                    Row {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(ToggleButtonDefaults.IconSize),
-                        )
-                        Spacer(Modifier.width(ToggleButtonDefaults.IconSpacing))
-                    }
-                }
-                Text(
-                    text = stringResource(tab.label),
-                    maxLines = 1,
-                    softWrap = false,
-                )
             }
         }
     }

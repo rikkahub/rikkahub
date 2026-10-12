@@ -29,7 +29,7 @@ import me.rerere.rikkahub.ui.components.ai.QuickMessagesContent
 import me.rerere.rikkahub.ui.components.ai.SkillsContent
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ExtensionTab
-import me.rerere.rikkahub.ui.components.ui.ExtensionTabs
+import me.rerere.rikkahub.ui.components.ui.PagerTabs
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
@@ -67,8 +67,9 @@ fun AssistantExtensionsPage(id: String) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            ExtensionTabs(
+            PagerTabs(
                 pagerState = pagerState,
+                tabs = ExtensionTab.entries,
                 modifier = Modifier.padding(bottom = 4.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp),
             )

@@ -1,20 +1,28 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import android.text.format.DateUtils
+import androidx.annotation.StringRes
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Settings03
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -28,6 +36,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -46,6 +55,8 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.ItemAction
 import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
+import me.rerere.rikkahub.ui.components.ui.PagerTab
+import me.rerere.rikkahub.ui.components.ui.PagerTabs
 import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -56,6 +67,15 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+
+// 记忆文件放第一页：从侧边栏的整理入口进来时能直接看到整理状态
+private enum class MemoryTab(
+    override val icon: ImageVector,
+    @param:StringRes override val label: Int,
+) : PagerTab {
+    FILES(HugeIcons.Brain02, R.string.assistant_page_manage_memory_title),
+    SETTINGS(HugeIcons.Settings03, R.string.settings),
+}
 
 @Composable
 fun AssistantMemoryPage(id: String) {
@@ -69,6 +89,7 @@ fun AssistantMemoryPage(id: String) {
     val consolidation by vm.memoryConsolidation.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val pagerState = rememberPagerState { MemoryTab.entries.size }
 
     Scaffold(
         topBar = {
@@ -79,6 +100,13 @@ fun AssistantMemoryPage(id: String) {
                 navigationIcon = {
                     BackButton()
                 },
+                actions = {
+                    if (MemoryTab.entries[pagerState.currentPage] == MemoryTab.FILES) {
+                        IconButton(onClick = { navController.navigate(Screen.MemoryFile(vm.memoryId, null)) }) {
+                            Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.add))
+                        }
+                    }
+                },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
@@ -86,34 +114,48 @@ fun AssistantMemoryPage(id: String) {
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
-        AssistantMemoryContent(
-            innerPadding = innerPadding,
-            assistant = assistant,
-            memories = memories,
-            consolidation = consolidation,
-            onOrganizeMemory = { vm.organizeMemory() },
-            onUpdateAssistant = { vm.update(it) },
-            onDeleteMemory = { vm.deleteMemory(it) },
-            onOpenMemory = { path -> navController.navigate(Screen.MemoryFile(vm.memoryId, path)) },
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            PagerTabs(
+                pagerState = pagerState,
+                tabs = MemoryTab.entries,
+                modifier = Modifier.padding(bottom = 4.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+            )
+
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) { page ->
+                when (MemoryTab.entries[page]) {
+                    MemoryTab.FILES -> MemoryFilesTab(
+                        memories = memories,
+                        consolidation = consolidation.takeIf { assistant.enableMemory },
+                        onOrganizeMemory = { vm.organizeMemory() },
+                        onOpenMemory = { path -> navController.navigate(Screen.MemoryFile(vm.memoryId, path)) },
+                        onDeleteMemory = { vm.deleteMemory(it) },
+                    )
+
+                    MemoryTab.SETTINGS -> MemorySettingsTab(
+                        assistant = assistant,
+                        onUpdateAssistant = { vm.update(it) },
+                    )
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun AssistantMemoryContent(
-    innerPadding: PaddingValues,
+private fun MemorySettingsTab(
     assistant: Assistant,
-    memories: List<MemoryFile>,
-    consolidation: MemoryConsolidationStatus,
-    onOrganizeMemory: () -> Unit,
     onUpdateAssistant: (Assistant) -> Unit,
-    // path 为 null 时新建
-    onOpenMemory: (path: String?) -> Unit,
-    onDeleteMemory: (MemoryFile) -> Unit,
 ) {
-    var pendingDeleteMemory by remember { mutableStateOf<MemoryFile?>(null) }
-    val memoryGroups = remember(memories) { memories.groupByDirectory() }
-
     var showTimeReminderIntervalDialog by remember(assistant.id) { mutableStateOf(false) }
     var timeReminderIntervalInput by remember(assistant.id) { mutableStateOf("") }
 
@@ -158,10 +200,7 @@ private fun AssistantMemoryContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(innerPadding)
-            .padding(bottom = 16.dp)
-            .imePadding(),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         CardGroup {
@@ -238,22 +277,34 @@ private fun AssistantMemoryContent(
                 )
             }
         }
+    }
+}
 
-        if (assistant.enableMemory) {
+@Composable
+private fun MemoryFilesTab(
+    memories: List<MemoryFile>,
+    // 为 null 时不显示整理入口
+    consolidation: MemoryConsolidationStatus?,
+    onOrganizeMemory: () -> Unit,
+    onOpenMemory: (path: String) -> Unit,
+    onDeleteMemory: (MemoryFile) -> Unit,
+) {
+    var pendingDeleteMemory by remember { mutableStateOf<MemoryFile?>(null) }
+    val memoryGroups = remember(memories) { memories.groupByDirectory() }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        if (consolidation != null) {
             MemoryConsolidationSection(
                 status = consolidation,
                 onOrganize = onOrganizeMemory,
             )
         }
-
-        SectionHeader(
-            title = stringResource(R.string.assistant_page_manage_memory_title),
-            action = {
-                SectionAddButton(
-                    onClick = { onOpenMemory(null) },
-                )
-            },
-        )
 
         memoryGroups.fastForEach { (directory, files) ->
             CardGroup(
