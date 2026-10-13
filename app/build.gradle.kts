@@ -270,8 +270,7 @@ dependencies {
     // Reorderable (https://github.com/Calvin-LL/Reorderable/)
     implementation(libs.reorderable)
 
-    // lucide icons
-    implementation(libs.lucide.icons)
+    // icons
     implementation(libs.huge.icons)
 
     // image viewer
