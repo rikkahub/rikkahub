@@ -1585,4 +1585,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_memory_dream_removed">%s 제거됨</string>
   <string name="memory_file_page_title">제목</string>
   <string name="memory_file_page_edit_warning">기억을 직접 편집하지 않는 것이 좋습니다. 대신 채팅에서 AI에게 기억하거나 변경해 달라고 요청하세요.</string>
+  <string name="setting_provider_page_context_length">컨텍스트 길이</string>
+  <string name="setting_provider_page_context_length_custom">사용자 지정</string>
 </resources>

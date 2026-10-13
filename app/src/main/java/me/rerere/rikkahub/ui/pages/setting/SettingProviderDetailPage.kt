@@ -139,6 +139,7 @@ import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderBalanceOpti
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.UiState
+import me.rerere.rikkahub.utils.formatNumber
 import me.rerere.rikkahub.utils.plus
 import me.rerere.ui.components.RikkaConfirmDialog
 import org.koin.androidx.compose.koinViewModel
@@ -641,6 +642,13 @@ private fun ModelSettingsForm(
                                     onModelChange(model.copy(abilities = it))
                                 }
                             )
+
+                            ModelContextLengthSelector(
+                                contextLength = model.contextLength,
+                                onUpdateContextLength = {
+                                    onModelChange(model.copy(contextLength = it))
+                                }
+                            )
                         }
                     }
                 }
@@ -1140,6 +1148,55 @@ fun ModalAbilitySelector(
             ),
             selected = selected,
             icon = HugeIcons.Tick01,
+        )
+    }
+}
+
+// 常见的上下文窗口大小，其余的走自定义输入
+private val ContextLengthPresets = listOf(128_000, 200_000, 1_000_000)
+
+@Composable
+private fun ModelContextLengthSelector(
+    contextLength: Int,
+    onUpdateContextLength: (Int) -> Unit
+) {
+    var custom by remember { mutableStateOf(contextLength !in ContextLengthPresets) }
+    // 输入过程中允许为空，只有合法的正整数才写回模型
+    var customText by remember { mutableStateOf(contextLength.toString()) }
+
+    Text(
+        stringResource(R.string.setting_provider_page_context_length),
+        style = MaterialTheme.typography.titleSmall
+    )
+    // null 表示自定义
+    ConnectedChoiceButtons(
+        options = ContextLengthPresets + null,
+        selected = if (custom) null else contextLength,
+        onSelect = { preset ->
+            custom = preset == null
+            if (preset != null) {
+                customText = preset.toString()
+                onUpdateContextLength(preset)
+            }
+        },
+    ) { preset, selected ->
+        ConnectedChoiceLabel(
+            text = preset?.formatNumber() ?: stringResource(R.string.setting_provider_page_context_length_custom),
+            selected = selected,
+        )
+    }
+    AnimatedVisibility(visible = custom) {
+        OutlinedTextField(
+            value = customText,
+            onValueChange = { value ->
+                customText = value.filter { it.isDigit() }
+                customText.toIntOrNull()?.takeIf { it > 0 }?.let(onUpdateContextLength)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            suffix = { Text("tokens") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            singleLine = true,
+            isError = (customText.toIntOrNull() ?: 0) <= 0,
         )
     }
 }

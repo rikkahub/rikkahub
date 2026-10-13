@@ -1585,4 +1585,6 @@
   <string name="chat_message_tool_list_memory">Перечислил воспоминания</string>
   <string name="memory_file_page_title">Заголовок</string>
   <string name="memory_file_page_edit_warning">Постарайтесь не редактировать воспоминания вручную. Вместо этого попросите ИИ в чате запомнить или изменить что-то для вас.</string>
+  <string name="setting_provider_page_context_length">Длина контекста</string>
+  <string name="setting_provider_page_context_length_custom">Пользовательский</string>
 </resources>
