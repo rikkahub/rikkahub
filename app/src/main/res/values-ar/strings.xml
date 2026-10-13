@@ -1492,7 +1492,7 @@
   <string name="media_creation_error_cancelled_remotely">تم إلغاء المهمة على الخادم</string>
   <string name="media_creation_error_expired">انتهت صلاحية المهمة</string>
   <string name="setting_media_page_empty">لا يوجد مزوّدو توليد وسائط بعد. اضغط على + في الأعلى لإضافة مزوّد.</string>
-  <string name="setting_media_page_s3_desc">بعض واجهات API تقبل الأصول فقط عبر روابط URL عامة (مثل الصور المرجعية ومقاطع الفيديو المرجعية لتوليد الفيديو). بمجرد إعداد ذلك، تُرفع الملفات المحلية إلى هذه الحاوية أولاً ثم تُمرَّر إلى API كروابط URL مؤقتة؛ وتُنظَّف الملفات المرفوعة تلقائيًا بعد 7 أيام. هذا الإعداد مستقل عن S3 المستخدم للنسخ الاحتياطي.</string>
+  <string name="setting_media_page_s3_desc">بعض واجهات API تقبل فقط الأصول الموجودة على روابط URL عامة (مثل الصور المرجعية ومقاطع الفيديو المرجعية لتوليد الفيديو). قم بإعداد خدمة تخزين كائنات متوافقة مع S3 هنا، حيث تُرفع الملفات المحلية إلى دلو الخدمة أولاً ثم تُمرَّر إلى API كروابط URL مؤقتة؛ وتُنظَّف الملفات المرفوعة تلقائيًا بعد 7 أيام. هذا الإعداد مستقل عن S3 المستخدم للنسخ الاحتياطية.</string>
   <string name="setting_media_page_provider_type">نوع المزوّد</string>
   <string name="setting_media_page_provider_name">الاسم</string>
   <string name="setting_media_page_workspace_id">معرّف مساحة العمل</string>
@@ -1585,4 +1585,5 @@
   <string name="memory_file_page_edit_warning">حاول ألا تحرر الذكريات يدويًا. بدلًا من ذلك، اطلب من الذكاء الاصطناعي في الدردشة أن يتذكر الأشياء أو يغيّرها نيابةً عنك.</string>
   <string name="setting_provider_page_context_length">طول السياق</string>
   <string name="setting_provider_page_context_length_custom">مخصص</string>
+  <string name="setting_media_page_asset_storage">تخزين الأصول</string>
 </resources>

@@ -1482,7 +1482,7 @@
   <string name="video_player_error">無法播放此影片</string>
   <string name="video_player_open_with">使用其他應用程式開啟</string>
   <string name="setting_media_page_empty">尚無媒體生成供應商。點擊頂端的 + 即可新增。</string>
-  <string name="setting_media_page_s3_desc">部分 API 僅接受公開 URL 的素材（例如用於影片生成的參考圖片與參考影片）。設定完成後，本機檔案會先上傳至此儲存桶，再以臨時 URL 的形式傳遞給 API；上傳的檔案會在 7 天後自動清除。此設定與用於備份的 S3 相互獨立。</string>
+  <string name="setting_media_page_s3_desc">部分 API 僅接受公開 URL 的素材（例如用於影片生成的參考圖片與參考影片）。在此設定 S3 相容的物件儲存服務後，本機檔案會先上傳至其儲存桶，再以臨時 URL 的形式傳遞給 API；上傳的檔案會在 7 天後自動清除。此設定與用於備份的 S3 相互獨立。</string>
   <string name="setting_media_page_provider_type">供應商類型</string>
   <string name="setting_media_page_provider_name">名稱</string>
   <string name="setting_media_page_workspace_id">Workspace ID</string>
@@ -1585,4 +1585,5 @@
   <string name="memory_file_page_edit_warning">盡量避免手動編輯記憶，建議在聊天介面讓 AI 替你記住或更改記憶</string>
   <string name="setting_provider_page_context_length">上下文長度</string>
   <string name="setting_provider_page_context_length_custom">自訂</string>
+  <string name="setting_media_page_asset_storage">素材儲存</string>
 </resources>

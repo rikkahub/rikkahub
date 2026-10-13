@@ -1504,7 +1504,7 @@
   <string name="media_creation_error_kind_unsupported">%1$s не поддерживает этот тип модели</string>
   <string name="media_creation_error_task_exists">Задача уже существует</string>
   <string name="setting_media_page_empty">Пока нет провайдеров генерации медиа. Нажмите + вверху, чтобы добавить.</string>
-  <string name="setting_media_page_s3_desc">Некоторые API принимают ресурсы только по публичным URL (например, референсные изображения и референсные видео для генерации видео). После настройки локальные файлы сначала загружаются в этот бакет, а затем передаются в API как временные URL; загруженные файлы автоматически удаляются через 7 дней. Эта конфигурация не зависит от S3, используемого для резервных копий.</string>
+  <string name="setting_media_page_s3_desc">Некоторые API принимают ресурсы только по публичным URL (например, референсные изображения и референсные видео для генерации видео). Настройте здесь S3-совместимый сервис объектного хранилища: локальные файлы сначала загружаются в его бакет, а затем передаются в API как временные URL; загруженные файлы автоматически удаляются через 7 дней. Эта конфигурация не зависит от S3, используемого для резервных копий.</string>
   <string name="setting_media_page_provider_type">Тип провайдера</string>
   <string name="setting_media_page_provider_name">Название</string>
   <string name="setting_media_page_workspace_id">ID рабочей области</string>
@@ -1587,4 +1587,5 @@
   <string name="memory_file_page_edit_warning">Постарайтесь не редактировать воспоминания вручную. Вместо этого попросите ИИ в чате запомнить или изменить что-то для вас.</string>
   <string name="setting_provider_page_context_length">Длина контекста</string>
   <string name="setting_provider_page_context_length_custom">Пользовательский</string>
+  <string name="setting_media_page_asset_storage">Хранилище ресурсов</string>
 </resources>

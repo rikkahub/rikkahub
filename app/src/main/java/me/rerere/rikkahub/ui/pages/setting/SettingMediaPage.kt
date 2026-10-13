@@ -1,11 +1,13 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -14,46 +16,42 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Connect
 import me.rerere.hugeicons.stroke.Database02
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Image02
@@ -62,16 +60,23 @@ import me.rerere.mediagen.provider.MediaGenerationProviderSetting
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.files.RemoteFileStore
+import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
 import me.rerere.rikkahub.ui.components.ui.ItemAction
 import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
+import me.rerere.rikkahub.ui.components.ui.PagerTab
+import me.rerere.rikkahub.ui.components.ui.PagerTabs
 import me.rerere.rikkahub.ui.components.ui.Tag
+import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.longPressReorder
 import me.rerere.rikkahub.ui.components.ui.s3ConnectionItems
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.pages.setting.components.MediaGenerationProviderConfigure
+import me.rerere.rikkahub.ui.pages.setting.components.ProviderEditSheet
+import me.rerere.rikkahub.ui.pages.setting.components.ProviderTypeSheet
 import me.rerere.rikkahub.ui.pages.setting.components.label
 import me.rerere.rikkahub.ui.pages.setting.components.typeName
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -81,11 +86,19 @@ import org.koin.compose.koinInject
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 
+private enum class MediaTab(
+    override val icon: ImageVector,
+    @param:StringRes override val label: Int,
+) : PagerTab {
+    PROVIDERS(HugeIcons.Image02, R.string.setting_media_page_providers),
+    STORAGE(HugeIcons.Database02, R.string.setting_media_page_asset_storage),
+}
+
 @Composable
 fun SettingMediaPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     var editingProvider by remember { mutableStateOf<MediaGenerationProviderSetting?>(null) }
-    var selectedPage by remember { mutableIntStateOf(0) }
+    val pagerState = rememberPagerState { MediaTab.entries.size }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -98,7 +111,7 @@ fun SettingMediaPage(vm: SettingVM = koinViewModel()) {
                     BackButton()
                 },
                 actions = {
-                    if (selectedPage == 0) {
+                    if (MediaTab.entries[pagerState.targetPage] == MediaTab.PROVIDERS) {
                         AddMediaProviderButton {
                             vm.updateSettings { latest ->
                                 latest.copy(
@@ -112,40 +125,41 @@ fun SettingMediaPage(vm: SettingVM = koinViewModel()) {
                 colors = CustomColors.topBarColors
             )
         },
-        bottomBar = {
-            NavigationBar(
-                containerColor = CustomColors.cardColorsOnSurfaceContainer.containerColor
-            ) {
-                NavigationBarItem(
-                    selected = selectedPage == 0,
-                    onClick = { selectedPage = 0 },
-                    icon = { Icon(HugeIcons.Image02, contentDescription = null) },
-                    label = { Text(stringResource(R.string.setting_media_page_providers)) }
-                )
-                NavigationBarItem(
-                    selected = selectedPage == 1,
-                    onClick = { selectedPage = 1 },
-                    icon = { Icon(HugeIcons.Database02, contentDescription = null) },
-                    label = { Text("S3") }
-                )
-            }
-        },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = CustomColors.topBarColors.containerColor,
     ) { innerPadding ->
-        when (selectedPage) {
-            0 -> MediaProviderList(
-                settings = settings,
-                onUpdateSettings = vm::updateSettings,
-                onEdit = { editingProvider = it },
-                modifier = Modifier.padding(innerPadding)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
+        ) {
+            PagerTabs(
+                pagerState = pagerState,
+                tabs = MediaTab.entries,
+                modifier = Modifier.padding(bottom = 4.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
             )
 
-            1 -> MediaUploadS3Tab(
-                settings = settings,
-                onUpdateSettings = vm::updateSettings,
-                modifier = Modifier.padding(innerPadding)
-            )
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) { page ->
+                when (MediaTab.entries[page]) {
+                    MediaTab.PROVIDERS -> MediaProviderList(
+                        settings = settings,
+                        onUpdateSettings = vm::updateSettings,
+                        onEdit = { editingProvider = it },
+                    )
+
+                    MediaTab.STORAGE -> MediaUploadS3Tab(
+                        settings = settings,
+                        onUpdateSettings = vm::updateSettings,
+                    )
+                }
+            }
         }
     }
 
@@ -185,24 +199,14 @@ private fun MediaProviderList(
     var deleteTarget by remember { mutableStateOf<MediaGenerationProviderSetting?>(null) }
 
     if (settings.mediaGenerationProviders.isEmpty()) {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .padding(32.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = stringResource(R.string.setting_media_page_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        ExtensionEmptyState(
+            message = stringResource(R.string.setting_media_page_empty),
+            icon = HugeIcons.Image02,
+        )
     } else {
         LazyColumn(
-            modifier = modifier
-                .fillMaxSize()
-                .imePadding(),
-            contentPadding = PaddingValues(16.dp),
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             state = lazyListState
         ) {
@@ -252,97 +256,103 @@ private fun MediaProviderItem(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val name = provider.name.ifEmpty { provider.typeName }
+
     Card(
         onClick = onEdit,
         modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = CustomColors.listItemColors.containerColor)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Row(
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 4.dp, bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            AutoAIIcon(
+                name = name,
+                modifier = Modifier.size(40.dp)
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                AutoAIIcon(
-                    name = provider.name.ifEmpty { provider.typeName },
-                    modifier = Modifier.size(32.dp)
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = provider.typeName,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = LocalContentColor.current.copy(alpha = 0.7f)
                 )
 
-                Column(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = provider.name.ifEmpty { provider.typeName },
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        text = provider.typeName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                ItemActionMenu(
-                    actions = listOf(
-                        ItemAction(
-                            text = stringResource(R.string.delete),
-                            icon = HugeIcons.Delete01,
-                            destructive = true,
-                            onClick = onDelete,
-                        ),
-                    )
-                )
-            }
-
-            val modelCounts = MediaKind.entries
-                .map { kind -> kind to provider.models.count { it.kind == kind } }
-                .filter { it.second > 0 }
-            if (modelCounts.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    modelCounts.forEach { (kind, count) ->
-                        Tag {
-                            Text("${kind.label} $count")
+                val modelCounts = MediaKind.entries
+                    .map { kind -> kind to provider.models.count { it.kind == kind } }
+                    .filter { it.second > 0 }
+                if (modelCounts.isNotEmpty()) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        modelCounts.forEach { (kind, count) ->
+                            Tag(type = TagType.INFO) {
+                                Text("${kind.label} $count")
+                            }
                         }
                     }
                 }
             }
+
+            ItemActionMenu(
+                actions = listOf(
+                    ItemAction(
+                        text = stringResource(R.string.delete),
+                        icon = HugeIcons.Delete01,
+                        destructive = true,
+                        onClick = onDelete,
+                    ),
+                )
+            )
         }
     }
 }
 
+// 新建时先选类型，再进配置面板
 @Composable
 private fun AddMediaProviderButton(onAdd: (MediaGenerationProviderSetting) -> Unit) {
-    var showTypeMenu by remember { mutableStateOf(false) }
+    var showTypeSheet by remember { mutableStateOf(false) }
     var newProvider by remember { mutableStateOf<MediaGenerationProviderSetting?>(null) }
+    val factories = remember {
+        listOf<() -> MediaGenerationProviderSetting>(
+            { MediaGenerationProviderSetting.OpenAI() },
+            { MediaGenerationProviderSetting.Aliyun() },
+            { MediaGenerationProviderSetting.Volcengine() },
+            { MediaGenerationProviderSetting.MiniMax() },
+            { MediaGenerationProviderSetting.OpenRouter() },
+        )
+    }
 
-    Box {
-        IconButton(
-            onClick = { showTypeMenu = true }
-        ) {
-            Icon(HugeIcons.Add01, stringResource(R.string.setting_media_page_add_provider))
-        }
-        DropdownMenu(
-            expanded = showTypeMenu,
-            onDismissRequest = { showTypeMenu = false }
-        ) {
-            listOf<() -> MediaGenerationProviderSetting>(
-                { MediaGenerationProviderSetting.OpenAI() },
-                { MediaGenerationProviderSetting.Aliyun() },
-                { MediaGenerationProviderSetting.Volcengine() },
-                { MediaGenerationProviderSetting.MiniMax() },
-                { MediaGenerationProviderSetting.OpenRouter() },
-            ).forEach { create ->
-                DropdownMenuItem(
-                    text = { Text(remember { create() }.typeName) },
-                    onClick = {
-                        newProvider = create()
-                        showTypeMenu = false
-                    }
-                )
-            }
-        }
+    IconButton(
+        onClick = { showTypeSheet = true }
+    ) {
+        Icon(HugeIcons.Add01, stringResource(R.string.setting_media_page_add_provider))
+    }
+
+    if (showTypeSheet) {
+        ProviderTypeSheet(
+            title = stringResource(R.string.setting_media_page_add_provider),
+            types = factories,
+            typeName = { create -> remember(create) { create() }.typeName },
+            onSelect = { create ->
+                showTypeSheet = false
+                newProvider = create()
+            },
+            onDismiss = { showTypeSheet = false },
+        )
     }
 
     newProvider?.let { provider ->
@@ -364,64 +374,21 @@ private fun MediaProviderSheet(
     onConfirm: (MediaGenerationProviderSetting) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val bottomSheetState = rememberBottomSheetState(
-        initialValue = SheetValue.Hidden,
-        enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
-    )
-    var currentProvider by remember(initial) { mutableStateOf(initial) }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = bottomSheetState,
-        dragHandle = {
-            BottomSheetDefaults.DragHandle()
-        }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .fillMaxHeight(0.8f),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall
-            )
-
-            MediaGenerationProviderConfigure(
-                setting = currentProvider,
-                onValueChange = { currentProvider = it },
-                modifier = Modifier.weight(1f)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TextButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(stringResource(R.string.cancel))
-                }
-
-                TextButton(
-                    onClick = {
-                        // 没填模型 ID 的行不保存
-                        onConfirm(
-                            currentProvider.copyProvider(
-                                models = currentProvider.models.filter { it.modelId.isNotBlank() }
-                            )
-                        )
-                        onDismiss()
-                    },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(confirmText)
-                }
-            }
-        }
+    ProviderEditSheet(
+        title = title,
+        initial = initial,
+        confirmText = confirmText,
+        onConfirm = { provider ->
+            // 没填模型 ID 的行不保存
+            onConfirm(provider.copyProvider(models = provider.models.filter { it.modelId.isNotBlank() }))
+        },
+        onDismiss = onDismiss,
+    ) { provider, onValueChange, modifier ->
+        MediaGenerationProviderConfigure(
+            setting = provider,
+            onValueChange = onValueChange,
+            modifier = modifier
+        )
     }
 }
 
@@ -444,62 +411,64 @@ private fun MediaUploadS3Tab(
         modifier = modifier
             .fillMaxSize()
             .imePadding()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.setting_media_page_s3_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Text(
+            text = stringResource(R.string.setting_media_page_s3_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
 
-            CardGroup {
-                s3ConnectionItems(
-                    config = config,
-                    onUpdate = {
-                        config = it
-                        onUpdateSettings { latest -> latest.copy(uploadS3Config = it) }
-                    }
-                )
-            }
+        CardGroup {
+            s3ConnectionItems(
+                config = config,
+                onUpdate = {
+                    config = it
+                    onUpdateSettings { latest -> latest.copy(uploadS3Config = it) }
+                }
+            )
         }
 
-        HorizontalDivider()
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            OutlinedButton(
-                enabled = !testing,
-                onClick = {
-                    scope.launch {
-                        testing = true
-                        remoteFileStore.testConnection()
-                            .onSuccess {
-                                toaster.show(
-                                    context.getString(R.string.backup_page_connection_success),
-                                    type = ToastType.Success
-                                )
-                            }
-                            .onFailure {
-                                toaster.show(
-                                    context.getString(R.string.backup_page_connection_failed, it.message ?: ""),
-                                    type = ToastType.Error
-                                )
-                            }
-                        testing = false
+        CardGroup {
+            item(
+                onClick = if (!testing) {
+                    {
+                        scope.launch {
+                            testing = true
+                            remoteFileStore.testConnection()
+                                .onSuccess {
+                                    toaster.show(
+                                        context.getString(R.string.backup_page_connection_success),
+                                        type = ToastType.Success
+                                    )
+                                }
+                                .onFailure {
+                                    toaster.show(
+                                        context.getString(R.string.backup_page_connection_failed, it.message ?: ""),
+                                        type = ToastType.Error
+                                    )
+                                }
+                            testing = false
+                        }
                     }
-                }
-            ) {
-                Text(stringResource(R.string.backup_page_test_connection))
-            }
+                } else null,
+                headlineContent = { Text(stringResource(R.string.backup_page_test_connection)) },
+                leadingContent = {
+                    if (testing) {
+                        Box(
+                            modifier = Modifier.size(40.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularWavyProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
+                    } else {
+                        CardGroupIcon(HugeIcons.Connect)
+                    }
+                },
+            )
         }
     }
 }

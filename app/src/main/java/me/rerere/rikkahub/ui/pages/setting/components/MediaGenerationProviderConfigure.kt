@@ -9,11 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,7 +22,11 @@ import me.rerere.mediagen.model.MediaGenerationModel
 import me.rerere.mediagen.model.MediaKind
 import me.rerere.mediagen.provider.MediaGenerationProviderSetting
 import me.rerere.rikkahub.R
-import me.rerere.ui.components.FormItem
+import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
+import me.rerere.rikkahub.ui.components.ui.CardGroupValue
+import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceButtons
+import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
 
 val MediaGenerationProviderSetting.typeName: String
     @Composable get() = when (this) {
@@ -49,137 +49,121 @@ fun MediaGenerationProviderConfigure(
     modifier: Modifier = Modifier,
     onValueChange: (MediaGenerationProviderSetting) -> Unit
 ) {
+    val models = setting.models
+    // 按枚举顺序排列，保证按钮组的顺序稳定
+    val kinds = MediaKind.entries.filter { it in setting.supportedKinds }
+
+    fun updateModels(models: List<MediaGenerationModel>) {
+        onValueChange(setting.copyProvider(models = models))
+    }
+
     Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = modifier.verticalScroll(rememberScrollState())
     ) {
-        FormItem(label = { Text(stringResource(R.string.setting_media_page_provider_type)) }) {
-            OutlinedTextField(
-                value = setting.typeName,
-                onValueChange = {},
-                readOnly = true,
-                modifier = Modifier.fillMaxWidth()
+        CardGroup {
+            // 类型在新建时选定，之后不能改
+            item(
+                headlineContent = { Text(stringResource(R.string.setting_media_page_provider_type)) },
+                trailingContent = { CardGroupValue(setting.typeName) },
             )
-        }
 
-        FormItem(label = { Text(stringResource(R.string.setting_media_page_provider_name)) }) {
-            OutlinedTextField(
-                value = setting.name,
-                onValueChange = { onValueChange(setting.copyProvider(name = it)) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-        }
-
-        FormItem(label = { Text("API Key") }) {
-            OutlinedTextField(
-                value = setting.apiKey,
-                onValueChange = { onValueChange(setting.copyProvider(apiKey = it.trim())) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-        }
-
-        FormItem(label = { Text("Base URL") }) {
-            OutlinedTextField(
-                value = setting.baseUrl,
-                onValueChange = { onValueChange(setting.copyProvider(baseUrl = it.trim())) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-        }
-
-        if (setting is MediaGenerationProviderSetting.Aliyun) {
-            FormItem(
-                label = { Text(stringResource(R.string.setting_media_page_workspace_id)) },
-                description = {
-                    Text(
-                        stringResource(
-                            R.string.setting_media_page_workspace_id_desc,
-                            MediaGenerationProviderSetting.Aliyun.WORKSPACE_PLACEHOLDER,
-                        )
-                    )
-                }
+            formItem(
+                headlineContent = { Text(stringResource(R.string.setting_media_page_provider_name)) },
             ) {
                 OutlinedTextField(
-                    value = setting.workspaceId,
-                    onValueChange = { onValueChange(setting.copy(workspaceId = it.trim())) },
+                    value = setting.name,
+                    onValueChange = { onValueChange(setting.copyProvider(name = it)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
             }
-        }
 
-        FormItem(
-            label = { Text(stringResource(R.string.setting_media_page_models)) },
-            description = { Text(stringResource(R.string.setting_media_page_models_desc)) }
-        ) {
-            MediaGenerationModelList(
-                models = setting.models,
-                supportedKinds = setting.supportedKinds,
-                onValueChange = { onValueChange(setting.copyProvider(models = it)) }
-            )
-        }
-    }
-}
+            formItem(headlineContent = { Text("API Key") }) {
+                OutlinedTextField(
+                    value = setting.apiKey,
+                    onValueChange = { onValueChange(setting.copyProvider(apiKey = it.trim())) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
 
-@Composable
-private fun MediaGenerationModelList(
-    models: List<MediaGenerationModel>,
-    supportedKinds: Set<MediaKind>,
-    onValueChange: (List<MediaGenerationModel>) -> Unit
-) {
-    // 按枚举顺序排列，保证分段按钮的顺序稳定
-    val kinds = MediaKind.entries.filter { it in supportedKinds }
+            formItem(headlineContent = { Text("Base URL") }) {
+                OutlinedTextField(
+                    value = setting.baseUrl,
+                    onValueChange = { onValueChange(setting.copyProvider(baseUrl = it.trim())) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            }
 
-    fun update(model: MediaGenerationModel) {
-        onValueChange(models.map { if (it.id == model.id) model else it })
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        models.forEach { model ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+            if (setting is MediaGenerationProviderSetting.Aliyun) {
+                formItem(
+                    headlineContent = { Text(stringResource(R.string.setting_media_page_workspace_id)) },
+                    supportingContent = {
+                        Text(
+                            stringResource(
+                                R.string.setting_media_page_workspace_id_desc,
+                                MediaGenerationProviderSetting.Aliyun.WORKSPACE_PLACEHOLDER,
+                            )
+                        )
+                    }
                 ) {
                     OutlinedTextField(
-                        value = model.modelId,
-                        onValueChange = { update(model.copy(modelId = it.trim())) },
+                        value = setting.workspaceId,
+                        onValueChange = { onValueChange(setting.copy(workspaceId = it.trim())) },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text(stringResource(R.string.setting_media_page_model_id)) },
                         singleLine = true
                     )
-                    // 只支持一种类型的厂商不需要选择
-                    if (kinds.size > 1) {
-                        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                            kinds.forEachIndexed { index, kind ->
-                                SegmentedButton(
-                                    shape = SegmentedButtonDefaults.itemShape(index = index, count = kinds.size),
-                                    selected = model.kind == kind,
-                                    onClick = { update(model.copy(kind = kind)) },
-                                ) {
-                                    Text(kind.label)
-                                }
-                            }
-                        }
-                    }
-                }
-                IconButton(onClick = { onValueChange(models.filter { it.id != model.id }) }) {
-                    Icon(HugeIcons.Delete01, stringResource(R.string.delete))
                 }
             }
         }
 
-        TextButton(
-            onClick = { onValueChange(models + MediaGenerationModel(modelId = "", kind = kinds.first())) },
-            enabled = kinds.isNotEmpty()
+        CardGroup(
+            title = { Text(stringResource(R.string.setting_media_page_models)) },
         ) {
-            Icon(HugeIcons.Add01, null)
-            Text(stringResource(R.string.setting_media_page_add_model))
+            models.forEach { model ->
+                formItem {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = model.modelId,
+                            onValueChange = { value ->
+                                updateModels(models.map { if (it.id == model.id) model.copy(modelId = value.trim()) else it })
+                            },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text(stringResource(R.string.setting_media_page_model_id)) },
+                            singleLine = true
+                        )
+                        IconButton(onClick = { updateModels(models.filter { it.id != model.id }) }) {
+                            Icon(HugeIcons.Delete01, stringResource(R.string.delete))
+                        }
+                    }
+                    // 只支持一种类型的厂商不需要选择
+                    if (kinds.size > 1) {
+                        ConnectedChoiceButtons(
+                            options = kinds,
+                            selected = model.kind,
+                            onSelect = { kind ->
+                                updateModels(models.map { if (it.id == model.id) model.copy(kind = kind) else it })
+                            },
+                        ) { kind, selected ->
+                            ConnectedChoiceLabel(text = kind.label, selected = selected)
+                        }
+                    }
+                }
+            }
+
+            item(
+                onClick = if (kinds.isNotEmpty()) {
+                    { updateModels(models + MediaGenerationModel(modelId = "", kind = kinds.first())) }
+                } else null,
+                headlineContent = { Text(stringResource(R.string.setting_media_page_add_model)) },
+                supportingContent = { Text(stringResource(R.string.setting_media_page_models_desc)) },
+                leadingContent = { CardGroupIcon(HugeIcons.Add01) },
+            )
         }
     }
 }

@@ -1531,7 +1531,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_media_page_edit_provider">编辑提供商</string>
   <string name="setting_media_page_add_provider">添加提供商</string>
   <string name="setting_media_page_empty">还没有媒体生成提供商，点右上角添加</string>
-  <string name="setting_media_page_s3_desc">部分接口只接受公网地址的素材（如视频生成的参考图、参考视频）。配置后，本地文件会先上传到这个桶，再以临时地址交给接口；上传的文件 7 天后自动清理。此配置与备份的 S3 互相独立。</string>
+  <string name="setting_media_page_s3_desc">部分接口只接受公网地址的素材（如视频生成的参考图、参考视频）。在这里配置一个 S3 兼容的对象存储服务后，本地文件会先上传到它的桶里，再以临时地址交给接口；上传的文件 7 天后自动清理。此配置与备份的 S3 互相独立。</string>
   <string name="setting_media_page_provider_type">提供商类型</string>
   <string name="setting_media_page_provider_name">名称</string>
   <string name="setting_media_page_workspace_id">业务空间 ID</string>
@@ -1587,4 +1587,5 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="memory_file_page_edit_warning">尽量避免手动编辑记忆，推荐在聊天界面让 AI 替你记住或者更改记忆</string>
   <string name="setting_provider_page_context_length">上下文长度</string>
   <string name="setting_provider_page_context_length_custom">自定义</string>
+  <string name="setting_media_page_asset_storage">素材存储</string>
 </resources>
