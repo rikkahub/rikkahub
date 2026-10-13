@@ -67,9 +67,15 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalScrollCaptureInProgress
@@ -79,6 +85,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceAtLeast
 import androidx.compose.ui.zIndex
@@ -182,6 +189,25 @@ fun ChatList(
         }
     }
 }
+
+// 顶部渐隐：消息滚到标题栏下面时逐渐透明，从状态栏一直淡出到标题栏下沿之外，保证标题可读。
+// 让内容自己变透明而不是盖一层背景色，背景图和动态渐变背景才不会被盖住。
+private fun Modifier.topFadingEdge(height: Dp): Modifier = this
+    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+    .drawWithCache {
+        val fadeHeight = height.toPx()
+        val brush = Brush.verticalGradient(
+            0f to Color.Transparent,
+            0.6f to Color.Black.copy(alpha = 0.15f),
+            1f to Color.Black,
+            startY = 0f,
+            endY = fadeHeight,
+        )
+        onDrawWithContent {
+            drawContent()
+            drawRect(brush, size = Size(size.width, fadeHeight), blendMode = BlendMode.DstIn)
+        }
+    }
 
 @Composable
 private fun ChatListNormal(
@@ -322,6 +348,7 @@ private fun ChatListNormal(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
                     .fillMaxSize()
+                    .topFadingEdge(innerPadding.calculateTopPadding() + 24.dp)
                     .hazeSource(state = hazeState),
             ) {
             itemsIndexed(
