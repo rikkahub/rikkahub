@@ -1,7 +1,7 @@
 package me.rerere.rikkahub.ui.components.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import com.dokar.sonner.ToastType
+import me.rerere.ui.toast.ToastType
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding

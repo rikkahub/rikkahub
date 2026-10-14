@@ -55,8 +55,8 @@ import coil3.network.cachecontrol.CacheControlCacheStrategy
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import coil3.svg.SvgDecoder
-import com.dokar.sonner.Toaster
-import com.dokar.sonner.rememberToasterState
+import me.rerere.ui.toast.Toaster
+import me.rerere.ui.toast.rememberToasterState
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -133,7 +133,6 @@ import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
 import me.rerere.rikkahub.ui.pages.webview.WebViewPage
-import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.openUsageAccessSettings
@@ -308,13 +307,6 @@ class RouteActivity : ComponentActivity() {
                 LocalTTSState provides tts,
                 LocalASRState provides asr,
             ) {
-                Toaster(
-                    state = toastState,
-                    darkTheme = LocalDarkMode.current,
-                    richColors = true,
-                    alignment = Alignment.TopCenter,
-                    showCloseButton = true,
-                )
                 TTSController()
                 Box(
                     modifier = Modifier
@@ -618,6 +610,10 @@ class RouteActivity : ComponentActivity() {
                             }
                         }
                     }
+                    Toaster(
+                        state = toastState,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                    )
                 }
             }
         }

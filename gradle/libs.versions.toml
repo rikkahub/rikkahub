@@ -41,7 +41,6 @@ firebase-crashlytics = "3.0.8"
 jsoup = "1.23.2"
 zxing = "3.5.4"
 quickie-bundled = "1.11.0"
-sonner = "0.4.0"
 leakcanary = "2.14"
 workmanager = "2.11.2"
 reorderable = "3.1.0"
@@ -143,7 +142,6 @@ firebase-crashlytics = { group = "com.google.firebase", name = "firebase-crashly
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 quickie-bundled = { group = "io.github.g00fy2.quickie", name = "quickie-bundled", version.ref = "quickie-bundled" }
-sonner = { module = "io.github.dokar3:sonner", version.ref = "sonner" }
 leakcanary-android = { module = "com.squareup.leakcanary:leakcanary-android", version.ref = "leakcanary" }
 reorderable = { module = "sh.calvin.reorderable:reorderable", version.ref = "reorderable" }
 commons-text = { module = "org.apache.commons:commons-text", version.ref = "commons-text" }

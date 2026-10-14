@@ -19,7 +19,7 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import coil3.compose.rememberAsyncImagePainter
-import com.dokar.sonner.ToastType
+import me.rerere.ui.toast.ToastType
 import com.jvziyaoyao.scale.image.pager.ImagePager
 import com.jvziyaoyao.scale.zoomable.pager.rememberZoomablePagerState
 import kotlinx.coroutines.launch

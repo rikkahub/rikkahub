@@ -25,8 +25,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
-import com.dokar.sonner.ToastType
-import com.dokar.sonner.ToasterState
+import me.rerere.ui.toast.ToastType
+import me.rerere.ui.toast.ToasterState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
