@@ -30,7 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -40,7 +39,8 @@ import kotlinx.coroutines.launch
 
 internal interface PagerTab {
     val icon: ImageVector
-    val label: Int
+    val label: String
+        @Composable get
 }
 
 // 分页切换：可横向滚动的切换按钮，选中项带图标；tabs 的顺序要和 pager 的页一一对应
@@ -98,7 +98,7 @@ internal fun PagerTabs(
                     }
                 }
                 Text(
-                    text = stringResource(tab.label),
+                    text = tab.label,
                     maxLines = 1,
                     softWrap = false,
                 )

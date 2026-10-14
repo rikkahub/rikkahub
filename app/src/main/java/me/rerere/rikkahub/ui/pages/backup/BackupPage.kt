@@ -42,12 +42,15 @@ import org.koin.androidx.compose.koinViewModel
 
 private enum class BackupTab(
     override val icon: ImageVector,
-    @param:StringRes override val label: Int,
+    @param:StringRes private val labelRes: Int,
 ) : PagerTab {
     LOCAL(HugeIcons.SmartPhone01, R.string.backup_page_import_export),
     WEBDAV(HugeIcons.CloudServer, R.string.backup_page_webdav_backup),
     S3(HugeIcons.Bucket, R.string.backup_page_s3_backup),
-    REMINDER(HugeIcons.Notification01, R.string.backup_page_reminder),
+    REMINDER(HugeIcons.Notification01, R.string.backup_page_reminder);
+
+    override val label: String
+        @Composable get() = stringResource(labelRes)
 }
 
 @Composable

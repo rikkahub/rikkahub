@@ -135,10 +135,13 @@ import java.io.File
 
 private enum class WorkspaceDetailTab(
     override val icon: ImageVector,
-    @param:StringRes override val label: Int,
+    @param:StringRes private val labelRes: Int,
 ) : PagerTab {
     BASIC(HugeIcons.Settings03, R.string.workspace_detail_tab_basic),
-    FILES(HugeIcons.File02, R.string.workspace_detail_tab_files),
+    FILES(HugeIcons.File02, R.string.workspace_detail_tab_files);
+
+    override val label: String
+        @Composable get() = stringResource(labelRes)
 }
 
 @Composable

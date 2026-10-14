@@ -71,10 +71,13 @@ import kotlin.time.Duration.Companion.seconds
 // 记忆文件放第一页：从侧边栏的整理入口进来时能直接看到整理状态
 private enum class MemoryTab(
     override val icon: ImageVector,
-    @param:StringRes override val label: Int,
+    @param:StringRes private val labelRes: Int,
 ) : PagerTab {
     FILES(HugeIcons.Brain02, R.string.assistant_page_manage_memory_title),
-    SETTINGS(HugeIcons.Settings03, R.string.settings),
+    SETTINGS(HugeIcons.Settings03, R.string.settings);
+
+    override val label: String
+        @Composable get() = stringResource(labelRes)
 }
 
 @Composable

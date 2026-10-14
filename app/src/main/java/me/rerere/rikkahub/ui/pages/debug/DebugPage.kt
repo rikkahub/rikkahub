@@ -24,8 +24,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -40,18 +38,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ui.toast.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.common.android.Logging
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Bug01
+import me.rerere.hugeicons.stroke.File01
+import me.rerere.hugeicons.stroke.PaintBoard
+import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.MathBlock
 import me.rerere.rikkahub.ui.components.richtext.Mermaid
+import me.rerere.rikkahub.ui.components.ui.PagerTab
+import me.rerere.rikkahub.ui.components.ui.PagerTabs
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
@@ -60,10 +65,21 @@ import kotlin.random.Random
 import kotlin.random.nextInt
 import kotlin.uuid.Uuid
 
+private enum class DebugTab(
+    override val icon: ImageVector,
+    private val title: String,
+) : PagerTab {
+    MAIN(HugeIcons.Bug01, "Main"),
+    COLORS(HugeIcons.PaintBoard, "Colors"),
+    LOGGING(HugeIcons.File01, "Logging"),
+    RECOVERY(HugeIcons.Wrench01, "Recovery");
+
+    override val label: String
+        @Composable get() = title
+}
+
 @Composable
 fun DebugPage(vm: DebugVM = koinViewModel()) {
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
     Scaffold(
         topBar = {
             TopAppBar(
@@ -76,71 +92,29 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
             )
         }
     ) { contentPadding ->
-        val state = rememberPagerState { 4 }
+        val state = rememberPagerState { DebugTab.entries.size }
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(contentPadding)
         ) {
-            SecondaryTabRow(
-                selectedTabIndex = state.currentPage,
-            ) {
-                Tab(
-                    selected = state.currentPage == 0,
-                    onClick = {
-                        scope.launch {
-                            state.animateScrollToPage(0)
-                        }
-                    },
-                    text = {
-                        Text("Main")
-                    }
-                )
-                Tab(
-                    selected = state.currentPage == 1,
-                    onClick = {
-                        scope.launch {
-                            state.animateScrollToPage(1)
-                        }
-                    },
-                    text = {
-                        Text("Colors")
-                    }
-                )
-                Tab(
-                    selected = state.currentPage == 2,
-                    onClick = {
-                        scope.launch {
-                            state.animateScrollToPage(2)
-                        }
-                    },
-                    text = {
-                        Text("Logging")
-                    }
-                )
-                Tab(
-                    selected = state.currentPage == 3,
-                    onClick = {
-                        scope.launch {
-                            state.animateScrollToPage(3)
-                        }
-                    },
-                    text = {
-                        Text("Recovery")
-                    }
-                )
-            }
+            PagerTabs(
+                pagerState = state,
+                tabs = DebugTab.entries,
+                modifier = Modifier.padding(vertical = 4.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+            )
             HorizontalPager(
                 state = state,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             ) { page ->
-                when (page) {
-                    0 -> MainPage(vm)
-                    1 -> ColorsPage()
-                    2 -> Box {}
-                    3 -> RecoveryPage(vm)
+                when (DebugTab.entries[page]) {
+                    DebugTab.MAIN -> MainPage(vm)
+                    DebugTab.COLORS -> ColorsPage()
+                    DebugTab.LOGGING -> Box {}
+                    DebugTab.RECOVERY -> RecoveryPage(vm)
                 }
             }
         }

@@ -35,12 +35,15 @@ import org.koin.compose.koinInject
 
 internal enum class ExtensionTab(
     override val icon: ImageVector,
-    @param:StringRes override val label: Int,
+    @param:StringRes private val labelRes: Int,
 ) : PagerTab {
     QUICK_MESSAGES(HugeIcons.Zap, R.string.extension_selector_tab_quick_messages),
     MODE_INJECTIONS(HugeIcons.MagicWand01, R.string.extension_selector_tab_mode_injections),
     LOREBOOKS(HugeIcons.Book01, R.string.extension_selector_tab_lorebooks),
-    SKILLS(HugeIcons.Puzzle, R.string.extension_selector_tab_skills),
+    SKILLS(HugeIcons.Puzzle, R.string.extension_selector_tab_skills);
+
+    override val label: String
+        @Composable get() = stringResource(labelRes)
 }
 
 

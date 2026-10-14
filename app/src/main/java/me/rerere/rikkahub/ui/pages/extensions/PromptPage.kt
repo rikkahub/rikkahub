@@ -119,10 +119,13 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 
 private enum class PromptTab(
     override val icon: ImageVector,
-    @param:StringRes override val label: Int,
+    @param:StringRes private val labelRes: Int,
 ) : PagerTab {
     MODE_INJECTIONS(HugeIcons.MagicWand01, R.string.prompt_page_mode_injection_tab),
-    LOREBOOKS(HugeIcons.Book01, R.string.prompt_page_lorebook_tab),
+    LOREBOOKS(HugeIcons.Book01, R.string.prompt_page_lorebook_tab);
+
+    override val label: String
+        @Composable get() = stringResource(labelRes)
 }
 
 @Composable

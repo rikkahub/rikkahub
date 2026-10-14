@@ -88,10 +88,13 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 
 private enum class MediaTab(
     override val icon: ImageVector,
-    @param:StringRes override val label: Int,
+    @param:StringRes private val labelRes: Int,
 ) : PagerTab {
     PROVIDERS(HugeIcons.Image02, R.string.setting_media_page_providers),
-    STORAGE(HugeIcons.Database02, R.string.setting_media_page_asset_storage),
+    STORAGE(HugeIcons.Database02, R.string.setting_media_page_asset_storage);
+
+    override val label: String
+        @Composable get() = stringResource(labelRes)
 }
 
 @Composable

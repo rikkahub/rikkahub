@@ -82,10 +82,13 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 
 private enum class SpeechTab(
     override val icon: ImageVector,
-    @param:StringRes override val label: Int,
+    @param:StringRes private val labelRes: Int,
 ) : PagerTab {
     TTS(HugeIcons.VolumeHigh, R.string.speech_tab_tts),
-    ASR(HugeIcons.Mic01, R.string.speech_tab_asr),
+    ASR(HugeIcons.Mic01, R.string.speech_tab_asr);
+
+    override val label: String
+        @Composable get() = stringResource(labelRes)
 }
 
 @Composable

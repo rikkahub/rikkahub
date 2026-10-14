@@ -52,10 +52,13 @@ import org.koin.androidx.compose.koinViewModel
 
 private enum class ModelSettingTab(
     override val icon: ImageVector,
-    @param:StringRes override val label: Int,
+    @param:StringRes private val labelRes: Int,
 ) : PagerTab {
     MODEL(HugeIcons.AiBrain01, R.string.setting_model_page_tab_model),
-    PROMPT(HugeIcons.AiEditing, R.string.setting_model_page_tab_prompt),
+    PROMPT(HugeIcons.AiEditing, R.string.setting_model_page_tab_prompt);
+
+    override val label: String
+        @Composable get() = stringResource(labelRes)
 }
 
 @Composable

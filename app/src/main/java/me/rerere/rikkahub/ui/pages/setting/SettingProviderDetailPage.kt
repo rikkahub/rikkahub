@@ -149,20 +149,26 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 
 private enum class ProviderDetailTab(
     override val icon: ImageVector,
-    @param:StringRes override val label: Int,
+    @param:StringRes private val labelRes: Int,
 ) : PagerTab {
     CONFIG(HugeIcons.Tools, R.string.setting_provider_page_configuration),
     MODELS(HugeIcons.Package01, R.string.setting_provider_page_models),
-    ADVANCED(HugeIcons.Settings03, R.string.setting_provider_page_advanced_settings),
+    ADVANCED(HugeIcons.Settings03, R.string.setting_provider_page_advanced_settings);
+
+    override val label: String
+        @Composable get() = stringResource(labelRes)
 }
 
 private enum class ModelFormTab(
     override val icon: ImageVector,
-    @param:StringRes override val label: Int,
+    @param:StringRes private val labelRes: Int,
 ) : PagerTab {
     BASIC(HugeIcons.Package01, R.string.setting_provider_page_basic_settings),
     ADVANCED(HugeIcons.Settings03, R.string.setting_provider_page_advanced_settings),
-    BUILT_IN_TOOLS(HugeIcons.Tools, R.string.setting_page_built_in_tools),
+    BUILT_IN_TOOLS(HugeIcons.Tools, R.string.setting_page_built_in_tools);
+
+    override val label: String
+        @Composable get() = stringResource(labelRes)
 }
 
 @Composable
