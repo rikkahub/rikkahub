@@ -1586,4 +1586,14 @@
   <string name="setting_provider_page_context_length">上下文長度</string>
   <string name="setting_provider_page_context_length_custom">自訂</string>
   <string name="setting_media_page_asset_storage">素材儲存</string>
+  <string name="translator_page_error">翻譯失敗</string>
+  <string name="translator_page_model_missing">未選擇翻譯模型。請輕觸右上角選擇一個。</string>
+  <string name="translator_page_char_count">%1$d 個字元</string>
+  <string name="translator_page_clear_input">清除輸入</string>
+  <string name="translator_page_paste">貼上</string>
+  <string name="translator_page_use_as_input">用作輸入</string>
+  <string name="translator_page_history">翻譯歷史</string>
+  <string name="translator_page_clear_history">清除</string>
+  <string name="translator_page_clear_history_title">清除翻譯記錄</string>
+  <string name="translator_page_clear_history_message">所有翻譯記錄將被刪除。此操作無法復原。</string>
 </resources>

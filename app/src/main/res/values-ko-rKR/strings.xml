@@ -1588,4 +1588,14 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_provider_page_context_length">컨텍스트 길이</string>
   <string name="setting_provider_page_context_length_custom">사용자 지정</string>
   <string name="setting_media_page_asset_storage">에셋 저장소</string>
+  <string name="translator_page_error">번역 실패</string>
+  <string name="translator_page_model_missing">번역 모델이 선택되지 않았습니다. 오른쪽 상단을 눌러 선택하세요.</string>
+  <string name="translator_page_char_count">%1$d자</string>
+  <string name="translator_page_clear_input">입력 지우기</string>
+  <string name="translator_page_paste">붙여넣기</string>
+  <string name="translator_page_use_as_input">입력으로 사용</string>
+  <string name="translator_page_history">번역 기록</string>
+  <string name="translator_page_clear_history">지우기</string>
+  <string name="translator_page_clear_history_title">번역 기록 지우기</string>
+  <string name="translator_page_clear_history_message">모든 번역 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</string>
 </resources>

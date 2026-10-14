@@ -1586,4 +1586,14 @@
   <string name="setting_provider_page_context_length">طول السياق</string>
   <string name="setting_provider_page_context_length_custom">مخصص</string>
   <string name="setting_media_page_asset_storage">تخزين الأصول</string>
+  <string name="translator_page_error">فشلت الترجمة</string>
+  <string name="translator_page_model_missing">لم يتم اختيار نموذج ترجمة. اضغط على الزاوية العلوية اليمنى لاختيار واحد.</string>
+  <string name="translator_page_char_count">%1$d أحرف</string>
+  <string name="translator_page_clear_input">مسح الإدخال</string>
+  <string name="translator_page_paste">لصق</string>
+  <string name="translator_page_use_as_input">استخدم كمدخل</string>
+  <string name="translator_page_history">سجل الترجمة</string>
+  <string name="translator_page_clear_history">مسح</string>
+  <string name="translator_page_clear_history_title">مسح سجل الترجمة</string>
+  <string name="translator_page_clear_history_message">سيتم حذف جميع سجلات الترجمة. لا يمكن التراجع عن هذا.</string>
 </resources>

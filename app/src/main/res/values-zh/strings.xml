@@ -1588,4 +1588,14 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_context_length">上下文长度</string>
   <string name="setting_provider_page_context_length_custom">自定义</string>
   <string name="setting_media_page_asset_storage">素材存储</string>
+  <string name="translator_page_error">翻译失败</string>
+  <string name="translator_page_model_missing">未选择翻译模型。点击右上角进行选择。</string>
+  <string name="translator_page_char_count">%1$d 个字符</string>
+  <string name="translator_page_clear_input">清空输入</string>
+  <string name="translator_page_paste">粘贴</string>
+  <string name="translator_page_use_as_input">用作输入</string>
+  <string name="translator_page_history">翻译历史</string>
+  <string name="translator_page_clear_history">清除</string>
+  <string name="translator_page_clear_history_title">清除翻译历史记录</string>
+  <string name="translator_page_clear_history_message">所有翻译记录都将被删除，此操作无法撤销。</string>
 </resources>

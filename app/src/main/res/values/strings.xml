@@ -1586,4 +1586,14 @@
   <string name="setting_provider_page_context_length">Context Length</string>
   <string name="setting_provider_page_context_length_custom">Custom</string>
   <string name="setting_media_page_asset_storage">Asset Storage</string>
+  <string name="translator_page_error">Translation failed</string>
+  <string name="translator_page_model_missing">No translation model selected. Tap the top-right corner to choose one.</string>
+  <string name="translator_page_char_count">%1$d characters</string>
+  <string name="translator_page_clear_input">Clear input</string>
+  <string name="translator_page_paste">Paste</string>
+  <string name="translator_page_use_as_input">Use as input</string>
+  <string name="translator_page_history">Translation history</string>
+  <string name="translator_page_clear_history">Clear</string>
+  <string name="translator_page_clear_history_title">Clear translation history</string>
+  <string name="translator_page_clear_history_message">All translation records will be deleted. This cannot be undone.</string>
 </resources>

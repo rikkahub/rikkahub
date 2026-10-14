@@ -1588,4 +1588,14 @@
   <string name="setting_provider_page_context_length">Длина контекста</string>
   <string name="setting_provider_page_context_length_custom">Пользовательский</string>
   <string name="setting_media_page_asset_storage">Хранилище ресурсов</string>
+  <string name="translator_page_error">Ошибка перевода</string>
+  <string name="translator_page_model_missing">Модель перевода не выбрана. Нажмите в правом верхнем углу, чтобы выбрать её.</string>
+  <string name="translator_page_char_count">%1$d символов</string>
+  <string name="translator_page_clear_input">Очистить ввод</string>
+  <string name="translator_page_paste">Вставить</string>
+  <string name="translator_page_use_as_input">Использовать как ввод</string>
+  <string name="translator_page_history">История переводов</string>
+  <string name="translator_page_clear_history">Очистить</string>
+  <string name="translator_page_clear_history_title">Очистить историю переводов</string>
+  <string name="translator_page_clear_history_message">Все записи перевода будут удалены. Это действие нельзя отменить.</string>
 </resources>

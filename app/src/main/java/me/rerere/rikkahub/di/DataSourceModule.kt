@@ -119,6 +119,10 @@ val dataSourceModule = module {
     }
 
     single {
+        get<AppDatabase>().translationHistoryDao()
+    }
+
+    single {
         MessageFtsManager(get())
     }
 
