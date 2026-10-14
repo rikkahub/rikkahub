@@ -7,6 +7,7 @@ import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.paging.map
 import androidx.room.withTransaction
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -493,6 +494,9 @@ class ConversationRepository(
                     e.printStackTrace()
                     offset += pageSize
                     continue
+                } catch (e: CancellationException) {
+                    // CancellationException 是 IllegalStateException 的子类，必须先重新抛出，否则取消后会在事务内无限循环
+                    throw e
                 } catch (e: IllegalStateException) {
                     e.printStackTrace()
                     offset += pageSize
