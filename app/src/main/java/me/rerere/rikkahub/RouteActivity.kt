@@ -119,6 +119,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingPreferencesUIPage
 import me.rerere.rikkahub.ui.pages.setting.SettingThemePage
 import me.rerere.rikkahub.ui.pages.setting.SettingDonatePage
 import me.rerere.rikkahub.ui.pages.setting.SettingFilesPage
+import me.rerere.rikkahub.ui.pages.setting.SettingMcpDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMcpPage
 import me.rerere.rikkahub.ui.pages.setting.SettingModelPage
 import me.rerere.rikkahub.ui.pages.setting.SettingPage
@@ -499,6 +500,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingMcpPage()
                             }
 
+                            entry<Screen.SettingMcpDetail> { key ->
+                                SettingMcpDetailPage(id = Uuid.parse(key.serverId))
+                            }
+
                             entry<Screen.SettingDonate> {
                                 SettingDonatePage()
                             }
@@ -737,6 +742,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingMcp : Screen
+
+    @Serializable
+    data class SettingMcpDetail(val serverId: String) : Screen
 
     @Serializable
     data object SettingDonate : Screen
