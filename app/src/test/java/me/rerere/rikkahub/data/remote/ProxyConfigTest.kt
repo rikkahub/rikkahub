@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.network
+package me.rerere.rikkahub.data.remote
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

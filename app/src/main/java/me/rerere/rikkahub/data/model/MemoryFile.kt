@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.data.model
 
-import me.rerere.rikkahub.data.files.SkillFrontmatterParser
+import me.rerere.rikkahub.data.skills.SkillFrontmatterParser
 import java.security.MessageDigest
 
 /**

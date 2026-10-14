@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.favorite
+package me.rerere.rikkahub.data.repository
 
 import me.rerere.rikkahub.data.db.entity.FavoriteEntity
 import me.rerere.rikkahub.data.model.FavoriteMeta

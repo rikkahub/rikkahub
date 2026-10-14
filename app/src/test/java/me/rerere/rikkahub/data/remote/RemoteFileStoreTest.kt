@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.files
+package me.rerere.rikkahub.data.remote
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

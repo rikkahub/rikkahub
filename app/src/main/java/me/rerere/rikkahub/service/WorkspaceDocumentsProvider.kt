@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.provider
+package me.rerere.rikkahub.service
 
 import android.database.Cursor
 import android.database.MatrixCursor

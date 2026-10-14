@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.files
+package me.rerere.rikkahub.data.skills
 
 import org.yaml.snakeyaml.DumperOptions
 import org.yaml.snakeyaml.LoaderOptions

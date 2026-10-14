@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.files
+package me.rerere.rikkahub.data.skills
 
 import java.io.File
 import java.nio.file.Files

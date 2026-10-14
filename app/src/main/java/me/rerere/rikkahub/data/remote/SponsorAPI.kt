@@ -1,4 +1,4 @@
-package me.rerere.rikkahub.data.api
+package me.rerere.rikkahub.data.remote
 
 import me.rerere.rikkahub.data.model.Sponsor
 import me.rerere.rikkahub.utils.JsonInstant

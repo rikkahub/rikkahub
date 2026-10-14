@@ -154,7 +154,7 @@
         android:resource="@xml/file_paths" />
     </provider>
     <provider
-      android:name=".data.provider.WorkspaceDocumentsProvider"
+      android:name=".service.WorkspaceDocumentsProvider"
       android:authorities="${applicationId}.documents"
       android:exported="true"
       android:grantUriPermissions="true"
