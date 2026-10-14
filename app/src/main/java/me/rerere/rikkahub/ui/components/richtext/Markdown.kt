@@ -260,7 +260,7 @@ private fun citationWidget(link: MarkdownInline.Link, onClick: (String) -> Unit)
                 .clickable { onClick(id.trim()) }
                 .fillMaxSize()
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.tertiaryContainer.copy(0.2f)),
+                .background(MaterialTheme.colorScheme.tertiaryContainer),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -271,7 +271,7 @@ private fun citationWidget(link: MarkdownInline.Link, onClick: (String) -> Unit)
                     lineHeight = 10.sp,
                     fontFamily = JetbrainsMono,
                     color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    fontWeight = FontWeight.Thin,
+                    fontWeight = FontWeight.Medium,
                 ),
             )
         }
