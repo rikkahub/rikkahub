@@ -1599,4 +1599,6 @@
   <string name="translator_page_clear_history_message">所有翻譯記錄將被刪除。此操作無法復原。</string>
   <string name="setting_display_page_enable_quote_highlight_title">引號內文字醒目顯示</string>
   <string name="setting_display_page_enable_quote_highlight_desc">將引號內的文字以主題顏色標示，讓角色對話更突出</string>
+  <string name="workspace_detail_copy_path">複製路徑</string>
+  <string name="workspace_detail_path_copied">路徑已複製</string>
 </resources>

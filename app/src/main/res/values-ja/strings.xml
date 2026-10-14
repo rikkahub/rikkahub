@@ -1601,4 +1601,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="translator_page_clear_history_message">すべての翻訳履歴が削除されます。この操作は元に戻せません。</string>
   <string name="setting_display_page_enable_quote_highlight_title">引用テキストをハイライト</string>
   <string name="setting_display_page_enable_quote_highlight_desc">引用符内のテキストをテーマカラーで着色し、キャラクターのセリフを目立たせます</string>
+  <string name="workspace_detail_copy_path">パスをコピー</string>
+  <string name="workspace_detail_path_copied">パスをコピーしました</string>
 </resources>

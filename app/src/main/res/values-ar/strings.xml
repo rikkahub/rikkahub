@@ -1599,4 +1599,6 @@
   <string name="translator_page_clear_history_message">سيتم حذف جميع سجلات الترجمة. لا يمكن التراجع عن هذا.</string>
   <string name="setting_display_page_enable_quote_highlight_title">تمييز النص المقتبس</string>
   <string name="setting_display_page_enable_quote_highlight_desc">تلوين النص داخل علامات الاقتباس بلون السمة لإبراز حوار الشخصيات</string>
+  <string name="workspace_detail_copy_path">نسخ المسار</string>
+  <string name="workspace_detail_path_copied">تم نسخ المسار</string>
 </resources>

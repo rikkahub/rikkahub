@@ -1601,4 +1601,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="translator_page_clear_history_message">모든 번역 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</string>
   <string name="setting_display_page_enable_quote_highlight_title">인용된 텍스트 강조</string>
   <string name="setting_display_page_enable_quote_highlight_desc">따옴표 안의 텍스트에 테마 색상을 적용하여 캐릭터 대화를 돋보이게 합니다</string>
+  <string name="workspace_detail_copy_path">경로 복사</string>
+  <string name="workspace_detail_path_copied">경로 복사됨</string>
 </resources>

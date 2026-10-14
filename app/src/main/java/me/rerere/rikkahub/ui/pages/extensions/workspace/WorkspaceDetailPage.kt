@@ -1,8 +1,10 @@
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
 import android.content.Intent
+import android.os.Build
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -82,6 +84,7 @@ import me.rerere.hugeicons.stroke.Bash
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.CheckList
 import me.rerere.hugeicons.stroke.ComputerTerminal01
+import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.File02
 import me.rerere.hugeicons.stroke.FileEdit
@@ -118,10 +121,12 @@ import me.rerere.rikkahub.ui.components.ui.switchItem
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.fileSizeToString
+import me.rerere.rikkahub.utils.writeClipboardText
 import me.rerere.ui.components.RikkaConfirmDialog
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
 import me.rerere.workspace.WorkspaceFileEntry
+import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.androidx.compose.koinViewModel
@@ -998,8 +1003,22 @@ private fun WorkspaceFileItem(
                     }
                 }
             } else {
+                val context = LocalContext.current
                 ItemActionMenu(
                     actions = buildList {
+                        add(
+                            ItemAction(
+                                text = stringResource(R.string.workspace_detail_copy_path),
+                                icon = HugeIcons.Copy01,
+                                onClick = {
+                                    context.writeClipboardText(entry.rootfsPath(area))
+                                    // Android 13 起系统会自己弹复制提示
+                                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                                        Toast.makeText(context, R.string.workspace_detail_path_copied, Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                            )
+                        )
                         if (!entry.isDirectory) {
                             add(
                                 ItemAction(
@@ -1029,6 +1048,12 @@ private fun WorkspaceFileItem(
             }
         }
     }
+}
+
+// 复制出去的路径要能直接给 AI 工具和终端用，所以按 Rootfs 内的绝对路径给
+private fun WorkspaceFileEntry.rootfsPath(area: WorkspaceStorageArea): String = when (area) {
+    WorkspaceStorageArea.FILES -> "${WorkspaceManager.ROOTFS_WORKSPACE_DIR}/$path"
+    WorkspaceStorageArea.LINUX -> "/$path"
 }
 
 @Composable
