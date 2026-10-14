@@ -1597,4 +1597,6 @@
   <string name="translator_page_clear_history">مسح</string>
   <string name="translator_page_clear_history_title">مسح سجل الترجمة</string>
   <string name="translator_page_clear_history_message">سيتم حذف جميع سجلات الترجمة. لا يمكن التراجع عن هذا.</string>
+  <string name="setting_display_page_enable_quote_highlight_title">تمييز النص المقتبس</string>
+  <string name="setting_display_page_enable_quote_highlight_desc">تلوين النص داخل علامات الاقتباس بلون السمة لإبراز حوار الشخصيات</string>
 </resources>

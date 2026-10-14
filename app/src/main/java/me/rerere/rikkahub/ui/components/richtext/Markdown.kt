@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -132,10 +133,12 @@ fun MarkdownBlock(
     onClickCitation: (String) -> Unit = {}
 ) {
     val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
+    val enableQuoteHighlight = LocalSettings.current.displaySetting.enableQuoteHighlight
     val fontSize = LocalTextStyle.current.merge(style).fontSize
     val density = LocalDensity.current
+    val quoteColor = MaterialTheme.colorScheme.tertiary
     val defaultTheme = MarkdownDefaults.theme(style)
-    val theme = remember(defaultTheme, fontSize, density) {
+    val theme = remember(defaultTheme, fontSize, density, enableQuoteHighlight, quoteColor) {
         defaultTheme.copy(
             inlineCode = defaultTheme.inlineCode.copy(
                 fontFamily = JetbrainsMono,
@@ -143,6 +146,7 @@ fun MarkdownBlock(
             ),
             // 段落间距跟随字号，调整字体大小时保持比例
             blockSpacing = if (fontSize.isSp) with(density) { fontSize.toDp() } else defaultTheme.blockSpacing,
+            quotedText = SpanStyle(color = quoteColor).takeIf { enableQuoteHighlight },
         )
     }
 

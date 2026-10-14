@@ -1597,4 +1597,6 @@
   <string name="translator_page_clear_history">Clear</string>
   <string name="translator_page_clear_history_title">Clear translation history</string>
   <string name="translator_page_clear_history_message">All translation records will be deleted. This cannot be undone.</string>
+  <string name="setting_display_page_enable_quote_highlight_title">Highlight Quoted Text</string>
+  <string name="setting_display_page_enable_quote_highlight_desc">Color text inside quotation marks with the theme color to make character dialogue stand out</string>
 </resources>

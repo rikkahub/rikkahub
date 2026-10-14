@@ -1599,4 +1599,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="translator_page_clear_history">清除</string>
   <string name="translator_page_clear_history_title">清除翻译历史记录</string>
   <string name="translator_page_clear_history_message">所有翻译记录都将被删除，此操作无法撤销。</string>
+  <string name="setting_display_page_enable_quote_highlight_title">引号内文字高亮</string>
+  <string name="setting_display_page_enable_quote_highlight_desc">使用主题色为引号内的文本着色，让角色对话更加醒目</string>
 </resources>

@@ -1599,4 +1599,6 @@
   <string name="translator_page_clear_history">Очистить</string>
   <string name="translator_page_clear_history_title">Очистить историю переводов</string>
   <string name="translator_page_clear_history_message">Все записи перевода будут удалены. Это действие нельзя отменить.</string>
+  <string name="setting_display_page_enable_quote_highlight_title">Подсветка цитируемого текста</string>
+  <string name="setting_display_page_enable_quote_highlight_desc">Окрашивать текст в кавычках в цвет темы, чтобы реплики персонажей выделялись</string>
 </resources>
