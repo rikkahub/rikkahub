@@ -42,6 +42,7 @@ data class Settings(
     val fastModelId: Uuid = Uuid.random(),
     val fastModelReasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
     val imageGenerationModelId: Uuid = Uuid.random(),
+    val enableAutoTitle: Boolean = true,
     val titlePrompt: String = DEFAULT_TITLE_PROMPT,
     val translateModeId: Uuid = Uuid.random(),
     val translatePrompt: String = DEFAULT_TRANSLATION_PROMPT,

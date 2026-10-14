@@ -890,6 +890,7 @@
   <string name="setting_model_page_compress_model_desc">النموذج المستخدم لضغط سجل المحادثة</string>
   <string name="setting_model_page_compress_prompt_vars">المتغيرات: {content}، {target_tokens}، {additional_context}</string>
   <string name="setting_model_page_enable_suggestion">تمكين اقتراحات الدردشة</string>
+  <string name="setting_model_page_enable_auto_title">إنشاء عناوين المحادثات تلقائيًا</string>
   <string name="setting_model_page_fast_model">النموذج السريع</string>
   <string name="setting_model_page_fast_model_desc">النموذج المستخدم للعناوين واقتراحات الدردشة والمهام السريعة أو الخلفية الأخرى</string>
   <string name="setting_model_page_ocr_model">نموذج OCR</string>

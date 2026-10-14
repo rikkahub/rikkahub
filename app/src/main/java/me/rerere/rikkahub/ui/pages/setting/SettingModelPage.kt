@@ -192,6 +192,13 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
                     },
                 )
                 switchItem(
+                    checked = settings.enableAutoTitle,
+                    onCheckedChange = {
+                        vm.updateSettings { latest -> latest.copy(enableAutoTitle = it) }
+                    },
+                    headlineContent = { Text(stringResource(R.string.setting_model_page_enable_auto_title)) },
+                )
+                switchItem(
                     checked = settings.enableSuggestion,
                     onCheckedChange = {
                         vm.updateSettings { latest -> latest.copy(enableSuggestion = it) }

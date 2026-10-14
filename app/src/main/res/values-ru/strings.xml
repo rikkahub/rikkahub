@@ -1112,6 +1112,7 @@
   <string name="setting_model_page_fast_model">Быстрая модель</string>
   <string name="setting_model_page_fast_model_desc">Модель для заголовков, подсказок в чате и других быстрых или фоновых задач</string>
   <string name="setting_model_page_enable_suggestion">Включить подсказки чата</string>
+  <string name="setting_model_page_enable_auto_title">Автоматически создавать заголовки чатов</string>
   <string name="assistant_page_gradient_background">Градиентный фон</string>
   <string name="assistant_page_gradient_background_desc">Использовать динамический градиентный фон на странице чата</string>
   <string name="assistant_page_workspace">Рабочая область</string>

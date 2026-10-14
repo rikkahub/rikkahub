@@ -868,8 +868,11 @@ class ChatService(
         }
         if (!shouldGenerate) return@withContext
 
+        val settings = settingsStore.awaitLoaded()
+        // 关掉自动生成后只跳过对话结束时的自动调用，手动重新生成照常执行
+        if (!force && !settings.enableAutoTitle) return@withContext
+
         runCatching {
-            val settings = settingsStore.awaitLoaded()
             val model = settings.findModelById(settings.fastModelId)
                 ?: throw IllegalStateException(context.getString(R.string.error_fast_model_not_found))
             val provider = model.findProvider(settings.providers)

@@ -1112,6 +1112,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_model_page_fast_model">빠른 모델</string>
   <string name="setting_model_page_fast_model_desc">제목, 채팅 제안 및 기타 빠른 작업이나 백그라운드 작업에 사용하는 모델</string>
   <string name="setting_model_page_enable_suggestion">채팅 제안 활성화</string>
+  <string name="setting_model_page_enable_auto_title">대화 제목 자동 생성</string>
   <string name="assistant_page_gradient_background">그라데이션 배경</string>
   <string name="assistant_page_gradient_background_desc">채팅 페이지에서 동적 그라데이션 배경 사용</string>
   <string name="assistant_page_workspace">작업 공간</string>

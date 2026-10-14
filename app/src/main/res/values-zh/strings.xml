@@ -1150,6 +1150,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_model_page_fast_model">快速模型</string>
   <string name="setting_model_page_fast_model_desc">用于生成标题、聊天建议以及执行其他快速或后台任务</string>
   <string name="setting_model_page_enable_suggestion">启用聊天建议</string>
+  <string name="setting_model_page_enable_auto_title">自动生成对话标题</string>
   <string name="assistant_page_gradient_background">渐变背景</string>
   <string name="assistant_page_gradient_background_desc">在聊天页面使用动态渐变背景</string>
   <string name="assistant_page_workspace">工作区</string>
