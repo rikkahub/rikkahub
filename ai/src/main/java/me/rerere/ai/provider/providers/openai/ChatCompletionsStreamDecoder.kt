@@ -5,7 +5,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -42,7 +41,8 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
 
         val chunks = buildList {
             event.data.trim().split("\n").filter(String::isNotBlank).forEach { line ->
-                val payload = json.parseToJsonElement(line).jsonObject
+                // 部分中转会在流中夹杂 `data: null` 之类的非对象行，直接跳过
+                val payload = json.parseToJsonElement(line).jsonObjectOrNull ?: return@forEach
                 payload["error"]?.let { throw it.parseErrorDetail() }
                 responseId = payload["id"]?.jsonPrimitive?.contentOrNull ?: responseId
                 responseModel = payload["model"]?.jsonPrimitive?.contentOrNull ?: responseModel
@@ -134,7 +134,7 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
     private fun accumulateReasoningDetails(details: JsonArray?): JsonObject? {
         if (details == null) return null
         details.forEachIndexed { fallbackIndex, element ->
-            val incoming = element.jsonObject
+            val incoming = element.jsonObjectOrNull ?: return@forEachIndexed
             val index = incoming["index"]?.jsonPrimitive?.intOrNull ?: fallbackIndex
             reasoningDetailsByIndex[index] = mergeReasoningDetail(reasoningDetailsByIndex[index], incoming)
         }
@@ -156,13 +156,14 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
         }
     }
 
-    private fun parseAnnotations(array: JsonArray): List<UIMessageAnnotation> = array.map { element ->
-        val type = element.jsonObject["type"]?.jsonPrimitive?.contentOrNull ?: error("type is null")
+    private fun parseAnnotations(array: JsonArray): List<UIMessageAnnotation> = array.mapNotNull { element ->
+        val annotation = element.jsonObjectOrNull ?: return@mapNotNull null
+        val type = annotation["type"]?.jsonPrimitive?.contentOrNull ?: error("type is null")
         when (type) {
             "url_citation" -> UIMessageAnnotation.UrlCitation(
-                title = element.jsonObject["url_citation"]?.jsonObject
+                title = annotation["url_citation"]?.jsonObjectOrNull
                     ?.get("title")?.jsonPrimitive?.contentOrNull ?: "",
-                url = element.jsonObject["url_citation"]?.jsonObject
+                url = annotation["url_citation"]?.jsonObjectOrNull
                     ?.get("url")?.jsonPrimitive?.contentOrNull ?: "",
             )
             else -> error("unknown annotation type: $type")
