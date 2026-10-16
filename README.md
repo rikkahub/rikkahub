@@ -2,9 +2,6 @@
   <img src="docs/icon.png" alt="App Icon" width="100" />
   <h1>RikkaHub</h1>
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/rikkahub/rikkahub)
-[![Ask DeepWiki](https://img.shields.io/badge/zread.ai-blue?style=flat&logo=readthedocs)](https://zread.ai/rikkahub/rikkahub)
-
 A native Android LLM chat client that supports switching between different providers for
 conversations 🤖💬
 
@@ -82,7 +79,7 @@ Technology stack documentation:
 
 ## 💰 Donate
 
-* [Patreon](https://patreon.com/rikkahub)
+* [Ko-fi](https://ko-fi.com/reovodev)
 * [爱发电](https://afdian.com/a/reovo)
 
 ## ⭐ Star History

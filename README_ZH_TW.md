@@ -75,7 +75,7 @@
 
 ## 💰 捐贈
 
-* [Patreon](https://patreon.com/rikkahub)
+* [Ko-fi](https://ko-fi.com/reovodev)
 * [愛發電](https://afdian.com/a/reovo)
 
 ## ⭐ Star History
