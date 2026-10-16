@@ -677,8 +677,6 @@
   <string name="setting_display_page_title">디스플레이 설정</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">활성화하면 TTS가 따옴표 안의 내용만 읽습니다</string>
   <string name="setting_display_page_tts_only_read_quoted_title">TTS가 인용 콘텐츠만 읽기</string>
-  <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">기본 원형 로딩 표시기 대신 앱 아이콘 애니메이션을 사용합니다</string>
-  <string name="setting_display_page_use_app_icon_style_loading_indicator_title">앱 아이콘 스타일 로딩 표시기 사용</string>
   <string name="setting_display_page_volume_key_scroll_desc">볼륨 키로 페이지를 스크롤합니다. 전자 잉크 화면에 적합합니다.</string>
   <string name="setting_display_page_volume_key_scroll_ratio">스크롤 양</string>
   <string name="setting_display_page_volume_key_scroll_title">볼륨 키 페이지 스크롤</string>

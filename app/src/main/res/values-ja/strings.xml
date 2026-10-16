@@ -677,8 +677,6 @@
   <string name="setting_display_page_title">表示設定</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">有効にすると、TTSは引用符内のコンテンツのみを読み上げます</string>
   <string name="setting_display_page_tts_only_read_quoted_title">引用部分のみTTSで読み上げ</string>
-  <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">デフォルトの円形読み込みインジケーターの代わりに、アプリアイコンのアニメーションを使用します</string>
-  <string name="setting_display_page_use_app_icon_style_loading_indicator_title">アプリアイコン風の読み込みインジケーターを使用</string>
   <string name="setting_display_page_volume_key_scroll_desc">音量キーでページをスクロール、電子ペーパー画面に最適</string>
   <string name="setting_display_page_volume_key_scroll_ratio">スクロロール量</string>
   <string name="setting_display_page_volume_key_scroll_title">音量キーでページスクロール</string>

@@ -677,8 +677,6 @@
   <string name="setting_display_page_title">顯示設定</string>
   <string name="setting_display_page_tts_only_read_quoted_desc">啟用後，TTS 只會朗讀引號內的內容</string>
   <string name="setting_display_page_tts_only_read_quoted_title">僅朗讀引用的 TTS 內容</string>
-  <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">使用應用程式圖示動畫取代預設的圓形載入指示器</string>
-  <string name="setting_display_page_use_app_icon_style_loading_indicator_title">使用 APP 圖示風格的載入指示器</string>
   <string name="setting_display_page_volume_key_scroll_desc">使用音量鍵捲動頁面，適合電子墨水螢幕</string>
   <string name="setting_display_page_volume_key_scroll_ratio">捲動幅度</string>
   <string name="setting_display_page_volume_key_scroll_title">音量鍵翻頁</string>

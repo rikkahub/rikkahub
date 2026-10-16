@@ -121,16 +121,6 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
             item {
                 CardGroup {
                     switchItem(
-                        checked = displaySetting.useAppIconStyleLoadingIndicator,
-                        onCheckedChange = {
-                            updateDisplaySetting(displaySetting.copy(useAppIconStyleLoadingIndicator = it))
-                        },
-                        supportingContent = {
-                            Text(stringResource(R.string.setting_display_page_use_app_icon_style_loading_indicator_desc))
-                        },
-                        headlineContent = { Text(stringResource(R.string.setting_display_page_use_app_icon_style_loading_indicator_title)) },
-                    )
-                    switchItem(
                         checked = displaySetting.enableBlurEffect,
                         onCheckedChange = { updateDisplaySetting(displaySetting.copy(enableBlurEffect = it)) },
                         supportingContent = { Text(stringResource(R.string.setting_display_page_background_effect_desc)) },

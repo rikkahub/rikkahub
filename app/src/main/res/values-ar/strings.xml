@@ -826,8 +826,6 @@
   <string name="setting_display_page_tts_only_read_quoted_title">قراءة TTS للمحتوى المقتبس فقط</string>
   <string name="setting_display_page_tts_read_outside_brackets_desc">عند التمكين، لن يقرأ TTS المحتوى الموجود داخل الأقواس</string>
   <string name="setting_display_page_tts_read_outside_brackets_title">تخطي TTS للمحتوى بين الأقواس</string>
-  <string name="setting_display_page_use_app_icon_style_loading_indicator_desc">استخدم أيقونة التطبيق المتحركة بدلاً من مؤشر التحميل الدائري الافتراضي</string>
-  <string name="setting_display_page_use_app_icon_style_loading_indicator_title">استخدام مؤشر تحميل بنمط أيقونة التطبيق</string>
   <string name="setting_display_page_volume_key_scroll_desc">تمرير الصفحات باستخدام مفاتيح الصوت، مثالي لشاشات الحبر الإلكتروني</string>
   <string name="setting_display_page_volume_key_scroll_ratio">مقدار التمرير</string>
   <string name="setting_display_page_volume_key_scroll_title">تمرير الصفحات بمفاتيح الصوت</string>
