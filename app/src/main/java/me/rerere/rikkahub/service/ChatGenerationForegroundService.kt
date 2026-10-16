@@ -72,9 +72,9 @@ class ChatGenerationForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_ACQUIRE -> acquire(intent)
-            ACTION_RELEASE -> release(intent)
-            else -> stopService()
+            ACTION_ACQUIRE -> acquire(intent, startId)
+            ACTION_RELEASE -> release(intent, startId)
+            else -> stopSelf(startId)
         }
         return START_NOT_STICKY
     }
@@ -102,17 +102,20 @@ class ChatGenerationForegroundService : Service() {
         stopService()
     }
 
-    private fun acquire(intent: Intent) {
-        val generationId = intent.getStringExtra(EXTRA_GENERATION_ID) ?: return stopService()
-        val conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID) ?: return stopService()
+    private fun acquire(intent: Intent, startId: Int) {
+        val generationId = intent.getStringExtra(EXTRA_GENERATION_ID) ?: return stopSelf(startId)
+        val conversationId = intent.getStringExtra(EXTRA_CONVERSATION_ID) ?: return stopSelf(startId)
         activeGenerations[generationId] = conversationId
         updateForegroundNotification(conversationId)
     }
 
-    private fun release(intent: Intent) {
+    private fun release(intent: Intent, startId: Int) {
         intent.getStringExtra(EXTRA_GENERATION_ID)?.let(activeGenerations::remove)
         if (activeGenerations.isEmpty()) {
-            stopService()
+            // Only stop if no newer start request is queued. A pending ACQUIRE came from
+            // startForegroundService(), and stopping before it calls startForeground() crashes
+            // with ForegroundServiceDidNotStartInTimeException. onDestroy() removes the notification.
+            stopSelf(startId)
         } else {
             updateForegroundNotification(activeGenerations.values.last())
         }
