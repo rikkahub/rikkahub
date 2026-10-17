@@ -33,6 +33,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.core.merge
+import me.rerere.ai.core.sum
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ImageGenerationParams
@@ -229,17 +230,6 @@ private fun StreamChunk.maxClaudeServerToolIndex(): Int? {
 }
 
 private fun ServerToolMetadata.maxIndex(): Int? = listOfNotNull(callIndex, resultIndex).maxOrNull()
-
-private fun TokenUsage?.sum(other: TokenUsage?): TokenUsage? {
-    if (this == null) return other
-    if (other == null) return this
-    return TokenUsage(
-        promptTokens = promptTokens + other.promptTokens,
-        completionTokens = completionTokens + other.completionTokens,
-        cachedTokens = cachedTokens + other.cachedTokens,
-        totalTokens = totalTokens + other.totalTokens,
-    )
-}
 
 class ClaudeProvider(private val client: OkHttpClient, context: Context? = null) : Provider<ProviderSetting.Claude> {
     private val keyRoulette = if (context != null) KeyRoulette.lru(context) else KeyRoulette.default()

@@ -82,13 +82,16 @@ fun ChatMessageNerdLine(
                         }
                     )
                     // TPS
-                    if (message.finishedAt != null) {
-                        val duration = Duration.between(
+                    // 旧消息没有记录生成耗时，退回用创建到完成的总时长估算
+                    val durationMillis = message.finishedAt?.let { finishedAt ->
+                        message.generationTimeMs ?: Duration.between(
                             message.createdAt.toJavaLocalDateTime(),
-                            message.finishedAt!!.toJavaLocalDateTime()
-                        )
-                        val tps = usage.completionTokens.toFloat() / duration.toMillis() * 1000
-                        val seconds = (duration.toMillis() / 1000f).toFixed(1)
+                            finishedAt.toJavaLocalDateTime()
+                        ).toMillis()
+                    }
+                    if (durationMillis != null && durationMillis > 0) {
+                        val tps = usage.completionTokens.toFloat() / durationMillis * 1000
+                        val seconds = (durationMillis / 1000f).toFixed(1)
                         StatsItem(
                             icon = {
                                 Icon(

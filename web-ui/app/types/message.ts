@@ -25,6 +25,8 @@ export interface UIMessage {
   modelId?: string | null;
   modelSnapshot?: ModelSnapshot | null;
   usage?: TokenUsage | null;
+  /** 模型实际生成耗时（毫秒），不含首 token 延迟、工具执行和审批等待 */
+  generationTimeMs?: number | null;
   translation?: string | null;
   isContextCheckpoint?: boolean;
 }

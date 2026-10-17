@@ -74,6 +74,8 @@ export interface MessageDto {
   modelId?: string | null;
   modelSnapshot?: ModelSnapshot | null;
   usage?: TokenUsage | null;
+  /** 模型实际生成耗时（毫秒），不含首 token 延迟、工具执行和审批等待 */
+  generationTimeMs?: number | null;
   translation?: string | null;
   /** 压缩检查点：此消息是它之前全部历史的摘要，之前的消息不再发送给模型 */
   isContextCheckpoint?: boolean;

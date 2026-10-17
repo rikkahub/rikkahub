@@ -19,6 +19,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
+import me.rerere.ai.core.sum
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderManager
@@ -50,6 +51,9 @@ import java.net.NoRouteToHostException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import kotlin.uuid.Uuid
 
 private const val TAG = "GenerationHandler"
@@ -411,11 +415,17 @@ class GenerationLoop(
                             modelId = model.id,
                         )
                     }
+                // 多轮工具调用共用同一条助手消息，消息上已有的 usage 和耗时来自之前的步骤。
+                // 本步从清空的统计开始（merge 只适合同一次请求内的快照），再与之前的步骤累加。
+                val stepBaseMessage = responseBaseMessages.last()
+                val stepStartMessages = responseBaseMessages.dropLast(1) +
+                    stepBaseMessage.copy(usage = null, generationTimeMs = null)
                 var retryCount = 0
 
                 while (true) {
                     val streamChunkHandler = StreamChunkHandler(model)
-                    var attemptMessages = responseBaseMessages
+                    var attemptMessages = stepStartMessages
+                    var firstChunkMark: TimeMark? = null
                     try {
                         providerImpl.streamText(
                             providerSetting = provider,
@@ -426,8 +436,12 @@ class GenerationLoop(
                                 if (retryCount > 0) {
                                     processingStatus.value = null
                                 }
+                                val stepMark = firstChunkMark
+                                    ?: TimeSource.Monotonic.markNow().also { firstChunkMark = it }
                                 attemptMessages = streamChunkHandler.handle(attemptMessages, chunk)
-                                onUpdateMessages(attemptMessages)
+                                onUpdateMessages(
+                                    attemptMessages.accumulateStepStats(stepBaseMessage, stepMark.elapsedNow())
+                                )
                             } catch (error: CancellationException) {
                                 throw error
                             } catch (error: Throwable) {
@@ -435,7 +449,10 @@ class GenerationLoop(
                                 throw StreamChunkHandlingException(error)
                             }
                         }
-                        messages = attemptMessages
+                        messages = attemptMessages.accumulateStepStats(
+                            stepBaseMessage,
+                            firstChunkMark?.elapsedNow() ?: Duration.ZERO
+                        )
                         break
                     } catch (error: Throwable) {
                         if (error is StreamChunkHandlingException) {
@@ -450,22 +467,46 @@ class GenerationLoop(
                     }
                 }
             } else {
+                // 非流式拿不到首 token 时间，只能统计最后一次尝试的整个请求耗时
+                var requestMark = TimeSource.Monotonic.markNow()
                 val result = executeProviderRequestWithRetry(
                     processingStatus = processingStatus,
                     enabled = settings.networkSetting.enableAutoRetry,
                 ) {
+                    requestMark = TimeSource.Monotonic.markNow()
                     providerImpl.generateText(
                         providerSetting = provider,
                         messages = internalMessages,
                         params = params,
                     )
                 }
-                messages = messages.handleTextGenerationResult(result = result, model = model)
+                val requestTime = requestMark.elapsedNow()
+                val stepBaseMessage = messages.lastOrNull()?.takeIf { it.role == MessageRole.ASSISTANT }
+                val stepStartMessages = if (stepBaseMessage != null) {
+                    messages.dropLast(1) + stepBaseMessage.copy(usage = null, generationTimeMs = null)
+                } else {
+                    messages
+                }
+                messages = stepStartMessages
+                    .handleTextGenerationResult(result = result, model = model)
+                    .accumulateStepStats(stepBaseMessage, requestTime)
                 onUpdateMessages(messages)
             }
         } finally {
             processingStatus.value = null
         }
+    }
+
+    // 把本步的 usage 和生成耗时累加到之前步骤的统计上
+    private fun List<UIMessage>.accumulateStepStats(
+        stepBaseMessage: UIMessage?,
+        stepTime: Duration,
+    ): List<UIMessage> {
+        val stepMessage = last()
+        return dropLast(1) + stepMessage.copy(
+            usage = stepBaseMessage?.usage.sum(stepMessage.usage),
+            generationTimeMs = (stepBaseMessage?.generationTimeMs ?: 0L) + stepTime.inWholeMilliseconds,
+        )
     }
 
     private suspend fun <T> executeProviderRequestWithRetry(

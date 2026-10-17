@@ -133,6 +133,7 @@ function getNerdStats(
   usage: TokenUsage,
   createdAt: string,
   finishedAt: string | null | undefined,
+  generationTimeMs: number | null | undefined,
   t: TFunction,
 ) {
   const stats: Array<{ key: string; icon: React.ReactNode; label: string }> = [];
@@ -159,7 +160,8 @@ function getNerdStats(
     }),
   });
 
-  const durationMs = getDurationMs(createdAt, finishedAt);
+  // 旧消息没有记录生成耗时，退回用创建到完成的总时长估算
+  const durationMs = generationTimeMs ?? getDurationMs(createdAt, finishedAt);
   if (durationMs && usage.completionTokens > 0) {
     const durationSeconds = durationMs / 1000;
     const tps = usage.completionTokens / durationSeconds;
@@ -494,7 +496,13 @@ const ChatMessageNerdLineRow = React.memo(({
     return null;
   }
 
-  const stats = getNerdStats(message.usage, message.createdAt, message.finishedAt, t);
+  const stats = getNerdStats(
+    message.usage,
+    message.createdAt,
+    message.finishedAt,
+    message.generationTimeMs,
+    t,
+  );
   if (stats.length === 0) return null;
 
   return (
