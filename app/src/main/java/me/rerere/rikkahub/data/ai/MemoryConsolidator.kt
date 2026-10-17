@@ -2,12 +2,22 @@ package me.rerere.rikkahub.data.ai
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.single
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import me.rerere.ai.agent.AgentEvent
+import me.rerere.ai.agent.AgentFinishReason
+import me.rerere.ai.agent.AgentHooks
+import me.rerere.ai.agent.AgentRequest
+import me.rerere.ai.agent.StepRequest
+import me.rerere.ai.agent.runAgent
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
+import me.rerere.ai.provider.ProviderManager
+import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.ai.prompts.MemoryConsolidationConversation
 import me.rerere.rikkahub.data.ai.prompts.buildMemoryConsolidationInput
@@ -20,6 +30,7 @@ import me.rerere.rikkahub.data.ai.tools.memoryWritePath
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
+import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.db.dao.MemoryConsolidationDAO
 import me.rerere.rikkahub.data.db.entity.MemoryConsolidationEntity
@@ -58,7 +69,7 @@ private const val PENDING_WINDOW_MS = 7L * 24 * 60 * 60 * 1000
  * 什么时候整理由 [MemoryConsolidationScheduler] 决定。
  */
 class MemoryConsolidator(
-    private val generationLoop: GenerationLoop,
+    private val providerManager: ProviderManager,
     private val memoryRepository: MemoryRepository,
     private val conversationRepo: ConversationRepository,
     private val consolidationDao: MemoryConsolidationDAO,
@@ -146,36 +157,53 @@ class MemoryConsolidator(
 
         val model = settings.consolidationModel(batches.firstOrNull()?.conversation, assistants.first())
             ?: error("No model available")
+        val providerSetting = model.findProvider(settings.providers) ?: error("Provider not found")
         // 自动整理只增改；删文件只在用户手动要求清理整个记忆库时才允许
         val tools = buildMemoryTools(memoryRepository, memoryId)
             .filter { fullReview || it.name != MemoryToolNames.DELETE } +
             createMemoryConversationTools(conversationRepo, assistantIds)
-
-        var messages = emptyList<UIMessage>()
-        generationLoop.generateText(
-            settings = settings,
-            model = model,
-            messages = listOf(
-                UIMessage.user(
-                    buildMemoryConsolidationInput(
-                        files = files,
-                        conversations = batches.map { it.input },
-                    )
+        val systemPrompt = buildMemoryConsolidationPrompt(fullReview)
+        // 整次整理的每一步用同一个会话 ID，服务端才能命中前面几步的缓存
+        val sessionId = Uuid.random().toString()
+        val hooks = object : AgentHooks {
+            override suspend fun prepareStep(messages: List<UIMessage>): StepRequest {
+                val system = (listOf(systemPrompt) + tools.map { it.systemPrompt(model, messages) })
+                    .filter { it.isNotBlank() }
+                    .joinToString("\n")
+                return StepRequest(
+                    messages = listOf(UIMessage.system(system)) + messages,
+                    params = TextGenerationParams(
+                        model = model,
+                        reasoningLevel = settings.fastModelReasoningLevel,
+                        customHeaders = model.customHeaders,
+                        customBody = model.customBodies,
+                        sessionId = sessionId,
+                    ),
                 )
-            ),
-            assistant = Assistant(
-                systemPrompt = buildMemoryConsolidationPrompt(fullReview),
-                streamOutput = false,
-                reasoningLevel = settings.fastModelReasoningLevel,
-            ),
-            tools = tools,
-            maxSteps = MAX_STEPS,
-            // 只用来当请求的会话 ID：整次整理的每一步用同一个，服务端才能命中前面几步的缓存
-            conversationId = Uuid.random(),
-        ).collect { chunk ->
-            when (chunk) {
-                is GenerationChunk.Messages -> messages = chunk.messages
             }
+        }
+
+        val finished = runAgent(
+            request = AgentRequest(
+                provider = providerManager.getProviderByType(providerSetting),
+                providerSetting = providerSetting,
+                messages = listOf(
+                    UIMessage.user(
+                        buildMemoryConsolidationInput(
+                            files = files,
+                            conversations = batches.map { it.input },
+                        )
+                    )
+                ),
+                tools = tools,
+                stream = false,
+                maxSteps = MAX_STEPS,
+                retry = settings.retryPolicy(),
+            ),
+            hooks = hooks,
+        ).filterIsInstance<AgentEvent.Finished>().single()
+        if (finished.reason == AgentFinishReason.StepLimitReached) {
+            Logging.log(TAG, "consolidate $memoryId: stopped after $MAX_STEPS steps")
         }
 
         // 生成中途失败会抛出，走不到这里：进度不推进，下次连同新的轮次一起重试
@@ -183,7 +211,7 @@ class MemoryConsolidator(
             batch.pending.consolidatedThrough?.let { advance(batch.conversation.id, it) }
         }
 
-        val steps = messages.flatMap { it.getTools() }
+        val steps = finished.message.getTools()
         val touched = steps.mapNotNull { it.memoryWritePath() }
             .map { MemoryFile.normalizePath(it) ?: it }
             .distinct()

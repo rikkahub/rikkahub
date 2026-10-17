@@ -132,13 +132,12 @@ val dataSourceModule = module {
         GenerationLoop(
             context = get(),
             providerManager = get(),
-            json = get(),
         )
     }
 
     single {
         MemoryConsolidator(
-            generationLoop = get(),
+            providerManager = get(),
             memoryRepository = get(),
             conversationRepo = get(),
             consolidationDao = get(),
