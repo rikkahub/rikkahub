@@ -134,6 +134,19 @@ data class MessageNode(
     }
 }
 
+/**
+ * 最近一次回复结束时的上下文占用（token），取不到时返回 null。
+ * 之后又插入了压缩检查点的话，记录的占用已经过时，同样返回 null。
+ */
+fun Conversation.lastContextTokens(): Int? {
+    val messages = currentMessages
+    val message = messages.lastOrNull { it.role == MessageRole.ASSISTANT } ?: return null
+    val checkpoint = messages.lastOrNull { it.isContextCheckpoint }
+    if (checkpoint != null && checkpoint.createdAt > message.createdAt) return null
+    // 旧消息没有 contextTokens，那时的 usage 只保留最后一步，可以直接用
+    return message.contextTokens ?: message.usage?.let { it.promptTokens + it.completionTokens }
+}
+
 fun UIMessage.toMessageNode(): MessageNode {
     return MessageNode(
         messages = listOf(this),

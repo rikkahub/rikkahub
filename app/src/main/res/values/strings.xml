@@ -256,9 +256,6 @@
   <string name="chat_page_compress_context">Compress History</string>
   <string name="chat_page_compress_context_desc">Compress the conversation into a summary to save tokens</string>
   <string name="chat_page_compress_context_title">Compress Conversation History</string>
-  <string name="chat_page_compress_keep_recent">Keep recent messages</string>
-  <string name="chat_page_compress_not_enough_messages">Not enough messages to compress. Reduce the number of messages to keep or add more messages.</string>
-  <string name="chat_page_compress_target_tokens">Target Token Size</string>
   <string name="chat_page_compressing">Compressing...</string>
   <string name="chat_page_conversation_system_prompt">Conversation System Prompt</string>
   <string name="chat_page_conversation_system_prompt_clear">Clear</string>
@@ -293,8 +290,6 @@
   <string name="chat_page_search_chats">Search Chats</string>
   <string name="chat_page_today">Today</string>
   <string name="chat_page_yesterday">Yesterday</string>
-  <string name="chat_size_dialog_content">Current message count: %1$d. This may cause the application to crash or lag, or even lose this conversation data. Please create a new conversation as soon as possible to continue chatting.</string>
-  <string name="chat_size_dialog_title">This conversation data is too large</string>
   <string name="citations_count">%1$d Citations</string>
   <string name="code_block_collapse">Collapse</string>
   <string name="code_block_copy">Copy Code</string>
@@ -780,11 +775,8 @@
   <string name="setting_mcp_page_url_label">URL</string>
   <string name="setting_model_page_chat_model">Chat Model</string>
   <string name="setting_model_page_chat_model_desc">Global default chat model</string>
-  <string name="setting_model_page_compress_model">Compress Model</string>
   <string name="setting_model_page_fast_model">Fast Model</string>
   <string name="setting_model_page_fast_model_desc">Model used for titles, chat suggestions, and other fast or background tasks</string>
-  <string name="setting_model_page_compress_model_desc">Model for compressing conversation history</string>
-  <string name="setting_model_page_compress_prompt_vars">Variables: {content}, {target_tokens}, {additional_context}</string>
   <string name="setting_model_page_ocr_model">OCR Model</string>
   <string name="setting_model_page_ocr_model_desc">Model used for optical character recognition on images</string>
   <string name="setting_model_page_ocr_prompt_vars">Variables: Image data: {images}</string>
@@ -1163,7 +1155,6 @@
   <string name="setting_model_page_prompt_title">Title Generation</string>
   <string name="setting_model_page_prompt_suggestion">Chat Reply Suggestions</string>
   <string name="setting_model_page_prompt_ocr">OCR Recognition</string>
-  <string name="setting_model_page_prompt_compress">Context Compression</string>
   <string name="setting_display_page_bubble_opacity_title">Bubble Opacity</string>
   <string name="setting_provider_page_include_history_reasoning">Include History Reasoning</string>
   <string name="assistant_page_gradient_background">Gradient Background</string>
@@ -1546,8 +1537,10 @@
   <string name="chat_page_compress_checkpoint_title">Earlier messages compressed into a summary</string>
   <string name="chat_page_compress_checkpoint_hint">Messages above this line are no longer sent to the model; this summary replaces them. Delete the summary to send the full history again.</string>
   <string name="chat_page_compress_blocked_generating">Stop the generation before compressing the context</string>
+  <string name="chat_page_compress_nothing_to_compress">No new messages to compress since the last summary</string>
+  <string name="chat_page_compress_handle_pending_tools">Handle the pending tool calls before compressing</string>
+  <string name="chat_page_compress_tool_call_response">The model tried to call a tool instead of writing the summary. Please try again.</string>
   <string name="chat_page_compress_conversation_changed">The conversation changed during compression. Please try again.</string>
-  <string name="chat_page_compress_pending_tools">Handle the pending tool calls first, or keep the recent messages that contain them</string>
   <string name="sketch">Sketch</string>
   <string name="sketch_draw_on_image">Draw on image</string>
   <string name="imggen_page_deprecated_warning">This feature is deprecated and will be removed in a future version. Use %1$s instead</string>

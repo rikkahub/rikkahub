@@ -62,7 +62,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -277,16 +276,6 @@ private fun ChatListNormal(
 
     // 自动跟随键盘滚动
     ImeLazyListAutoScroller(lazyListState = state)
-
-    // 对话大小警告对话框
-    val sizeInfo = rememberConversationSizeInfo(conversation)
-    var showSizeWarningDialog by rememberSaveable(conversation.id) { mutableStateOf(true) }
-    if (sizeInfo.showWarning && showSizeWarningDialog) {
-        ConversationSizeWarningDialog(
-            sizeInfo = sizeInfo,
-            onDismiss = { showSizeWarningDialog = false }
-        )
-    }
 
     val assistant = remember(
         settings.assistants,

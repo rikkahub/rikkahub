@@ -38,6 +38,7 @@ import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.files.FileFolders
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
+import me.rerere.rikkahub.data.ai.transformers.transformThinkTags
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.visualTransforms
 import me.rerere.rikkahub.data.datastore.Settings
@@ -72,6 +73,22 @@ sealed interface GenerationChunk {
     data class Messages(
         val messages: List<UIMessage>
     ) : GenerationChunk
+}
+
+/**
+ * 取出压缩请求回复里的摘要正文。
+ *
+ * 指令要求不调用工具，模型仍可能发起调用。这时附带的文本只是"我先看看文件"之类的说明，
+ * 当成摘要保存会让之后的请求丢掉全部历史，所以返回 null 交给调用方报错。
+ * 压缩请求不经过输出转换器，正文开头的 <think> 思考内容也要在这里剥掉，否则会存进摘要。
+ */
+internal fun UIMessage.compressionSummaryOrNull(): String? {
+    if (getTools().isNotEmpty()) return null
+    return listOf(this)
+        .transformThinkTags(now = Clock.System.now(), generationFinished = true)
+        .single()
+        .toText()
+        .trim()
 }
 
 class GenerationLoop(
@@ -345,61 +362,21 @@ class GenerationLoop(
         conversationId: Uuid? = null,
         workspaceCwd: String? = null,
     ) {
-        val internalMessages = buildList {
-            val system = buildString {
-                val effectiveSystemPrompt =
-                    if (assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()) {
-                        conversationSystemPrompt
-                    } else {
-                        assistant.systemPrompt
-                    }
-                if (effectiveSystemPrompt.isNotBlank()) {
-                    append(effectiveSystemPrompt)
-                }
-
-                // 记忆
-                if (assistant.enableMemory) {
-                    appendLine()
-                    append(buildMemoryPrompt(memories))
-                }
-                // 工具prompt
-                tools.forEach { tool ->
-                    appendLine()
-                    append(tool.systemPrompt(model, messages))
-                }
-            }
-            if (system.isNotBlank()) {
-                add(UIMessage.system(prompt = system).copy(isSynthetic = true))
-            }
-            addAll(messages.limitContext(assistant.contextMessageLimit))
-        }.transforms(
-            transformers = transformers,
-            context = context,
-            model = model,
+        val (internalMessages, params) = buildProviderRequest(
             assistant = assistant,
             settings = settings,
+            messages = messages,
+            transformers = transformers,
+            model = model,
+            tools = tools,
+            memories = memories,
             processingStatus = processingStatus,
+            conversationSystemPrompt = conversationSystemPrompt,
+            conversationId = conversationId,
             workspaceCwd = workspaceCwd,
         )
 
         var messages: List<UIMessage> = messages
-        val params = TextGenerationParams(
-            model = model,
-            temperature = assistant.temperature,
-            topP = assistant.topP,
-            maxTokens = assistant.maxTokens,
-            tools = tools,
-            reasoningLevel = assistant.reasoningLevel,
-            customHeaders = buildList {
-                addAll(assistant.customHeaders)
-                addAll(model.customHeaders)
-            },
-            customBody = buildList {
-                addAll(assistant.customBodies)
-                addAll(model.customBodies)
-            },
-            sessionId = (conversationId ?: Uuid.random()).toString(),
-        )
         try {
             if (stream) {
                 // 每次重试都从本次模型调用开始前的消息快照重新合并，避免将重试响应
@@ -497,6 +474,134 @@ class GenerationLoop(
         }
     }
 
+    /**
+     * 生成压缩摘要。
+     *
+     * 请求按正常对话组装（系统提示词、工具定义、参数和 sessionId 都相同），只在末尾追加压缩指令，
+     * 前缀与上一轮对话一致，可以命中提示词缓存，模型也能看到工具调用和结果。
+     * 工具定义必须保留：它属于请求前缀，去掉或改动 tool_choice 都会让缓存失效。
+     */
+    suspend fun generateCompressionSummary(
+        settings: Settings,
+        model: Model,
+        messages: List<UIMessage>,
+        inputTransformers: List<InputMessageTransformer>,
+        assistant: Assistant,
+        memories: List<MemoryFile>,
+        tools: List<Tool>,
+        compressPrompt: String,
+        conversationSystemPrompt: String?,
+        conversationId: Uuid,
+        workspaceCwd: String?,
+    ): String {
+        val provider = model.findProvider(settings.providers) ?: error("Provider not found")
+        val providerImpl = providerManager.getProviderByType(provider)
+        val processingStatus = MutableStateFlow<String?>(null)
+        val (requestMessages, params) = buildProviderRequest(
+            assistant = assistant,
+            settings = settings,
+            messages = messages,
+            transformers = inputTransformers,
+            model = model,
+            tools = tools,
+            memories = memories,
+            processingStatus = processingStatus,
+            conversationSystemPrompt = conversationSystemPrompt,
+            conversationId = conversationId,
+            workspaceCwd = workspaceCwd,
+        )
+        // 压缩指令不经过输入转换器，模板转换器会把其中的花括号当成模板语法
+        val result = executeProviderRequestWithRetry(
+            processingStatus = processingStatus,
+            enabled = settings.networkSetting.enableAutoRetry,
+        ) {
+            providerImpl.generateText(
+                providerSetting = provider,
+                messages = requestMessages + UIMessage.user(compressPrompt),
+                // 助手的输出上限是给聊天回复定的，结构化摘要写不完会被截断；max_tokens 不属于请求前缀，改了不影响缓存
+                params = params.copy(maxTokens = null),
+            )
+        }
+        val summary = result.message.compressionSummaryOrNull()
+            ?: error(context.getString(R.string.chat_page_compress_tool_call_response))
+        return summary.ifBlank { error("Failed to generate compressed summary") }
+    }
+
+    private data class ProviderRequest(
+        val messages: List<UIMessage>,
+        val params: TextGenerationParams,
+    )
+
+    // 正常对话和压缩共用，二者的请求前缀必须一致才能命中提示词缓存
+    private suspend fun buildProviderRequest(
+        assistant: Assistant,
+        settings: Settings,
+        messages: List<UIMessage>,
+        transformers: List<MessageTransformer>,
+        model: Model,
+        tools: List<Tool>,
+        memories: List<MemoryFile>,
+        processingStatus: MutableStateFlow<String?>,
+        conversationSystemPrompt: String?,
+        conversationId: Uuid?,
+        workspaceCwd: String?,
+    ): ProviderRequest {
+        val requestMessages = buildList {
+            val system = buildString {
+                val effectiveSystemPrompt =
+                    if (assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()) {
+                        conversationSystemPrompt
+                    } else {
+                        assistant.systemPrompt
+                    }
+                if (effectiveSystemPrompt.isNotBlank()) {
+                    append(effectiveSystemPrompt)
+                }
+
+                // 记忆
+                if (assistant.enableMemory) {
+                    appendLine()
+                    append(buildMemoryPrompt(memories))
+                }
+                // 工具prompt
+                tools.forEach { tool ->
+                    appendLine()
+                    append(tool.systemPrompt(model, messages))
+                }
+            }
+            if (system.isNotBlank()) {
+                add(UIMessage.system(prompt = system).copy(isSynthetic = true))
+            }
+            addAll(messages.limitContext(assistant.contextMessageLimit))
+        }.transforms(
+            transformers = transformers,
+            context = context,
+            model = model,
+            assistant = assistant,
+            settings = settings,
+            processingStatus = processingStatus,
+            workspaceCwd = workspaceCwd,
+        )
+        val params = TextGenerationParams(
+            model = model,
+            temperature = assistant.temperature,
+            topP = assistant.topP,
+            maxTokens = assistant.maxTokens,
+            tools = tools,
+            reasoningLevel = assistant.reasoningLevel,
+            customHeaders = buildList {
+                addAll(assistant.customHeaders)
+                addAll(model.customHeaders)
+            },
+            customBody = buildList {
+                addAll(assistant.customBodies)
+                addAll(model.customBodies)
+            },
+            sessionId = (conversationId ?: Uuid.random()).toString(),
+        )
+        return ProviderRequest(requestMessages, params)
+    }
+
     // 把本步的 usage 和生成耗时累加到之前步骤的统计上
     private fun List<UIMessage>.accumulateStepStats(
         stepBaseMessage: UIMessage?,
@@ -506,6 +611,8 @@ class GenerationLoop(
         return dropLast(1) + stepMessage.copy(
             usage = stepBaseMessage?.usage.sum(stepMessage.usage),
             generationTimeMs = (stepBaseMessage?.generationTimeMs ?: 0L) + stepTime.inWholeMilliseconds,
+            contextTokens = stepMessage.usage?.let { it.promptTokens + it.completionTokens }
+                ?: stepBaseMessage?.contextTokens,
         )
     }
 

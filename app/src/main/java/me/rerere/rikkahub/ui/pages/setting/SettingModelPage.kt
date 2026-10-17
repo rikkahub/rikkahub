@@ -28,7 +28,6 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiBrain01
 import me.rerere.hugeicons.stroke.AiEditing
-import me.rerere.hugeicons.stroke.ArrowShrink
 import me.rerere.hugeicons.stroke.BubbleChat
 import me.rerere.hugeicons.stroke.ScanText
 import me.rerere.hugeicons.stroke.Translate
@@ -145,11 +144,6 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
         providers = settings.providers,
         type = ModelType.CHAT,
     )
-    val compressModel = rememberModelListState(
-        modelId = settings.compressModelId,
-        providers = settings.providers,
-        type = ModelType.CHAT,
-    )
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -230,14 +224,6 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
                     iconContainerColor = containerColor,
                     iconContentColor = contentColor,
                 )
-                modelItem(
-                    icon = HugeIcons.ArrowShrink,
-                    title = R.string.setting_model_page_compress_model,
-                    description = R.string.setting_model_page_compress_model_desc,
-                    state = compressModel,
-                    iconContainerColor = containerColor,
-                    iconContentColor = contentColor,
-                )
             }
         }
     }
@@ -253,9 +239,6 @@ private fun ModelSettingsPage(settings: Settings, vm: SettingVM, contentPadding:
     }
     ModelListSheet(state = ocrModel) {
         vm.updateSettings { latest -> latest.copy(ocrModelId = it.id) }
-    }
-    ModelListSheet(state = compressModel) {
-        vm.updateSettings { latest -> latest.copy(compressModelId = it.id) }
     }
 }
 

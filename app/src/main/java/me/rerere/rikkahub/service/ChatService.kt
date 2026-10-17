@@ -9,9 +9,6 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.completeWith
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -89,6 +86,7 @@ import me.rerere.rikkahub.data.repository.memoryId
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
+import me.rerere.rikkahub.data.ai.prompts.buildCompressPrompt
 import java.util.Locale
 import kotlin.uuid.Uuid
 
@@ -201,6 +199,13 @@ class ChatService(
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
+
+    // 对话和压缩共用，压缩请求的前缀与对话一致才能命中提示词缓存
+    private val chatInputTransformers = buildList {
+        addAll(inputTransformers)
+        add(templateTransformer)
+        add(workspaceReminderTransformer)
+    }
 
     private val sessionManager = ConversationSessionManager(
         scope = appScope,
@@ -713,11 +718,7 @@ class ChatService(
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 workspaceCwd = conversation.workspaceCwd,
                 memories = memoryRepository.getFiles(assistant.memoryId),
-                inputTransformers = buildList {
-                    addAll(inputTransformers)
-                    add(templateTransformer)
-                    add(workspaceReminderTransformer)
-                },
+                inputTransformers = chatInputTransformers,
                 outputTransformers = outputTransformers,
                 tools = tools,
             ).onCompletion {
@@ -969,85 +970,59 @@ class ChatService(
         conversationId: Uuid,
         conversation: Conversation,
         additionalPrompt: String,
-        targetTokens: Int,
-        keepRecentMessages: Int = 32
     ): Result<Unit> = runCatching {
         val session = sessionManager.getOrCreate(conversationId)
         // 生成循环按下标回写消息，期间插入节点会让回复写到错误的节点上。
         check(!session.isGenerating) { context.getString(R.string.chat_page_compress_blocked_generating) }
 
         val settings = settingsStore.awaitLoaded()
-        val model = settings.findModelById(settings.compressModelId)
-            ?: settings.getChatModelOf(conversation)
-            ?: throw IllegalStateException("No model available for compression")
-        val provider = model.findProvider(settings.providers)
-            ?: throw IllegalStateException("Provider not found")
+        // 必须和对话用同一个模型、同一套请求组装，才能命中提示词缓存
+        val assistant = settings.getAssistantOf(conversation)
+        val model = settings.getChatModelOf(conversation)
+            ?: throw IllegalStateException("No chat model selected")
 
-        val providerHandler = providerManager.getProviderByType(provider)
-
-        val maxMessagesPerChunk = 256
         val nodes = conversation.messageNodes
-
-        // 上一个检查点之前的消息已被它的摘要覆盖，只压缩它之后、保留区之前的部分。
+        // 上一个检查点之后没有新消息，就没什么可压缩的
         val checkpointIndex = nodes.indexOfLast { it.currentMessage.isContextCheckpoint }
-        val cutIndex = nodes.size - keepRecentMessages.coerceAtLeast(0)
-        if (cutIndex <= checkpointIndex + 1) {
-            throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
+        if (checkpointIndex == nodes.lastIndex) {
+            throw IllegalStateException(context.getString(R.string.chat_page_compress_nothing_to_compress))
         }
-        // 上一份摘要一并交给模型，新摘要才能覆盖完整历史。
-        val messagesToCompress = nodes.subList(checkpointIndex.coerceAtLeast(0), cutIndex)
-            .map { it.currentMessage }
-        // 生成循环只从最后一条消息恢复工具调用，待处理的工具被压到检查点之前就再也不会执行。
-        check(messagesToCompress.none { message ->
-            message.getTools().any { it.isPending || it.canResumeExecution }
-        }) { context.getString(R.string.chat_page_compress_pending_tools) }
+        // 未完成的工具调用没有结果，请求会被服务端拒绝；压到检查点之前也再不会执行。
+        check(nodes.subList(checkpointIndex + 1, nodes.size).none { node ->
+            node.currentMessage.getTools().any { it.isPending || it.canResumeExecution }
+        }) { context.getString(R.string.chat_page_compress_handle_pending_tools) }
 
-        fun splitMessages(messages: List<UIMessage>): List<List<UIMessage>> {
-            if (messages.size <= maxMessagesPerChunk) return listOf(messages)
-            val mid = messages.size / 2
-            val left = splitMessages(messages.subList(0, mid))
-            val right = splitMessages(messages.subList(mid, messages.size))
-            return left + right
-        }
+        val prompt = buildCompressPrompt(
+            additionalPrompt = additionalPrompt,
+            locale = Locale.getDefault().displayName,
+        )
+        val summary = generationLoop.generateCompressionSummary(
+            settings = settings,
+            model = model,
+            messages = conversation.currentMessages,
+            inputTransformers = chatInputTransformers,
+            assistant = assistant,
+            memories = memoryRepository.getFiles(assistant.memoryId),
+            tools = chatToolFactory.createTools(
+                settings = settings,
+                assistant = assistant,
+                model = model,
+                workspaceCwd = conversation.workspaceCwd,
+            ),
+            compressPrompt = prompt,
+            conversationSystemPrompt = conversation.customSystemPrompt,
+            conversationId = conversationId,
+            workspaceCwd = conversation.workspaceCwd,
+        )
 
-        suspend fun compressMessages(messages: List<UIMessage>): String {
-            val contentToCompress = messages.joinToString("\n\n") {
-                // 上一份摘要是更早历史的唯一来源，不能截断。
-                it.summaryAsText(maxLength = if (it.isContextCheckpoint) Int.MAX_VALUE else 2000)
-            }
-            val prompt = settings.compressPrompt.applyPlaceholders(
-                "content" to contentToCompress,
-                "target_tokens" to targetTokens.toString(),
-                "additional_context" to if (additionalPrompt.isNotBlank()) {
-                    "Additional instructions from user: $additionalPrompt"
-                } else "",
-                "locale" to Locale.getDefault().displayName
-            )
-
-            val result = providerHandler.generateText(
-                providerSetting = provider,
-                messages = listOf(UIMessage.user(prompt)),
-                params = backgroundTextGenerationParams(model, conversationId),
-            )
-
-            return result.message.toText().trim().takeIf { it.isNotBlank() }
-                ?: throw IllegalStateException("Failed to generate compressed summary")
-        }
-
-        val compressedSummaries = coroutineScope {
-            splitMessages(messagesToCompress)
-                .map { chunk -> async { compressMessages(chunk) } }
-                .awaitAll()
-        }
-
-        // 原消息原样保留，只在切点插入摘要。摘要生成期间对话可能已变化，
+        // 原消息原样保留，摘要插在压缩时的最后一条消息之后。摘要生成期间对话可能已变化，
         // 因此按节点定位插入到最新状态，而不是用调用时的快照整体覆盖。
         val newConversation = synchronized(session) {
             check(!session.isGenerating) { context.getString(R.string.chat_page_compress_blocked_generating) }
             val updated = insertContextCheckpoint(
                 conversation = session.state.value,
-                afterNodeId = nodes[cutIndex - 1].id,
-                summary = compressedSummaries.joinToString("\n\n"),
+                afterNodeId = nodes.last().id,
+                summary = summary,
             ) ?: throw IllegalStateException(context.getString(R.string.chat_page_compress_conversation_changed))
             updated.copy(chatSuggestions = emptyList()).also { updateConversation(conversationId, it) }
         }

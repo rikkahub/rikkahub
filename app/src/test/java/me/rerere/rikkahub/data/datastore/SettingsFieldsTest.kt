@@ -69,7 +69,6 @@ class SettingsFieldsTest {
         assertEquals(DEFAULT_AUTO_MODEL_ID, settings.chatModelId)
         assertEquals(DEFAULT_AUTO_MODEL_ID, settings.fastModelId)
         assertEquals(DEFAULT_AUTO_MODEL_ID, settings.translateModeId)
-        assertEquals(DEFAULT_AUTO_MODEL_ID, settings.compressModelId)
         assertEquals(DEFAULT_MODE_INJECTIONS, settings.modeInjections)
         assertEquals(DEFAULT_ASSISTANT_ID, settings.assistantId)
         assertEquals(DEFAULT_SYSTEM_TTS_ID, settings.selectedTTSProviderId)
@@ -133,8 +132,6 @@ private val SAMPLE = Settings(
     suggestionPrompt = "suggestion",
     ocrModelId = id(5),
     ocrPrompt = "ocr",
-    compressModelId = id(6),
-    compressPrompt = "compress",
     assistantId = id(20),
     providers = listOf(ProviderSetting.OpenAI(id = id(31), name = "Provider")),
     assistants = listOf(Assistant(id = id(20), name = "Assistant")),
@@ -189,8 +186,6 @@ private val STORED_KEYS = setOf(
     "suggestion_prompt",
     "ocr_model",
     "ocr_prompt",
-    "compress_model",
-    "compress_prompt",
     "providers",
     "select_assistant",
     "assistants",

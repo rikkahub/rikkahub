@@ -254,9 +254,6 @@
   <string name="chat_page_compress_context">履歴を圧縮</string>
   <string name="chat_page_compress_context_desc">会話を要約して圧縮し、トークンを節約します</string>
   <string name="chat_page_compress_context_title">会話履歴を圧縮</string>
-  <string name="chat_page_compress_keep_recent">最近のメッセージを保持</string>
-  <string name="chat_page_compress_not_enough_messages">圧縮するためのメッセージが不足しています。保持するメッセージ数を減らすか、メッセージを追加してください。</string>
-  <string name="chat_page_compress_target_tokens">ターゲットトークンサイズ</string>
   <string name="chat_page_compressing">圧縮中…</string>
   <string name="chat_page_conversation_system_prompt">会話システムプロンプト</string>
   <string name="chat_page_conversation_system_prompt_clear">クリア</string>
@@ -290,8 +287,6 @@
   <string name="chat_page_search_chats">チャットを検索</string>
   <string name="chat_page_today">今日</string>
   <string name="chat_page_yesterday">昨日</string>
-  <string name="chat_size_dialog_content">現在のメッセージ数: %1$d。これによりアプリがクラッシュしたり動作が遅くなったり、この会話データが失われる可能性があります。チャットを続けるには、できるだけ早く新しい会話を作成してください。</string>
-  <string name="chat_size_dialog_title">この会話データは大きすぎます</string>
   <string name="citations_count">%1$d 件の引用</string>
   <string name="code_block_collapse">折りたたむ</string>
   <string name="code_block_copy">コードをコピー</string>
@@ -731,9 +726,6 @@
   <string name="setting_mcp_page_url_label">URL</string>
   <string name="setting_model_page_chat_model">チャットモデル</string>
   <string name="setting_model_page_chat_model_desc">グローバルデフォルトチャットモデル</string>
-  <string name="setting_model_page_compress_model">モデルを圧縮</string>
-  <string name="setting_model_page_compress_model_desc">会話履歴を圧縮するモデル</string>
-  <string name="setting_model_page_compress_prompt_vars">変数: {content}, {target_tokens}, {additional_context}</string>
   <string name="setting_model_page_ocr_model">OCRモデル</string>
   <string name="setting_model_page_ocr_model_desc">画像の光学文字認識に使用されるモデル</string>
   <string name="setting_model_page_ocr_prompt_vars">変数: 画像データ: {images}</string>
@@ -1104,7 +1096,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_model_page_prompt_title">タイトル生成</string>
   <string name="setting_model_page_prompt_suggestion">チャット返信の提案</string>
   <string name="setting_model_page_prompt_ocr">OCR認識</string>
-  <string name="setting_model_page_prompt_compress">コンテキスト圧縮</string>
   <string name="setting_display_page_bubble_opacity_title">吹き出しの不透明度</string>
   <string name="setting_provider_page_include_history_reasoning">履歴の思考過程を送信</string>
   <string name="setting_model_page_fast_model">高速モデル</string>
@@ -1549,7 +1540,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_compress_checkpoint_hint">この行より上のメッセージはモデルに送信されなくなり、代わりにこの要約が使用されます。要約を削除すると、履歴全体が再び送信されます。</string>
   <string name="chat_page_compress_blocked_generating">コンテキストを圧縮する前に生成を停止してください</string>
   <string name="chat_page_compress_conversation_changed">圧縮中に会話が変更されました。もう一度お試しください。</string>
-  <string name="chat_page_compress_pending_tools">保留中のツール呼び出しを先に処理するか、それらを含む最近のメッセージを保持してください</string>
   <string name="sketch">スケッチ</string>
   <string name="sketch_draw_on_image">画像に描画</string>
   <string name="imggen_page_deprecated_warning">この機能は非推奨であり、将来のバージョンで削除される予定です。代わりに %1$s を使用してください</string>

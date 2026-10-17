@@ -254,9 +254,6 @@
   <string name="chat_page_compress_context">Сжать историю</string>
   <string name="chat_page_compress_context_desc">Сжать переписку в краткое резюме, чтобы сэкономить токены</string>
   <string name="chat_page_compress_context_title">Сжать историю чата</string>
-  <string name="chat_page_compress_keep_recent">Сохранять недавние сообщения</string>
-  <string name="chat_page_compress_not_enough_messages">Недостаточно сообщений для сжатия. Уменьшите количество сохраняемых сообщений или добавьте больше сообщений.</string>
-  <string name="chat_page_compress_target_tokens">Целевой размер токенов</string>
   <string name="chat_page_compressing">Сжатие...</string>
   <string name="chat_page_conversation_system_prompt">Системный запрос для беседы</string>
   <string name="chat_page_conversation_system_prompt_clear">Очистить</string>
@@ -290,8 +287,6 @@
   <string name="chat_page_search_chats">Поиск чатов</string>
   <string name="chat_page_today">Сегодня</string>
   <string name="chat_page_yesterday">Вчера</string>
-  <string name="chat_size_dialog_content">Текущее количество сообщений: %1$d. Это может привести к вылету или зависанию приложения, а также к потере данных этой беседы. Пожалуйста, создайте новый чат как можно скорее, чтобы продолжить общение.</string>
-  <string name="chat_size_dialog_title">Данные этого разговора слишком большие</string>
   <string name="citations_count">%1$d цитирований</string>
   <string name="code_block_collapse">Свернуть</string>
   <string name="code_block_copy">Копировать код</string>
@@ -731,9 +726,6 @@
   <string name="setting_mcp_page_url_label">URL</string>
   <string name="setting_model_page_chat_model">Модель чата</string>
   <string name="setting_model_page_chat_model_desc">Глобальная модель чата по умолчанию</string>
-  <string name="setting_model_page_compress_model">Сжать модель</string>
-  <string name="setting_model_page_compress_model_desc">Модель для сжатия истории разговоров</string>
-  <string name="setting_model_page_compress_prompt_vars">Переменные: {content}, {target_tokens}, {additional_context}</string>
   <string name="setting_model_page_ocr_model">Модель OCR</string>
   <string name="setting_model_page_ocr_model_desc">Модель, используемая для оптического распознавания текста на изображениях</string>
   <string name="setting_model_page_ocr_prompt_vars">Переменные: Данные изображения: {images}</string>
@@ -1104,7 +1096,6 @@
   <string name="setting_model_page_prompt_title">Генерация заголовка</string>
   <string name="setting_model_page_prompt_suggestion">Подсказки ответов в чате</string>
   <string name="setting_model_page_prompt_ocr">OCR распознавание</string>
-  <string name="setting_model_page_prompt_compress">Сжатие контекста</string>
   <string name="setting_display_page_bubble_opacity_title">Прозрачность пузырьков</string>
   <string name="setting_provider_page_include_history_reasoning">Отправлять историю рассуждений</string>
   <string name="setting_model_page_fast_model">Быстрая модель</string>
@@ -1549,7 +1540,6 @@
   <string name="chat_page_compress_checkpoint_hint">Сообщения над этой линией больше не отправляются модели; эта сводка заменяет их. Удалите сводку, чтобы снова отправлять всю историю.</string>
   <string name="chat_page_compress_blocked_generating">Остановите генерацию перед сжатием контекста</string>
   <string name="chat_page_compress_conversation_changed">Диалог изменился во время сжатия. Повторите попытку.</string>
-  <string name="chat_page_compress_pending_tools">Сначала обработайте ожидающие вызовы инструментов или сохраните последние сообщения, содержащие их</string>
   <string name="sketch">Эскиз</string>
   <string name="sketch_draw_on_image">Рисовать на изображении</string>
   <string name="imggen_page_deprecated_warning">Эта функция устарела и будет удалена в будущей версии. Вместо неё используйте %1$s</string>

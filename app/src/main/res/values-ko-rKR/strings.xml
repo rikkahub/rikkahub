@@ -254,9 +254,6 @@
   <string name="chat_page_compress_context">기록 압축</string>
   <string name="chat_page_compress_context_desc">대화를 요약하여 토큰을 절약하세요</string>
   <string name="chat_page_compress_context_title">대화 기록 압축</string>
-  <string name="chat_page_compress_keep_recent">최근 메시지 유지</string>
-  <string name="chat_page_compress_not_enough_messages">압축할 메시지가 부족합니다. 유지할 메시지 수를 줄이거나 더 많은 메시지를 추가하세요.</string>
-  <string name="chat_page_compress_target_tokens">대상 토큰 크기</string>
   <string name="chat_page_compressing">압축 중...</string>
   <string name="chat_page_conversation_system_prompt">대화 시스템 프롬프트</string>
   <string name="chat_page_conversation_system_prompt_clear">지우기</string>
@@ -290,8 +287,6 @@
   <string name="chat_page_search_chats">채팅 검색</string>
   <string name="chat_page_today">오늘</string>
   <string name="chat_page_yesterday">어제</string>
-  <string name="chat_size_dialog_content">현재 메시지 수: %1$d. 이로 인해 앱이 강제 종료되거나 느려질 수 있으며, 대화 데이터가 손실될 수도 있습니다. 계속 대화하려면 새 대화를 만들어 주세요.</string>
-  <string name="chat_size_dialog_title">이 대화 데이터가 너무 큽니다</string>
   <string name="citations_count">%1$d 출처</string>
   <string name="code_block_collapse">접기</string>
   <string name="code_block_copy">코드 복사</string>
@@ -731,9 +726,6 @@
   <string name="setting_mcp_page_url_label">URL</string>
   <string name="setting_model_page_chat_model">채팅 모델</string>
   <string name="setting_model_page_chat_model_desc">전역 기본 채팅 모델</string>
-  <string name="setting_model_page_compress_model">모델 압축</string>
-  <string name="setting_model_page_compress_model_desc">대화 기록 압축용 모델</string>
-  <string name="setting_model_page_compress_prompt_vars">변수: {content}, {target_tokens}, {additional_context}</string>
   <string name="setting_model_page_ocr_model">OCR 모델</string>
   <string name="setting_model_page_ocr_model_desc">이미지에서 광학 문자 인식에 사용되는 모델</string>
   <string name="setting_model_page_ocr_prompt_vars">변수: 이미지 데이터: {images}</string>
@@ -1104,7 +1096,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_model_page_prompt_title">제목 생성</string>
   <string name="setting_model_page_prompt_suggestion">채팅 답변 제안</string>
   <string name="setting_model_page_prompt_ocr">OCR 인식</string>
-  <string name="setting_model_page_prompt_compress">컨텍스트 압축</string>
   <string name="setting_display_page_bubble_opacity_title">버블 불투명도</string>
   <string name="setting_provider_page_include_history_reasoning">이전 추론 내용 전송</string>
   <string name="setting_model_page_fast_model">빠른 모델</string>
@@ -1549,7 +1540,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_page_compress_checkpoint_hint">이 줄 위의 메시지는 더 이상 모델로 전송되지 않으며, 이 요약이 해당 메시지를 대체합니다. 전체 기록을 다시 보내려면 요약을 삭제하세요.</string>
   <string name="chat_page_compress_blocked_generating">컨텍스트를 압축하기 전에 생성을 중지하세요</string>
   <string name="chat_page_compress_conversation_changed">압축 중에 대화가 변경되었습니다. 다시 시도해 주세요.</string>
-  <string name="chat_page_compress_pending_tools">대기 중인 도구 호출을 먼저 처리하거나, 해당 호출이 포함된 최근 메시지를 유지하세요</string>
   <string name="sketch">스케치</string>
   <string name="sketch_draw_on_image">이미지에 그리기</string>
   <string name="imggen_page_deprecated_warning">이 기능은 더 이상 사용되지 않으며 향후 버전에서 제거될 예정입니다. 대신 %1$s을(를) 사용하세요.</string>

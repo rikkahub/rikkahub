@@ -89,8 +89,6 @@ internal val SETTINGS_FIELDS: List<SettingsField<*, *>> = with(SettingsStore) {
         plain(SUGGESTION_PROMPT, Settings::suggestionPrompt) { copy(suggestionPrompt = it) },
         uuid(OCR_MODEL, Settings::ocrModelId) { copy(ocrModelId = it) },
         plain(OCR_PROMPT, Settings::ocrPrompt) { copy(ocrPrompt = it) },
-        uuid(COMPRESS_MODEL, Settings::compressModelId) { copy(compressModelId = it) },
-        plain(COMPRESS_PROMPT, Settings::compressPrompt) { copy(compressPrompt = it) },
 
         // 提供商
         json(PROVIDERS, Settings::providers) { copy(providers = it) },
@@ -161,7 +159,6 @@ private val MISSING_KEY_DEFAULTS = Settings(
     chatModelId = DEFAULT_AUTO_MODEL_ID,
     fastModelId = DEFAULT_AUTO_MODEL_ID,
     translateModeId = DEFAULT_AUTO_MODEL_ID,
-    compressModelId = DEFAULT_AUTO_MODEL_ID,
 )
 
 /** 解码出的是盘上的原始值，还没有经过 [normalized]。 */

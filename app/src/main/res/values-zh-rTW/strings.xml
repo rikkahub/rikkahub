@@ -254,9 +254,6 @@
   <string name="chat_page_compress_context">壓縮歷史</string>
   <string name="chat_page_compress_context_desc">將對話壓縮成摘要以節省 token</string>
   <string name="chat_page_compress_context_title">壓縮對話紀錄</string>
-  <string name="chat_page_compress_keep_recent">保留最近訊息</string>
-  <string name="chat_page_compress_not_enough_messages">訊息不足，無法壓縮。請減少要保留的訊息數量，或新增更多訊息。</string>
-  <string name="chat_page_compress_target_tokens">目標 Token 大小</string>
   <string name="chat_page_compressing">正在壓縮...</string>
   <string name="chat_page_conversation_system_prompt">對話系統提示</string>
   <string name="chat_page_conversation_system_prompt_clear">清除</string>
@@ -290,8 +287,6 @@
   <string name="chat_page_search_chats">搜尋聊天</string>
   <string name="chat_page_today">今天</string>
   <string name="chat_page_yesterday">昨天</string>
-  <string name="chat_size_dialog_content">目前訊息數：%1$d。這可能導致應用程式崩潰或延遲，甚至遺失此對話資料。請盡快建立新對話以繼續聊天。</string>
-  <string name="chat_size_dialog_title">此對話資料過大</string>
   <string name="citations_count">%1$d 條引用</string>
   <string name="code_block_collapse">摺疊</string>
   <string name="code_block_copy">複製代碼</string>
@@ -731,9 +726,6 @@
   <string name="setting_mcp_page_url_label">URL</string>
   <string name="setting_model_page_chat_model">聊天模型</string>
   <string name="setting_model_page_chat_model_desc">全域預設聊天模型</string>
-  <string name="setting_model_page_compress_model">壓縮模型</string>
-  <string name="setting_model_page_compress_model_desc">用於壓縮對話歷程的模型</string>
-  <string name="setting_model_page_compress_prompt_vars">變數：{content}、{target_tokens}、{additional_context}</string>
   <string name="setting_model_page_ocr_model">OCR 模型</string>
   <string name="setting_model_page_ocr_model_desc">用於圖片光學字元辨識的模型</string>
   <string name="setting_model_page_ocr_prompt_vars">變數：圖片資料：{images}</string>
@@ -1102,7 +1094,6 @@
   <string name="setting_model_page_prompt_title">標題生成</string>
   <string name="setting_model_page_prompt_suggestion">聊天回覆建議</string>
   <string name="setting_model_page_prompt_ocr">OCR 辨識</string>
-  <string name="setting_model_page_prompt_compress">上下文壓縮</string>
   <string name="setting_display_page_bubble_opacity_title">氣泡透明度</string>
   <string name="setting_provider_page_include_history_reasoning">回傳歷史思考過程</string>
   <string name="setting_model_page_fast_model">快速模型</string>
@@ -1547,7 +1538,6 @@
   <string name="chat_page_compress_checkpoint_hint">此線以上的訊息將不再傳送給模型；此摘要會取代它們。刪除摘要即可再次傳送完整歷史記錄。</string>
   <string name="chat_page_compress_blocked_generating">請先停止生成，再壓縮上下文</string>
   <string name="chat_page_compress_conversation_changed">對話在壓縮期間已變更。請再試一次。</string>
-  <string name="chat_page_compress_pending_tools">請先處理待處理的工具呼叫，或保留包含這些呼叫的近期訊息</string>
   <string name="sketch">草圖</string>
   <string name="sketch_draw_on_image">在圖片上繪圖</string>
   <string name="imggen_page_deprecated_warning">此功能已棄用，將在未來版本中移除。請改用 %1$s</string>
