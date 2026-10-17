@@ -39,7 +39,8 @@ private val markdownParser = MarkdownParser(flavour)
  * @param softBreakAsLineBreak 段落内的单个换行是否渲染为换行（聊天场景的习惯）；为 false 时按 CommonMark 当作空格
  */
 fun parseMarkdown(content: String, softBreakAsLineBreak: Boolean = true): MarkdownDocument {
-    val text = normalizeLatexDelimiters(content)
+    // 解析器只认 \n 作为换行，CRLF 里残留的 \r 会让围栏行匹配不上（比如结尾的 ``` 不被当作闭合）
+    val text = normalizeLatexDelimiters(content.replace(LINE_ENDING_REGEX, "\n"))
     val tree = markdownParser.buildMarkdownTreeFromString(text)
     val providers = flavour.createHtmlGeneratingProviders(LinkMap.buildLinkMap(tree, text), null) +
         (MarkdownTokenTypes.HTML_TAG to InlineHtmlTagProvider)
@@ -52,6 +53,8 @@ fun parseMarkdown(content: String, softBreakAsLineBreak: Boolean = true): Markdo
 }
 
 // ---- 预处理 ----
+
+private val LINE_ENDING_REGEX = Regex("""\r\n?""")
 
 // 第 1 组匹配代码（围栏未闭合时一直算到结尾），用来跳过代码里的内容；第 2、3 组分别是 \( \) 和 \[ \]
 private val LATEX_DELIMITER_REGEX =

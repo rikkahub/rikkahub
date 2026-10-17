@@ -94,6 +94,19 @@ class MarkdownParserTest {
     }
 
     @Test
+    fun `code fences close with CRLF line endings`() {
+        val source = "````\n文字 A\n\n````\n文字 B\n```\n\n文字 C\n```".replace("\n", "\r\n")
+        assertEquals(
+            listOf(
+                CodeBlock(code = "文字 A", language = null, closed = true),
+                Paragraph(listOf(Text("文字 B"))),
+                CodeBlock(code = "\n文字 C", language = null, closed = true),
+            ),
+            parseMarkdown(source).blocks,
+        )
+    }
+
+    @Test
     fun `lists keep start number nesting and task state`() {
         val list = single<ListBlock>(
             """
