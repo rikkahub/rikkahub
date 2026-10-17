@@ -100,7 +100,7 @@ internal fun FilesPicker(
     mcpManager: McpManager,
     onCompressContext: (additionalPrompt: String) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
-    onUpdateConversation: (Conversation) -> Unit,
+    onUpdateWorkspaceCwd: (String?) -> Unit,
     showCompressDialog: Boolean,
     onShowCompressDialogChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
@@ -326,7 +326,7 @@ internal fun FilesPicker(
             workspaceId = boundWorkspace.id,
             currentCwd = conversation.workspaceCwd,
             onSelectCwd = { newCwd ->
-                onUpdateConversation(conversation.copy(workspaceCwd = newCwd))
+                onUpdateWorkspaceCwd(newCwd)
             },
             onDismiss = { showCwdSheet = false },
         )

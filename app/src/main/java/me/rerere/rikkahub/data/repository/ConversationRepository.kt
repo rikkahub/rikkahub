@@ -372,12 +372,6 @@ class ConversationRepository(
         }
     }
 
-    suspend fun deleteConversationOfAssistant(assistantId: Uuid) {
-        getConversationsOfAssistant(assistantId).first().forEach { conversation ->
-            deleteConversation(conversation)
-        }
-    }
-
     fun conversationToConversationEntity(conversation: Conversation): ConversationEntity {
         require(conversation.messageNodes.none { it.messages.any { message -> message.hasBase64Part() } })
         return ConversationEntity(
@@ -451,6 +445,22 @@ class ConversationRepository(
             modeInjectionIds = JsonInstant.encodeToString(conversation.modeInjectionIds),
             lorebookIds = JsonInstant.encodeToString(conversation.lorebookIds),
             workspaceCwd = conversation.workspaceCwd ?: "",
+        )
+    }
+
+    suspend fun updateTitle(conversationId: Uuid, title: String) {
+        conversationDAO.updateTitle(conversationId.toString(), title)
+        messageFtsManager.updateTitle(conversationId.toString(), title)
+    }
+
+    suspend fun updateCustomSystemPrompt(conversationId: Uuid, customSystemPrompt: String?) {
+        conversationDAO.updateCustomSystemPrompt(conversationId.toString(), customSystemPrompt ?: "")
+    }
+
+    suspend fun updateChatSuggestions(conversationId: Uuid, chatSuggestions: List<String>) {
+        conversationDAO.updateChatSuggestions(
+            id = conversationId.toString(),
+            chatSuggestions = JsonInstant.encodeToString(chatSuggestions),
         )
     }
 

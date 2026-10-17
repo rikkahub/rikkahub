@@ -191,8 +191,7 @@ internal class AgentLoop(
         val definition = findTool(tool.toolName) ?: error("Tool ${tool.toolName} not found")
         val args = runCatching { json.parseToJsonElement(tool.input.ifBlank { "{}" }) }
             .getOrElse { error("Invalid tool arguments JSON for ${tool.toolName}: ${it.message}") }
-        hooks.processToolOutput(tool, definition.execute(args))
-            .ifEmpty { listOf(UIMessagePart.Text(EMPTY_TOOL_OUTPUT)) }
+        definition.execute(args).ifEmpty { listOf(UIMessagePart.Text(EMPTY_TOOL_OUTPUT)) }
     } catch (e: CancellationException) {
         // 取消必须向上传播，否则停止生成会被误报为工具执行错误
         throw e

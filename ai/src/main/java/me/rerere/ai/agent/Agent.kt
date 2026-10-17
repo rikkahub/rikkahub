@@ -7,7 +7,6 @@ import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
-import me.rerere.ai.ui.UIMessagePart
 
 /**
  * 一次 agent 运行的输入。
@@ -48,12 +47,6 @@ interface AgentHooks {
      * 下标 [newPartsFrom] 及之后的 part 是这一步新生成的；之前的来自更早的步骤，已经处理过一次。
      */
     suspend fun finishStep(message: UIMessage, newPartsFrom: Int): UIMessage = message
-
-    /** 工具执行成功后、结果写回之前调用，比如截断过长的输出。拒绝、回答和执行出错的结果不经过这里。 */
-    suspend fun processToolOutput(
-        tool: UIMessagePart.Tool,
-        output: List<UIMessagePart>,
-    ): List<UIMessagePart> = output
 }
 
 data class StepRequest(

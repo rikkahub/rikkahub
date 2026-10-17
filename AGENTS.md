@@ -54,9 +54,13 @@ Material 3 look (cards with dividers, plain forms).
   Once a conversation is persisted it also holds a `ConversationConfig` snapshot (chat model, reasoning level, search,
   MCP servers, workspace, skills) taken from the assistant; from then on chat-page changes to those settings stay on
   the conversation, and code should read them through `Settings.getAssistantOf(conversation)` /
-  `Settings.getChatModelOf(conversation)` instead of the assistant directly. (
+  `Settings.getChatModelOf(conversation)` instead of the assistant directly. Once loaded, the in-memory
+  `ConversationSession` is the single source of truth: change a conversation through `ChatService` (which applies
+  `session.update { latest -> ... }` and then `flush()`), never by saving a whole `Conversation` snapshot or one read
+  back from the database; deleting also goes through `ChatService` so a running generation cannot re-insert it. (
   app/src/main/java/me/rerere/rikkahub/data/model/Conversation.kt,
-  app/src/main/java/me/rerere/rikkahub/data/model/ConversationConfig.kt)
+  app/src/main/java/me/rerere/rikkahub/data/model/ConversationConfig.kt,
+  app/src/main/java/me/rerere/rikkahub/service/ConversationSession.kt)
 
 - **UIMessage**: A platform-agnostic message abstraction that encapsulates chat messages with different types of content
   parts (text, images, documents, reasoning, tool calls/results, etc.). Each message has a role (USER, ASSISTANT,

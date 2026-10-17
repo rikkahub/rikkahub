@@ -17,7 +17,6 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
-import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.ai.prompts.MemoryConsolidationConversation
 import me.rerere.rikkahub.data.ai.prompts.buildMemoryConsolidationInput
@@ -164,22 +163,13 @@ class MemoryConsolidator(
             createMemoryConversationTools(conversationRepo, assistantIds)
         val systemPrompt = buildMemoryConsolidationPrompt(fullReview)
         // 整次整理的每一步用同一个会话 ID，服务端才能命中前面几步的缓存
-        val sessionId = Uuid.random().toString()
+        val params = backgroundTextGenerationParams(model, Uuid.random(), settings.fastModelReasoningLevel)
         val hooks = object : AgentHooks {
             override suspend fun prepareStep(messages: List<UIMessage>): StepRequest {
                 val system = (listOf(systemPrompt) + tools.map { it.systemPrompt(model, messages) })
                     .filter { it.isNotBlank() }
                     .joinToString("\n")
-                return StepRequest(
-                    messages = listOf(UIMessage.system(system)) + messages,
-                    params = TextGenerationParams(
-                        model = model,
-                        reasoningLevel = settings.fastModelReasoningLevel,
-                        customHeaders = model.customHeaders,
-                        customBody = model.customBodies,
-                        sessionId = sessionId,
-                    ),
-                )
+                return StepRequest(messages = listOf(UIMessage.system(system)) + messages, params = params)
             }
         }
 
