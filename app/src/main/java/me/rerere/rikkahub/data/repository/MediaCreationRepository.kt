@@ -126,6 +126,21 @@ class MediaCreationRepository(
 
     suspend fun hasNode(id: Uuid): Boolean = dao.getNode(id.toString()) != null
 
+    /** 时间线上每一项当前显示的版本，从最早的一项排起。 */
+    suspend fun getSelectedRecordsOfSession(sessionId: Uuid): List<MediaCreationRecord> =
+        dao.getSelectedRecordsOfSession(sessionId.toString()).map { it.toRecord() }
+
+    /** 一项的所有版本，按创建顺序。 */
+    suspend fun getVersionIds(nodeId: Uuid): List<Uuid> = dao.getVersionIds(nodeId.toString()).map { Uuid.parse(it) }
+
+    /** 从时间线上删除一项，连同它的所有版本和文件。 */
+    suspend fun deleteNode(sessionId: Uuid, nodeId: Uuid) {
+        // 版本随这一项级联删除，目录要自己清理
+        val versions = getVersionIds(nodeId)
+        dao.deleteNode(nodeId.toString())
+        withContext(Dispatchers.IO) { versions.forEach { recordDir(sessionId, it).deleteRecursively() } }
+    }
+
     /**
      * 让一项改为显示相邻的版本，[offset] 为 -1 是上一个、1 是下一个；已经到头时不变。
      */

@@ -1601,4 +1601,15 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_display_page_enable_quote_highlight_desc">使用主题色为引号内的文本着色，让角色对话更加醒目</string>
   <string name="workspace_detail_copy_path">复制路径</string>
   <string name="workspace_detail_path_copied">路径已复制</string>
+  <string name="media_creation_page_selected_count">已选择 %1$d 项</string>
+  <string name="media_creation_page_select">多选</string>
+  <string name="media_creation_page_exit_selection">退出多选</string>
+  <string name="media_creation_page_select_all">全选</string>
+  <string name="media_creation_page_deselect_all">取消全选</string>
+  <string name="media_creation_page_save">保存</string>
+  <string name="media_creation_page_saving">保存中…</string>
+  <string name="media_creation_page_delete_selected_text">选中的 %1$d 项会连同它们的所有版本和生成的文件一起删除，无法恢复。其中还在生成的任务不会再获取结果。</string>
+  <string name="media_creation_page_nothing_to_save">选中的项里没有可以保存的图片或视频</string>
+  <string name="media_creation_page_saved_files">已保存 %1$d 个文件到相册</string>
+  <string name="media_creation_page_saved_files_partial">已保存 %1$d 个文件，%2$d 个失败：%3$s</string>
 </resources>

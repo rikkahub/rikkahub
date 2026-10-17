@@ -97,6 +97,17 @@ interface MediaCreationDAO {
     )
     suspend fun getNodePosition(id: String): Int
 
+    /** 会话里每一项当前显示的记录，从最早的一项排起。 */
+    @Query(
+        """
+        SELECT r.* FROM media_creation_node n
+        JOIN media_creation_record r ON r.id = n.selected_record_id
+        WHERE n.session_id = :sessionId
+        ORDER BY n.create_at, n.rowid
+        """
+    )
+    suspend fun getSelectedRecordsOfSession(sessionId: String): List<MediaCreationRecordEntity>
+
     @Query("SELECT * FROM media_creation_node WHERE id = :id")
     suspend fun getNode(id: String): MediaCreationNodeEntity?
 

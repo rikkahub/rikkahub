@@ -277,8 +277,12 @@ internal suspend fun saveMediaToGallery(context: Context, file: File, mimeType: 
             context.getActivity()?.let { ActivityCompat.requestPermissions(it, arrayOf(permission), 1) }
             error(context.getString(R.string.media_creation_page_storage_permission_required))
         }
-        val target = File(Environment.getExternalStoragePublicDirectory(directory), name)
-        file.copyTo(target, overwrite = true)
+        // 批量保存时同一毫秒里会有好几个文件，重名的另取一个名字，不能互相覆盖（Android 10 起由 MediaStore 处理）
+        val dir = Environment.getExternalStoragePublicDirectory(directory)
+        val target = generateSequence(0) { it + 1 }
+            .map { if (it == 0) File(dir, name) else File(dir, "${name.substringBeforeLast('.')}_$it.${file.extension}") }
+            .first { !it.exists() }
+        file.copyTo(target)
         MediaScannerConnection.scanFile(context, arrayOf(target.absolutePath), arrayOf(mimeType), null)
     }
 }

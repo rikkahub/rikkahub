@@ -1601,4 +1601,15 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_display_page_enable_quote_highlight_desc">따옴표 안의 텍스트에 테마 색상을 적용하여 캐릭터 대화를 돋보이게 합니다</string>
   <string name="workspace_detail_copy_path">경로 복사</string>
   <string name="workspace_detail_path_copied">경로 복사됨</string>
+  <string name="media_creation_page_selected_count">%1$d개 선택됨</string>
+  <string name="media_creation_page_select">선택</string>
+  <string name="media_creation_page_exit_selection">선택 종료</string>
+  <string name="media_creation_page_select_all">모두 선택</string>
+  <string name="media_creation_page_deselect_all">모두 선택 해제</string>
+  <string name="media_creation_page_save">저장</string>
+  <string name="media_creation_page_saving">저장 중…</string>
+  <string name="media_creation_page_delete_selected_text">선택한 항목 %1$d개와 해당 항목의 모든 버전 및 생성된 파일이 삭제되며 복구할 수 없습니다. 아직 생성 중인 작업의 결과는 더 이상 가져오지 않습니다.</string>
+  <string name="media_creation_page_nothing_to_save">선택한 항목에 저장할 이미지나 동영상이 없습니다.</string>
+  <string name="media_creation_page_saved_files">갤러리에 파일 %1$d개를 저장했습니다</string>
+  <string name="media_creation_page_saved_files_partial">파일 %1$d개 저장됨, %2$d개 실패: %3$s</string>
 </resources>

@@ -1,29 +1,45 @@
 package me.rerere.rikkahub.ui.pages.mediacreation
 
+import android.content.Context
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
@@ -31,9 +47,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -44,8 +62,15 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import me.rerere.ui.toast.ToastType
+import me.rerere.ui.toast.ToasterState
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.CheckList
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Download01
 import me.rerere.hugeicons.stroke.ImageToVideo
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.rikkahub.R
@@ -55,6 +80,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.ui.components.RikkaConfirmDialog
+import me.rerere.ui.components.Tooltip
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
@@ -75,8 +101,15 @@ fun MediaCreationPage(id: String) {
     val selection by vm.selection.collectAsStateWithLifecycle()
     val uploadConfigured by vm.uploadConfigured.collectAsStateWithLifecycle()
     val recentOutputs by vm.recentOutputs.collectAsStateWithLifecycle()
+    val selectedNodes by vm.selectedNodes.collectAsStateWithLifecycle()
+    val nodes = vm.nodes.collectAsLazyPagingItems()
 
     var showUploadDialog by remember { mutableStateOf(false) }
+    var confirmDeleteSelected by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = selectedNodes != null) {
+        vm.endSelection()
+    }
 
     LaunchedEffect(vm) {
         vm.events.collect { event ->
@@ -93,13 +126,25 @@ fun MediaCreationPage(id: String) {
             TopAppBar(
                 title = {
                     Text(
-                        text = session?.title?.ifBlank { null } ?: stringResource(R.string.media_creation_title),
+                        text = selectedNodes?.let { stringResource(R.string.media_creation_page_selected_count, it.size) }
+                            ?: session?.title?.ifBlank { null }
+                            ?: stringResource(R.string.media_creation_title),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 },
                 navigationIcon = {
                     BackButton()
+                },
+                actions = {
+                    if (selectedNodes == null && nodes.itemCount > 0) {
+                        val label = stringResource(R.string.media_creation_page_select)
+                        Tooltip(tooltip = { Text(label) }) {
+                            IconButton(onClick = { vm.startSelection() }) {
+                                Icon(HugeIcons.CheckList, contentDescription = label)
+                            }
+                        }
+                    }
                 },
             )
         },
@@ -122,21 +167,47 @@ fun MediaCreationPage(id: String) {
             ) {
                 MediaCreationTimeline(
                     vm = vm,
+                    nodes = nodes,
                     editingNodeId = draft.editingNodeId,
+                    selectedNodes = selectedNodes,
                     hasModels = settings.mediaGenerationProviders.any { it.models.isNotEmpty() },
                     onOpenMediaSettings = { navController.navigate(Screen.SettingMedia) },
                 )
             }
-            MediaCreationComposer(
-                vm = vm,
-                draft = draft,
-                selection = selection,
-                providers = settings.mediaGenerationProviders,
-                recentOutputs = recentOutputs,
-                uploadConfigured = uploadConfigured,
-                onOpenMediaSettings = { navController.navigate(Screen.SettingMedia) },
-            )
+            val selected = selectedNodes
+            if (selected != null) {
+                MediaCreationSelectionBar(
+                    vm = vm,
+                    selectedCount = selected.size,
+                    allSelected = nodes.itemCount > 0 && selected.size >= nodes.itemCount,
+                    onDelete = { confirmDeleteSelected = true },
+                )
+            } else {
+                MediaCreationComposer(
+                    vm = vm,
+                    draft = draft,
+                    selection = selection,
+                    providers = settings.mediaGenerationProviders,
+                    recentOutputs = recentOutputs,
+                    uploadConfigured = uploadConfigured,
+                    onOpenMediaSettings = { navController.navigate(Screen.SettingMedia) },
+                )
+            }
         }
+    }
+
+    RikkaConfirmDialog(
+        show = confirmDeleteSelected,
+        title = stringResource(R.string.confirm_delete),
+        confirmText = stringResource(R.string.delete),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            confirmDeleteSelected = false
+            vm.deleteSelected()
+        },
+        onDismiss = { confirmDeleteSelected = false },
+    ) {
+        Text(stringResource(R.string.media_creation_page_delete_selected_text, selectedNodes?.size ?: 0))
     }
 
     RikkaConfirmDialog(
@@ -157,11 +228,12 @@ fun MediaCreationPage(id: String) {
 @Composable
 private fun MediaCreationTimeline(
     vm: MediaCreationVM,
+    nodes: LazyPagingItems<MediaCreationNode>,
     editingNodeId: Uuid?,
+    selectedNodes: Set<Uuid>?,
     hasModels: Boolean,
     onOpenMediaSettings: () -> Unit,
 ) {
-    val nodes = vm.nodes.collectAsLazyPagingItems()
     val listState = rememberLazyListState()
 
     // 列表是倒序排布的，第 0 项就是最下面那条最新的记录。停在底部时，新记录出现后跟着露出来；
@@ -199,7 +271,12 @@ private fun MediaCreationTimeline(
         ) { index ->
             val node = nodes[index]
             if (node != null) {
-                MediaCreationRecordItem(node = node, editing = node.id == editingNodeId, vm = vm)
+                MediaCreationRecordItem(
+                    node = node,
+                    editing = node.id == editingNodeId,
+                    selected = selectedNodes?.let { node.id in it },
+                    vm = vm,
+                )
             } else {
                 // 还没加载到的记录先占位，保证列表总长度和滚动位置稳定
                 Surface(
@@ -275,6 +352,132 @@ private fun TimelineEmpty(
             ) {
                 Text(stringResource(R.string.media_creation_page_go_configure))
             }
+        }
+    }
+}
+
+/** 多选时代替输入区：退出多选、全选，以及对选中各项的批量操作。 */
+@Composable
+private fun MediaCreationSelectionBar(
+    vm: MediaCreationVM,
+    selectedCount: Int,
+    allSelected: Boolean,
+    onDelete: () -> Unit,
+) {
+    val context = LocalContext.current
+    val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
+    var saving by remember { mutableStateOf(false) }
+
+    // 和输入区占同一个位置、同一种外观
+    Surface(
+        modifier = Modifier
+            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars).only(WindowInsetsSides.Bottom))
+            .padding(horizontal = 8.dp)
+            .padding(bottom = 8.dp)
+            .fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.largeIncreased,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val exitLabel = stringResource(R.string.media_creation_page_exit_selection)
+            Tooltip(tooltip = { Text(exitLabel) }) {
+                IconButton(onClick = { vm.endSelection() }) {
+                    Icon(HugeIcons.Cancel01, contentDescription = exitLabel)
+                }
+            }
+            TextButton(
+                onClick = { if (allSelected) vm.clearSelection() else vm.selectAll() },
+                shapes = ButtonDefaults.shapes(),
+            ) {
+                Text(
+                    stringResource(
+                        if (allSelected) R.string.media_creation_page_deselect_all else R.string.media_creation_page_select_all
+                    )
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            FilledTonalButton(
+                onClick = {
+                    scope.launch {
+                        saving = true
+                        try {
+                            saveSelected(context, toaster, vm)
+                        } finally {
+                            saving = false
+                        }
+                    }
+                },
+                enabled = selectedCount > 0 && !saving,
+                shapes = ButtonDefaults.shapes(),
+                contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+            ) {
+                Icon(HugeIcons.Download01, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                Text(
+                    stringResource(if (saving) R.string.media_creation_page_saving else R.string.media_creation_page_save)
+                )
+            }
+            Button(
+                onClick = onDelete,
+                enabled = selectedCount > 0 && !saving,
+                shapes = ButtonDefaults.shapes(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+                contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+            ) {
+                Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                Text(stringResource(R.string.delete))
+            }
+        }
+    }
+}
+
+/** 把选中各项当前显示的版本的产出逐个存进相册，一个失败不影响其余的。 */
+private suspend fun saveSelected(context: Context, toaster: ToasterState, vm: MediaCreationVM) {
+    val outputs = vm.getSelectedOutputs()
+    if (outputs.isEmpty()) {
+        toaster.show(context.getString(R.string.media_creation_page_nothing_to_save), type = ToastType.Info)
+        return
+    }
+    val failures = outputs.mapNotNull { output ->
+        try {
+            saveMediaToGallery(context, vm.resolve(output.path), output.mimeType)
+            null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            e
+        }
+    }
+    when {
+        failures.isEmpty() -> toaster.show(
+            context.getString(R.string.media_creation_page_saved_files, outputs.size),
+            type = ToastType.Success,
+        )
+        else -> {
+            val reason = failures.first().message ?: context.getString(R.string.media_creation_page_save_failed)
+            toaster.show(
+                if (failures.size == outputs.size) {
+                    reason
+                } else {
+                    context.getString(
+                        R.string.media_creation_page_saved_files_partial,
+                        outputs.size - failures.size,
+                        failures.size,
+                        reason,
+                    )
+                },
+                type = ToastType.Error,
+            )
         }
     }
 }

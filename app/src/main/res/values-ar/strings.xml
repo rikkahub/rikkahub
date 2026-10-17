@@ -1599,4 +1599,15 @@
   <string name="setting_display_page_enable_quote_highlight_desc">تلوين النص داخل علامات الاقتباس بلون السمة لإبراز حوار الشخصيات</string>
   <string name="workspace_detail_copy_path">نسخ المسار</string>
   <string name="workspace_detail_path_copied">تم نسخ المسار</string>
+  <string name="media_creation_page_selected_count">تم تحديد %1$d</string>
+  <string name="media_creation_page_select">تحديد</string>
+  <string name="media_creation_page_exit_selection">إنهاء التحديد</string>
+  <string name="media_creation_page_select_all">تحديد الكل</string>
+  <string name="media_creation_page_deselect_all">إلغاء تحديد الكل</string>
+  <string name="media_creation_page_save">حفظ</string>
+  <string name="media_creation_page_saving">جارٍ الحفظ…</string>
+  <string name="media_creation_page_delete_selected_text">سيتم حذف العناصر المحددة (%1$d) وجميع إصداراتها والملفات المولّدة لها، ولا يمكن استعادتها. لن يتم جلب نتائج المهام التي لا تزال قيد التوليد بعد الآن.</string>
+  <string name="media_creation_page_nothing_to_save">لا تحتوي العناصر المحددة على صور أو مقاطع فيديو لحفظها</string>
+  <string name="media_creation_page_saved_files">تم حفظ %1$d من الملفات في المعرض</string>
+  <string name="media_creation_page_saved_files_partial">تم حفظ %1$d من الملفات، وفشل %2$d: %3$s</string>
 </resources>

@@ -2,7 +2,9 @@ package me.rerere.rikkahub.ui.pages.mediacreation
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -47,7 +50,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +74,7 @@ import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Refresh
 import me.rerere.hugeicons.stroke.Share01
+import me.rerere.hugeicons.stroke.Tick02
 import me.rerere.hugeicons.stroke.Video01
 import me.rerere.mediagen.model.ImageRole
 import me.rerere.rikkahub.R
@@ -97,46 +104,82 @@ private data class MediaPreview(val file: File, val isVideo: Boolean)
  * 时间线上的一项，显示它当前选中的版本：上面是这次生成的输入，下面是进度或产出，
  * 最后一行是可以对它做的操作，有多个版本时右下角可以切换。
  *
- * [editing] 表示输入区正在修改这一项。
+ * [editing] 表示输入区正在修改这一项。[selected] 非空时处在多选状态，点按整张卡片切换选中，里面的操作不响应；
+ * 不在多选状态时长按卡片进入多选。
  */
 @Composable
 internal fun MediaCreationRecordItem(
     node: MediaCreationNode,
     editing: Boolean,
+    selected: Boolean?,
     vm: MediaCreationVM,
     modifier: Modifier = Modifier,
 ) {
     val record = node.record
     var preview by remember { mutableStateOf<MediaPreview?>(null) }
+    val haptic = LocalHapticFeedback.current
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (selected == null) {
+                    // 里面的按钮、预览自己处理点按，只有点在空白处的长按会落到这里
+                    Modifier.pointerInput(node.id) {
+                        detectTapGestures(
+                            onLongPress = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                vm.startSelection(node.id)
+                            },
+                        )
+                    }
+                } else {
+                    Modifier
+                }
+            ),
         // 内容离边 16dp，里面的小块圆角 12dp，和外圈同心
         shape = MaterialTheme.shapes.extraLarge,
         colors = CustomColors.cardColors,
-        border = if (editing) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        border = if (selected ?: editing) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
     ) {
-        Column(
-            // 最后一行按钮自带 8dp 的点击留白，底部补 8dp 后看起来和其它三边一样是 16dp
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            RecordInput(
-                record = record,
-                resolve = vm::resolve,
-                onPreview = { preview = it },
-            )
-            when {
-                record.status.isActive -> RecordProgress(record)
-                record.status == MediaCreationStatus.SUCCEEDED -> RecordOutputs(
+        Box {
+            Column(
+                // 最后一行按钮自带 8dp 的点击留白，底部补 8dp 后看起来和其它三边一样是 16dp
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                RecordInput(
                     record = record,
-                    vm = vm,
+                    resolve = vm::resolve,
                     onPreview = { preview = it },
                 )
+                when {
+                    record.status.isActive -> RecordProgress(record)
+                    record.status == MediaCreationStatus.SUCCEEDED -> RecordOutputs(
+                        record = record,
+                        vm = vm,
+                        onPreview = { preview = it },
+                    )
 
-                else -> RecordFailure(record)
+                    else -> RecordFailure(record)
+                }
+                RecordActions(node = node, vm = vm)
             }
-            RecordActions(node = node, vm = vm)
+            if (selected != null) {
+                // 盖在内容上面，接住所有点按
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .toggleable(value = selected, onValueChange = { vm.toggleSelection(node.id) }),
+                ) {
+                    SelectionMark(
+                        selected = selected,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(12.dp),
+                    )
+                }
+            }
         }
     }
 
@@ -145,6 +188,35 @@ internal fun MediaCreationRecordItem(
             VideoPlayerDialog(file = target.file, onDismissRequest = { preview = null })
         } else {
             ImagePreviewDialog(images = listOf(target.file.absolutePath), onDismissRequest = { preview = null })
+        }
+    }
+}
+
+/** 多选时卡片角上的勾选标记。 */
+@Composable
+private fun SelectionMark(selected: Boolean, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .size(24.dp)
+            .clip(CircleShape)
+            .then(
+                if (selected) {
+                    Modifier.background(MaterialTheme.colorScheme.primary)
+                } else {
+                    Modifier
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                }
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (selected) {
+            Icon(
+                imageVector = HugeIcons.Tick02,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }
@@ -681,28 +753,31 @@ private fun ActionIcon(
     destructive: Boolean = false,
     onClick: () -> Unit,
 ) {
-    Tooltip(tooltip = { Text(text) }) {
-        FilledTonalIconButton(
-            onClick = onClick,
-            // 按下时圆角收紧
-            shapes = IconButtonDefaults.shapes(),
-            modifier = Modifier.size(
-                IconButtonDefaults.extraSmallContainerSize(IconButtonDefaults.IconButtonWidthOption.Wide)
-            ),
-            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                contentColor = if (destructive) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-            ),
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = text,
-                modifier = Modifier.size(IconButtonDefaults.extraSmallIconSize),
-            )
+    // 尺寸写死后最小点击区撑不开，按钮只占 32dp 高；外面补到和 ActionChip 一样的 48dp，居中才对得齐
+    Box(modifier = Modifier.heightIn(min = 48.dp), contentAlignment = Alignment.Center) {
+        Tooltip(tooltip = { Text(text) }) {
+            FilledTonalIconButton(
+                onClick = onClick,
+                // 按下时圆角收紧
+                shapes = IconButtonDefaults.shapes(),
+                modifier = Modifier.size(
+                    IconButtonDefaults.extraSmallContainerSize(IconButtonDefaults.IconButtonWidthOption.Wide)
+                ),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    contentColor = if (destructive) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                ),
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = text,
+                    modifier = Modifier.size(IconButtonDefaults.extraSmallIconSize),
+                )
+            }
         }
     }
 }

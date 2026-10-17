@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filterNotNull
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -52,6 +54,7 @@ import me.rerere.rikkahub.data.model.MediaCreationOutput
 import me.rerere.rikkahub.data.model.MediaCreationParams
 import me.rerere.rikkahub.data.model.MediaCreationRecord
 import me.rerere.rikkahub.data.model.MediaCreationSession
+import me.rerere.rikkahub.data.model.MediaCreationStatus
 import me.rerere.rikkahub.data.model.canSubmit
 import me.rerere.rikkahub.data.model.supportedBy
 import me.rerere.rikkahub.data.model.withRequired
@@ -150,6 +153,11 @@ class MediaCreationVM(
 
     /** 每提交一条新记录发出一次，时间线据此滚到它所在的那一项。 */
     val submitted: Flow<MediaCreationSubmitted> = _submitted.asSharedFlow()
+
+    private val _selectedNodes = MutableStateFlow<Set<Uuid>?>(null)
+
+    /** 多选时选中的项；null 表示不在多选状态。 */
+    val selectedNodes: StateFlow<Set<Uuid>?> = _selectedNodes.asStateFlow()
 
     // 输入区最近一次提交，还没有结果时不接受下一次
     private var generateJob: Job? = null
@@ -542,6 +550,61 @@ class MediaCreationVM(
                 draft.copy(
                     assets = draft.assets.filterNot { it.path.startsWith(recordDir) },
                     editingNodeId = draft.editingNodeId.takeUnless { nodeRemoved && it == record.nodeId },
+                )
+            }
+        }
+    }
+
+    // ---- 多选 ----
+
+    /** 进入多选状态，[nodeId] 非空时顺带选中它。 */
+    fun startSelection(nodeId: Uuid? = null) {
+        _selectedNodes.update { selected -> (selected ?: emptySet()) + listOfNotNull(nodeId) }
+    }
+
+    fun endSelection() {
+        _selectedNodes.value = null
+    }
+
+    fun toggleSelection(nodeId: Uuid) {
+        _selectedNodes.update { selected ->
+            selected?.let { if (nodeId in it) it - nodeId else it + nodeId }
+        }
+    }
+
+    /** 选中时间线上的所有项，包括还没有加载出来的。 */
+    fun selectAll() {
+        viewModelScope.launch {
+            val all = repository.getSelectedRecordsOfSession(sessionId).map { it.nodeId }.toSet()
+            // 查询期间退出了多选的话不再进入
+            _selectedNodes.update { selected -> selected?.let { all } }
+        }
+    }
+
+    fun clearSelection() {
+        _selectedNodes.update { selected -> selected?.let { emptySet() } }
+    }
+
+    /** 选中的各项当前显示的版本里所有的产出，从最早的一项排起。 */
+    suspend fun getSelectedOutputs(): List<MediaCreationOutput> {
+        val selected = _selectedNodes.value.orEmpty()
+        return repository.getSelectedRecordsOfSession(sessionId)
+            .filter { it.nodeId in selected && it.status == MediaCreationStatus.SUCCEEDED }
+            .flatMap { it.outputs }
+    }
+
+    /** 删除选中的项，连同它们的所有版本，然后退出多选。 */
+    fun deleteSelected() {
+        val nodeIds = _selectedNodes.value?.takeIf { it.isNotEmpty() } ?: return
+        _selectedNodes.value = null
+        viewModelScope.launch {
+            val records = service.deleteNodes(sessionId, nodeIds)
+            // 草稿可能正引用着这些记录的文件，也可能正在修改其中某一项
+            val recordDirs = records.map { repository.relativePath(repository.recordDir(sessionId, it)) + File.separator }
+            updateDraft { draft ->
+                draft.copy(
+                    assets = draft.assets.filterNot { asset -> recordDirs.any { asset.path.startsWith(it) } },
+                    editingNodeId = draft.editingNodeId.takeUnless { it in nodeIds },
                 )
             }
         }

@@ -1601,4 +1601,15 @@
   <string name="setting_display_page_enable_quote_highlight_desc">Окрашивать текст в кавычках в цвет темы, чтобы реплики персонажей выделялись</string>
   <string name="workspace_detail_copy_path">Скопировать путь</string>
   <string name="workspace_detail_path_copied">Путь скопирован</string>
+  <string name="media_creation_page_selected_count">Выбрано: %1$d</string>
+  <string name="media_creation_page_select">Выбрать</string>
+  <string name="media_creation_page_exit_selection">Выйти из режима выбора</string>
+  <string name="media_creation_page_select_all">Выбрать все</string>
+  <string name="media_creation_page_deselect_all">Снять выделение со всех</string>
+  <string name="media_creation_page_save">Сохранить</string>
+  <string name="media_creation_page_saving">Сохранение…</string>
+  <string name="media_creation_page_delete_selected_text">Выбранные элементы (%1$d) вместе со всеми их версиями и сгенерированными файлами будут удалены без возможности восстановления. Результаты задач, которые всё ещё генерируются, больше не будут загружаться.</string>
+  <string name="media_creation_page_nothing_to_save">В выбранных элементах нет изображений или видео для сохранения</string>
+  <string name="media_creation_page_saved_files">Сохранено %1$d файлов в галерею</string>
+  <string name="media_creation_page_saved_files_partial">Сохранено %1$d файлов, %2$d не удалось: %3$s</string>
 </resources>

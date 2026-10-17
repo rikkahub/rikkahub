@@ -1599,4 +1599,15 @@
   <string name="setting_display_page_enable_quote_highlight_desc">Color text inside quotation marks with the theme color to make character dialogue stand out</string>
   <string name="workspace_detail_copy_path">Copy path</string>
   <string name="workspace_detail_path_copied">Path copied</string>
+  <string name="media_creation_page_selected_count">%1$d selected</string>
+  <string name="media_creation_page_select">Select</string>
+  <string name="media_creation_page_exit_selection">Exit selection</string>
+  <string name="media_creation_page_select_all">Select all</string>
+  <string name="media_creation_page_deselect_all">Deselect all</string>
+  <string name="media_creation_page_save">Save</string>
+  <string name="media_creation_page_saving">Saving…</string>
+  <string name="media_creation_page_delete_selected_text">The %1$d selected items, along with all their versions and generated files, will be deleted and can\'t be recovered. Results of tasks that are still generating will no longer be fetched.</string>
+  <string name="media_creation_page_nothing_to_save">The selected items have no images or videos to save</string>
+  <string name="media_creation_page_saved_files">Saved %1$d files to gallery</string>
+  <string name="media_creation_page_saved_files_partial">Saved %1$d files, %2$d failed: %3$s</string>
 </resources>
