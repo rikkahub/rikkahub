@@ -1608,4 +1608,6 @@
   <string name="chat_page_compress_nothing_to_compress">自上次摘要以來沒有可壓縮的新訊息</string>
   <string name="chat_page_compress_handle_pending_tools">請先處理待完成的工具呼叫，再進行壓縮</string>
   <string name="chat_page_compress_tool_call_response">模型嘗試呼叫工具，而非撰寫摘要。請再試一次。</string>
+  <string name="assistant_page_memory_auto_dream">自動做夢</string>
+  <string name="assistant_page_memory_auto_dream_desc">對話暫停後，在背景將對話轉為記憶。關閉時，只有在你點選「立即做夢」時才會執行此操作</string>
 </resources>

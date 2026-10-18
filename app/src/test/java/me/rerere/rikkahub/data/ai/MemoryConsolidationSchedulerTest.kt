@@ -26,15 +26,30 @@ class MemoryConsolidationSchedulerTest {
     /** 扮演数据库和模型：[pending] 是还没整理的轮数，整理成功后清掉 */
     private inner class FakeWorker : MemoryConsolidationWorker {
         val pending = mutableMapOf<Uuid, Int>()
+
         // 不在这里的对话都属于 memoryId
         val memoryIdOf = mutableMapOf<Uuid, String>()
+
+        // 助手关了自动整理的对话
+        val manual = mutableSetOf<Uuid>()
         val calls = mutableListOf<Call>()
         var failure: Exception? = null
         var gate: CompletableDeferred<Unit>? = null
+
         // 查完数据库、结果还没返回时停在这里
         var scanGate: CompletableDeferred<Unit>? = null
 
-        private fun item(id: Uuid, turns: Int) = PendingMemoryConversation(id, memoryIdOf[id] ?: memoryId, turns)
+        // 一次最多整理这么多个对话，模拟长度预算
+        var perRun = Int.MAX_VALUE
+
+        // 每个对话一次最多整理这么多轮，模拟每个对话的轮数上限
+        var turnsPerRun = Int.MAX_VALUE
+
+        // 进度写不进去：整理完对话还是待整理
+        var stuck = false
+
+        private fun item(id: Uuid, turns: Int) =
+            PendingMemoryConversation(id, memoryIdOf[id] ?: memoryId, turns, automatic = id !in manual)
 
         override suspend fun pendingOf(conversation: Conversation) =
             pending[conversation.id]?.let { item(conversation.id, it) }
@@ -60,12 +75,20 @@ class MemoryConsolidationSchedulerTest {
             calls += Call(conversationIds, fullReview)
             gate?.await()
             failure?.let { throw it }
-            conversationIds.forEach { pending.remove(it) }
+            val batch = conversationIds.take(perRun)
+            if (batch.isEmpty() && !fullReview) return null
+            if (!stuck) {
+                batch.forEach { id ->
+                    val left = pending.getValue(id) - turnsPerRun
+                    if (left > 0) pending[id] = left else pending.remove(id)
+                }
+            }
             return MemoryConsolidationRun(
                 memoryId = memoryId,
                 finishedAt = 0,
                 fullReview = fullReview,
                 changedPaths = listOf("/profile.md"),
+                advancedConversations = if (stuck) emptySet() else batch.toSet(),
             )
         }
     }
@@ -367,5 +390,122 @@ class MemoryConsolidationSchedulerTest {
         advanceTimeBy(2.minutes + 1.seconds)
 
         assertEquals(setOf(setOf(chat.id), setOf(otherChat.id)), worker.calls.map { it.conversationIds }.toSet())
+    }
+
+    @Test
+    fun `turns of an assistant without auto consolidation wait for a manual run`() = runTest {
+        val scheduler = scheduler()
+        worker.manual += chat.id
+
+        scheduler.finishTurn(chat, pendingTurns = 3)
+        runCurrent()
+        scheduler.onConversationLeft(chat.id)
+        scheduler.onAppHidden()
+        advanceTimeBy(10.minutes)
+        assertTrue(worker.calls.isEmpty())
+        assertEquals(3, scheduler.statusOf(memoryId).first().pendingTurns)
+
+        scheduler.organize(memoryId)
+        runCurrent()
+
+        assertEquals(listOf(setOf(chat.id)), worker.calls.map { it.conversationIds })
+        assertTrue(worker.calls.single().fullReview)
+    }
+
+    @Test
+    fun `an automatic run of a shared store leaves out conversations without auto consolidation`() = runTest {
+        val scheduler = scheduler()
+        worker.manual += otherChat.id
+
+        scheduler.finishTurn(otherChat, pendingTurns = 1)
+        scheduler.finishTurn(chat, pendingTurns = 1)
+        advanceTimeBy(2.minutes + 1.seconds)
+
+        assertEquals(listOf(setOf(chat.id)), worker.calls.map { it.conversationIds })
+        assertEquals(1, scheduler.statusOf(memoryId).first().pendingTurns)
+        // 整理完重新查数据库时找到的也只是它，不会再排一次自动整理
+        advanceTimeBy(10.minutes)
+        assertEquals(1, worker.calls.size)
+    }
+
+    @Test
+    fun `startup does not schedule stores whose pending conversations are all manual`() = runTest {
+        val scheduler = scheduler()
+        worker.pending[chat.id] = 2
+        worker.manual += chat.id
+
+        scheduler.resumePending()
+        advanceTimeBy(10.minutes)
+
+        assertEquals(2, scheduler.statusOf(memoryId).first().pendingTurns)
+        assertTrue(worker.calls.isEmpty())
+    }
+
+    @Test
+    fun `organizing keeps going until every pending conversation is consolidated`() = runTest {
+        val scheduler = scheduler()
+        val third = Conversation(assistantId = Uuid.random(), messageNodes = emptyList())
+        listOf(chat, otherChat, third).forEach {
+            worker.pending[it.id] = 1
+            worker.manual += it.id
+        }
+        worker.perRun = 1
+
+        scheduler.organize(memoryId)
+        runCurrent()
+
+        assertEquals(3, worker.calls.size)
+        // 只有第一批顺带清理整个记忆库
+        assertEquals(listOf(true, false, false), worker.calls.map { it.fullReview })
+        val status = scheduler.statusOf(memoryId).first()
+        assertEquals(0, status.pendingTurns)
+        assertFalse(status.running)
+        // 之后也不会再自动整理
+        advanceTimeBy(10.minutes)
+        assertEquals(3, worker.calls.size)
+    }
+
+    @Test
+    fun `organizing a long backlog keeps going for as long as it makes progress`() = runTest {
+        val scheduler = scheduler()
+        worker.pending[chat.id] = 241
+        worker.manual += chat.id
+        worker.turnsPerRun = 12
+
+        scheduler.organize(memoryId)
+        runCurrent()
+
+        assertEquals(21, worker.calls.size)
+        assertEquals(0, scheduler.statusOf(memoryId).first().pendingTurns)
+    }
+
+    @Test
+    fun `organizing stops once a batch makes no progress`() = runTest {
+        val scheduler = scheduler()
+        worker.pending[chat.id] = 1
+        worker.pending[otherChat.id] = 1
+        worker.manual += chat.id
+        worker.stuck = true
+
+        scheduler.organize(memoryId)
+        runCurrent()
+
+        assertEquals(1, worker.calls.size)
+        assertFalse(scheduler.statusOf(memoryId).first().running)
+    }
+
+    @Test
+    fun `a failed batch stops organizing`() = runTest {
+        val scheduler = scheduler()
+        worker.pending[chat.id] = 1
+        worker.pending[otherChat.id] = 1
+        worker.perRun = 1
+        worker.failure = IllegalStateException("model unavailable")
+
+        scheduler.organize(memoryId)
+        runCurrent()
+
+        assertEquals(1, worker.calls.size)
+        assertEquals("model unavailable", scheduler.statusOf(memoryId).first().lastRun?.error)
     }
 }

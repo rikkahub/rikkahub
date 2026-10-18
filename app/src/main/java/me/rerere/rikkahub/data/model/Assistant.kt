@@ -3,11 +3,11 @@ package me.rerere.rikkahub.data.model
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.core.ReasoningLevel
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.utils.SimpleCache
 import java.util.concurrent.TimeUnit
@@ -29,6 +29,7 @@ data class Assistant(
     val streamOutput: Boolean = true,
     val enableMemory: Boolean = false,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
+    val autoConsolidateMemory: Boolean = true, // 对话停下来后在后台自动整理记忆; 关闭后只能手动整理
     val enableRecentChatsReference: Boolean = false,
     val messageTemplate: String = "{{ message }}",
     val presetMessages: List<UIMessage> = emptyList(),
@@ -45,11 +46,11 @@ data class Assistant(
     val background: String? = null, // 聊天页背景图地址(本地文件 URI 或网络 URL), 为 null 时无背景
     val backgroundOpacity: Float = 1.0f, // 背景图不透明度(0~1)
     val useGradientBackground: Boolean = false, // 开启后聊天页使用动态渐变背景
-    val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
-    val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID
-    val enabledSkills: Set<String> = emptySet(),        // 启用的 skill 名称列表
-    val enableTimeReminder: Boolean = false,            // 时间间隔提醒注入
-    val timeReminderIntervalMinutes: Int = 60,          // 时间提醒间隔（分钟，至少 1 分钟）
+    val modeInjectionIds: Set<Uuid> = emptySet(), // 关联的模式注入 ID
+    val lorebookIds: Set<Uuid> = emptySet(), // 关联的 Lorebook ID
+    val enabledSkills: Set<String> = emptySet(), // 启用的 skill 名称列表
+    val enableTimeReminder: Boolean = false, // 时间间隔提醒注入
+    val timeReminderIntervalMinutes: Int = 60, // 时间提醒间隔（分钟，至少 1 分钟）
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
 )
 
@@ -131,19 +132,19 @@ fun List<UIMessagePart>.replaceUserRegexes(assistant: Assistant): List<UIMessage
 @Serializable
 enum class InjectionPosition {
     @SerialName("before_system_prompt")
-    BEFORE_SYSTEM_PROMPT,   // 系统提示词之前
+    BEFORE_SYSTEM_PROMPT, // 系统提示词之前
 
     @SerialName("after_system_prompt")
-    AFTER_SYSTEM_PROMPT,    // 系统提示词之后（最常用）
+    AFTER_SYSTEM_PROMPT, // 系统提示词之后（最常用）
 
     @SerialName("top_of_chat")
-    TOP_OF_CHAT,            // 对话最开头（第一条用户消息之前）
+    TOP_OF_CHAT, // 对话最开头（第一条用户消息之前）
 
     @SerialName("bottom_of_chat")
-    BOTTOM_OF_CHAT,         // 最新消息之前（当前用户输入之前）
+    BOTTOM_OF_CHAT, // 最新消息之前（当前用户输入之前）
 
     @SerialName("at_depth")
-    AT_DEPTH,               // 在指定深度位置插入（从最新消息往前数）
+    AT_DEPTH, // 在指定深度位置插入（从最新消息往前数）
 }
 
 /**
@@ -160,8 +161,8 @@ sealed class PromptInjection {
     abstract val priority: Int
     abstract val position: InjectionPosition
     abstract val content: String
-    abstract val injectDepth: Int  // 当 position 为 AT_DEPTH 时使用，表示从最新消息往前数的位置
-    abstract val role: MessageRole  // 注入角色：USER 或 ASSISTANT
+    abstract val injectDepth: Int // 当 position 为 AT_DEPTH 时使用，表示从最新消息往前数的位置
+    abstract val role: MessageRole // 注入角色：USER 或 ASSISTANT
 
     /**
      * 模式注入 - 基于开关状态触发
@@ -193,11 +194,11 @@ sealed class PromptInjection {
         override val content: String = "",
         override val injectDepth: Int = 4,
         override val role: MessageRole = MessageRole.USER,
-        val keywords: List<String> = emptyList(),  // 触发关键词
-        val useRegex: Boolean = false,             // 是否使用正则匹配
-        val caseSensitive: Boolean = false,        // 大小写敏感
-        val scanDepth: Int = 4,                    // 扫描最近N条消息
-        val constantActive: Boolean = false,       // 常驻激活（无需匹配）
+        val keywords: List<String> = emptyList(), // 触发关键词
+        val useRegex: Boolean = false, // 是否使用正则匹配
+        val caseSensitive: Boolean = false, // 大小写敏感
+        val scanDepth: Int = 4, // 扫描最近N条消息
+        val constantActive: Boolean = false, // 常驻激活（无需匹配）
     ) : PromptInjection()
 }
 

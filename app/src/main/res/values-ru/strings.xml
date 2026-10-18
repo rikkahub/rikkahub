@@ -1610,4 +1610,6 @@
   <string name="chat_page_compress_nothing_to_compress">Нет новых сообщений для сжатия с момента последней сводки</string>
   <string name="chat_page_compress_handle_pending_tools">Перед сжатием обработайте ожидающие вызовы инструментов</string>
   <string name="chat_page_compress_tool_call_response">Модель попыталась вызвать инструмент вместо создания сводки. Пожалуйста, попробуйте ещё раз.</string>
+  <string name="assistant_page_memory_auto_dream">Автосновидение</string>
+  <string name="assistant_page_memory_auto_dream_desc">Превращать чаты в воспоминания в фоновом режиме после паузы. Если выключено, это происходит только при нажатии «Запустить сновидение сейчас».</string>
 </resources>

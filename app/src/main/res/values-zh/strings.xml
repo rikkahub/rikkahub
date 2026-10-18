@@ -1610,4 +1610,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_compress_nothing_to_compress">自上次摘要以来没有新消息可压缩</string>
   <string name="chat_page_compress_handle_pending_tools">压缩前请先处理待处理的工具调用</string>
   <string name="chat_page_compress_tool_call_response">模型试图调用工具，而不是编写摘要。请重试。</string>
+  <string name="assistant_page_memory_auto_dream">自动做梦</string>
+  <string name="assistant_page_memory_auto_dream_desc">聊天暂停后，在后台将聊天内容转为记忆。关闭后，仅在点击“立即做梦”时执行此操作</string>
 </resources>

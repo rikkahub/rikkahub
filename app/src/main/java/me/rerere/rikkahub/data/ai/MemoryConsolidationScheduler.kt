@@ -26,6 +26,11 @@ data class PendingMemoryConversation(
     val conversationId: Uuid,
     val memoryId: String,
     val turns: Int,
+    /**
+     * 助手是否开着自动整理；关着时只记下待整理的轮数，等用户手动整理。
+     * 是记下时的设置，改了开关要等下次查到这个对话才更新
+     */
+    val automatic: Boolean = true,
 )
 
 /** 一次整理的结果 */
@@ -38,11 +43,26 @@ data class MemoryConsolidationRun(
     val deletedPaths: List<String> = emptyList(),
     /** [changedPaths] 里各个文件在界面上显示的标题 */
     val titles: Map<String, String> = emptyMap(),
+    /** 整理进度推进了的对话；为空说明这次没有推进任何对话 */
+    val advancedConversations: Set<Uuid> = emptySet(),
     /** 这次整理花了多久，由调度器填 */
     val duration: Duration = Duration.ZERO,
     val error: String? = null,
 ) {
     val hasChanges: Boolean get() = changedPaths.isNotEmpty() || deletedPaths.isNotEmpty()
+}
+
+/** 手动整理分了几批时合成一次结果：后一批的改动覆盖前一批，失败时保留失败信息 */
+internal operator fun MemoryConsolidationRun.plus(next: MemoryConsolidationRun): MemoryConsolidationRun {
+    val deleted = (deletedPaths - next.changedPaths.toSet() + next.deletedPaths).distinct()
+    return next.copy(
+        fullReview = fullReview || next.fullReview,
+        changedPaths = (changedPaths + next.changedPaths).distinct() - next.deletedPaths.toSet(),
+        deletedPaths = deleted,
+        titles = (titles + next.titles) - deleted.toSet(),
+        advancedConversations = advancedConversations + next.advancedConversations,
+        duration = duration + next.duration,
+    )
 }
 
 data class MemoryConsolidationStatus(
@@ -53,13 +73,16 @@ data class MemoryConsolidationStatus(
 
 /** 调度器依赖的整理能力，由 [MemoryConsolidator] 实现 */
 interface MemoryConsolidationWorker {
-    /** [conversation] 里还没整理的轮次；助手没开记忆或没有新的轮次时返回 null */
+    /** [conversation] 里还没整理的轮次；助手没开记忆或没有新的轮次时返回 null，没开自动整理也照样返回 */
     suspend fun pendingOf(conversation: Conversation): PendingMemoryConversation?
 
     /** 可能有对话没整理完的记忆库。只按更新时间粗筛，不保证真有新的轮次 */
     suspend fun memoryIdsWithUpdates(): List<String>
 
-    /** 从数据库里找出记忆库 [memoryId] 下还有轮次没整理的对话，最多返回一次整理能处理的数量 */
+    /**
+     * 从数据库里找出记忆库 [memoryId] 下还有轮次没整理的对话。
+     * 开着和关了自动整理的助手各自最多返回一次整理能处理的数量
+     */
     suspend fun findPending(memoryId: String): List<PendingMemoryConversation>
 
     /** 把 [conversation] 现有的内容都算作整理过，只有之后新增的轮次才会被整理 */
@@ -83,6 +106,7 @@ fun interface MemoryDreamKeepAlive {
 
 /**
  * 决定什么时候整理记忆：对话空闲一段时间后、攒够轮数时、用户离开对话或切走应用时，或者用户手动触发。
+ * 助手关了自动整理时，它的对话只在用户手动触发时整理。
  *
  * 整理以记忆库为单位，一次覆盖这个记忆库下所有有新内容的对话；同一个记忆库同一时间只跑一次。
  */
@@ -97,8 +121,8 @@ class MemoryConsolidationScheduler(
 ) {
     private val lock = Any()
 
-    // memoryId -> (conversationId -> 待整理轮数)
-    private val pending = mutableMapOf<String, Map<Uuid, Int>>()
+    // memoryId -> (conversationId -> 待整理的对话)
+    private val pending = mutableMapOf<String, Map<Uuid, PendingMemoryConversation>>()
     private val timers = mutableMapOf<String, Job>()
     private val runLocks = mutableMapOf<String, Mutex>()
 
@@ -120,6 +144,7 @@ class MemoryConsolidationScheduler(
             try {
                 val item = worker.pendingOf(conversation) ?: return@launch
                 markPending(item)
+                if (!item.automatic) return@launch
                 if (item.turns >= maxPendingTurns) {
                     runAutomatically(item.memoryId)
                 } else {
@@ -139,13 +164,13 @@ class MemoryConsolidationScheduler(
 
     /** 应用被切到后台：之后空闲计时不一定还能走完，有待整理的就现在开始 */
     fun onAppHidden() {
-        synchronized(lock) { pending.filterValues { it.isNotEmpty() }.keys.toList() }.forEach(::launchRun)
+        synchronized(lock) { pending.filterValues { it.hasAutomatic() }.keys.toList() }.forEach(::launchRun)
     }
 
     /** 用户离开了对话，不会马上再有新消息，不用等到空闲 */
     fun onConversationLeft(conversationId: Uuid) {
         val memoryId = synchronized(lock) {
-            pending.entries.firstOrNull { conversationId in it.value }?.key
+            pending.entries.firstOrNull { it.value[conversationId]?.automatic == true }?.key
         } ?: return
         launchRun(memoryId)
     }
@@ -170,7 +195,7 @@ class MemoryConsolidationScheduler(
                 // 进程重启后内存里的待整理列表可能是空的，把数据库里的也算上
                 mergePending(memoryId, worker.findPending(memoryId))
                 started = true
-                run(memoryId, fullReview = true)
+                run(memoryId, manual = true)
             } finally {
                 // run 自己会收尾，这里只管没走到它的情况
                 if (!started) updateStatus(memoryId) { it.copy(running = false) }
@@ -184,49 +209,42 @@ class MemoryConsolidationScheduler(
 
     private suspend fun runAutomatically(memoryId: String) {
         cancelTimer(memoryId)
-        run(memoryId, fullReview = false)
+        run(memoryId, manual = false)
     }
 
-    // 整理这个记忆库下所有待整理的对话
+    /**
+     * 整理这个记忆库下所有待整理的对话。
+     *
+     * [manual] 时先顺带清理整个记忆库，关了自动整理的助手的对话也算上；一次处理不完就接着整理，直到处理完。
+     * 自动整理一次只处理一批，剩下的交给定时器。
+     */
     private suspend fun run(
         memoryId: String,
-        fullReview: Boolean,
+        manual: Boolean,
     ): MemoryConsolidationRun? = synchronized(lock) { runLocks.getOrPut(memoryId) { Mutex() } }.withLock {
-        val ids = synchronized(lock) {
-            // 失败后不自动重试，免得模型一直出错时每次切走应用、离开对话都再调用一遍；
-            // 待整理的内容留着，等下一轮对话结束或用户手动触发
-            if (!fullReview && memoryId in failed) return null
-            pending[memoryId]?.keys.orEmpty()
-        }
-        if (ids.isEmpty() && !fullReview) return null
+        // 失败后不自动重试，免得模型一直出错时每次切走应用、离开对话都再调用一遍；
+        // 待整理的内容留着，等下一轮对话结束或用户手动触发
+        if (!manual && synchronized(lock) { memoryId in failed }) return null
+        if (!manual && pendingOf(memoryId, manual).isEmpty()) return null
 
         updateStatus(memoryId) { it.copy(running = true) }
         var run: MemoryConsolidationRun? = null
         val hold = keepAlive.acquire()
-        val started = TimeSource.Monotonic.markNow()
         try {
-            val result = try {
-                worker.consolidate(memoryId, ids, fullReview)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                MemoryConsolidationRun(
-                    memoryId = memoryId,
-                    finishedAt = System.currentTimeMillis(),
-                    fullReview = fullReview,
-                    error = e.message ?: e.toString(),
-                )
-            }
-            run = result?.copy(duration = started.elapsedNow())
-            if (run?.error != null) {
-                synchronized(lock) { failed += memoryId }
-            } else {
+            var fullReview = manual
+            while (true) {
+                val pass = runOnce(memoryId, pendingOf(memoryId, manual).keys, fullReview)
+                if (pass != null) run = run?.let { it + pass } ?: pass
+                if (pass?.error != null) break
                 // 有对话可能因为超出长度预算被留到下一次，从数据库里再找一遍
-                synchronized(lock) {
-                    failed -= memoryId
-                    pending[memoryId] = pending[memoryId].orEmpty() - ids
+                val automaticLeft = mergePending(memoryId, worker.findPending(memoryId))
+                // 一批没推进任何对话（进度写不进数据库）就停下，否则同一批会一直被交给模型
+                val advanced = pass?.advancedConversations.orEmpty().isNotEmpty()
+                if (!manual || !advanced || pendingOf(memoryId, manual).isEmpty()) {
+                    if (automaticLeft) restartTimer(memoryId)
+                    break
                 }
-                if (mergePending(memoryId, worker.findPending(memoryId))) restartTimer(memoryId)
+                fullReview = false
             }
         } finally {
             hold.close()
@@ -234,6 +252,39 @@ class MemoryConsolidationScheduler(
         }
         run
     }
+
+    // 整理一批，失败时记下来并返回带 error 的结果；整理完的对话从待整理列表里拿掉，有剩下的由调用方重新找
+    private suspend fun runOnce(
+        memoryId: String,
+        ids: Set<Uuid>,
+        fullReview: Boolean,
+    ): MemoryConsolidationRun? {
+        val started = TimeSource.Monotonic.markNow()
+        val result = try {
+            worker.consolidate(memoryId, ids, fullReview)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            MemoryConsolidationRun(
+                memoryId = memoryId,
+                finishedAt = System.currentTimeMillis(),
+                fullReview = fullReview,
+                error = e.message ?: e.toString(),
+            )
+        }?.copy(duration = started.elapsedNow())
+        synchronized(lock) {
+            if (result?.error != null) {
+                failed += memoryId
+            } else {
+                failed -= memoryId
+                pending[memoryId] = pending[memoryId].orEmpty() - ids
+            }
+        }
+        return result
+    }
+
+    private fun pendingOf(memoryId: String, manual: Boolean): Map<Uuid, PendingMemoryConversation> =
+        synchronized(lock) { pending[memoryId].orEmpty().filterValues { manual || it.automatic } }
 
     // [hold] 交给定时器管：占到整理结束，定时器被取消或被新的顶掉时放开
     private fun restartTimer(memoryId: String, hold: AutoCloseable? = null) {
@@ -259,18 +310,20 @@ class MemoryConsolidationScheduler(
     }
 
     /**
-     * 把 [items] 并进待整理列表，返回这个记忆库现在是否有待整理的对话。
+     * 把 [items] 并进待整理列表，返回这个记忆库现在是否有要自动整理的对话。
      *
      * 不能整个换掉：[items] 是从数据库查出来的，查询期间结束的轮次不在里面，换掉会把它们刚记下的待整理弄丢。
      */
     private fun mergePending(memoryId: String, items: List<PendingMemoryConversation>): Boolean {
         val conversations = synchronized(lock) {
-            (pending[memoryId].orEmpty() + items.associate { it.conversationId to it.turns })
+            (pending[memoryId].orEmpty() + items.associateBy { it.conversationId })
                 .also { pending[memoryId] = it }
         }
-        updateStatus(memoryId) { it.copy(pendingTurns = conversations.values.sum()) }
-        return conversations.isNotEmpty()
+        updateStatus(memoryId) { it.copy(pendingTurns = conversations.values.sumOf { it.turns }) }
+        return conversations.hasAutomatic()
     }
+
+    private fun Map<Uuid, PendingMemoryConversation>.hasAutomatic() = values.any { it.automatic }
 
     private fun updateStatus(memoryId: String, transform: (MemoryConsolidationStatus) -> MemoryConsolidationStatus) {
         status.update { it + (memoryId to transform(it[memoryId] ?: MemoryConsolidationStatus())) }

@@ -1610,4 +1610,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_page_compress_nothing_to_compress">마지막 요약 이후로 압축할 새 메시지가 없습니다</string>
   <string name="chat_page_compress_handle_pending_tools">압축하기 전에 대기 중인 도구 호출을 처리하세요</string>
   <string name="chat_page_compress_tool_call_response">모델이 요약을 작성하는 대신 도구를 호출하려고 했습니다. 다시 시도해 주세요.</string>
+  <string name="assistant_page_memory_auto_dream">자동 꿈꾸기</string>
+  <string name="assistant_page_memory_auto_dream_desc">대화가 멈추면 백그라운드에서 대화를 기억으로 전환합니다. 이 기능이 꺼져 있으면 \'지금 꿈꾸기\'를 탭할 때만 전환됩니다.</string>
 </resources>

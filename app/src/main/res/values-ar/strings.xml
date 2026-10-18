@@ -1608,4 +1608,6 @@
   <string name="chat_page_compress_nothing_to_compress">لا توجد رسائل جديدة لضغطها منذ آخر ملخّص</string>
   <string name="chat_page_compress_handle_pending_tools">عالج استدعاءات الأدوات المعلّقة قبل الضغط</string>
   <string name="chat_page_compress_tool_call_response">حاول النموذج استدعاء أداة بدلاً من كتابة الملخّص. يُرجى المحاولة مرة أخرى.</string>
+  <string name="assistant_page_memory_auto_dream">حلم تلقائي</string>
+  <string name="assistant_page_memory_auto_dream_desc">حوّل المحادثات إلى ذكريات في الخلفية بمجرد توقفها. عند إيقاف هذا الخيار، لا يحدث ذلك إلا عند النقر على «احلم الآن».</string>
 </resources>

@@ -233,6 +233,19 @@ private fun MemorySettingsTab(
                 headlineContent = { Text(stringResource(R.string.assistant_page_global_memory)) },
             )
             switchItem(
+                checked = assistant.autoConsolidateMemory,
+                onCheckedChange = {
+                    onUpdateAssistant(
+                        assistant.copy(
+                            autoConsolidateMemory = it
+                        )
+                    )
+                },
+                enabled = assistant.enableMemory,
+                supportingContent = { Text(stringResource(R.string.assistant_page_memory_auto_dream_desc)) },
+                headlineContent = { Text(stringResource(R.string.assistant_page_memory_auto_dream)) },
+            )
+            switchItem(
                 checked = assistant.enableRecentChatsReference,
                 onCheckedChange = {
                     onUpdateAssistant(

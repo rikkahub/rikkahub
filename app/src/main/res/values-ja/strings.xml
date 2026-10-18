@@ -1610,4 +1610,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_compress_nothing_to_compress">前回の要約以降、圧縮する新しいメッセージはありません</string>
   <string name="chat_page_compress_handle_pending_tools">圧縮する前に、保留中のツール呼び出しを処理してください</string>
   <string name="chat_page_compress_tool_call_response">モデルが要約を作成する代わりにツールを呼び出そうとしました。もう一度お試しください。</string>
+  <string name="assistant_page_memory_auto_dream">自動で夢を見る</string>
+  <string name="assistant_page_memory_auto_dream_desc">チャットが停止すると、バックグラウンドで記憶に変換されます。オフの場合、これは「今すぐ夢を見る」をタップしたときにのみ実行されます。</string>
 </resources>
