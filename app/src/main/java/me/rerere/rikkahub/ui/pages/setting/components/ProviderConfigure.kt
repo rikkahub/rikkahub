@@ -51,6 +51,7 @@ import kotlin.reflect.KClass
 fun ProviderConfigure(
     provider: ProviderSetting,
     modifier: Modifier = Modifier,
+    allowTypeSwitch: Boolean = false,
     onEdit: (provider: ProviderSetting) -> Unit
 ) {
     Column(
@@ -60,8 +61,8 @@ fun ProviderConfigure(
         provider.description()
 
         CardGroup {
-            // 内置服务商的类型是定死的
-            if (!provider.builtIn) {
+            // 提供商创建后类型就定死了，只有模型的提供商覆盖可以换类型
+            if (allowTypeSwitch) {
                 formItem {
                     ConnectedChoiceButtons(
                         options = ProviderSetting.Types,
