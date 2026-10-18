@@ -1,1 +1,4 @@
-<manifest />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- MockOpenAIServer 需要在本机监听端口 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>

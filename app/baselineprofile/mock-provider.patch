@@ -1,0 +1,25 @@
+diff --git a/app/src/main/java/me/rerere/rikkahub/data/datastore/DefaultProviders.kt b/app/src/main/java/me/rerere/rikkahub/data/datastore/DefaultProviders.kt
+index 917ec982..39a23aa6 100644
+--- a/app/src/main/java/me/rerere/rikkahub/data/datastore/DefaultProviders.kt
++++ b/app/src/main/java/me/rerere/rikkahub/data/datastore/DefaultProviders.kt
+@@ -17,6 +17,20 @@ import kotlin.uuid.Uuid
+ val DEFAULT_AUTO_MODEL_ID = Uuid.parse("b7055fb4-39f9-4042-a88a-0d80ed76cf08")
+ 
+ val DEFAULT_PROVIDERS = listOf(
++    // 仅用于生成 baseline profile，生成完必须撤掉（见 app/baselineprofile/mock-provider.patch）
++    ProviderSetting.OpenAI(
++        id = Uuid.parse("5c1f6a2e-8d3b-4f7a-9e2c-b4d1a6f0c3e8"),
++        name = "Baseline Profile Mock",
++        baseUrl = "http://127.0.0.1:18765/v1",
++        apiKey = "mock",
++        models = listOf(
++            me.rerere.ai.provider.Model(
++                modelId = "mock-model",
++                displayName = "Mock Model",
++                id = DEFAULT_AUTO_MODEL_ID,
++            )
++        ),
++    ),
+     ProviderSetting.OpenAI(
+         id = Uuid.parse("1eeea727-9ee5-4cae-93e6-6fb01a4d051e"),
+         name = "OpenAI",

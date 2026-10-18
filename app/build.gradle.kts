@@ -123,6 +123,14 @@ android {
     }
 }
 
+// baselineprofile 插件按 release 复制出 nonMinifiedRelease 时只关掉 isMinifyEnabled，关不掉 optimization，
+// 不手动关的话生成用的包会被 R8 内联、合并类，profile 里记下的是优化后的类和方法
+androidComponents {
+    finalizeDsl { extension ->
+        extension.buildTypes.findByName("nonMinifiedRelease")?.optimization?.enable = false
+    }
+}
+
 composeCompiler {
     stabilityConfigurationFiles.add(
         project.layout.projectDirectory.file("compose_compiler_config.conf")
