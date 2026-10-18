@@ -127,6 +127,18 @@ class ConversationSession(
     }
 
     /**
+     * 只修改还没落库的新会话，只改内存，首次落库时一并写入；会话已经落库时不修改，返回 false。
+     * 在 [flush] 的锁内判断，不会和首次落库交错
+     */
+    internal suspend fun updateDraft(transform: (Conversation) -> Conversation): Boolean {
+        return writeMutex.withLock {
+            if (existsInDatabase) return@withLock false
+            update(transform)
+            true
+        }
+    }
+
+    /**
      * 只更新部分列的元数据：改内存，再按列落库，不重写消息节点。
      * 修改和落库都在 [flush] 的锁内进行，落库的先后与内存修改的先后一致。
      *

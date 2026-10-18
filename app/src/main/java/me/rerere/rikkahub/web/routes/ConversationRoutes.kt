@@ -291,8 +291,10 @@ fun Route.conversationRoutes(
         post("/{id}/messages") {
             val uuid = call.parameters["id"].toUuid("conversation id")
             val request = call.receive<SendMessageRequest>()
+            val folderId = request.folderId?.takeIf { it.isNotBlank() }?.toUuid("folder id")
 
             chatService.initializeConversation(uuid)
+            if (folderId != null) chatService.updateDraftConversationFolder(uuid, folderId)
             chatService.sendMessage(uuid, request.parts, answer = true)
 
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))

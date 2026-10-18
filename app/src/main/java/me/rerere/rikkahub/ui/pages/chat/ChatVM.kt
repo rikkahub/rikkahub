@@ -184,6 +184,11 @@ class ChatVM(
         }
     }
 
+    // 新会话开始前归入抽屉里选中的文件夹
+    suspend fun updateDraftFolder(folderId: Uuid?) {
+        chatService.updateDraftConversationFolder(_conversationId, folderId)
+    }
+
     // 设置聊天模型
     fun setChatModel(model: Model) {
         viewModelScope.launch {

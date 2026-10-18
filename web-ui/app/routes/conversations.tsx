@@ -421,12 +421,14 @@ function useDraftInputController({
   isHomeRoute,
   homeDraftId,
   setHomeDraftId,
+  folderId,
   navigate,
   refreshList,
 }: {
   activeId: string | null;
   isHomeRoute: boolean;
   homeDraftId: string;
+  folderId: string | null;
   setHomeDraftId: React.Dispatch<React.SetStateAction<string>>;
   navigate: ReturnType<typeof useNavigate>;
   refreshList: () => void;
@@ -484,7 +486,10 @@ function useDraftInputController({
     const conversationId = uuidv4();
     setHomeDraftId(createHomeDraftId());
 
-    await api.post<{ status: string }>(`conversations/${conversationId}/messages`, { parts });
+    await api.post<{ status: string }>(`conversations/${conversationId}/messages`, {
+      parts,
+      folderId,
+    });
     clearDraft(draftKey);
 
     navigate(`/c/${conversationId}`);
@@ -493,6 +498,7 @@ function useDraftInputController({
     activeId,
     clearDraft,
     draftKey,
+    folderId,
     getSubmitParts,
     navigate,
     refreshList,
@@ -755,6 +761,7 @@ function ConversationsPageInner() {
     isHomeRoute,
     homeDraftId,
     setHomeDraftId,
+    folderId: selectedFolderId,
     navigate,
     refreshList,
   });

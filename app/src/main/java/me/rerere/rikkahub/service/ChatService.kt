@@ -1092,6 +1092,20 @@ class ChatService(
     }
 
     /**
+     * 还没开始的新会话跟随抽屉里选中的文件夹，首次落库时归入；已经落库的会话不受影响，移动走 [moveConversationToFolder]。
+     */
+    suspend fun updateDraftConversationFolder(conversationId: Uuid, folderId: Uuid?) {
+        val folder = folderId?.let { folderRepository.getFolderById(it) }
+        withLoadedSession(conversationId) { session ->
+            session.updateDraft { latest ->
+                // 文件夹属于助手：已被删除或不属于会话的助手时不归入
+                val target = folder?.takeIf { it.assistantId == latest.assistantId }?.id
+                if (latest.folderId == target) latest else latest.copy(folderId = target)
+            }
+        }
+    }
+
+    /**
      * 文件夹内是否存在正在生成回复的会话。
      * 仅活跃 session 可能在生成；内存态 folderId 为权威（移动会先同步内存态）。
      */

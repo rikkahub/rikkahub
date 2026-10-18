@@ -65,6 +65,28 @@ class ConversationSessionTest {
     }
 
     @Test
+    fun `draft folder follows selection until the first save then stays fixed`() = runBlocking {
+        val id = Uuid.random()
+        val firstFolder = Uuid.random()
+        val secondFolder = Uuid.random()
+        val store = FakeConversationStore()
+        val session = ConversationSession(id, Conversation.ofId(id), this, store, {})
+        session.initialize(load = { null }, create = { Conversation.ofId(id) })
+
+        assertTrue(session.updateDraft { it.copy(folderId = firstFolder) })
+        session.flush()
+        assertTrue("An empty draft must not be saved just because its folder changed", store.writes.isEmpty())
+        assertTrue(session.updateDraft { it.copy(folderId = secondFolder) })
+
+        session.update { it.updateCurrentMessages(listOf(UIMessage.user("hello"))) }
+        session.flush()
+        assertEquals(secondFolder, store.persisted!!.folderId)
+
+        assertFalse(session.updateDraft { it.copy(folderId = firstFolder) })
+        assertEquals(secondFolder, session.state.value.folderId)
+    }
+
+    @Test
     fun `metadata edit loads history when the conversation has no initialized session`() = runBlocking {
         val id = Uuid.random()
         var persisted = Conversation.ofId(id, assistantId = Uuid.random())

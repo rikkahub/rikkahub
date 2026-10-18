@@ -16,6 +16,8 @@ import me.rerere.rikkahub.data.model.MessageNode
 @Serializable
 data class SendMessageRequest(
     val parts: List<UIMessagePart>,
+    // 新会话首条消息归入的文件夹；已存在的会话忽略
+    val folderId: String? = null,
 )
 
 @Serializable
