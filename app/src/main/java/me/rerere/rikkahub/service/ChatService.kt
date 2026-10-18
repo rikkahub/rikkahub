@@ -1082,7 +1082,8 @@ class ChatService(
     suspend fun moveConversationToFolder(conversationId: Uuid, folderId: Uuid?) {
         if (sessionManager.get(conversationId) == null) {
             conversationRepo.updateConversationFolderId(conversationId, folderId)
-            return
+            // 写库期间页面可能刚好打开了这个会话，加载时读到的可能是旧值，再同步一次内存
+            if (sessionManager.get(conversationId) == null) return
         }
         updateConversationMetadata(
             conversationId = conversationId,
