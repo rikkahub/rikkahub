@@ -6,6 +6,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.rikkahub.data.ai.tools.local.LocalToolOption
 import me.rerere.rikkahub.utils.SimpleCache
@@ -112,6 +113,15 @@ fun String.replaceRegexes(
         } else {
             acc
         }
+    }
+}
+
+/** 对用户输入的文本应用助手作用于用户消息的正则替换 */
+fun List<UIMessagePart>.replaceUserRegexes(assistant: Assistant): List<UIMessagePart> = map { part ->
+    if (part is UIMessagePart.Text) {
+        part.copy(text = part.text.replaceRegexes(assistant, AssistantAffectScope.USER, visual = false))
+    } else {
+        part
     }
 }
 

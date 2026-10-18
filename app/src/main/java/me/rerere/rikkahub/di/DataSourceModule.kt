@@ -20,6 +20,7 @@ import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
 import me.rerere.rikkahub.data.ai.MemoryConsolidationScheduler
 import me.rerere.rikkahub.data.ai.MemoryConsolidator
 import me.rerere.rikkahub.data.ai.TranslationHandler
+import me.rerere.rikkahub.data.ai.ConversationMetaGenerator
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.remote.RikkaHubAPI
 import me.rerere.rikkahub.data.remote.SponsorAPI
@@ -148,6 +149,10 @@ val dataSourceModule = module {
 
     single {
         TranslationHandler(providerManager = get())
+    }
+
+    single {
+        ConversationMetaGenerator(context = get(), providerManager = get())
     }
 
     single<OkHttpClient> {

@@ -31,35 +31,33 @@ import me.rerere.ai.agent.runAgent
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.ModelAbility
-import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.finishPendingTools
 import me.rerere.ai.ui.isEmptyInputMessage
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.ChatRequestFactory
 import me.rerere.rikkahub.data.ai.ChatTurnContext
+import me.rerere.rikkahub.data.ai.ConversationMetaGenerator
 import me.rerere.rikkahub.data.ai.MemoryConsolidationScheduler
 import me.rerere.rikkahub.data.ai.TranslationHandler
-import me.rerere.rikkahub.data.ai.backgroundTextGenerationParams
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.prompts.buildCompressPrompt
 import me.rerere.rikkahub.data.ai.tools.InvalidMcpServerNamesException
 import me.rerere.rikkahub.data.ai.tools.shouldUseExternalWebSearch
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.data.datastore.findModelById
-import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.bindConfig
+import me.rerere.rikkahub.data.model.cancelInterruptedTools
+import me.rerere.rikkahub.data.model.deleteMessage
+import me.rerere.rikkahub.data.model.editMessage
 import me.rerere.rikkahub.data.model.fillModelSnapshots
 import me.rerere.rikkahub.data.model.fork
 import me.rerere.rikkahub.data.model.getAssistantOf
@@ -68,14 +66,17 @@ import me.rerere.rikkahub.data.model.getStoredAssistantOf
 import me.rerere.rikkahub.data.model.insertContextCheckpoint
 import me.rerere.rikkahub.data.model.isAwaitingToolApproval
 import me.rerere.rikkahub.data.model.localFileUrls
-import me.rerere.rikkahub.data.model.replaceRegexes
+import me.rerere.rikkahub.data.model.replaceUserRegexes
+import me.rerere.rikkahub.data.model.selectBranch
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.model.withAssistantUpdate
+import me.rerere.rikkahub.data.model.withNodeFavorite
+import me.rerere.rikkahub.data.model.withToolApproval
+import me.rerere.rikkahub.data.model.withTranslation
 import me.rerere.rikkahub.data.model.withoutConversationFields
 import me.rerere.rikkahub.data.model.withoutUnresumableToolCalls
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FolderRepository
-import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import java.net.ConnectException
@@ -109,7 +110,7 @@ class ChatService(
     private val requestFactory: ChatRequestFactory,
     private val memoryConsolidationScheduler: MemoryConsolidationScheduler,
     private val translationHandler: TranslationHandler,
-    private val providerManager: ProviderManager,
+    private val metaGenerator: ConversationMetaGenerator,
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
     private val folderRepository: FolderRepository,
@@ -418,7 +419,7 @@ class ChatService(
                 finishInterruptedPendingTools(session)
 
                 val assistant = settingsStore.awaitLoaded().getStoredAssistantOf(session.state.value)
-                val processedContent = preprocessUserInputParts(queued.parts, assistant)
+                val processedContent = queued.parts.replaceUserRegexes(assistant)
 
                 // 添加消息到列表
                 val previousIds = session.state.value.currentMessages.mapTo(HashSet()) { it.id }
@@ -469,24 +470,6 @@ class ChatService(
         if (error is CancellationException) throw error
         session.messageQueue.pause()
         addError(error, session.id, title = context.getString(title))
-    }
-
-    private fun preprocessUserInputParts(parts: List<UIMessagePart>, assistant: Assistant): List<UIMessagePart> {
-        return parts.map { part ->
-            when (part) {
-                is UIMessagePart.Text -> {
-                    part.copy(
-                        text = part.text.replaceRegexes(
-                            assistant = assistant,
-                            scope = AssistantAffectScope.USER,
-                            visual = false
-                        )
-                    )
-                }
-
-                else -> part
-            }
-        }
     }
 
     // ---- 重新生成消息 ----
@@ -556,25 +539,8 @@ class ChatService(
                             else -> ToolApprovalState.Denied(reason)
                         }
 
-                        val updated = session.tryUpdate { conversation ->
-                            // Ignore double taps and stale approvals for completed or inactive tools.
-                            if (conversation.currentMessages.none { message ->
-                                    message.getTools().any { it.toolCallId == toolCallId && it.isPending }
-                                }) return@tryUpdate null
-                            conversation.copy(
-                                messageNodes = conversation.messageNodes.map { node ->
-                                    node.copy(messages = node.messages.map { message ->
-                                        message.copy(parts = message.parts.map { part ->
-                                            if (part is UIMessagePart.Tool && part.toolCallId == toolCallId) {
-                                                part.copy(approvalState = newApprovalState)
-                                            } else {
-                                                part
-                                            }
-                                        })
-                                    })
-                                }
-                            )
-                        } ?: return@afterPreviousGeneration
+                        val updated = session.tryUpdate { it.withToolApproval(toolCallId, newApprovalState) }
+                            ?: return@afterPreviousGeneration
                         session.flush()
 
                         // Only continue generation when all pending tools are handled
@@ -752,24 +718,8 @@ class ChatService(
         )
     }
 
-    private fun cancelToolByUser(tool: UIMessagePart.Tool): UIMessagePart.Tool {
-        return tool.copy(
-            output = listOf(
-                UIMessagePart.Text(
-                    """{"status":"cancelled","error":"Generation cancelled by user before tool execution completed."}"""
-                )
-            )
-        )
-    }
-
-    // 生成被停止时还没执行的工具补上取消的结果，否则这条消息之后没法继续发给模型
     private suspend fun finishInterruptedPendingTools(session: ConversationSession) {
-        session.tryUpdate { conversation ->
-            val lastNode = conversation.messageNodes.lastOrNull() ?: return@tryUpdate null
-            val updatedMessage = lastNode.currentMessage.finishPendingTools(::cancelToolByUser)
-            if (updatedMessage === lastNode.currentMessage) return@tryUpdate null
-            conversation.upsertMessage(lastNode.id, updatedMessage)
-        }
+        session.tryUpdate { it.cancelInterruptedTools() }
         session.flush()
     }
 
@@ -789,28 +739,9 @@ class ChatService(
             if (!force && !settings.enableAutoTitle) return@withLoadedSession
 
             runCatching {
-                val model = settings.findModelById(settings.fastModelId)
-                    ?: throw IllegalStateException(context.getString(R.string.error_fast_model_not_found))
-                val provider = model.findProvider(settings.providers)
-                    ?: throw IllegalStateException(context.getString(R.string.error_fast_model_provider_not_found))
-
-                val providerHandler = providerManager.getProviderByType(provider)
-                val result = providerHandler.generateText(
-                    providerSetting = provider,
-                    messages = listOf(
-                        UIMessage.user(
-                            prompt = settings.titlePrompt.applyPlaceholders(
-                                "locale" to Locale.getDefault().displayName,
-                                "content" to conversation.currentMessages
-                                    .takeLast(4).joinToString("\n\n") { it.summaryAsText(maxLength = 500) })
-                        ),
-                    ),
-                    params = backgroundTextGenerationParams(model, conversationId, settings.fastModelReasoningLevel),
-                )
-
+                val title = metaGenerator.generateTitle(settings, conversation)
                 // 只写标题这一列：这时可能已经在生成下一轮，不能把还没生成完的内容一起落库。
                 // 生成期间会话被删除的话不写入
-                val title = result.message.toText().trim()
                 session.updateMetadata(
                     transform = { it.copy(title = title) },
                     persist = { conversationRepo.updateTitle(conversationId, title) },
@@ -835,32 +766,12 @@ class ChatService(
             runCatching {
                 val settings = settingsStore.awaitLoaded()
                 if (!settings.enableSuggestion) return@runCatching
-                val model = settings.findModelById(settings.fastModelId)
-                    ?: return@runCatching
-                val provider = model.findProvider(settings.providers) ?: return@runCatching
 
                 // 上一轮的建议在这一轮开始时已经清掉了
                 ensureInitialized(session)
                 val incarnation = session.incarnation
-                val conversation = session.state.value
-
-                val providerHandler = providerManager.getProviderByType(provider)
-                val result = providerHandler.generateText(
-                    providerSetting = provider,
-                    messages = listOf(
-                        UIMessage.user(
-                            settings.suggestionPrompt.applyPlaceholders(
-                                "locale" to Locale.getDefault().displayName,
-                                "content" to conversation.currentMessages
-                                    .takeLast(8).joinToString("\n\n") { it.summaryAsText(maxLength = 500) }),
-                        )
-                    ),
-                    params = backgroundTextGenerationParams(model, conversationId, settings.fastModelReasoningLevel),
-                )
-                val suggestions = result.message.toText().split("\n")
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() }
-                    .take(10)
+                val suggestions = metaGenerator.generateSuggestions(settings, session.state.value)
+                    ?: return@runCatching
 
                 // 只写建议这一列，理由同标题
                 session.updateMetadata(
@@ -1219,11 +1130,6 @@ class ChatService(
         mutate(conversationId) { it.withTranslation(messageId, null) }
     }
 
-    private fun Conversation.withTranslation(messageId: Uuid, translation: String?): Conversation {
-        val node = getMessageNodeByMessageId(messageId) ?: return this
-        return upsertMessage(node.id, node.messages.first { it.id == messageId }.copy(translation = translation))
-    }
-
     // ---- 消息操作 ----
 
     suspend fun editMessage(
@@ -1235,22 +1141,7 @@ class ChatService(
         val settings = settingsStore.awaitLoaded()
 
         mutate(conversationId) { conversation ->
-            val node = conversation.getMessageNodeByMessageId(messageId) ?: return@mutate conversation
-            val original = node.messages.first { it.id == messageId }
-            val processedParts = preprocessUserInputParts(parts, settings.getStoredAssistantOf(conversation))
-            val edited = if (original.isContextCheckpoint) {
-                // 摘要原地改写：新建分支会丢掉检查点标记，删除摘要时还会露出旧版本。
-                original.copy(parts = processedParts)
-            } else {
-                UIMessage(
-                    role = node.role,
-                    parts = processedParts,
-                    // 编辑的是原消息的内容，来源仍是生成它的模型
-                    modelId = original.modelId,
-                    modelSnapshot = original.modelSnapshot,
-                )
-            }
-            conversation.upsertMessage(node.id, edited)
+            conversation.editMessage(messageId, parts.replaceUserRegexes(settings.getStoredAssistantOf(conversation)))
         }
     }
 
@@ -1287,28 +1178,14 @@ class ChatService(
                 throw BadRequestException("Invalid selectIndex")
             }
             if (targetNode.selectIndex == selectIndex) return@mutate conversation
-
-            conversation.copy(
-                messageNodes = conversation.messageNodes.map { node ->
-                    if (node.id == nodeId) node.copy(selectIndex = selectIndex) else node
-                }
-            )
+            conversation.selectBranch(nodeId, selectIndex)
         }
     }
 
     // 收藏记录在单独的表里，节点上的标记只用于显示，不需要落库
     suspend fun setNodeFavorite(conversationId: Uuid, nodeId: Uuid, favorite: Boolean) {
         val session = sessionManager.get(conversationId)?.takeIf { it.isInitialized } ?: return
-        session.updateMetadata(
-            transform = { conversation ->
-                conversation.copy(
-                    messageNodes = conversation.messageNodes.map { node ->
-                        if (node.id == nodeId) node.copy(isFavorite = favorite) else node
-                    }
-                )
-            },
-            persist = {},
-        )
+        session.updateMetadata(transform = { it.withNodeFavorite(nodeId, favorite) }, persist = {})
     }
 
     suspend fun deleteMessage(
@@ -1317,7 +1194,7 @@ class ChatService(
         failIfMissing: Boolean = true,
     ) {
         mutate(conversationId) { conversation ->
-            buildConversationAfterMessageDelete(conversation, messageId)
+            conversation.deleteMessage(messageId)
                 ?: if (failIfMissing) throw NotFoundException("Message not found") else conversation
         }
     }
@@ -1327,37 +1204,6 @@ class ChatService(
         message: UIMessage,
     ) {
         deleteMessage(conversationId, message.id, failIfMissing = false)
-    }
-
-    private fun buildConversationAfterMessageDelete(
-        conversation: Conversation,
-        messageId: Uuid,
-    ): Conversation? {
-        val targetNodeIndex = conversation.messageNodes.indexOfFirst { node ->
-            node.messages.any { it.id == messageId }
-        }
-        if (targetNodeIndex == -1) {
-            return null
-        }
-
-        val updatedNodes = conversation.messageNodes.mapIndexedNotNull { index, node ->
-            if (index != targetNodeIndex) {
-                return@mapIndexedNotNull node
-            }
-
-            val nextMessages = node.messages.filterNot { it.id == messageId }
-            if (nextMessages.isEmpty()) {
-                return@mapIndexedNotNull null
-            }
-
-            val nextSelectIndex = node.selectIndex.coerceAtMost(nextMessages.lastIndex)
-            node.copy(
-                messages = nextMessages,
-                selectIndex = nextSelectIndex,
-            )
-        }
-
-        return conversation.copy(messageNodes = updatedNodes)
     }
 
     // 停止当前会话生成任务（不清理会话缓存）
