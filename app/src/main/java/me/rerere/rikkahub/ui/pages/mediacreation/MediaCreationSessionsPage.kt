@@ -10,20 +10,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.ListItemShapes
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -55,6 +55,7 @@ import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ItemAction
 import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.hooks.heroContainer
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.utils.toMessageTimeString
@@ -107,7 +108,8 @@ fun MediaCreationSessionsPage(vm: MediaCreationSessionsVM = koinViewModel()) {
             state = listState,
             // 底部留出悬浮按钮的位置，最后一项的菜单才点得到
             contentPadding = innerPadding + PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
+            // 会话之间互不相关，各自一张卡片，不做成分组
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (sessions?.isEmpty() == true) {
                 item {
@@ -115,11 +117,9 @@ fun MediaCreationSessionsPage(vm: MediaCreationSessionsVM = koinViewModel()) {
                 }
             }
 
-            val items = sessions.orEmpty()
-            itemsIndexed(items, key = { _, session -> session.id.toString() }) { index, session ->
+            items(sessions.orEmpty(), key = { it.id.toString() }) { session ->
                 SessionItem(
                     session = session,
-                    shapes = ListItemDefaults.segmentedShapes(index = index, count = items.size),
                     resolve = vm::resolve,
                     onOpen = { open(session.id) },
                     onRename = { renaming = session },
@@ -205,6 +205,7 @@ private fun EmptySessionsState(modifier: Modifier = Modifier) {
     }
 }
 
+private val SessionItemShape = RoundedCornerShape(20.dp)
 private val SessionLeadingSize = 48.dp
 
 // 每个会话按 id 固定分到一个形状，列表看起来不那么整齐划一
@@ -222,18 +223,18 @@ private val sessionShapes = listOf(
 @Composable
 private fun SessionItem(
     session: MediaCreationSession,
-    shapes: ListItemShapes,
     resolve: (String) -> File,
     onOpen: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    SegmentedListItem(
+    ListItem(
         onClick = onOpen,
-        shapes = shapes,
-        modifier = modifier,
-        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceBright),
+        shapes = ListItemDefaults.shapes(shape = SessionItemShape),
+        // 点开时展开成创作页
+        modifier = modifier.heroContainer(mediaCreationHeroKey(session.id.toString()), SessionItemShape),
+        colors = CustomColors.listItemColors,
         leadingContent = {
             val shape = sessionShapes[session.id.hashCode().mod(sessionShapes.size)].toShape()
             val cover = session.cover

@@ -2,6 +2,8 @@ package me.rerere.rikkahub.ui.pages.mediacreation
 
 import android.content.Context
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.animateDp
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +30,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -58,6 +61,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation3.ui.LocalNavAnimatedContentScope
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
@@ -79,6 +83,7 @@ import me.rerere.rikkahub.data.model.MediaCreationNode
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.hooks.heroContainer
 import me.rerere.ui.components.RikkaConfirmDialog
 import me.rerere.ui.components.Tooltip
 import org.koin.androidx.compose.koinViewModel
@@ -121,7 +126,13 @@ fun MediaCreationPage(id: String) {
         }
     }
 
+    // 从会话列表点进来时由列表项展开；切换途中带着圆角，到位后变成直角
+    val heroCorner by LocalNavAnimatedContentScope.current.transition.animateDp(label = "heroCorner") { state ->
+        if (state == EnterExitState.Visible) 0.dp else 24.dp
+    }
+
     Scaffold(
+        modifier = Modifier.heroContainer(mediaCreationHeroKey(id), RoundedCornerShape(heroCorner)),
         topBar = {
             TopAppBar(
                 title = {
@@ -290,6 +301,9 @@ private fun MediaCreationTimeline(
         }
     }
 }
+
+/** 会话列表项和创作页共用的容器变换 key。 */
+internal fun mediaCreationHeroKey(sessionId: String) = "media_creation_session_$sessionId"
 
 private fun LazyPagingItems<MediaCreationNode>.newestId(): Uuid? =
     if (itemCount > 0) peek(0)?.id else null

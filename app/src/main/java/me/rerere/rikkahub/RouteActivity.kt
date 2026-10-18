@@ -426,7 +426,12 @@ class RouteActivity : ComponentActivity() {
                                 MediaCreationSessionsPage()
                             }
 
-                            entry<Screen.MediaCreation> { key ->
+                            // 从会话列表展开（容器变换），页面本身只做淡入淡出，避免和平移打架
+                            entry<Screen.MediaCreation>(
+                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
+                                    + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
+                                    + NavDisplay.predictivePopTransitionSpec { fadeIn() togetherWith fadeOut() }
+                            ) { key ->
                                 MediaCreationPage(key.id)
                             }
 
