@@ -645,6 +645,8 @@
   <string name="setting_display_page_auto_collapse_thinking_desc">思考完成自动折叠思考内容</string>
   <string name="setting_display_page_auto_collapse_thinking_title">自动折叠思考</string>
   <string name="setting_display_page_auto_play_tts_desc">助手消息生成完成后自动播放TTS</string>
+  <string name="setting_display_page_voice_listen_while_replying_title">语音模式回复时继续聆听</string>
+  <string name="setting_display_page_voice_listen_while_replying_desc">模型回复期间说的话会加入队列，回复结束后自动发送。关闭后，回复（及朗读）结束前麦克风保持关闭，适合一问一答的对话</string>
   <string name="setting_display_page_auto_play_tts_title">生成后自动播放TTS</string>
   <string name="setting_display_page_chat_font_family_default">默认</string>
   <string name="setting_display_page_chat_font_family_custom">自定义</string>
@@ -1340,6 +1342,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_voice_listening_queued">正在聆听，新语音将加入队列</string>
   <string name="chat_page_voice_listening">正在聆听，说完后自动发送</string>
   <string name="chat_page_voice_transcribing">正在确认识别结果…</string>
+  <string name="chat_page_voice_waiting">等待回复，结束后继续聆听</string>
   <string name="chat_page_voice_speaking">正在朗读，结束后继续聆听</string>
   <string name="chat_page_voice_paused">已暂停</string>
   <string name="chat_page_voice_retry">重试</string>
@@ -1604,4 +1607,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="media_creation_page_saved_files_partial">已保存 %1$d 个文件，%2$d 个失败：%3$s</string>
   <string name="chat_input_edit_reasoning">编辑思维过程</string>
   <string name="chat_input_reasoning_placeholder">思维过程</string>
+  <string name="chat_page_compress_nothing_to_compress">自上次摘要以来没有新消息可压缩</string>
+  <string name="chat_page_compress_handle_pending_tools">压缩前请先处理待处理的工具调用</string>
+  <string name="chat_page_compress_tool_call_response">模型试图调用工具，而不是编写摘要。请重试。</string>
 </resources>

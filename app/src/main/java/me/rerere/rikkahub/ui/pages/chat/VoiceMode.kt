@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.ui.pages.chat
 
-import me.rerere.rikkahub.R
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -20,8 +19,9 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.asr.ASRController
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.asr.providers.DashScopeASRController
-import me.rerere.asr.providers.VolcengineASRController
 import me.rerere.asr.providers.OpenAIRealtimeASRController
+import me.rerere.asr.providers.VolcengineASRController
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
 import me.rerere.rikkahub.data.datastore.getSelectedTTSProvider
@@ -101,8 +101,11 @@ fun rememberVoiceModeStarter(vm: ChatVM, settings: Settings): () -> Unit {
                             }.first { it }
                         }
                     }
-                } else null,
+                } else {
+                    null
+                },
                 stopSpeaking = tts::stop,
+                listenWhileReplying = settings.displaySetting.voiceModeListenWhileReplying,
             )
         }
     }
@@ -136,10 +139,12 @@ private fun createVoiceAsr(context: Context, client: OkHttpClient, provider: ASR
     }
     val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     val focus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
-        .setAudioAttributes(AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-            .build())
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+        )
         .build()
     return object : ASRController by delegate {
         override fun start(onTranscriptChange: (String) -> Unit) {
@@ -150,7 +155,11 @@ private fun createVoiceAsr(context: Context, client: OkHttpClient, provider: ASR
         }
 
         override fun dispose() {
-            try { delegate.dispose() } finally { audioManager.abandonAudioFocusRequest(focus) }
+            try {
+                delegate.dispose()
+            } finally {
+                audioManager.abandonAudioFocusRequest(focus)
+            }
         }
     }
 }

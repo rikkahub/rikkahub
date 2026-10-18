@@ -1602,4 +1602,10 @@
   <string name="media_creation_page_saved_files_partial">已儲存 %1$d 個檔案，%2$d 個失敗：%3$s</string>
   <string name="chat_input_edit_reasoning">編輯推理</string>
   <string name="chat_input_reasoning_placeholder">推理內容</string>
+  <string name="setting_display_page_voice_listen_while_replying_title">語音模式下回覆期間持續聆聽</string>
+  <string name="setting_display_page_voice_listen_while_replying_desc">模型回覆期間所說的話會排入佇列，並於回覆後送出。關閉此項可在回覆完成（並朗讀完畢）前暫停麥克風，適合一問一答的對話。</string>
+  <string name="chat_page_voice_waiting">正在等待回覆，之後將恢復聆聽</string>
+  <string name="chat_page_compress_nothing_to_compress">自上次摘要以來沒有可壓縮的新訊息</string>
+  <string name="chat_page_compress_handle_pending_tools">請先處理待完成的工具呼叫，再進行壓縮</string>
+  <string name="chat_page_compress_tool_call_response">模型嘗試呼叫工具，而非撰寫摘要。請再試一次。</string>
 </resources>

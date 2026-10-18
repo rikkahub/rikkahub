@@ -1604,4 +1604,10 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="media_creation_page_saved_files_partial">파일 %1$d개 저장됨, %2$d개 실패: %3$s</string>
   <string name="chat_input_edit_reasoning">추론 편집</string>
   <string name="chat_input_reasoning_placeholder">추론 내용</string>
+  <string name="setting_display_page_voice_listen_while_replying_title">음성 모드에서 답변 중에도 계속 듣기</string>
+  <string name="setting_display_page_voice_listen_while_replying_desc">모델이 답변하는 동안의 음성은 대기열에 저장되었다가 이후에 전송됩니다. 질문 하나에 답변 하나씩 주고받는 대화를 하려면 끄세요. 답변이 끝나고 소리 내어 읽힐 때까지 마이크가 일시 중지됩니다.</string>
+  <string name="chat_page_voice_waiting">답변을 기다리는 중이며, 이후 듣기가 다시 시작됩니다</string>
+  <string name="chat_page_compress_nothing_to_compress">마지막 요약 이후로 압축할 새 메시지가 없습니다</string>
+  <string name="chat_page_compress_handle_pending_tools">압축하기 전에 대기 중인 도구 호출을 처리하세요</string>
+  <string name="chat_page_compress_tool_call_response">모델이 요약을 작성하는 대신 도구를 호출하려고 했습니다. 다시 시도해 주세요.</string>
 </resources>

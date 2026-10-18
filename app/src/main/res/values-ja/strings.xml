@@ -1604,4 +1604,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="media_creation_page_saved_files_partial">ファイルを %1$d 件保存しました。%2$d 件失敗: %3$s</string>
   <string name="chat_input_edit_reasoning">推論を編集</string>
   <string name="chat_input_reasoning_placeholder">推論内容</string>
+  <string name="setting_display_page_voice_listen_while_replying_title">音声モードで応答中も聞き取りを続ける</string>
+  <string name="setting_display_page_voice_listen_while_replying_desc">モデルが応答している間の音声はキューに追加され、後で送信されます。オフにすると、応答が終了して読み上げられるまでマイクが一時停止され、一問一答の会話になります。</string>
+  <string name="chat_page_voice_waiting">応答を待機中です。終了後に聞き取りを再開します</string>
+  <string name="chat_page_compress_nothing_to_compress">前回の要約以降、圧縮する新しいメッセージはありません</string>
+  <string name="chat_page_compress_handle_pending_tools">圧縮する前に、保留中のツール呼び出しを処理してください</string>
+  <string name="chat_page_compress_tool_call_response">モデルが要約を作成する代わりにツールを呼び出そうとしました。もう一度お試しください。</string>
 </resources>

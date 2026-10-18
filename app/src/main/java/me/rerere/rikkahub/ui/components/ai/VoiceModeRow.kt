@@ -48,6 +48,7 @@ internal fun VoiceModeRow(
                         VoicePhase.Listening -> if (state.pendingReplies > 0)
                             stringResource(R.string.chat_page_voice_listening_queued) else stringResource(R.string.chat_page_voice_listening)
                         VoicePhase.Transcribing -> stringResource(R.string.chat_page_voice_transcribing)
+                        VoicePhase.Waiting -> stringResource(R.string.chat_page_voice_waiting)
                         VoicePhase.Speaking -> stringResource(R.string.chat_page_voice_speaking)
                         VoicePhase.Error -> stringResource(R.string.chat_page_voice_paused)
                     },

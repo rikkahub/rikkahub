@@ -257,6 +257,12 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(stringResource(R.string.setting_display_page_auto_play_tts_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_display_page_auto_play_tts_title)) },
                     )
+                    switchItem(
+                        checked = displaySetting.voiceModeListenWhileReplying,
+                        onCheckedChange = { updateDisplaySetting(displaySetting.copy(voiceModeListenWhileReplying = it)) },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_voice_listen_while_replying_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_voice_listen_while_replying_title)) },
+                    )
                 }
             }
         }

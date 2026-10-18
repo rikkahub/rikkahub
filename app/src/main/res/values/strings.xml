@@ -652,6 +652,8 @@
   <string name="setting_display_page_auto_collapse_thinking_desc">Automatically collapse thinking content after thinking is complete</string>
   <string name="setting_display_page_auto_collapse_thinking_title">Auto Collapse Thinking</string>
   <string name="setting_display_page_auto_play_tts_desc">Automatically play TTS after assistant message generation completes</string>
+  <string name="setting_display_page_voice_listen_while_replying_title">Keep listening during replies in voice mode</string>
+  <string name="setting_display_page_voice_listen_while_replying_desc">Speech while the model is replying is queued and sent afterward. Turn off to pause the microphone until the reply finishes (and is read aloud), for one-question-one-answer conversations.</string>
   <string name="setting_display_page_auto_play_tts_title">Auto-play TTS After Generation</string>
   <string name="setting_display_page_chat_font_family_default">Default</string>
   <string name="setting_display_page_chat_font_family_custom">Custom</string>
@@ -1320,6 +1322,7 @@
   <string name="chat_page_voice_listening_queued">Listening; new speech will be queued</string>
   <string name="chat_page_voice_listening">Listening; your message will be sent when you finish speaking</string>
   <string name="chat_page_voice_transcribing">Finalizing transcription…</string>
+  <string name="chat_page_voice_waiting">Waiting for the reply; listening will resume afterward</string>
   <string name="chat_page_voice_speaking">Reading aloud; listening will resume afterward</string>
   <string name="chat_page_voice_paused">Paused</string>
   <string name="chat_page_voice_retry">Retry</string>
