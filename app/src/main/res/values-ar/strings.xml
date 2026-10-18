@@ -1600,4 +1600,6 @@
   <string name="media_creation_page_nothing_to_save">لا تحتوي العناصر المحددة على صور أو مقاطع فيديو لحفظها</string>
   <string name="media_creation_page_saved_files">تم حفظ %1$d من الملفات في المعرض</string>
   <string name="media_creation_page_saved_files_partial">تم حفظ %1$d من الملفات، وفشل %2$d: %3$s</string>
+  <string name="chat_input_edit_reasoning">تعديل الاستدلال</string>
+  <string name="chat_input_reasoning_placeholder">محتوى الاستدلال</string>
 </resources>

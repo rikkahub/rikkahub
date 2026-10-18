@@ -1602,4 +1602,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="media_creation_page_nothing_to_save">선택한 항목에 저장할 이미지나 동영상이 없습니다.</string>
   <string name="media_creation_page_saved_files">갤러리에 파일 %1$d개를 저장했습니다</string>
   <string name="media_creation_page_saved_files_partial">파일 %1$d개 저장됨, %2$d개 실패: %3$s</string>
+  <string name="chat_input_edit_reasoning">추론 편집</string>
+  <string name="chat_input_reasoning_placeholder">추론 내용</string>
 </resources>

@@ -1602,4 +1602,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="media_creation_page_nothing_to_save">选中的项里没有可以保存的图片或视频</string>
   <string name="media_creation_page_saved_files">已保存 %1$d 个文件到相册</string>
   <string name="media_creation_page_saved_files_partial">已保存 %1$d 个文件，%2$d 个失败：%3$s</string>
+  <string name="chat_input_edit_reasoning">编辑思维过程</string>
+  <string name="chat_input_reasoning_placeholder">思维过程</string>
 </resources>

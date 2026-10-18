@@ -1602,4 +1602,6 @@
   <string name="media_creation_page_nothing_to_save">В выбранных элементах нет изображений или видео для сохранения</string>
   <string name="media_creation_page_saved_files">Сохранено %1$d файлов в галерею</string>
   <string name="media_creation_page_saved_files_partial">Сохранено %1$d файлов, %2$d не удалось: %3$s</string>
+  <string name="chat_input_edit_reasoning">Изменить рассуждение</string>
+  <string name="chat_input_reasoning_placeholder">Содержимое рассуждения</string>
 </resources>

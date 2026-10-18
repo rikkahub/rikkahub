@@ -1600,4 +1600,6 @@
   <string name="media_creation_page_nothing_to_save">所選項目沒有可儲存的圖片或影片</string>
   <string name="media_creation_page_saved_files">已將 %1$d 個檔案儲存至相簿</string>
   <string name="media_creation_page_saved_files_partial">已儲存 %1$d 個檔案，%2$d 個失敗：%3$s</string>
+  <string name="chat_input_edit_reasoning">編輯推理</string>
+  <string name="chat_input_reasoning_placeholder">推理內容</string>
 </resources>

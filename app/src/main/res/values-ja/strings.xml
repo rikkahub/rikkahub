@@ -1602,4 +1602,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="media_creation_page_nothing_to_save">選択した項目には保存できる画像や動画がありません</string>
   <string name="media_creation_page_saved_files">%1$d件のファイルをギャラリーに保存しました</string>
   <string name="media_creation_page_saved_files_partial">ファイルを %1$d 件保存しました。%2$d 件失敗: %3$s</string>
+  <string name="chat_input_edit_reasoning">推論を編集</string>
+  <string name="chat_input_reasoning_placeholder">推論内容</string>
 </resources>

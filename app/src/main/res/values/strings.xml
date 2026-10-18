@@ -1603,4 +1603,6 @@
   <string name="media_creation_page_nothing_to_save">The selected items have no images or videos to save</string>
   <string name="media_creation_page_saved_files">Saved %1$d files to gallery</string>
   <string name="media_creation_page_saved_files_partial">Saved %1$d files, %2$d failed: %3$s</string>
+  <string name="chat_input_edit_reasoning">Edit reasoning</string>
+  <string name="chat_input_reasoning_placeholder">Reasoning content</string>
 </resources>
