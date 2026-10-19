@@ -154,6 +154,17 @@ class OpenAIMediaGenerationProviderTest {
     }
 
     @Test
+    fun blankBase64FallsBackToUrl() {
+        val root = mediaGenerationJson.parseToJsonElement(
+            """{"data":[{"url":"https://cdn.example.com/out.png","b64_json":"","revised_prompt":null}]}"""
+        ).jsonObject
+
+        val output = OpenAIMediaGenerationProvider(OkHttpClient()).parseTask(root).outputs.single()
+        assertEquals("https://cdn.example.com/out.png", output.url)
+        assertNull(output.data)
+    }
+
+    @Test
     fun imageInputsAreUploadedToEditEndpointAsMultipart() = runBlocking {
         val first = tempFolder.newFile("a.png").apply { writeText("png-bytes") }
         val second = tempFolder.newFile("b.JPG").apply { writeText("jpg-bytes") }

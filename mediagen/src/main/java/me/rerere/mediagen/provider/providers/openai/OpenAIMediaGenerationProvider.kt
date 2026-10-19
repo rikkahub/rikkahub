@@ -111,9 +111,10 @@ class OpenAIMediaGenerationProvider(
             status = MediaGenerationStatus.SUCCEEDED,
             outputs = data.map { element ->
                 val item = element.jsonObject
-                val base64 = item.string("b64_json")
+                // 部分中转同时给 url 和空字符串的 b64_json，空串当作没有
+                val base64 = item.string("b64_json")?.takeIf { it.isNotBlank() }
                 // dall-e 系列和部分中转不返回 b64_json，而是有时效的 url
-                val url = item.string("url")
+                val url = item.string("url")?.takeIf { it.isNotBlank() }
                 if (base64 == null && url == null) error("OpenAI image contains neither b64_json nor url")
                 MediaGenerationOutput(
                     url = url,

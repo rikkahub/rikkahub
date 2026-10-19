@@ -395,7 +395,11 @@ class MediaCreationService(
             val url = output.url
             when {
                 data != null -> file.writeBytes(data)
-                url != null -> download(setting, url, file)
+                url != null -> {
+                    Log.i(TAG, "Downloading output $index (${output.mimeType}) from $url")
+                    download(setting, url, file)
+                    Log.i(TAG, "Downloaded output $index: ${file.length()} bytes -> ${file.name}")
+                }
                 else -> return@mapIndexedNotNull null
             }
 
