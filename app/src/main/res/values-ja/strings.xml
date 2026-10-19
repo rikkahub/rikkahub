@@ -1650,4 +1650,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_memory_empty">まだ記憶がありません</string>
   <string name="assistant_page_memory_empty_hint">チャット中に伝えた内容をアシスタントが記憶します。+ をタップして追加することもできます</string>
   <string name="assistant_page_memory_empty_disabled_hint">このアシスタントの記憶はオフになっています。オンにすると、伝えた内容を記憶できるようになります</string>
+  <string name="image_preview_saving">保存中…</string>
+  <string name="image_preview_saved">画像を保存しました</string>
 </resources>

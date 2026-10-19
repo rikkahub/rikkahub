@@ -1648,4 +1648,6 @@
   <string name="assistant_page_memory_empty">لا توجد ذكريات بعد</string>
   <string name="assistant_page_memory_empty_hint">سيتذكر المساعد ما تخبره به أثناء الدردشة. يمكنك أيضًا الضغط على + لإضافة ذكرى</string>
   <string name="assistant_page_memory_empty_disabled_hint">الذاكرة معطّلة لهذا المساعد. فعّلها ليتمكن من تذكر ما تخبره به</string>
+  <string name="image_preview_saving">جارٍ الحفظ…</string>
+  <string name="image_preview_saved">تم حفظ الصورة</string>
 </resources>

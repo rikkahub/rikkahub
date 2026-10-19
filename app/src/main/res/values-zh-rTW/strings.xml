@@ -1648,4 +1648,6 @@
   <string name="assistant_page_memory_empty">尚無記憶</string>
   <string name="assistant_page_memory_empty_hint">助理會在聊天時記住你告訴它的內容。你也可以輕觸 + 新增一則記憶</string>
   <string name="assistant_page_memory_empty_disabled_hint">此助理的記憶功能已關閉。開啟後，它就能記住你告訴它的內容</string>
+  <string name="image_preview_saving">儲存中…</string>
+  <string name="image_preview_saved">圖片已儲存</string>
 </resources>

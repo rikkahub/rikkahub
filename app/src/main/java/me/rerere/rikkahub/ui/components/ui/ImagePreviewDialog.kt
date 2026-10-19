@@ -12,6 +12,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -25,6 +26,7 @@ import com.jvziyaoyao.scale.zoomable.pager.rememberZoomablePagerState
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Download01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.context.LocalToaster
 import org.koin.compose.koinInject
@@ -35,6 +37,7 @@ fun ImagePreviewDialog(
     onDismissRequest: () -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val filesManager: FilesManager = koinInject()
     val state = rememberZoomablePagerState { images.size }
     val toaster = LocalToaster.current
@@ -66,12 +69,16 @@ fun ImagePreviewDialog(
                 IconButton(
                     onClick = {
                         lifecycleOwner.lifecycleScope.launch {
+                            // 保存完成前一直显示，结束后收起，避免和结果提示叠在一起
+                            val saving = toaster.showProgress(resources.getString(R.string.image_preview_saving))
                             runCatching {
-                                toaster.show("正在保存")
                                 val imgUrl = images[state.currentPage]
                                 filesManager.saveMessageImage(context, imgUrl)
-                                toaster.show(message = "已保存图片", type = ToastType.Success)
+                            }.onSuccess {
+                                saving.dismiss()
+                                toaster.show(message = resources.getString(R.string.image_preview_saved), type = ToastType.Success)
                             }.onFailure {
+                                saving.dismiss()
                                 it.printStackTrace()
                                 toaster.show(
                                     message = it.toString(),

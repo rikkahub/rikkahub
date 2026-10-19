@@ -1650,4 +1650,6 @@
   <string name="assistant_page_memory_empty">Пока нет воспоминаний</string>
   <string name="assistant_page_memory_empty_hint">Ассистент будет запоминать то, что вы ему сообщаете, во время общения. Вы также можете нажать +, чтобы добавить воспоминание</string>
   <string name="assistant_page_memory_empty_disabled_hint">Память для этого ассистента отключена. Включите её, чтобы он запоминал то, что вы ему сообщаете</string>
+  <string name="image_preview_saving">Сохранение…</string>
+  <string name="image_preview_saved">Изображение сохранено</string>
 </resources>
