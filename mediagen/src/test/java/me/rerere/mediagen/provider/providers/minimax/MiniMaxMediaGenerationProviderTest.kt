@@ -75,4 +75,17 @@ class MiniMaxMediaGenerationProviderTest {
             statuses,
         )
     }
+
+    @Test
+    fun downloadHeadersCarryTheKeyOnlyToTheApiHost() {
+        val relay = MediaGenerationProviderSetting.MiniMax(apiKey = "key", baseUrl = "https://relay.example.com/v2")
+
+        assertEquals(
+            mapOf("Authorization" to "Bearer key"),
+            relay.downloadHeaders("https://relay.example.com/v2/video_generation/task_1/content"),
+        )
+        // 官方结果是带签名的 CDN 直链，不能把密钥带过去
+        assertTrue(relay.downloadHeaders("https://cdn.example.com/video.mp4?sign=abc").isEmpty())
+        assertTrue(relay.downloadHeaders("http://relay.example.com/v2/video_generation/task_1/content").isEmpty())
+    }
 }

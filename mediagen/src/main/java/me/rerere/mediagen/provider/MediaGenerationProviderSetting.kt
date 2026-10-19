@@ -23,9 +23,17 @@ sealed class MediaGenerationProviderSetting {
 
     /**
      * 下载产出地址 [url] 时要带上的请求头。多数厂商给的是带签名的地址，不需要额外的头；
-     * OpenRouter 的视频要凭 API Key 从它自己的接口取。
+     * OpenRouter 的视频、以及部分 MiniMax 中转站的结果要凭 API Key 从它自己的接口取。
      */
     open fun downloadHeaders(url: String): Map<String, String> = emptyMap()
+
+    // 密钥只发给 baseUrl 所在的站点，结果地址指向别处时原样下载
+    protected fun sameOriginBearer(url: String): Map<String, String> {
+        val target = url.toHttpUrlOrNull() ?: return emptyMap()
+        val base = baseUrl.toHttpUrlOrNull() ?: return emptyMap()
+        if (target.scheme != base.scheme || target.host != base.host || target.port != base.port) return emptyMap()
+        return mapOf("Authorization" to "Bearer $apiKey")
+    }
 
     abstract fun copyProvider(
         id: Uuid = this.id,
@@ -154,6 +162,9 @@ sealed class MediaGenerationProviderSetting {
         override val supportedKinds: Set<MediaKind>
             get() = setOf(MediaKind.VIDEO)
 
+        // 官方结果是带签名的直链（不同源），中转站可能把视频放在自己需要鉴权的接口后面
+        override fun downloadHeaders(url: String): Map<String, String> = sameOriginBearer(url)
+
         override fun copyProvider(
             id: Uuid,
             name: String,
@@ -187,13 +198,7 @@ sealed class MediaGenerationProviderSetting {
         override val supportedKinds: Set<MediaKind>
             get() = setOf(MediaKind.IMAGE, MediaKind.VIDEO)
 
-        // 密钥只发给 baseUrl 所在的站点，结果地址指向别处时原样下载
-        override fun downloadHeaders(url: String): Map<String, String> {
-            val target = url.toHttpUrlOrNull() ?: return emptyMap()
-            val base = baseUrl.toHttpUrlOrNull() ?: return emptyMap()
-            if (target.scheme != base.scheme || target.host != base.host || target.port != base.port) return emptyMap()
-            return mapOf("Authorization" to "Bearer $apiKey")
-        }
+        override fun downloadHeaders(url: String): Map<String, String> = sameOriginBearer(url)
 
         override fun copyProvider(
             id: Uuid,
