@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,11 +21,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.contentColorFor
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -38,7 +42,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.addOutline
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -550,26 +559,35 @@ private fun ChatMessageBubble(
     } else {
         RoundedCornerShape(topStart = BubbleTailCorner, topEnd = corner, bottomEnd = corner, bottomStart = corner)
     }
-    // MarkdownBlock 自带 4dp 的水平内边距
-    val contentModifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
-    if (onClick != null) {
-        Surface(
-            onClick = onClick,
-            modifier = modifier,
-            shape = shape,
-            color = color,
-            interactionSource = interactionSource,
-        ) {
-            Box(modifier = contentModifier) { content() }
-        }
-    } else {
-        Surface(
-            modifier = modifier,
-            shape = shape,
-            color = color,
-        ) {
-            Box(modifier = contentModifier) { content() }
-        }
+    val contentColor = contentColorFor(color)
+    Box(
+        modifier = modifier
+            .clipDrawing(shape)
+            .background(color)
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(interactionSource = interactionSource, indication = ripple(), onClick = onClick)
+                } else {
+                    Modifier
+                },
+            )
+            // MarkdownBlock 自带 4dp 的水平内边距
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        CompositionLocalProvider(LocalContentColor provides contentColor) { content() }
+    }
+}
+
+/**
+ * 只裁剪绘制内容，不像 [clip] 那样把形状设成图层轮廓。
+ *
+ * 四个角半径不同时图层轮廓是 Path，Compose 判断触摸点是否落在轮廓内时用 Path 求交，
+ * 坐标超过 8192px 后 float 精度不够，求交结果为空，长消息下半部分（例如展开的长代码块）就收不到触摸了。
+ */
+private fun Modifier.clipDrawing(shape: Shape): Modifier = drawWithCache {
+    val path = Path().apply { addOutline(shape.createOutline(size, layoutDirection, this@drawWithCache)) }
+    onDrawWithContent {
+        clipPath(path) { this@onDrawWithContent.drawContent() }
     }
 }
 
