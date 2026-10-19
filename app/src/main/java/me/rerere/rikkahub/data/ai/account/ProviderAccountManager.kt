@@ -158,7 +158,10 @@ class ProviderAccountManager(
                     e
                 )
             }
-            persistCredential(latest.id, refreshed)
+            // 刷新期间用户可能退出或换了账号，这时结果作废，不能把旧会话写回去
+            if (!replaceCredential(latest.id, expected = credential, credential = refreshed)) {
+                error("${latest.name}: sign-in changed during refresh, please try again")
+            }
             refreshed
         }
     }
@@ -245,6 +248,29 @@ class ProviderAccountManager(
                 }
             )
         }
+    }
+
+    /** 设置里的凭据仍是 [expected] 时才替换，返回是否替换了 */
+    private suspend fun replaceCredential(
+        providerId: Uuid,
+        expected: OAuthCredential,
+        credential: OAuthCredential,
+    ): Boolean {
+        var replaced = false
+        settingsStore.update { old ->
+            old.copy(
+                providers = old.providers.map { provider ->
+                    if (provider.id == providerId && provider is ProviderSetting.Account &&
+                        provider.credential == expected) {
+                        replaced = true
+                        provider.withCredential(credential)
+                    } else {
+                        provider
+                    }
+                }
+            )
+        }
+        return replaced
     }
 
     // 刚被服务端拒绝，或者快过期了

@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -23,6 +24,7 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -68,22 +70,31 @@ class ProviderAccountManagerTest {
         storeScope.coroutineContext.job.cancelAndJoin()
     }
 
-    @Test
-    fun `refresh that already started is saved even if the caller is cancelled`() = runBlocking {
+    private val provider = ProviderSetting.ChatGPT(
+        credential = OAuthCredential(
+            accessToken = "old-access",
+            refreshToken = "old-refresh",
+            expiresAt = 1L, // 早已过期，一取凭据就会刷新
+            accountId = "account",
+        ),
+    )
+
+    private suspend fun createStore(): SettingsStore {
         val store = SettingsStore(
             PreferenceDataStoreFactory.create(scope = storeScope) { File(temp.root, "settings.preferences_pb") },
             storeScope,
         )
         store.awaitLoaded()
-        val provider = ProviderSetting.ChatGPT(
-            credential = OAuthCredential(
-                accessToken = "old-access",
-                refreshToken = "old-refresh",
-                expiresAt = 1L, // 早已过期，一取凭据就会刷新
-                accountId = "account",
-            ),
-        )
         store.update { it.copy(providers = it.providers + provider) }
+        return store
+    }
+
+    private fun SettingsStore.credential(): OAuthCredential? =
+        (settingsFlow.value.providers.find { it.id == provider.id } as ProviderSetting.ChatGPT).credential
+
+    @Test
+    fun `refresh that already started is saved even if the caller is cancelled`() = runBlocking {
+        val store = createStore()
         val manager = ProviderAccountManager(store, appScope, client)
 
         val caller = launch(Dispatchers.Default) { manager.getCredential(provider, rejectedAccessToken = null) }
@@ -101,5 +112,21 @@ class ProviderAccountManagerTest {
         }
         assertEquals("new-access", saved?.accessToken)
         assertEquals("account", saved?.accountId)
+    }
+
+    @Test
+    fun `refresh result is dropped if the user signs out meanwhile`() = runBlocking {
+        val store = createStore()
+        val manager = ProviderAccountManager(store, appScope, client)
+
+        val caller = async(Dispatchers.Default) {
+            runCatching { manager.getCredential(provider, rejectedAccessToken = null) }
+        }
+        assertTrue(withContext(Dispatchers.IO) { requestArrived.await(10, TimeUnit.SECONDS) })
+        manager.logout(provider.id)
+        release.countDown()
+
+        assertTrue(caller.await().isFailure)
+        assertNull(store.credential())
     }
 }
