@@ -37,6 +37,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.toSize
 import androidx.core.graphics.withTranslation
@@ -59,6 +60,7 @@ internal fun SketchCanvas(state: SketchState, modifier: Modifier = Modifier) {
     ) {
         val paper = state.paperSize
         if (paper.isSpecified) {
+            val view = LocalView.current
             var canvasSize by remember { mutableStateOf(IntSize.Zero) }
             Box(
                 modifier = Modifier
@@ -74,7 +76,12 @@ internal fun SketchCanvas(state: SketchState, modifier: Modifier = Modifier) {
                             // 落笔说明颜色调好了
                             state.pickingColor = false
                             // 画笔的一笔由落笔层接手，这里管橡皮、文字和选择
-                            if (state.tool == SketchTool.Brush) return@awaitEachGesture
+                            if (state.tool == SketchTool.Brush) {
+                                // 有的机型（Android 13 的 OPPO）上落笔层要等窗口再画一帧才开始出墨和交回笔画，
+                                // 而用画笔时窗口本身没有变化、不会重画，一直画都不显示。落笔时主动让窗口画一帧
+                                view.invalidate()
+                                return@awaitEachGesture
+                            }
                             down.consume()
                             val scale = size.width / paper.width
                             // 画纸坐标的原点在正中
