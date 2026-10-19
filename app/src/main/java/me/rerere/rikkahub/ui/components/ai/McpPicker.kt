@@ -303,40 +303,46 @@ fun McpPicker(
                         )
                     }
                 },
+                // ListItem 测量时会读 supporting 的基线判断是否多行，这里放多子节点布局会在测量中提前放置子节点，
+                // 触发 Compose UI 1.12 的 "LayoutNode not found in RectList" 崩溃 (#2179)，所以只放单个 Text
                 supportingContent = {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = when (val s = status) {
-                                is McpStatus.Idle -> "Idle"
-                                is McpStatus.Connecting -> "Connecting"
-                                is McpStatus.Connected -> "Connected"
-                                is McpStatus.Reconnecting -> "Reconnecting (${s.attempt}/${s.maxAttempts})"
-                                is McpStatus.Error -> "Error: ${s.message}"
-                                is McpStatus.NeedsAuthorization -> "Needs authorization"
-                                is McpStatus.Authorizing -> "Authorizing"
-                            },
-                            maxLines = 5,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (status == McpStatus.Connected) {
-                            val tools = server.commonOptions.tools
-                            val enabledTools = tools.fastFilter { it.enable }
-                            Tag(
-                                type = TagType.INFO
-                            ) {
-                                Text("${enabledTools.size}/${tools.size} tools")
-                            }
-                        }
-                    }
+                    Text(
+                        text = when (val s = status) {
+                            is McpStatus.Idle -> "Idle"
+                            is McpStatus.Connecting -> "Connecting"
+                            is McpStatus.Connected -> "Connected"
+                            is McpStatus.Reconnecting -> "Reconnecting (${s.attempt}/${s.maxAttempts})"
+                            is McpStatus.Error -> "Error: ${s.message}"
+                            is McpStatus.NeedsAuthorization -> "Needs authorization"
+                            is McpStatus.Authorizing -> "Authorizing"
+                        },
+                        maxLines = 5,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 },
                 trailingContent = {
                     // 整行都能点击切换，开关只用来显示状态
                     Switch(checked = checked, onCheckedChange = null)
                 },
             ) {
-                Text(server.commonOptions.name)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = server.commonOptions.name,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (status == McpStatus.Connected) {
+                        val tools = server.commonOptions.tools
+                        val enabledTools = tools.fastFilter { it.enable }
+                        Tag(
+                            type = TagType.INFO
+                        ) {
+                            Text("${enabledTools.size}/${tools.size} tools")
+                        }
+                    }
+                }
             }
         }
     }
