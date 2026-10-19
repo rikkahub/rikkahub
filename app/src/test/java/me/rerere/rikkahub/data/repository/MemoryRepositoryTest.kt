@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.repository
 
 import kotlinx.coroutines.runBlocking
+import me.rerere.rikkahub.data.db.entity.MemoryFileEntity
 import me.rerere.rikkahub.data.model.MemoryFile
 import me.rerere.rikkahub.data.model.groupByDirectory
 import org.junit.Assert.assertEquals
@@ -9,7 +10,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MemoryRepositoryTest {
-    private val repository = MemoryRepository(FakeMemoryDAO())
+    private val dao = FakeMemoryDAO()
+    private val repository = MemoryRepository(dao)
     private val assistant = "assistant"
 
     private suspend fun create(path: String, content: String): MemoryFile {
@@ -70,7 +72,11 @@ class MemoryRepositoryTest {
         val file = create("/topics/work.md", "- [stated] On the search team\n")
 
         val result = repository.replaceInFile(
-            assistant, "/topics/work.md", "On the search team", "On the infra team (previously on search)", file.version,
+            assistant,
+            "/topics/work.md",
+            "On the search team",
+            "On the infra team (previously on search)",
+            file.version,
         )
 
         assertEquals(
@@ -110,6 +116,27 @@ class MemoryRepositoryTest {
         assertTrue(notMarkdown is MemoryWriteResult.Rejected)
         assertTrue(traversal is MemoryWriteResult.Rejected)
         assertTrue(repository.getFiles(assistant).isEmpty())
+    }
+
+    @Test
+    fun `an oversized file can shrink but not grow`() = runBlocking {
+        // 迁移直接写库，不经过大小检查
+        val lines = List(MemoryFile.MAX_BYTES / 1000 + 10) { "- [stated] Fact $it ${"x".repeat(1000)}\n" }
+        dao.upsertFile(MemoryFileEntity(assistant, "/profile.md", lines.joinToString(""), updatedAt = 0))
+        val file = repository.getFile(assistant, "/profile.md")!!
+
+        val append = repository.appendToFile(assistant, "/profile.md", "- [stated] More", file.version)
+        assertTrue(append is MemoryWriteResult.Rejected)
+
+        val trimmed = lines.drop(1).joinToString("")
+        val removed = repository.replaceInFile(assistant, "/profile.md", lines.first().trimEnd(), "", file.version)
+        assertEquals(trimmed, (removed as MemoryWriteResult.Success).file?.content)
+        assertTrue(trimmed.toByteArray().size > MemoryFile.MAX_BYTES)
+
+        // 用户在编辑页删掉一部分后保存，同样走 writeFile
+        val edited = lines.drop(2).joinToString("")
+        val saved = repository.writeFile(assistant, "/profile.md", edited)
+        assertEquals(edited, (saved as MemoryWriteResult.Success).file?.content)
     }
 
     @Test
@@ -155,8 +182,13 @@ class MemoryRepositoryTest {
     @Test
     fun `files are grouped by directory with profile and preferences first`() = runBlocking {
         listOf(
-            "/people/mom.md", "/topics/food.md", "/work/notes.md", "/preferences.md",
-            "/areas/house-hunt.md", "/profile.md", "/topics/books.md",
+            "/people/mom.md",
+            "/topics/food.md",
+            "/work/notes.md",
+            "/preferences.md",
+            "/areas/house-hunt.md",
+            "/profile.md",
+            "/topics/books.md",
         ).forEach { create(it, "content") }
 
         val groups = repository.getFiles(assistant).groupByDirectory()

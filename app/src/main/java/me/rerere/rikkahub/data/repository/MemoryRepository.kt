@@ -66,7 +66,9 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
         when {
             index < 0 -> Edit.Reject("old_str was not found in $path.")
             current.indexOf(oldStr, index + 1) >= 0 ->
-                Edit.Reject("old_str matches more than one place in $path; include more surrounding text to make it unique.")
+                Edit.Reject(
+                    "old_str matches more than one place in $path; include more surrounding text to make it unique."
+                )
 
             else -> Edit.Content(current.replaceAt(index, oldStr.length, newStr))
         }
@@ -132,7 +134,9 @@ class MemoryRepository(private val memoryDAO: MemoryDAO) {
             is Edit.Reject -> return MemoryWriteResult.Rejected(result.reason)
             is Edit.Content -> result.content
         }
-        if (content.toByteArray().size > MemoryFile.MAX_BYTES) {
+        // 只拦会让文件变大的超限写入：迁移来的旧记忆可能本来就超限，得允许一点点删小
+        val size = content.toByteArray().size
+        if (size > MemoryFile.MAX_BYTES && size > current?.content?.toByteArray()?.size ?: 0) {
             return MemoryWriteResult.Rejected(
                 "$normalized would exceed the ${MemoryFile.MAX_BYTES / 1024}KB limit. " +
                     "Merge duplicates and drop outdated details instead of adding more."
@@ -167,7 +171,11 @@ private fun String.replaceAt(index: Int, length: Int, replacement: String): Stri
         val atLineStart = start == 0 || this[start - 1] == '\n'
         val atLineEnd = end == this.length || this[end] == '\n'
         if (atLineStart && atLineEnd) {
-            if (end < this.length) end++ else if (start > 0) start--
+            if (end < this.length) {
+                end++
+            } else if (start > 0) {
+                start--
+            }
         }
     }
     return substring(0, start) + replacement + substring(end)
