@@ -557,7 +557,13 @@ private fun handleImageQRCode(
 private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
     var showSheet by remember { mutableStateOf(false) }
     val templates = remember {
-        listOf(ProviderSetting.OpenAI(), ProviderSetting.Google(), ProviderSetting.Claude())
+        listOf(
+            ProviderSetting.OpenAI(),
+            ProviderSetting.Google(),
+            ProviderSetting.Claude(),
+            ProviderSetting.ChatGPT(),
+            ProviderSetting.Grok(),
+        )
     }
 
     IconButton(

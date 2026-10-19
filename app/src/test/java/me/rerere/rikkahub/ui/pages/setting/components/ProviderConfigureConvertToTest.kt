@@ -1,9 +1,10 @@
 package me.rerere.rikkahub.ui.pages.setting.components
 
-import me.rerere.ai.provider.BalanceOption
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.OAuthCredential
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.QuotaQuery
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
@@ -19,9 +20,9 @@ class ProviderConfigureConvertToTest {
             modelId = "gpt-custom",
             displayName = "GPT Custom"
         )
-        val balanceOption = BalanceOption(
+        val quotaQuery = QuotaQuery(
             enabled = true,
-            apiPath = "/custom/credits",
+            url = "{{baseUrl}}/custom/credits",
             resultPath = "data.balance"
         )
         val original = ProviderSetting.OpenAI(
@@ -29,7 +30,7 @@ class ProviderConfigureConvertToTest {
             enabled = false,
             name = "My Provider",
             models = listOf(model),
-            balanceOption = balanceOption,
+            quotaQuery = quotaQuery,
             customHeaders = listOf(CustomHeader("User-Agent", "test-agent")),
             apiKey = "sk-test",
             baseUrl = "https://api.openai.com/v1"
@@ -43,7 +44,7 @@ class ProviderConfigureConvertToTest {
         assertEquals(original.enabled, google.enabled)
         assertEquals(original.name, google.name)
         assertEquals(original.models, google.models)
-        assertEquals(original.balanceOption, google.balanceOption)
+        assertEquals(original.quotaQuery, google.quotaQuery)
         assertEquals(original.customHeaders, google.customHeaders)
         assertEquals(original.apiKey, google.apiKey)
         assertEquals("https://generativelanguage.googleapis.com/v1beta", google.baseUrl)
@@ -110,5 +111,19 @@ class ProviderConfigureConvertToTest {
 
         val converted = original.convertTo(ProviderSetting.OpenAI::class) as ProviderSetting.OpenAI
         assertEquals("not-a-url", converted.baseUrl)
+    }
+
+    @Test
+    fun `convertTo from account provider uses target default endpoint without credential`() {
+        val original = ProviderSetting.ChatGPT(
+            name = "ChatGPT",
+            credential = OAuthCredential(accessToken = "secret-access", refreshToken = "secret-refresh"),
+        )
+
+        val converted = original.convertTo(ProviderSetting.OpenAI::class) as ProviderSetting.OpenAI
+        assertEquals(original.id, converted.id)
+        assertEquals("", converted.apiKey)
+        assertEquals("https://api.openai.com/v1", converted.baseUrl)
+        assertEquals(ProviderSetting.OpenAI().quotaQuery, converted.quotaQuery)
     }
 }

@@ -6,6 +6,11 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
@@ -16,8 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -26,14 +33,30 @@ import androidx.compose.ui.unit.dp
 import me.rerere.ui.toast.ToastType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.ProviderQuota
+import me.rerere.ai.provider.UsageWindow
+import me.rerere.ai.provider.supportsQuota
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.account.AccountLoginStatus
+import me.rerere.rikkahub.data.ai.account.ChatGPTAuth
+import me.rerere.oauth.CustomTabsOAuthAuthorizationLauncher
+import me.rerere.rikkahub.data.ai.account.ProviderAccountManager
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.DashboardSpeed02
 import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.Login03
+import me.rerere.hugeicons.stroke.Logout03
 import me.rerere.hugeicons.stroke.Refresh03
+import me.rerere.hugeicons.stroke.UserCircle
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
+import me.rerere.rikkahub.ui.components.ai.longLabel
+import me.rerere.rikkahub.ui.components.ai.rememberProviderQuota
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
 import me.rerere.rikkahub.ui.components.ui.CardGroupScope
 import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceButtons
 import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
@@ -45,7 +68,15 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.koinInject
+import me.rerere.rikkahub.utils.toMessageTimeString
+import java.time.LocalDateTime
+import java.time.ZoneId
+import kotlin.math.roundToInt
 import kotlin.reflect.KClass
+import kotlin.time.toJavaInstant
 
 @Composable
 fun ProviderConfigure(
@@ -84,6 +115,21 @@ fun ProviderConfigure(
             is ProviderSetting.OpenAI -> ProviderConfigureOpenAI(provider, onEdit)
             is ProviderSetting.Google -> ProviderConfigureGoogle(provider, onEdit)
             is ProviderSetting.Claude -> ProviderConfigureClaude(provider, onEdit)
+            is ProviderSetting.ChatGPT -> ProviderConfigureAccount(
+                provider = provider,
+                onEdit = onEdit,
+                serviceName = "ChatGPT",
+                plan = provider.credential?.plan?.let { "ChatGPT ${ChatGPTAuth.planDisplayName(it)}" },
+                disclaimer = stringResource(R.string.setting_provider_page_chatgpt_disclaimer),
+            )
+
+            is ProviderSetting.Grok -> ProviderConfigureAccount(
+                provider = provider,
+                onEdit = onEdit,
+                serviceName = "Grok",
+                plan = null,
+                disclaimer = stringResource(R.string.setting_provider_page_grok_disclaimer),
+            )
         }
     }
 }
@@ -91,55 +137,46 @@ fun ProviderConfigure(
 fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSetting {
     if (this::class == type) return this
 
-    val apiKey = when (this) {
-        is ProviderSetting.OpenAI -> this.apiKey
-        is ProviderSetting.Google -> this.apiKey
-        is ProviderSetting.Claude -> this.apiKey
-    }
-    val sourceBaseUrl = when (this) {
-        is ProviderSetting.OpenAI -> this.baseUrl
-        is ProviderSetting.Google -> this.baseUrl
-        is ProviderSetting.Claude -> this.baseUrl
-    }
+    // 账号凭据不能带到可以自填地址的类型上，从账号类转过来时 key、地址和额度查询都用目标类型的默认值
+    val source = this as? ProviderSetting.ApiKey
+    val apiKey = source?.apiKey.orEmpty()
     val targetDefaultBaseUrl = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI().baseUrl
         ProviderSetting.Google::class -> ProviderSetting.Google().baseUrl
         ProviderSetting.Claude::class -> ProviderSetting.Claude().baseUrl
         else -> error("Unsupported provider type: $type")
     }
-    val convertedBaseUrl = sourceBaseUrl.convertToTargetBaseUrl(targetDefaultBaseUrl)
+    val convertedBaseUrl = source?.baseUrl?.convertToTargetBaseUrl(targetDefaultBaseUrl) ?: targetDefaultBaseUrl
 
-    return when (type) {
+    val converted: ProviderSetting.ApiKey = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, customHeaders = this.customHeaders, builtIn = this.builtIn,
+            customHeaders = this.customHeaders, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Google::class -> ProviderSetting.Google(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, customHeaders = this.customHeaders, builtIn = this.builtIn,
+            customHeaders = this.customHeaders, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Claude::class -> ProviderSetting.Claude(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, customHeaders = this.customHeaders, builtIn = this.builtIn,
+            customHeaders = this.customHeaders, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         else -> error("Unsupported provider type: $type")
     }
+    // 沿用用户配的额度查询
+    return source?.let { converted.withQuotaQuery(it.quotaQuery) } ?: converted
 }
 
-internal fun ProviderSetting.defaultBaseUrlForReset(): String {
+internal fun ProviderSetting.ApiKey.defaultBaseUrlForReset(): String {
     val defaultProvider = DEFAULT_PROVIDERS.find { it.id == id }
-    if (defaultProvider != null) {
-        when (this) {
-            is ProviderSetting.OpenAI -> if (defaultProvider is ProviderSetting.OpenAI) return defaultProvider.baseUrl
-            is ProviderSetting.Google -> if (defaultProvider is ProviderSetting.Google) return defaultProvider.baseUrl
-            is ProviderSetting.Claude -> if (defaultProvider is ProviderSetting.Claude) return defaultProvider.baseUrl
-        }
+    if (defaultProvider is ProviderSetting.ApiKey && defaultProvider::class == this::class) {
+        return defaultProvider.baseUrl
     }
     return when (this) {
         is ProviderSetting.OpenAI -> ProviderSetting.OpenAI().baseUrl
@@ -148,18 +185,11 @@ internal fun ProviderSetting.defaultBaseUrlForReset(): String {
     }
 }
 
-internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean {
-    val baseUrl = when (this) {
-        is ProviderSetting.OpenAI -> this.baseUrl
-        is ProviderSetting.Google -> this.baseUrl
-        is ProviderSetting.Claude -> this.baseUrl
-    }
-    return baseUrl == defaultBaseUrlForReset()
-}
+internal fun ProviderSetting.ApiKey.isUsingDefaultBaseUrl(): Boolean = baseUrl == defaultBaseUrlForReset()
 
 // 地址不是默认值时，输入框右侧出现的恢复默认按钮
 private fun resetBaseUrlButton(
-    provider: ProviderSetting,
+    provider: ProviderSetting.ApiKey,
     onReset: () -> Unit,
 ): (@Composable () -> Unit)? {
     if (provider.isUsingDefaultBaseUrl()) return null
@@ -326,6 +356,152 @@ private fun ProviderConfigureOpenAI(
             onCheckedChange = { onEdit(provider.copy(includeHistoryReasoning = it)) },
             headlineContent = { Text(stringResource(R.string.setting_provider_page_include_history_reasoning)) },
         )
+    }
+}
+
+// 账号类提供商：登录状态、用量和说明
+@Composable
+private fun ProviderConfigureAccount(
+    provider: ProviderSetting.Account,
+    onEdit: (provider: ProviderSetting) -> Unit,
+    serviceName: String,
+    plan: String?,
+    disclaimer: String,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val accountManager = koinInject<ProviderAccountManager>()
+    val loginStatus by accountManager.loginStatus.collectAsStateWithLifecycle()
+    val status = loginStatus[provider.id]
+    val credential = provider.credential
+
+    CardGroup {
+        nameItem(provider, onEdit)
+    }
+
+    CardGroup(title = { Text(stringResource(R.string.setting_provider_page_account)) }) {
+        if (credential != null) {
+            item(
+                leadingContent = { CardGroupIcon(HugeIcons.UserCircle) },
+                supportingContent = plan?.let { { Text(it) } },
+                headlineContent = { Text(credential.email ?: stringResource(R.string.setting_provider_page_signed_in)) },
+            )
+            item(
+                onClick = { scope.launch { accountManager.logout(provider.id) } },
+                leadingContent = {
+                    CardGroupIcon(
+                        icon = HugeIcons.Logout03,
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_sign_out)) },
+            )
+        } else if (status is AccountLoginStatus.DeviceCode) {
+            item(
+                onClick = { CustomTabsOAuthAuthorizationLauncher.launch(context, status.verificationUrl) },
+                leadingContent = { ContainedLoadingIndicator(modifier = Modifier.size(40.dp)) },
+                overlineContent = { Text(stringResource(R.string.setting_provider_page_device_code_hint)) },
+                supportingContent = { Text(stringResource(R.string.setting_provider_page_device_code_reopen)) },
+                headlineContent = {
+                    Text(
+                        text = status.userCode,
+                        style = MaterialTheme.typography.headlineSmallEmphasized,
+                        fontFamily = JetbrainsMono,
+                    )
+                },
+            )
+            item(
+                onClick = { accountManager.cancelLogin(provider.id) },
+                leadingContent = { CardGroupIcon(HugeIcons.Cancel01) },
+                headlineContent = { Text(stringResource(R.string.cancel)) },
+            )
+        } else if (status == AccountLoginStatus.Authorizing) {
+            item(
+                onClick = { accountManager.cancelLogin(provider.id) },
+                leadingContent = { ContainedLoadingIndicator(modifier = Modifier.size(40.dp)) },
+                supportingContent = { Text(stringResource(R.string.setting_provider_page_waiting_authorization_desc)) },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_waiting_authorization)) },
+            )
+        } else {
+            item(
+                onClick = { accountManager.startLogin(provider.id, context) },
+                leadingContent = { CardGroupIcon(HugeIcons.Login03) },
+                supportingContent = (status as? AccountLoginStatus.Failed)?.let { failed ->
+                    { Text(failed.message, color = MaterialTheme.colorScheme.error) }
+                },
+                trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_sign_in_with, serviceName)) },
+            )
+        }
+    }
+
+    if (provider.supportsQuota) {
+        AccountUsage(provider)
+    }
+
+    Text(
+        text = disclaimer,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 4.dp),
+    )
+}
+
+// 订阅用量：每个窗口一条进度和重置时间
+@Composable
+private fun AccountUsage(provider: ProviderSetting.Account) {
+    val result = rememberProviderQuota(provider)
+    val limits = result?.getOrNull() as? ProviderQuota.UsageLimits
+    CardGroup(title = { Text(stringResource(R.string.setting_provider_page_usage)) }) {
+        when {
+            result == null -> item(
+                leadingContent = { ContainedLoadingIndicator(modifier = Modifier.size(40.dp)) },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_usage_loading)) },
+            )
+
+            limits == null -> item(
+                leadingContent = { CardGroupIcon(HugeIcons.DashboardSpeed02) },
+                supportingContent = {
+                    Text(
+                        text = result.exceptionOrNull()?.message.orEmpty(),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_usage_failed)) },
+            )
+
+            limits.windows.isEmpty() -> item(
+                leadingContent = { CardGroupIcon(HugeIcons.DashboardSpeed02) },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_usage_none)) },
+            )
+
+            else -> limits.windows.forEach { window ->
+                val reached = limits.limitReached || window.usedPercent >= 100
+                formItem(
+                    headlineContent = { Text(window.longLabel()) },
+                    supportingContent = window.resetsAt?.let { resetsAt ->
+                        {
+                            val time = LocalDateTime.ofInstant(resetsAt.toJavaInstant(), ZoneId.systemDefault())
+                            Text(stringResource(R.string.setting_provider_page_usage_resets, time.toMessageTimeString()))
+                        }
+                    },
+                    trailingContent = {
+                        Text(
+                            text = "${window.usedPercent.roundToInt()}%",
+                            style = MaterialTheme.typography.titleMediumEmphasized,
+                            color = if (reached) MaterialTheme.colorScheme.error else Color.Unspecified,
+                        )
+                    },
+                ) {
+                    LinearWavyProgressIndicator(
+                        progress = { (window.usedPercent / 100).toFloat().coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = if (reached) MaterialTheme.colorScheme.error else ProgressIndicatorDefaults.linearColor,
+                    )
+                }
+            }
+        }
     }
 }
 

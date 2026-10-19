@@ -46,7 +46,11 @@ object SettingsJsonMigrator {
                 if (extractedQuickMessages.isNotEmpty()) {
                     val existing = root["quickMessages"]
                     val existingArray = existing?.let {
-                        runCatching { JsonInstant.parseToJsonElement(JsonInstant.encodeToString(it)) as? JsonArray }.getOrNull()
+                        runCatching {
+                            JsonInstant.parseToJsonElement(
+                                JsonInstant.encodeToString(it)
+                            ) as? JsonArray
+                        }.getOrNull()
                     } ?: JsonArray(emptyList())
                     val existingIds = existingArray.mapNotNull {
                         (it as? JsonObject)?.get("id")?.toString()?.trim('"')
@@ -65,6 +69,11 @@ object SettingsJsonMigrator {
             root["assistants"]?.let { element ->
                 val migrated = migrateAssistantsConversationInjections(JsonInstant.encodeToString(element))
                 root["assistants"] = JsonInstant.parseToJsonElement(migrated)
+            }
+
+            // V5: 提供商的余额查询 balanceOption 改成自定义额度查询 quotaQuery
+            (root["providers"] as? JsonArray)?.let { providers ->
+                root["providers"] = JsonArray(providers.map(::migrateProviderQuotaQuery))
             }
 
             JsonInstant.encodeToString(JsonObject(root))

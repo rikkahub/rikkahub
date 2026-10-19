@@ -36,12 +36,14 @@ data class OAuthCallback(
  * 服务器只绑定 IPv4 回环地址；首个授权会话打开时启动，最后一个会话关闭时停止。
  * 同一实例可以承载多个并发授权，并通过 state 将回调路由到对应会话。
  *
- * redirect URI 使用 localhost 而非 127.0.0.1：部分授权服务器前置的 WAF 会拦截请求体中
- * 带 IPv4 主机的 URL，导致动态客户端注册直接 403。
+ * redirect URI 默认使用 localhost 而非 127.0.0.1：部分授权服务器前置的 WAF 会拦截请求体中
+ * 带 IPv4 主机的 URL，导致动态客户端注册直接 403。预注册了 redirect URI 的客户端需按注册值
+ * 传入 [redirectHost]。
  */
 class OAuthLoopbackCallbackServer(
     private val port: Int = 0,
     callbackPath: String = "/oauth/callback",
+    private val redirectHost: String = "localhost",
 ) {
     private class CallbackRegistration {
         val result = CompletableDeferred<OAuthCallback>()
@@ -54,6 +56,7 @@ class OAuthLoopbackCallbackServer(
 
     private var server: EmbeddedServer<CIOApplicationEngine, CIOApplicationEngine.Configuration>? = null
     private var redirectUri: String? = null
+
     @Volatile
     private var localizedContext: Context? = null
 
@@ -129,7 +132,7 @@ class OAuthLoopbackCallbackServer(
         try {
             newServer.startSuspend(wait = false)
             val resolvedPort = newServer.engine.resolvedConnectors().single().port
-            return "http://$REDIRECT_HOST:$resolvedPort$callbackPath".also {
+            return "http://$redirectHost:$resolvedPort$callbackPath".also {
                 server = newServer
                 redirectUri = it
             }
@@ -228,7 +231,6 @@ class OAuthLoopbackCallbackServer(
 
     private companion object {
         const val LOOPBACK_HOST = "127.0.0.1"
-        const val REDIRECT_HOST = "localhost"
     }
 
     private fun successHtml() = callbackPage(

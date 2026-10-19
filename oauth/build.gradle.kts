@@ -18,4 +18,5 @@ dependencies {
     implementation(libs.ktor.server.cio)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
