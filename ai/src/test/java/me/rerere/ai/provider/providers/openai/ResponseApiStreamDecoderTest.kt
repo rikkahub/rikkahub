@@ -1,7 +1,7 @@
 package me.rerere.ai.provider.providers.openai
 
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -362,6 +362,73 @@ class ResponseApiStreamDecoderTest {
         }
 
         assertSingleSearchTool(chunks)
+    }
+
+    @Test
+    fun `server executed function call output should mark tool as executed`() {
+        val decoder = ResponseApiStreamDecoder()
+        val chunks = buildList {
+            addAll(decoder.decode(functionCallItemEvent("response.output_item.added", id = "fc_1")))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.function_call_arguments.done")
+                put("item_id", "fc_1")
+                put("arguments", "{\"query\":\"Kotlin\"}")
+            }))
+            addAll(decoder.decode(functionCallItemEvent("response.output_item.done", id = "fc_1")))
+            addAll(decoder.decode(functionCallOutputItemEvent("response.output_item.added")))
+            addAll(decoder.decode(functionCallOutputItemEvent("response.output_item.done")))
+        }
+
+        assertSingleSearchTool(chunks)
+        val handler = StreamChunkHandler(Model(modelId = "test-model"))
+        val tool = chunks.fold(listOf(UIMessage.user("search"))) { messages, chunk ->
+            handler.handle(messages, chunk)
+        }.last().getTools().single()
+        assertTrue(tool.isExecuted)
+        assertEquals("result", tool.output.filterIsInstance<UIMessagePart.Text>().single().text)
+    }
+
+    @Test
+    fun `non streaming response should attach server executed function call output`() {
+        val result = api.parseResponseOutput(buildJsonObject {
+            put("id", "resp_1")
+            put("model", "test-model")
+            put("status", "completed")
+            put("output", buildJsonArray {
+                add(buildJsonObject {
+                    put("type", "function_call")
+                    put("id", "fc_1")
+                    put("call_id", "call_1")
+                    put("name", "search_web")
+                    put("arguments", "{\"query\":\"Kotlin\"}")
+                })
+                add(buildJsonObject {
+                    put("type", "function_call_output")
+                    put("call_id", "call_1")
+                    put("output", buildJsonArray {
+                        add(buildJsonObject {
+                            put("type", "input_text")
+                            put("text", "result")
+                        })
+                    })
+                })
+            })
+        })
+
+        val tool = result.message.getTools().single()
+        assertTrue(tool.isExecuted)
+        assertEquals("result", tool.output.filterIsInstance<UIMessagePart.Text>().single().text)
+    }
+
+    private fun functionCallOutputItemEvent(type: String) = buildJsonObject {
+        put("type", type)
+        put("output_index", 2)
+        put("item", buildJsonObject {
+            put("type", "function_call_output")
+            put("id", "fco_1")
+            put("call_id", "call_1")
+            put("output", "result")
+        })
     }
 
     private fun assertSingleSearchTool(chunks: List<StreamChunk>) {

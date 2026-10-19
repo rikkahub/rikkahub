@@ -81,9 +81,12 @@ class StreamChunkHandler(private val model: Model? = null) {
     private fun append(message: UIMessage, chunk: StreamChunk): UIMessage = with(message) {
         when (chunk) {
             is StreamChunk.TextStart -> {
-                if (chunk.id in textPartIndexes) this
-                else copy(parts = parts + UIMessagePart.Text("", chunk.metadata)).also {
-                    textPartIndexes[chunk.id] = parts.size
+                if (chunk.id in textPartIndexes) {
+                    this
+                } else {
+                    copy(parts = parts + UIMessagePart.Text("", chunk.metadata)).also {
+                        textPartIndexes[chunk.id] = parts.size
+                    }
                 }
             }
             is StreamChunk.TextDelta -> {
@@ -97,7 +100,8 @@ class StreamChunkHandler(private val model: Model? = null) {
                     copy(parts = parts.toMutableList().apply {
                         val text = get(index) as UIMessagePart.Text
                         set(
-                            index, text.copy(
+                            index,
+                            text.copy(
                                 text = text.text + chunk.text,
                                 metadata = chunk.metadata ?: text.metadata,
                             )
@@ -108,14 +112,17 @@ class StreamChunkHandler(private val model: Model? = null) {
 
             is StreamChunk.TextEnd -> this.also { textPartIndexes.remove(chunk.id) }
             is StreamChunk.ReasoningStart -> {
-                if (chunk.id in reasoningPartIndexes) this
-                else copy(parts = parts + UIMessagePart.Reasoning(
-                    reasoning = "",
-                    createdAt = Clock.System.now(),
-                    finishedAt = null,
-                    metadata = chunk.metadata,
-                    reasoningType = chunk.reasoningType,
-                )).also { reasoningPartIndexes[chunk.id] = parts.size }
+                if (chunk.id in reasoningPartIndexes) {
+                    this
+                } else {
+                    copy(parts = parts + UIMessagePart.Reasoning(
+                        reasoning = "",
+                        createdAt = Clock.System.now(),
+                        finishedAt = null,
+                        metadata = chunk.metadata,
+                        reasoningType = chunk.reasoningType,
+                    )).also { reasoningPartIndexes[chunk.id] = parts.size }
+                }
             }
 
             is StreamChunk.ReasoningDelta -> {
@@ -142,24 +149,30 @@ class StreamChunkHandler(private val model: Model? = null) {
 
             is StreamChunk.ReasoningEnd -> {
                 val index = reasoningPartIndexes.remove(chunk.id)
-                if (index == null || parts.getOrNull(index) !is UIMessagePart.Reasoning) this
-                else copy(parts = parts.toMutableList().apply {
-                    val reasoning = get(index) as UIMessagePart.Reasoning
-                    set(index, reasoning.copy(
-                        finishedAt = Clock.System.now(),
-                        metadata = chunk.metadata ?: reasoning.metadata,
-                    ))
-                })
+                if (index == null || parts.getOrNull(index) !is UIMessagePart.Reasoning) {
+                    this
+                } else {
+                    copy(parts = parts.toMutableList().apply {
+                        val reasoning = get(index) as UIMessagePart.Reasoning
+                        set(index, reasoning.copy(
+                            finishedAt = Clock.System.now(),
+                            metadata = chunk.metadata ?: reasoning.metadata,
+                        ))
+                    })
+                }
             }
 
             is StreamChunk.ToolCallStart -> {
-                if (parts.any { it is UIMessagePart.Tool && it.toolCallId == chunk.id }) this
-                else copy(parts = parts + UIMessagePart.Tool(
-                    toolCallId = chunk.id,
-                    toolName = chunk.toolName,
-                    input = "",
-                    metadata = chunk.metadata,
-                ))
+                if (parts.any { it is UIMessagePart.Tool && it.toolCallId == chunk.id }) {
+                    this
+                } else {
+                    copy(parts = parts + UIMessagePart.Tool(
+                        toolCallId = chunk.id,
+                        toolName = chunk.toolName,
+                        input = "",
+                        metadata = chunk.metadata,
+                    ))
+                }
             }
 
             is StreamChunk.ToolCallDelta -> copy(parts = parts.map { part ->
@@ -170,10 +183,19 @@ class StreamChunkHandler(private val model: Model? = null) {
                         input = part.input + chunk.inputDelta,
                         metadata = chunk.metadata ?: part.metadata,
                     )
-                } else part
+                } else {
+                    part
+                }
             })
 
             is StreamChunk.ToolCallEnd -> this
+            is StreamChunk.ToolCallOutput -> copy(parts = parts.map { part ->
+                if (part is UIMessagePart.Tool && part.toolCallId == chunk.id) {
+                    part.copy(output = listOf(UIMessagePart.Text(chunk.output)))
+                } else {
+                    part
+                }
+            })
             is StreamChunk.ServerToolStart -> {
                 val index = parts.indexOfFirst {
                     it is UIMessagePart.ServerTool && it.toolCallId == chunk.id
@@ -239,11 +261,14 @@ class StreamChunkHandler(private val model: Model? = null) {
                 }
             }
             is StreamChunk.ImageStart -> {
-                if (chunk.id in imagePartIndexes) this
-                else copy(parts = parts + UIMessagePart.Image(
-                    url = "data:${chunk.mimeType};base64,",
-                    metadata = chunk.metadata,
-                )).also { imagePartIndexes[chunk.id] = parts.size }
+                if (chunk.id in imagePartIndexes) {
+                    this
+                } else {
+                    copy(parts = parts + UIMessagePart.Image(
+                        url = "data:${chunk.mimeType};base64,",
+                        metadata = chunk.metadata,
+                    )).also { imagePartIndexes[chunk.id] = parts.size }
+                }
             }
 
             is StreamChunk.ImageDelta -> {
@@ -424,7 +449,9 @@ private fun UIMessage.appendMessage(delta: UIMessage): UIMessage {
                                 status = deltaPart.status,
                                 metadata = mergeMetadata(part.metadata, deltaPart.metadata),
                             )
-                        } else part
+                        } else {
+                            part
+                        }
                     }
                 }
             }

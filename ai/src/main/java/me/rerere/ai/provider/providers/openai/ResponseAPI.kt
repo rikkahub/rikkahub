@@ -11,7 +11,9 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonArrayBuilder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -32,18 +34,18 @@ import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
-import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.provider.stream.SseEvent
+import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.providers.PartGroup
 import me.rerere.ai.provider.providers.groupPartsByToolBoundary
+import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.registry.ModelRegistry
-import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.OpenAIReasoningMetadata
 import me.rerere.ai.ui.ReasoningType
 import me.rerere.ai.ui.ServerToolMetadata
 import me.rerere.ai.ui.ServerToolProtocol
 import me.rerere.ai.ui.ServerToolStatus
+import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.metadataAs
@@ -230,7 +232,8 @@ class ResponseAPI(
                 val parts = messages.first { it.role == MessageRole.SYSTEM }.parts
                 put(
                     "instructions",
-                    parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text })
+                    parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+                )
             }
 
             // messages
@@ -311,7 +314,7 @@ class ResponseAPI(
                         part is UIMessagePart.Reasoning &&
                             part.metadataAs<OpenAIReasoningMetadata>()?.encryptedContent != null
                     }
-                )
+                    )
             }
             .forEach { message ->
                 if (message.role == MessageRole.ASSISTANT) {
@@ -489,9 +492,13 @@ class ResponseAPI(
             put("id", tool.toolCallId)
             put("status", tool.status.toOpenAIStatus())
             tool.input?.let { input ->
-                if (tool.toolName.removeSuffix("_call") == "web_search") put("action", input)
-                else if (input is JsonObject) input.forEach { (key, value) -> put(key, value) }
-                else put("input", input)
+                if (tool.toolName.removeSuffix("_call") == "web_search") {
+                    put("action", input)
+                } else if (input is JsonObject) {
+                    input.forEach { (key, value) -> put(key, value) }
+                } else {
+                    put("input", input)
+                }
             }
             tool.output?.let { put("output", it) }
         })
@@ -617,6 +624,16 @@ class ResponseAPI(
                     )
                 }
 
+                // 部分兼容网关会在服务端执行函数工具，并把结果作为 function_call_output 一起返回
+                "function_call_output" -> {
+                    val callId = output["call_id"]?.jsonPrimitive?.content ?: error("call_id not found")
+                    val index = parts.indexOfLast { it is UIMessagePart.Tool && it.toolCallId == callId }
+                    if (index >= 0) {
+                        val tool = parts[index] as UIMessagePart.Tool
+                        parts[index] = tool.copy(output = listOf(UIMessagePart.Text(output.functionCallOutputText())))
+                    }
+                }
+
                 "message" -> {
                     val content = output["content"]?.jsonArray ?: error("content not found")
                     content.map { it.jsonObject }.forEach { part ->
@@ -660,10 +677,22 @@ class ResponseAPI(
             promptTokens = jsonObject["input_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
             completionTokens = jsonObject["output_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
             totalTokens = jsonObject["total_tokens"]?.jsonPrimitive?.intOrNull ?: 0,
-            cachedTokens = jsonObject["input_tokens_details"]?.jsonObjectOrNull?.get("cached_tokens")?.jsonPrimitive?.intOrNull
+            cachedTokens =
+            jsonObject["input_tokens_details"]?.jsonObjectOrNull?.get("cached_tokens")?.jsonPrimitive?.intOrNull
                 ?: 0
         )
     }
+}
+
+// function_call_output.output 可以是字符串，也可以是 input_text 等内容数组
+internal fun JsonObject.functionCallOutputText(): String = when (val output = get("output")) {
+    null, is JsonNull -> ""
+    is JsonPrimitive -> output.content
+    is JsonArray -> output.mapNotNull { item ->
+        item.jsonObjectOrNull?.takeIf { it["type"]?.jsonPrimitive?.contentOrNull == "input_text" }
+            ?.get("text")?.jsonPrimitive?.contentOrNull
+    }.takeIf { it.isNotEmpty() }?.joinToString("\n") ?: output.toString()
+    else -> output.toString()
 }
 
 internal fun isOpenAIServerToolCall(type: String): Boolean =

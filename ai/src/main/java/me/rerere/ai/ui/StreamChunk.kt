@@ -78,6 +78,14 @@ sealed class StreamChunk {
     @SerialName("tool_call_end")
     data class ToolCallEnd(val id: String) : StreamChunk()
 
+    /** Result of a tool call that the provider already executed server-side; the client must not run it again. */
+    @Serializable
+    @SerialName("tool_call_output")
+    data class ToolCallOutput(
+        val id: String,
+        val output: String,
+    ) : StreamChunk()
+
     @Serializable
     @SerialName("server_tool_start")
     data class ServerToolStart(
