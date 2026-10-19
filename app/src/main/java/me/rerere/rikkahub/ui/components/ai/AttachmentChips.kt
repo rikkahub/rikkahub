@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,8 +30,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
@@ -42,8 +45,11 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Files02
 import me.rerere.hugeicons.stroke.MusicNote03
+import me.rerere.hugeicons.stroke.PaintBoard
 import me.rerere.hugeicons.stroke.Video01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
 import me.rerere.ui.sketch.SketchDialog
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import org.koin.compose.koinInject
@@ -95,6 +101,31 @@ internal fun MediaFileInputRow(
         )
     }
 
+    // 点开预览时从哪张图片开始，非空时显示预览；预览里可以切到画板在当前图片上画
+    var previewing by remember { mutableStateOf<UIMessagePart.Image?>(null) }
+    previewing?.let { start ->
+        val images = state.messageContent.filterIsInstance<UIMessagePart.Image>()
+        ImagePreviewDialog(
+            images = images.map { it.url },
+            initialPage = images.indexOf(start).coerceAtLeast(0),
+            onDismissRequest = { previewing = null },
+            actions = { page ->
+                IconButton(
+                    onClick = {
+                        previewing = null
+                        drawingOn = images.getOrNull(page)
+                    }
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.PaintBoard,
+                        contentDescription = stringResource(R.string.sketch_draw_on_image),
+                        tint = Color.White,
+                    )
+                }
+            },
+        )
+    }
+
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier
@@ -127,7 +158,7 @@ internal fun MediaFileInputRow(
                             }
                         },
                         onRemove = { removePart(part, part.url) },
-                        onClick = { drawingOn = part },
+                        onClick = { previewing = part },
                     )
                 }
 
