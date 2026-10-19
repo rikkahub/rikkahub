@@ -13,7 +13,6 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.UsageWindow
 import me.rerere.ai.provider.providers.openai.ResponseAPI
-import me.rerere.ai.provider.providers.openai.ResponseProviderCapabilities
 import me.rerere.ai.provider.supportsQuota
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.util.json
@@ -28,13 +27,11 @@ import kotlin.time.Instant
 class GrokProviderTest {
     private val api = ResponseAPI(OkHttpClient())
 
-    private fun grokBody(model: Model, level: ReasoningLevel = ReasoningLevel.AUTO): JsonObject = grokRequestBody(
-        api.buildRequestBody(
-            capabilities = ResponseProviderCapabilities(supportsReasoningSummary = false),
-            messages = listOf(UIMessage.system("Be brief."), UIMessage.user("hello")),
-            params = TextGenerationParams(model = model, reasoningLevel = level),
-            stream = true,
-        )
+    private fun grokBody(model: Model, level: ReasoningLevel = ReasoningLevel.AUTO): JsonObject = api.buildRequestBody(
+        capabilities = GROK_CAPABILITIES,
+        messages = listOf(UIMessage.system("Be brief."), UIMessage.user("hello")),
+        params = TextGenerationParams(model = model, reasoningLevel = level),
+        stream = true,
     )
 
     private fun json(text: String) = json.parseToJsonElement(text).jsonObject
@@ -80,7 +77,9 @@ class GrokProviderTest {
                     {"model":"grok-imagine-image"}
                 ]}"""
             ),
-            apiCatalog = json("""{"data":[{"id":"grok-4.3"},{"id":"grok-4.20-0309-non-reasoning"},{"id":"grok-tts"}]}"""),
+            apiCatalog = json(
+                """{"data":[{"id":"grok-4.3"},{"id":"grok-4.20-0309-non-reasoning"},{"id":"grok-tts"}]}"""
+            ),
         )
 
         assertEquals(listOf("grok-4.3", "grok-build", "grok-4.20-0309-non-reasoning"), models.map { it.modelId })
@@ -117,7 +116,11 @@ class GrokProviderTest {
             """{"config":{"currentPeriod":{"start":"2026-10-13T00:00:00Z","end":"2026-10-20T00:00:00Z","type":"WEEKLY"}}}"""
         )
 
-        assertEquals(0.0, parseGrokWeeklyUsage(body, now = Instant.parse("2026-10-14T00:00:00Z"))!!.windows.single().usedPercent, 0.0)
+        assertEquals(
+            0.0,
+            parseGrokWeeklyUsage(body, now = Instant.parse("2026-10-14T00:00:00Z"))!!.windows.single().usedPercent,
+            0.0
+        )
         assertNull(parseGrokWeeklyUsage(body, now = Instant.parse("2026-10-21T00:00:00Z")))
         assertNull(parseGrokWeeklyUsage(json("""{"config":{"monthlyLimit":{"val":100}}}""")))
     }
@@ -145,7 +148,9 @@ class GrokProviderTest {
 
     @Test
     fun `grok setting round trips with its credential`() {
-        val setting = ProviderSetting.Grok(credential = OAuthCredential(accessToken = "a", refreshToken = "r", accountId = "sub"))
+        val setting = ProviderSetting.Grok(
+            credential = OAuthCredential(accessToken = "a", refreshToken = "r", accountId = "sub")
+        )
 
         val encoded = json.encodeToString(ProviderSetting.serializer(), setting)
         val decoded = json.decodeFromString(ProviderSetting.serializer(), encoded)

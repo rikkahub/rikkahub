@@ -9,6 +9,7 @@ import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -56,7 +57,7 @@ class QuotaQueryRunnerTest {
         )
         var keys = 0
 
-        val quota = client("""{"data":{"total":12.5}}""").runQuotaQuery(setting, query, setting.baseUrl) {
+        val quota = client("""{"data":{"total":12.5}}""").runQuotaQuery(setting.copy(quotaQuery = query)) {
             keys++
             "sk-$keys"
         }
@@ -75,7 +76,7 @@ class QuotaQueryRunnerTest {
         val setting = ProviderSetting.Claude()
         val query = setting.quotaQuery.copy(enabled = true, url = "https://x.example.com/me", resultPath = "plan")
 
-        val quota = client("""{"plan":"unlimited"}""").runQuotaQuery(setting, query, setting.baseUrl) { "key" }
+        val quota = client("""{"plan":"unlimited"}""").runQuotaQuery(setting.copy(quotaQuery = query)) { "key" }
 
         assertEquals(ProviderQuota.Balance("unlimited"), quota)
         assertEquals("key", captured!!.header("x-api-key"))
@@ -83,10 +84,9 @@ class QuotaQueryRunnerTest {
 
     @Test
     fun `unsuccessful response fails with status and body`() = runTest {
-        val setting = ProviderSetting.OpenAI()
+        val setting = ProviderSetting.OpenAI(quotaQuery = QuotaQuery(enabled = true))
         val error = runCatching {
-            client("""{"error":"denied"}""", code = 401)
-                .runQuotaQuery(setting, setting.quotaQuery, setting.baseUrl) { "key" }
+            client("""{"error":"denied"}""", code = 401).runQuotaQuery(setting) { "key" }
         }.exceptionOrNull()
 
         assertTrue(error?.message.orEmpty().contains("401"))
@@ -102,10 +102,10 @@ class QuotaQueryRunnerTest {
     }
 
     @Test
-    fun `quota query is only available on api key providers`() {
-        val query = QuotaQuery(enabled = true, url = "https://x.example.com")
+    fun `disabled query sends no request`() = runTest {
+        val quota = client("{}").runQuotaQuery(ProviderSetting.OpenAI()) { "key" }
 
-        assertEquals(query, ProviderSetting.Google().withQuotaQuery(query).quotaQueryOrNull)
-        assertEquals(null, ProviderSetting.ChatGPT().withQuotaQuery(query).quotaQueryOrNull)
+        assertNull(quota)
+        assertNull(captured)
     }
 }

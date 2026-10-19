@@ -90,12 +90,10 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
     }
     private val interactionsAPI = InteractionsAPI(client = client, keyRoulette = keyRoulette)
 
-    override suspend fun getQuota(providerSetting: ProviderSetting.Google): ProviderQuota? {
-        if (!providerSetting.quotaQuery.enabled) return null
-        return client.runQuotaQuery(providerSetting, providerSetting.quotaQuery, providerSetting.baseUrl) {
+    override suspend fun getQuota(providerSetting: ProviderSetting.Google): ProviderQuota? =
+        client.runQuotaQuery(providerSetting) {
             keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())
         }
-    }
 
     // Interactions API 目前只有 Gemini Developer API 提供，Vertex AI 仍走 generateContent
     private fun ProviderSetting.Google.usesInteractionsApi() = useInteractionsApi && !vertexAI

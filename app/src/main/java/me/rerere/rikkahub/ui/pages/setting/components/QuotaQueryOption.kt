@@ -29,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.QuotaQuery
-import me.rerere.ai.provider.quotaQueryOrNull
 import me.rerere.ai.provider.renderQuotaTemplate
 import me.rerere.common.http.isJsonExprValid
 import me.rerere.rikkahub.R
@@ -41,13 +40,13 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 /** 自定义额度查询的设置项，只给 API Key 类提供商用 */
 @Composable
 fun SettingProviderQuotaQuery(
-    provider: ProviderSetting,
-    query: QuotaQuery,
+    provider: ProviderSetting.ApiKey,
     modifier: Modifier = Modifier,
     // 标题下方的说明，用来放查到的额度
     supportingContent: (@Composable () -> Unit)? = null,
     onEdit: (QuotaQuery) -> Unit,
 ) {
+    val query = provider.quotaQuery
     var expand by remember { mutableStateOf(false) }
     val codeStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = JetbrainsMono)
     CardGroup(modifier = modifier) {
@@ -149,9 +148,8 @@ fun SettingProviderQuotaQuery(
                         }
                         TextButton(
                             onClick = {
-                                val default = DEFAULT_PROVIDERS.find { it.id == provider.id }?.quotaQueryOrNull
-                                    ?: provider.defaultQuotaQuery()
-                                onEdit(default.copy())
+                                val builtIn = DEFAULT_PROVIDERS.find { it.id == provider.id } as? ProviderSetting.ApiKey
+                                onEdit(builtIn?.quotaQuery ?: provider.defaultQuotaQuery())
                             },
                         ) {
                             Text(stringResource(R.string.setting_model_page_reset_to_default))
@@ -167,11 +165,10 @@ private fun List<CustomHeader>.replaced(index: Int, header: CustomHeader): List<
     toMutableList().apply { set(index, header) }
 
 // 鉴权头按类型不同，取各类型的默认配置
-private fun ProviderSetting.defaultQuotaQuery(): QuotaQuery = when (this) {
+private fun ProviderSetting.ApiKey.defaultQuotaQuery(): QuotaQuery = when (this) {
     is ProviderSetting.OpenAI -> ProviderSetting.OpenAI().quotaQuery
     is ProviderSetting.Google -> ProviderSetting.Google().quotaQuery
     is ProviderSetting.Claude -> ProviderSetting.Claude().quotaQuery
-    is ProviderSetting.Account -> QuotaQuery()
 }
 
 // 用示例值代入变量后能解析成 http(s) 地址

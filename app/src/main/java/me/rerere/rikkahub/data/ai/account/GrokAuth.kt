@@ -43,13 +43,10 @@ internal object GrokAuth {
     ): OAuthCredential {
         val accessClaims = decodeJwtPayload(token.accessToken)
         val idClaims = token.idToken?.let(::decodeJwtPayload)
-        val expiresAt = token.expiresIn?.takeIf { it > 0 }?.let { now + it * 1000 }
-            ?: accessClaims?.claimLong("exp")?.let { it * 1000 }
-            ?: 0L
         return OAuthCredential(
             accessToken = token.accessToken,
             refreshToken = token.refreshToken ?: previous?.refreshToken,
-            expiresAt = expiresAt,
+            expiresAt = token.expiresAtMillis(accessClaims, now),
             accountId = accessClaims?.claimString("sub") ?: idClaims?.claimString("sub") ?: previous?.accountId,
             email = idClaims?.claimString("email") ?: accessClaims?.claimString("email") ?: previous?.email,
             plan = previous?.plan,

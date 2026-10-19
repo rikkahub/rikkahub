@@ -19,10 +19,10 @@ import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.provider.AccountCredentialProvider
 import me.rerere.ai.provider.OAuthCredential
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.common.http.await
 import me.rerere.oauth.CustomTabsOAuthAuthorizationLauncher
 import me.rerere.oauth.OAuthHttpClient
 import me.rerere.oauth.OAuthLoopbackCallbackServer
-import me.rerere.common.http.await
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.utils.JsonInstant
@@ -107,15 +107,21 @@ class ProviderAccountManager(
     }
 
     /**
-     * 在 [appScope] 里执行，调用方被取消（停止生成、关掉额度界面）时打断不了已经发出的刷新：
+     * 需要刷新时在 [appScope] 里执行，调用方被取消（停止生成、关掉额度界面）时打断不了已经发出的刷新：
      * 服务端一收到请求就会轮换 refresh token，新的没存下来就只能重新登录。
      */
     override suspend fun getCredential(
         setting: ProviderSetting.Account,
         rejectedAccessToken: String?,
-    ): OAuthCredential = appScope.async(Dispatchers.IO) {
-        refreshIfNeeded(setting, rejectedAccessToken)
-    }.await()
+    ): OAuthCredential {
+        // 绝大多数请求的 token 都还有效，直接返回，不用切线程排队拿锁
+        findAccount(setting.id)?.credential
+            ?.takeUnless { it.needsRefresh(rejectedAccessToken) }
+            ?.let { return it }
+        return appScope.async(Dispatchers.IO) {
+            refreshIfNeeded(setting, rejectedAccessToken)
+        }.await()
+    }
 
     /**
      * 按提供商串行刷新。拿到锁后重新读设置：并发请求可能已经刷新过，refresh token 只能用一次。
@@ -128,11 +134,7 @@ class ProviderAccountManager(
         return lock.withLock {
             val latest = findAccount(setting.id) ?: setting
             val credential = latest.credential ?: error("${latest.name}: not signed in")
-            val rejected =
-                rejectedAccessToken != null && rejectedAccessToken == credential.accessToken
-            val expiring = credential.expiresAt > 0 &&
-                    System.currentTimeMillis() >= credential.expiresAt - TOKEN_REFRESH_LEEWAY_MS
-            if (!rejected && !expiring) return@withLock credential
+            if (!credential.needsRefresh(rejectedAccessToken)) return@withLock credential
 
             val refreshToken = credential.refreshToken
                 ?: error("${latest.name}: session expired, please sign in again")
@@ -244,6 +246,11 @@ class ProviderAccountManager(
             )
         }
     }
+
+    // 刚被服务端拒绝，或者快过期了
+    private fun OAuthCredential.needsRefresh(rejectedAccessToken: String?): Boolean =
+        accessToken == rejectedAccessToken ||
+            (expiresAt > 0 && System.currentTimeMillis() >= expiresAt - TOKEN_REFRESH_LEEWAY_MS)
 
     private fun findAccount(providerId: Uuid): ProviderSetting.Account? =
         settingsStore.settingsFlow.value.providers

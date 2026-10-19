@@ -12,7 +12,6 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.UsageWindow
 import me.rerere.ai.provider.providers.openai.ResponseAPI
-import me.rerere.ai.provider.providers.openai.ResponseProviderCapabilities
 import me.rerere.ai.provider.supportsBuiltInSearch
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.util.json
@@ -30,11 +29,8 @@ class ChatGPTProviderTest {
     private fun codexBody(
         messages: List<UIMessage>,
         params: TextGenerationParams,
-        promptCacheKey: String? = "session-1",
-    ) = codexRequestBody(
-        body = api.buildRequestBody(ResponseProviderCapabilities(), messages, params, stream = false),
-        promptCacheKey = promptCacheKey,
-    )
+        sessionId: String? = "session-1",
+    ) = api.buildRequestBody(CODEX_CAPABILITIES, messages, params.copy(sessionId = sessionId), stream = true)
 
     @Test
     fun `system prompt becomes leading developer message instead of instructions`() {
@@ -46,11 +42,8 @@ class ChatGPTProviderTest {
         assertFalse("instructions" in body)
         val input = body["input"]!!.jsonArray
         val developer = input[0].jsonObject
-        assertEquals("message", developer["type"]!!.jsonPrimitive.content)
         assertEquals("developer", developer["role"]!!.jsonPrimitive.content)
-        val content = developer["content"]!!.jsonArray.single().jsonObject
-        assertEquals("input_text", content["type"]!!.jsonPrimitive.content)
-        assertEquals("Be brief.", content["text"]!!.jsonPrimitive.content)
+        assertEquals("Be brief.", developer["content"]!!.jsonPrimitive.content)
         assertEquals("user", input[1].jsonObject["role"]!!.jsonPrimitive.content)
     }
 
@@ -67,7 +60,7 @@ class ChatGPTProviderTest {
     }
 
     @Test
-    fun `forces streaming without storage and drops unsupported parameters`() {
+    fun `streams without storage and drops unsupported parameters`() {
         val body = codexBody(
             messages = listOf(UIMessage.user("hello")),
             // 非推理模型名，ResponseAPI 会带上 temperature/top_p
@@ -93,7 +86,7 @@ class ChatGPTProviderTest {
         val body = codexBody(
             messages = listOf(UIMessage.user("hello")),
             params = TextGenerationParams(model = Model(modelId = "gpt-5.5")),
-            promptCacheKey = "conversation-42",
+            sessionId = "conversation-42",
         )
 
         assertEquals(
@@ -110,7 +103,7 @@ class ChatGPTProviderTest {
             params = TextGenerationParams(
                 model = Model(modelId = "gpt-5.5", abilities = listOf(ModelAbility.REASONING)),
             ),
-            promptCacheKey = null,
+            sessionId = null,
         )
 
         assertEquals(1, body["include"]!!.jsonArray.size)
@@ -215,8 +208,16 @@ class ChatGPTProviderTest {
         assertEquals(
             ProviderQuota.UsageLimits(
                 windows = listOf(
-                    UsageWindow(usedPercent = 42.0, windowMinutes = 300, resetsAt = Instant.fromEpochSeconds(1760000000)),
-                    UsageWindow(usedPercent = 7.0, windowMinutes = 10080, resetsAt = Instant.fromEpochSeconds(1760500000)),
+                    UsageWindow(
+                        usedPercent = 42.0,
+                        windowMinutes = 300,
+                        resetsAt = Instant.fromEpochSeconds(1760000000)
+                    ),
+                    UsageWindow(
+                        usedPercent = 7.0,
+                        windowMinutes = 10080,
+                        resetsAt = Instant.fromEpochSeconds(1760500000)
+                    ),
                 ),
                 limitReached = false,
             ),

@@ -35,9 +35,7 @@ import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.ProviderQuota
 import me.rerere.ai.provider.UsageWindow
-import me.rerere.ai.provider.quotaQueryOrNull
 import me.rerere.ai.provider.supportsQuota
-import me.rerere.ai.provider.withQuotaQuery
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.account.AccountLoginStatus
 import me.rerere.rikkahub.data.ai.account.ChatGPTAuth
@@ -55,6 +53,7 @@ import me.rerere.hugeicons.stroke.Refresh03
 import me.rerere.hugeicons.stroke.UserCircle
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
+import me.rerere.rikkahub.ui.components.ai.longLabel
 import me.rerere.rikkahub.ui.components.ai.rememberProviderQuota
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
@@ -77,6 +76,7 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlin.math.roundToInt
 import kotlin.reflect.KClass
+import kotlin.time.toJavaInstant
 
 @Composable
 fun ProviderConfigure(
@@ -137,22 +137,18 @@ fun ProviderConfigure(
 fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSetting {
     if (this::class == type) return this
 
-    val apiKey = when (this) {
-        is ProviderSetting.OpenAI -> this.apiKey
-        is ProviderSetting.Google -> this.apiKey
-        is ProviderSetting.Claude -> this.apiKey
-        // 账号凭据不能带到可以自填地址的类型上
-        is ProviderSetting.Account -> ""
-    }
+    // 账号凭据不能带到可以自填地址的类型上，从账号类转过来时 key、地址和额度查询都用目标类型的默认值
+    val source = this as? ProviderSetting.ApiKey
+    val apiKey = source?.apiKey.orEmpty()
     val targetDefaultBaseUrl = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI().baseUrl
         ProviderSetting.Google::class -> ProviderSetting.Google().baseUrl
         ProviderSetting.Claude::class -> ProviderSetting.Claude().baseUrl
         else -> error("Unsupported provider type: $type")
     }
-    val convertedBaseUrl = baseUrlOrNull()?.convertToTargetBaseUrl(targetDefaultBaseUrl) ?: targetDefaultBaseUrl
+    val convertedBaseUrl = source?.baseUrl?.convertToTargetBaseUrl(targetDefaultBaseUrl) ?: targetDefaultBaseUrl
 
-    val converted = when (type) {
+    val converted: ProviderSetting.ApiKey = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
             customHeaders = this.customHeaders, builtIn = this.builtIn,
@@ -173,37 +169,27 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         )
         else -> error("Unsupported provider type: $type")
     }
-    // 沿用用户配的额度查询；从账号类转过来时用目标类型的默认值
-    return quotaQueryOrNull?.let(converted::withQuotaQuery) ?: converted
+    // 沿用用户配的额度查询
+    return source?.let { converted.withQuotaQuery(it.quotaQuery) } ?: converted
 }
 
-// 账号型提供商的地址写死在代码里，没有 baseUrl
-private fun ProviderSetting.baseUrlOrNull(): String? = when (this) {
-    is ProviderSetting.OpenAI -> this.baseUrl
-    is ProviderSetting.Google -> this.baseUrl
-    is ProviderSetting.Claude -> this.baseUrl
-    is ProviderSetting.Account -> null
-}
-
-internal fun ProviderSetting.defaultBaseUrlForReset(): String {
+internal fun ProviderSetting.ApiKey.defaultBaseUrlForReset(): String {
     val defaultProvider = DEFAULT_PROVIDERS.find { it.id == id }
-    if (defaultProvider != null && defaultProvider::class == this::class) {
-        defaultProvider.baseUrlOrNull()?.let { return it }
+    if (defaultProvider is ProviderSetting.ApiKey && defaultProvider::class == this::class) {
+        return defaultProvider.baseUrl
     }
     return when (this) {
         is ProviderSetting.OpenAI -> ProviderSetting.OpenAI().baseUrl
         is ProviderSetting.Google -> ProviderSetting.Google().baseUrl
         is ProviderSetting.Claude -> ProviderSetting.Claude().baseUrl
-        is ProviderSetting.Account -> ""
     }
 }
 
-internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean =
-    (baseUrlOrNull() ?: "") == defaultBaseUrlForReset()
+internal fun ProviderSetting.ApiKey.isUsingDefaultBaseUrl(): Boolean = baseUrl == defaultBaseUrlForReset()
 
 // 地址不是默认值时，输入框右侧出现的恢复默认按钮
 private fun resetBaseUrlButton(
-    provider: ProviderSetting,
+    provider: ProviderSetting.ApiKey,
     onReset: () -> Unit,
 ): (@Composable () -> Unit)? {
     if (provider.isUsingDefaultBaseUrl()) return null
@@ -462,25 +448,6 @@ private fun ProviderConfigureAccount(
     )
 }
 
-// 5 小时 -> 5-hour limit，一周 -> Weekly limit
-@Composable
-private fun UsageWindow.longLabel(): String {
-    val minutes = windowMinutes ?: return stringResource(R.string.setting_provider_page_usage_limit)
-    return when {
-        minutes == WEEK_MINUTES -> stringResource(R.string.setting_provider_page_usage_limit_weekly)
-        minutes == DAY_MINUTES -> stringResource(R.string.setting_provider_page_usage_limit_daily)
-        minutes % WEEK_MINUTES == 0 ->
-            stringResource(R.string.setting_provider_page_usage_limit_weeks, minutes / WEEK_MINUTES)
-        minutes % DAY_MINUTES == 0 ->
-            stringResource(R.string.setting_provider_page_usage_limit_days, minutes / DAY_MINUTES)
-        minutes % 60 == 0 -> stringResource(R.string.setting_provider_page_usage_limit_hours, minutes / 60)
-        else -> stringResource(R.string.setting_provider_page_usage_limit_minutes, minutes)
-    }
-}
-
-private const val DAY_MINUTES = 24 * 60
-private const val WEEK_MINUTES = 7 * DAY_MINUTES
-
 // 订阅用量：每个窗口一条进度和重置时间
 @Composable
 private fun AccountUsage(provider: ProviderSetting.Account) {
@@ -515,10 +482,7 @@ private fun AccountUsage(provider: ProviderSetting.Account) {
                     headlineContent = { Text(window.longLabel()) },
                     supportingContent = window.resetsAt?.let { resetsAt ->
                         {
-                            val time = LocalDateTime.ofInstant(
-                                java.time.Instant.ofEpochMilli(resetsAt.toEpochMilliseconds()),
-                                ZoneId.systemDefault(),
-                            )
+                            val time = LocalDateTime.ofInstant(resetsAt.toJavaInstant(), ZoneId.systemDefault())
                             Text(stringResource(R.string.setting_provider_page_usage_resets, time.toMessageTimeString()))
                         }
                     },

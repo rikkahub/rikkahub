@@ -4,7 +4,7 @@
 
 提供商按凭据的来源分成两类：
 
-- **API Key 类**：`ProviderSetting.OpenAI` / `Google` / `Claude`。凭据（API Key、Vertex 服务账号）由用户填写，
+- **API Key 类**：`ProviderSetting.ApiKey` 的子类，即 `OpenAI` / `Google` / `Claude`。凭据（API Key、Vertex 服务账号）由用户填写，
   请求地址 `baseUrl` 也由用户填写，可以指向官方接口或任意兼容的中转。
 - **账号类**：`ProviderSetting.Account` 的子类，目前有 `ProviderSetting.ChatGPT` 和 `ProviderSetting.Grok`。凭据只能通过账号登录（OAuth）获得，
   请求地址写死在代码里。
@@ -17,6 +17,7 @@ ai 模块不接触设置存储，也不发起授权流程。
 | 概念                         | 位置                                     | 说明                                                                                  |
 |----------------------------|----------------------------------------|-------------------------------------------------------------------------------------|
 | `ProviderSetting`          | `provider/ProviderSetting.kt`          | 一个提供商的完整配置，随设置持久化。按**协议**区分类型，同一协议的不同厂商（官方、各家中转）是同一类型的不同实例                       |
+| `ProviderSetting.ApiKey`   | 同上                                     | API Key 类提供商的公共父类，持有 `apiKey`、`baseUrl` 和 `quotaQuery`                                     |
 | `ProviderSetting.Account`  | 同上                                     | 账号类提供商的公共父类，持有 `credential: OAuthCredential?`（`null` 表示未登录），只能通过 `withCredential` 替换 |
 | `OAuthCredential`          | 同上                                     | 登录得到的凭据，见下表。`toString()` 会遮住 token                                                 |
 | `AccountCredentialProvider` | `provider/AccountCredentialProvider.kt` | 由 app 层实现、经 `ProviderManager` 构造参数注入。Provider 每次发请求前向它要可用的凭据                         |
@@ -148,7 +149,8 @@ sequenceDiagram
 ```
 
 - 401 重试由 OkHttp 的 `Authenticator`（`providers/AccountAuth.kt` 的 `AccountTokenAuthenticator`）完成，
-  流式、非流式、模型列表和额度查询请求都覆盖到。各 Provider 通过 `configureAccountAuth` 写鉴权头，重试时用新凭据重写同一组头。
+  流式、非流式、模型列表和额度查询请求都覆盖到。`configureAccountAuth` 写入 `Authorization: Bearer`，各 Provider 只补充自己的额外鉴权头，
+  重试时用新凭据重写同一组头。
   它通过请求上的 tag 认出账号类请求，每个请求最多重试一次。
 - 刷新失败（网络错误、refresh token 失效等）时抛出「请重新登录」的错误，但**不清除凭据**：临时的网络问题不应该把用户登出。
   重新登录会直接覆盖旧凭据。
@@ -168,11 +170,12 @@ sequenceDiagram
 
 #### ChatGPT 的请求约定
 
-地址固定为 `https://chatgpt.com/backend-api/codex`，协议是 Responses API，但和 `api.openai.com` 有几处不同，详见 `ChatGPTProvider`：
+地址固定为 `https://chatgpt.com/backend-api/codex`，协议是 Responses API，但和 `api.openai.com` 有几处不同，详见 `ChatGPTProvider`。
+请求体的差异用 `CODEX_CAPABILITIES`（`ResponseProviderCapabilities`）表达，由 `ResponseAPI` 直接生成：
 
 - 鉴权头：`Authorization: Bearer <accessToken>`、`ChatGPT-Account-ID: <accountId>`、`originator: codex_cli_rs`；
 - `POST /responses` 只支持流式，`store` 必须为 false；system 提示以 `developer` 消息放在 `input` 开头，不使用 `instructions`；
-  不接受 `max_output_tokens`、`temperature`、`top_p`；
+  不接受 `max_output_tokens`、`temperature`、`top_p`；总是请求 `reasoning.encrypted_content`，会话 ID 作为 `prompt_cache_key`；
 - `GET /models?client_version=<版本>` 返回 Codex 可用的模型，结果按客户端版本过滤；
 - 订阅用量走 `GET https://chatgpt.com/backend-api/wham/usage`（不在 `/codex` 下），取 `rate_limit` 的
   `primary_window`、`secondary_window`（通常是 5 小时和一周），返回 `ProviderQuota.UsageLimits`；
@@ -183,7 +186,7 @@ sequenceDiagram
 SuperGrok 订阅，参照 can1357/oh-my-pi 的 xai-oauth，详见 `GrokProvider`：
 
 - 对话走 `https://api.x.ai/v1/responses`，鉴权头只有 `Authorization: Bearer <accessToken>`；带 `x-grok-conv-id: <sessionId>` 命中提示缓存；
-- 请求体：system 提示以 `system` 消息放在 `input` 开头；不发 `reasoning.summary`；`reasoning.effort` 只有 low/medium/high，
+- 请求体（`GROK_CAPABILITIES`）：system 提示以 `system` 消息放在 `input` 开头；不发 `reasoning.summary`；`reasoning.effort` 只有 low/medium/high，
   只发给模型目录里声明了推理档位的模型；总是请求 `reasoning.encrypted_content`，`store=false` 时多轮推理靠它接上；
 - 模型目录合并 `https://cli-chat-proxy.grok.com/v1/models-v2`（Grok CLI）和 `https://api.x.ai/v1/models`，两边都有的以前者为准，
   过滤掉图片、语音等非对话模型；
@@ -194,7 +197,7 @@ SuperGrok 订阅，参照 can1357/oh-my-pi 的 xai-oauth，详见 `GrokProvider`
 
 | 模块     | 文件                                                       | 职责                                                                       |
 |--------|----------------------------------------------------------|--------------------------------------------------------------------------|
-| ai     | `provider/ProviderSetting.kt`                            | `OAuthCredential`、`Account`、`ChatGPT`、`Grok`、`supportsBuiltInSearch`       |
+| ai     | `provider/ProviderSetting.kt`                            | `OAuthCredential`、`ApiKey`、`Account`、`ChatGPT`、`Grok`、`supportsBuiltInSearch` |
 | ai     | `provider/AccountCredentialProvider.kt`                  | 凭据接口                                                                     |
 | ai     | `provider/ProviderQuota.kt`、`provider/QuotaQueryRunner.kt` | 额度类型、自定义查询的配置和执行                                                       |
 | ai     | `provider/ProviderManager.kt`                            | 注入 `AccountCredentialProvider`，按类型分发 Provider                              |
@@ -213,9 +216,10 @@ SuperGrok 订阅，参照 can1357/oh-my-pi 的 xai-oauth，详见 `GrokProvider`
 
 1. ai：新增 `ProviderSetting.Account` 的子类（不要加 `baseUrl` 之类可以改变请求地址的字段），实现对应的 `Provider`，
    用 `withAccountAuthenticator` 包一层 client，请求都通过 `configureAccountAuth` 加鉴权（凭据从 `AccountCredentialProvider`
-   获取，401 时自动刷新重试），然后在 `ProviderManager` 中注册。
+   获取，401 时自动刷新重试），然后在 `ProviderManager` 中注册。走 Responses API 的话复用 `ResponseAPI`，
+   请求体的差异加到 `ResponseProviderCapabilities` 上，不要在生成后改写 JSON。
 2. 处理编译器报出的分支：`ProviderManager.getProviderByType`、`ProviderAccountManager` 的登录和刷新分发、
-   `supportsBuiltInSearch`、`supportsQuota`、`ProviderConfigure` 等用穷举 `when` 写的地方都会要求明确处理新类型。
+   `ProviderConfigure` 等用穷举 `when` 写的地方都会要求明确处理新类型。
    有用量接口的话实现 `getQuota`，优先复用 `ProviderQuota` 已有的类型。
 3. app：参照 `ChatGPTAuth`（授权码 + 本地回调）或 `GrokAuth`（设备码）写协议参数，在 `ProviderAccountManager` 里实现登录和刷新，
    在新增提供商的入口加上模板，在 `ProviderConfigure` 里接上通用的 `ProviderConfigureAccount`。

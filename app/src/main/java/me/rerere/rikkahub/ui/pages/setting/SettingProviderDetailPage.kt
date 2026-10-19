@@ -90,9 +90,7 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
-import me.rerere.ai.provider.quotaQueryOrNull
 import me.rerere.ai.provider.supportsQuota
-import me.rerere.ai.provider.withQuotaQuery
 import me.rerere.ai.registry.ModelRegistry
 import me.rerere.ai.ui.UIMessage
 import me.rerere.hugeicons.HugeIcons
@@ -329,15 +327,14 @@ private fun SettingProviderConfigPage(
             )
 
             // 账号类的额度查询写死在 Provider 里，没有这一项
-            internalProvider.quotaQueryOrNull?.let { query ->
+            (internalProvider as? ProviderSetting.ApiKey)?.let { apiKeyProvider ->
                 SettingProviderQuotaQuery(
-                    provider = internalProvider,
-                    query = query,
+                    provider = apiKeyProvider,
                     // 额度按已保存的配置查，没开就不留这一行
                     supportingContent = if (provider.supportsQuota) {
                         { ProviderQuotaText(providerSetting = provider) }
                     } else null,
-                    onEdit = { internalProvider = internalProvider.withQuotaQuery(it) }
+                    onEdit = { internalProvider = apiKeyProvider.withQuotaQuery(it) }
                 )
             }
 

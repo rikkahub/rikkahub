@@ -54,13 +54,10 @@ internal object ChatGPTAuth {
         val idClaims = token.idToken?.let(::decodeJwtPayload)
         val accessClaims = decodeJwtPayload(token.accessToken)
         val authClaims = (idClaims ?: accessClaims)?.get(AUTH_CLAIM) as? JsonObject
-        val expiresAt = token.expiresIn?.takeIf { it > 0 }?.let { now + it * 1000 }
-            ?: accessClaims?.claimLong("exp")?.let { it * 1000 }
-            ?: 0L
         return OAuthCredential(
             accessToken = token.accessToken,
             refreshToken = token.refreshToken ?: previous?.refreshToken,
-            expiresAt = expiresAt,
+            expiresAt = token.expiresAtMillis(accessClaims, now),
             accountId = authClaims?.claimString("chatgpt_account_id") ?: previous?.accountId,
             email = idClaims?.claimString("email")
                 ?: (idClaims?.get(PROFILE_CLAIM) as? JsonObject)?.claimString("email")

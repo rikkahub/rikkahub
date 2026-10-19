@@ -45,8 +45,7 @@ val ProviderSetting.supportsBuiltInSearch: Boolean
         is ProviderSetting.OpenAI -> useResponseApi
         is ProviderSetting.Google -> true
         is ProviderSetting.Claude -> true
-        is ProviderSetting.ChatGPT -> true
-        is ProviderSetting.Grok -> true
+        is ProviderSetting.Account -> true
     }
 
 @Serializable
@@ -58,13 +57,23 @@ sealed class ProviderSetting {
     abstract val customHeaders: List<CustomHeader>
 
     abstract val builtIn: Boolean
-    abstract val description: @Composable() () -> Unit
-    abstract val shortDescription: @Composable() () -> Unit
+    abstract val description:
+        @Composable()
+        () -> Unit
+    abstract val shortDescription:
+        @Composable()
+        () -> Unit
 
-    abstract fun addModel(model: Model): ProviderSetting
-    abstract fun editModel(model: Model): ProviderSetting
-    abstract fun delModel(model: Model): ProviderSetting
-    abstract fun moveMove(from: Int, to: Int): ProviderSetting
+    fun addModel(model: Model): ProviderSetting = copyProvider(models = models + model)
+
+    fun editModel(model: Model): ProviderSetting =
+        copyProvider(models = models.map { if (it.id == model.id) model.copy() else it })
+
+    fun delModel(model: Model): ProviderSetting = copyProvider(models = models.filter { it.id != model.id })
+
+    fun moveMove(from: Int, to: Int): ProviderSetting =
+        copyProvider(models = models.toMutableList().apply { add(to, removeAt(from)) })
+
     abstract fun copyProvider(
         id: Uuid = this.id,
         enabled: Boolean = this.enabled,
@@ -83,39 +92,19 @@ sealed class ProviderSetting {
         override var enabled: Boolean = true,
         override var name: String = "OpenAI",
         override var models: List<Model> = emptyList(),
-        val quotaQuery: QuotaQuery = QuotaQuery(),
+        override val quotaQuery: QuotaQuery = QuotaQuery(),
         override val customHeaders: List<CustomHeader> = emptyList(),
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
-        var apiKey: String = "",
-        var baseUrl: String = "https://api.openai.com/v1",
+        override var apiKey: String = "",
+        override var baseUrl: String = "https://api.openai.com/v1",
         var chatCompletionsPath: String = "/chat/completions",
         var useResponseApi: Boolean = false,
         var includeHistoryReasoning: Boolean = true,
         var responsesPath: String = "/responses",
-    ) : ProviderSetting() {
-        override fun addModel(model: Model): ProviderSetting {
-            return copy(models = models + model)
-        }
-
-        override fun editModel(model: Model): ProviderSetting {
-            return copy(models = models.map { if (it.id == model.id) model.copy() else it })
-        }
-
-        override fun delModel(model: Model): ProviderSetting {
-            return copy(models = models.filter { it.id != model.id })
-        }
-
-        override fun moveMove(
-            from: Int,
-            to: Int
-        ): ProviderSetting {
-            return copy(models = models.toMutableList().apply {
-                val model = removeAt(from)
-                add(to, model)
-            })
-        }
+    ) : ApiKey() {
+        override fun withQuotaQuery(query: QuotaQuery): ApiKey = copy(quotaQuery = query)
 
         override fun copyProvider(
             id: Uuid,
@@ -147,13 +136,14 @@ sealed class ProviderSetting {
         override var enabled: Boolean = true,
         override var name: String = "Google",
         override var models: List<Model> = emptyList(),
-        val quotaQuery: QuotaQuery = QuotaQuery(headers = listOf(CustomHeader("x-goog-api-key", "{{apiKey}}"))),
+        override val quotaQuery: QuotaQuery =
+            QuotaQuery(headers = listOf(CustomHeader("x-goog-api-key", "{{apiKey}}"))),
         override val customHeaders: List<CustomHeader> = emptyList(),
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
-        var apiKey: String = "",
-        var baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
+        override var apiKey: String = "",
+        override var baseUrl: String = "https://generativelanguage.googleapis.com/v1beta",
         var vertexAI: Boolean = false,
         var useServiceAccount: Boolean = false,
         var privateKey: String = "", // only for vertex AI service account
@@ -161,28 +151,8 @@ sealed class ProviderSetting {
         var location: String = "us-central1", // only for vertex AI service account
         var projectId: String = "", // only for vertex AI service account
         var useInteractionsApi: Boolean = false, // ignored when vertex AI is enabled
-    ) : ProviderSetting() {
-        override fun addModel(model: Model): ProviderSetting {
-            return copy(models = models + model)
-        }
-
-        override fun editModel(model: Model): ProviderSetting {
-            return copy(models = models.map { if (it.id == model.id) model.copy() else it })
-        }
-
-        override fun delModel(model: Model): ProviderSetting {
-            return copy(models = models.filter { it.id != model.id })
-        }
-
-        override fun moveMove(
-            from: Int,
-            to: Int
-        ): ProviderSetting {
-            return copy(models = models.toMutableList().apply {
-                val model = removeAt(from)
-                add(to, model)
-            })
-        }
+    ) : ApiKey() {
+        override fun withQuotaQuery(query: QuotaQuery): ApiKey = copy(quotaQuery = query)
 
         override fun copyProvider(
             id: Uuid,
@@ -214,37 +184,17 @@ sealed class ProviderSetting {
         override var enabled: Boolean = true,
         override var name: String = "Claude",
         override var models: List<Model> = emptyList(),
-        val quotaQuery: QuotaQuery = QuotaQuery(headers = listOf(CustomHeader("x-api-key", "{{apiKey}}"))),
+        override val quotaQuery: QuotaQuery = QuotaQuery(headers = listOf(CustomHeader("x-api-key", "{{apiKey}}"))),
         override val customHeaders: List<CustomHeader> = emptyList(),
         @Transient override val builtIn: Boolean = false,
         @Transient override val description: @Composable (() -> Unit) = {},
         @Transient override val shortDescription: @Composable (() -> Unit) = {},
-        var apiKey: String = "",
-        var baseUrl: String = "https://api.anthropic.com/v1",
+        override var apiKey: String = "",
+        override var baseUrl: String = "https://api.anthropic.com/v1",
         var promptCaching: Boolean = false,
         var promptCacheTtl: ClaudePromptCacheTtl = ClaudePromptCacheTtl.FIVE_MINUTES,
-    ) : ProviderSetting() {
-        override fun addModel(model: Model): ProviderSetting {
-            return copy(models = models + model)
-        }
-
-        override fun editModel(model: Model): ProviderSetting {
-            return copy(models = models.map { if (it.id == model.id) model.copy() else it })
-        }
-
-        override fun delModel(model: Model): ProviderSetting {
-            return copy(models = models.filter { it.id != model.id })
-        }
-
-        override fun moveMove(
-            from: Int,
-            to: Int
-        ): ProviderSetting {
-            return copy(models = models.toMutableList().apply {
-                val model = removeAt(from)
-                add(to, model)
-            })
-        }
+    ) : ApiKey() {
+        override fun withQuotaQuery(query: QuotaQuery): ApiKey = copy(quotaQuery = query)
 
         override fun copyProvider(
             id: Uuid,
@@ -267,6 +217,18 @@ sealed class ProviderSetting {
                 shortDescription = shortDescription,
             )
         }
+    }
+
+    /** 用 API Key 鉴权、地址可以自填的提供商 */
+    @Serializable
+    sealed class ApiKey : ProviderSetting() {
+        abstract val apiKey: String
+        abstract val baseUrl: String
+
+        /** 用户自定义的额度查询 */
+        abstract val quotaQuery: QuotaQuery
+
+        abstract fun withQuotaQuery(query: QuotaQuery): ApiKey
     }
 
     /**
@@ -297,28 +259,6 @@ sealed class ProviderSetting {
         override val credential: OAuthCredential? = null,
     ) : Account() {
         override fun withCredential(credential: OAuthCredential?): Account = copy(credential = credential)
-
-        override fun addModel(model: Model): ProviderSetting {
-            return copy(models = models + model)
-        }
-
-        override fun editModel(model: Model): ProviderSetting {
-            return copy(models = models.map { if (it.id == model.id) model.copy() else it })
-        }
-
-        override fun delModel(model: Model): ProviderSetting {
-            return copy(models = models.filter { it.id != model.id })
-        }
-
-        override fun moveMove(
-            from: Int,
-            to: Int
-        ): ProviderSetting {
-            return copy(models = models.toMutableList().apply {
-                val model = removeAt(from)
-                add(to, model)
-            })
-        }
 
         override fun copyProvider(
             id: Uuid,
@@ -357,28 +297,6 @@ sealed class ProviderSetting {
         override val credential: OAuthCredential? = null,
     ) : Account() {
         override fun withCredential(credential: OAuthCredential?): Account = copy(credential = credential)
-
-        override fun addModel(model: Model): ProviderSetting {
-            return copy(models = models + model)
-        }
-
-        override fun editModel(model: Model): ProviderSetting {
-            return copy(models = models.map { if (it.id == model.id) model.copy() else it })
-        }
-
-        override fun delModel(model: Model): ProviderSetting {
-            return copy(models = models.filter { it.id != model.id })
-        }
-
-        override fun moveMove(
-            from: Int,
-            to: Int
-        ): ProviderSetting {
-            return copy(models = models.toMutableList().apply {
-                val model = removeAt(from)
-                add(to, model)
-            })
-        }
 
         override fun copyProvider(
             id: Uuid,

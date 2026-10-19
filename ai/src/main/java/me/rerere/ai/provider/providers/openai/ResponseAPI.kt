@@ -76,7 +76,7 @@ import kotlin.time.Clock
 private const val TAG = "ResponseAPI"
 
 /**
- * Responses API 请求的目标：发往哪里、怎么鉴权，以及该网关对请求体的特殊要求。
+ * Responses API 请求的目标：发往哪里、怎么鉴权，以及该网关对请求体的特殊要求（[capabilities]）。
  *
  * OpenAI 兼容提供商由 [ProviderSetting.OpenAI] 生成；地址写死的账号型提供商各自构造。
  */
@@ -85,7 +85,6 @@ internal class ResponsesEndpoint(
     val capabilities: ResponseProviderCapabilities = ResponseProviderCapabilities(),
     // 构建请求时调用，负责请求头和鉴权；可挂起，以便先刷新 token
     val configureRequest: suspend Request.Builder.() -> Unit,
-    val transformBody: (JsonObject) -> JsonObject = { it },
 )
 
 class ResponseAPI(
@@ -120,13 +119,11 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): TextGenerationResult = withContext(Dispatchers.IO) {
-        val requestBody = endpoint.transformBody(
-            buildRequestBody(
-                capabilities = endpoint.capabilities,
-                messages = messages,
-                params = params,
-                stream = false,
-            )
+        val requestBody = buildRequestBody(
+            capabilities = endpoint.capabilities,
+            messages = messages,
+            params = params,
+            stream = false,
         )
         val request = Request.Builder()
             .url(endpoint.url)
@@ -155,13 +152,11 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<StreamChunk> = callbackFlow {
-        val requestBody = endpoint.transformBody(
-            buildRequestBody(
-                capabilities = endpoint.capabilities,
-                messages = messages,
-                params = params,
-                stream = true,
-            )
+        val requestBody = buildRequestBody(
+            capabilities = endpoint.capabilities,
+            messages = messages,
+            params = params,
+            stream = true,
         )
         val request = Request.Builder()
             .url(endpoint.url)
@@ -236,18 +231,6 @@ class ResponseAPI(
     }.buffer(Channel.UNLIMITED).flowOn(Dispatchers.IO)
 
     internal fun buildRequestBody(
-        providerSetting: ProviderSetting.OpenAI,
-        messages: List<UIMessage>,
-        params: TextGenerationParams,
-        stream: Boolean
-    ): JsonObject = buildRequestBody(
-        capabilities = resolveResponseProviderCapabilities(providerSetting.baseUrl.toHttpUrl().host),
-        messages = messages,
-        params = params,
-        stream = stream,
-    )
-
-    internal fun buildRequestBody(
         capabilities: ResponseProviderCapabilities,
         messages: List<UIMessage>,
         params: TextGenerationParams,
@@ -258,40 +241,50 @@ class ResponseAPI(
             put("stream", stream)
             put("store", false)
 
-            if (isModelAllowTemperature(params.model)) {
-                if (params.temperature != null) put("temperature", params.temperature)
-                if (params.topP != null) put("top_p", params.topP)
+            if (capabilities.supportsSamplingParams) {
+                if (isModelAllowTemperature(params.model)) {
+                    if (params.temperature != null) put("temperature", params.temperature)
+                    if (params.topP != null) put("top_p", params.topP)
+                }
+                if (params.maxTokens != null) put("max_output_tokens", params.maxTokens)
             }
-            if (params.maxTokens != null) put("max_output_tokens", params.maxTokens)
 
             // system instructions
-            if (messages.any { it.role == MessageRole.SYSTEM }) {
-                val parts = messages.first { it.role == MessageRole.SYSTEM }.parts
-                put(
-                    "instructions",
-                    parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
-                )
-            }
+            val systemPrompt = messages.firstOrNull { it.role == MessageRole.SYSTEM }
+                ?.parts?.filterIsInstance<UIMessagePart.Text>()?.joinToString("\n") { it.text }
+            val systemRole = capabilities.systemMessageRole
+            if (systemPrompt != null && systemRole == null) put("instructions", systemPrompt)
 
             // messages
-            put("input", buildMessages(messages))
+            putJsonArray("input") {
+                if (!systemPrompt.isNullOrEmpty() && systemRole != null) {
+                    add(buildJsonObject {
+                        put("role", systemRole)
+                        put("content", systemPrompt)
+                    })
+                }
+                buildMessages(messages).forEach { add(it) }
+            }
 
             // reasoning
-            if (params.model.abilities.contains(ModelAbility.REASONING)) {
-                val level = params.reasoningLevel
-                put("reasoning", buildJsonObject {
+            val reasoningModel = params.model.abilities.contains(ModelAbility.REASONING)
+            if (reasoningModel) {
+                val reasoning = buildJsonObject {
                     if (capabilities.supportsReasoningSummary) {
                         put("summary", "auto")
                     }
-                    if (level != ReasoningLevel.AUTO) {
-                        put("effort", level.effort)
-                    }
-                })
-                if (capabilities.supportEncryptedContent) {
-                    put("include", buildJsonArray {
-                        add("reasoning.encrypted_content")
-                    })
+                    capabilities.reasoningEffort(params.reasoningLevel)?.let { put("effort", it) }
                 }
+                if (reasoning.isNotEmpty()) put("reasoning", reasoning)
+            }
+            if (capabilities.supportEncryptedContent &&
+                (reasoningModel || capabilities.alwaysIncludeEncryptedContent)) {
+                put("include", buildJsonArray {
+                    add("reasoning.encrypted_content")
+                })
+            }
+            if (capabilities.sendPromptCacheKey) {
+                params.sessionId?.let { put("prompt_cache_key", it) }
             }
 
             // tools
@@ -784,7 +777,19 @@ private fun List<UIMessagePart>.isOnlyTextPart(): Boolean {
 
 internal data class ResponseProviderCapabilities(
     val supportsReasoningSummary: Boolean = true,
-    val supportEncryptedContent: Boolean = true
+    val supportEncryptedContent: Boolean = true,
+    // 不为 null 时 system 提示以这个角色的消息放在 input 开头，不用 instructions 字段
+    val systemMessageRole: String? = null,
+    // 是否接受 temperature、top_p 和 max_output_tokens
+    val supportsSamplingParams: Boolean = true,
+    // 非推理模型也请求加密推理内容：不保存会话时，自带推理的模型要靠它接上多轮推理
+    val alwaysIncludeEncryptedContent: Boolean = false,
+    // 把会话 ID 作为 prompt_cache_key 发送
+    val sendPromptCacheKey: Boolean = false,
+    // 推理档位对应的 reasoning.effort，返回 null 时不带
+    val reasoningEffort: (
+        ReasoningLevel
+    ) -> String? = { level -> level.effort.takeIf { level != ReasoningLevel.AUTO } },
 )
 
 internal fun resolveResponseProviderCapabilities(host: String): ResponseProviderCapabilities {

@@ -1,21 +1,15 @@
 package me.rerere.ai.provider.providers.grok
 
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.AccountCredentialProvider
 import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.provider.Modality
@@ -34,9 +28,10 @@ import me.rerere.ai.provider.providers.openai.ResponsesEndpoint
 import me.rerere.ai.provider.providers.withAccountAuthenticator
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.util.fetchBody
 import me.rerere.ai.util.json
-import me.rerere.common.http.await
 import me.rerere.common.http.jsonPrimitiveOrNull
+import me.rerere.common.http.stringOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import kotlin.time.Clock
@@ -54,9 +49,29 @@ private val NON_CHAT_MODEL = Regex("imagine|tts|embed|video", RegexOption.IGNORE
 private const val WEEK_MINUTES = 7 * 24 * 60
 
 /**
+ * xAI 对请求体的要求：system 提示以 system 消息放在 `input` 开头；不接受 `reasoning.summary`；
+ * 只有部分模型接受 `reasoning.effort`，档位也只有 low/medium/high。
+ * 不保存会话，所有模型都请求加密推理内容来接上多轮推理。
+ */
+internal val GROK_CAPABILITIES = ResponseProviderCapabilities(
+    supportsReasoningSummary = false,
+    systemMessageRole = "system",
+    alwaysIncludeEncryptedContent = true,
+    reasoningEffort = ::grokEffort,
+)
+
+// xAI 只认 low/medium/high；关不掉推理的模型关闭时落到最低档
+private fun grokEffort(level: ReasoningLevel): String? = when (level) {
+    ReasoningLevel.AUTO -> null
+    ReasoningLevel.OFF, ReasoningLevel.LOW -> "low"
+    ReasoningLevel.MEDIUM -> "medium"
+    ReasoningLevel.HIGH, ReasoningLevel.XHIGH, ReasoningLevel.MAX -> "high"
+}
+
+/**
  * SuperGrok 订阅（xAI 账号登录）。对话走 api.x.ai 的 Responses API，用 OAuth access token 作 Bearer：
  *
- * - xAI 不接受 `reasoning.summary`；只有部分模型接受 `reasoning.effort`，档位也只有 low/medium/high
+ * - 请求体的差异见 [GROK_CAPABILITIES]
  * - 模型目录合并 Grok CLI 的 models-v2 和 api.x.ai 的 /models
  * - 额度查 Grok CLI 的 billing：旧的按周额度，或统一计费的按月额度
  */
@@ -67,24 +82,26 @@ class GrokProvider(
     private val client = client.withAccountAuthenticator(credentials)
     private val responseAPI = ResponseAPI(this.client)
 
-    override suspend fun listModels(providerSetting: ProviderSetting.Grok): List<Model> =
-        withContext(Dispatchers.IO) {
-            // 两个目录拿到一个就够用
-            val cli = runCatching { getJson(providerSetting, "$GROK_CLI_BASE_URL/models-v2", grokCli = true) }
-            val api = runCatching { getJson(providerSetting, "$XAI_BASE_URL/models") }
-            if (cli.isFailure && api.isFailure) throw cli.exceptionOrNull()!!
-            parseGrokModels(cliCatalog = cli.getOrNull(), apiCatalog = api.getOrNull())
+    override suspend fun listModels(providerSetting: ProviderSetting.Grok): List<Model> = coroutineScope {
+        // 两个目录拿到一个就够用
+        val cliRequest = async {
+            runCatching { getJson(providerSetting, "$GROK_CLI_BASE_URL/models-v2", grokCli = true) }
         }
+        val apiRequest = async { runCatching { getJson(providerSetting, "$XAI_BASE_URL/models") } }
+        val cli = cliRequest.await()
+        val api = apiRequest.await()
+        if (cli.isFailure && api.isFailure) throw cli.exceptionOrNull()!!
+        parseGrokModels(cliCatalog = cli.getOrNull(), apiCatalog = api.getOrNull())
+    }
 
-    override suspend fun getQuota(providerSetting: ProviderSetting.Grok): ProviderQuota =
-        withContext(Dispatchers.IO) {
-            val credits = getJson(providerSetting, "$GROK_CLI_BASE_URL/billing?format=credits", grokCli = true)
-            val weekly = parseGrokWeeklyUsage(credits)
-            if (weekly != null && !credits.isUnifiedBilling()) return@withContext weekly
-            // 统一计费账号的按月额度在不带 format 的接口上
-            val monthly = parseGrokMonthlyUsage(getJson(providerSetting, "$GROK_CLI_BASE_URL/billing", grokCli = true))
-            monthly ?: weekly ?: ProviderQuota.UsageLimits(windows = emptyList(), limitReached = false)
-        }
+    override suspend fun getQuota(providerSetting: ProviderSetting.Grok): ProviderQuota {
+        val credits = getJson(providerSetting, "$GROK_CLI_BASE_URL/billing?format=credits", grokCli = true)
+        val weekly = parseGrokWeeklyUsage(credits)
+        if (weekly != null && !credits.isUnifiedBilling()) return weekly
+        // 统一计费账号的按月额度在不带 format 的接口上
+        val monthly = parseGrokMonthlyUsage(getJson(providerSetting, "$GROK_CLI_BASE_URL/billing", grokCli = true))
+        return monthly ?: weekly ?: ProviderQuota.UsageLimits(windows = emptyList(), limitReached = false)
+    }
 
     override suspend fun streamText(
         providerSetting: ProviderSetting.Grok,
@@ -100,13 +117,12 @@ class GrokProvider(
 
     private fun endpoint(setting: ProviderSetting.Grok, params: TextGenerationParams) = ResponsesEndpoint(
         url = "$XAI_BASE_URL/responses",
-        capabilities = ResponseProviderCapabilities(supportsReasoningSummary = false),
+        capabilities = GROK_CAPABILITIES,
         configureRequest = {
             configureAuth(setting, params.customHeaders)
             // 同一会话的请求能命中提示缓存
             params.sessionId?.let { header("x-grok-conv-id", it) }
         },
-        transformBody = ::grokRequestBody,
     )
 
     private suspend fun getJson(setting: ProviderSetting.Grok, url: String, grokCli: Boolean = false): JsonObject {
@@ -115,65 +131,17 @@ class GrokProvider(
             .apply { configureAuth(setting, grokCli = grokCli) }
             .get()
             .build()
-        return client.newCall(request).await().use { response ->
-            val body = response.body.string()
-            if (!response.isSuccessful) {
-                error("Request to $url failed: ${response.code} $body")
-            }
-            json.parseToJsonElement(body).jsonObject
-        }
+        return json.parseToJsonElement(client.fetchBody(request)).jsonObject
     }
 
     private suspend fun Request.Builder.configureAuth(
         setting: ProviderSetting.Grok,
         customHeaders: List<CustomHeader> = emptyList(),
         grokCli: Boolean = false,
-    ) = configureAccountAuth(credentials, setting, customHeaders) { credential ->
-        header("Authorization", "Bearer ${credential.accessToken}")
+    ) = configureAccountAuth(credentials, setting, customHeaders) {
         // Grok CLI 的代理要求带上，和官方 CLI 走同一个产品通道
         if (grokCli) header("X-XAI-Token-Auth", "xai-grok-cli")
     }
-}
-
-/** 把 [ResponseAPI] 生成的请求体改成 xAI 接受的形式，保持字段顺序 */
-internal fun grokRequestBody(body: JsonObject): JsonObject {
-    val instructions = body["instructions"]?.jsonPrimitiveOrNull?.contentOrNull
-    return buildJsonObject {
-        body.forEach { (key, value) ->
-            when (key) {
-                // system 提示放进 input
-                "instructions" -> {}
-                "input" -> putJsonArray(key) {
-                    if (!instructions.isNullOrEmpty()) {
-                        add(buildJsonObject {
-                            put("role", "system")
-                            put("content", instructions)
-                        })
-                    }
-                    value.jsonArray.forEach { add(it) }
-                }
-
-                "reasoning" -> {
-                    val effort = (value as? JsonObject)?.get("effort")?.jsonPrimitiveOrNull?.contentOrNull
-                    grokEffort(effort)?.let { put(key, buildJsonObject { put("effort", it) }) }
-                }
-
-                else -> put(key, value)
-            }
-        }
-        // 不保存会话时，多轮推理要靠加密的推理内容接上
-        if ("include" !in body) {
-            put("include", buildJsonArray { add("reasoning.encrypted_content") })
-        }
-    }
-}
-
-// xAI 只认 low/medium/high；关不掉推理的模型关闭时落到最低档
-private fun grokEffort(effort: String?): String? = when (effort) {
-    null -> null
-    "none", "minimal", "low" -> "low"
-    "medium" -> "medium"
-    else -> "high"
 }
 
 /**
@@ -195,7 +163,10 @@ internal fun parseGrokModels(cliCatalog: JsonObject?, apiCatalog: JsonObject?): 
             val efforts = (row["reasoningEfforts"] ?: row["reasoning_efforts"] ?: meta?.get("reasoningEfforts"))
                 as? JsonArray
             val contextWindow = listOf(
-                row["contextWindow"], row["context_window"], meta?.get("contextWindow"), meta?.get("totalContextTokens")
+                row["contextWindow"],
+                row["context_window"],
+                meta?.get("contextWindow"),
+                meta?.get("totalContextTokens")
             ).firstNotNullOfOrNull { it?.number()?.toInt() }
             models[id] = Model(
                 modelId = id,
@@ -255,10 +226,11 @@ internal fun parseGrokMonthlyUsage(body: JsonObject): ProviderQuota.UsageLimits?
 private fun JsonObject.isUnifiedBilling(): Boolean =
     (get("config") as? JsonObject)?.get("isUnifiedBillingUser")?.jsonPrimitiveOrNull?.booleanOrNull == true
 
-private fun JsonObject.string(key: String): String? =
-    (get(key) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+private fun JsonObject.string(key: String): String? = stringOrNull(key)?.takeIf { it.isNotBlank() }
 
 // 数字可能以字符串给出
 private fun JsonElement.number(): Double? = jsonPrimitiveOrNull?.contentOrNull?.toDoubleOrNull()
 
-private fun JsonObject.instant(key: String): Instant? = string(key)?.let { runCatching { Instant.parse(it) }.getOrNull() }
+private fun JsonObject.instant(key: String): Instant? = string(
+    key
+)?.let { runCatching { Instant.parse(it) }.getOrNull() }

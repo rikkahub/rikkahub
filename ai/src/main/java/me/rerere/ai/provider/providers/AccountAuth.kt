@@ -12,7 +12,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.Route
 
-/** 账号类请求的鉴权头，401 重试时用新凭据重新写一遍 */
+/** 账号类请求在 Bearer token 之外要带的鉴权头，401 重试时用新凭据重新写一遍 */
 internal typealias AccountHeaders = Request.Builder.(OAuthCredential) -> Unit
 
 private class AccountRequestTag(val setting: ProviderSetting.Account, val applyHeaders: AccountHeaders)
@@ -28,13 +28,18 @@ internal fun OkHttpClient.withAccountAuthenticator(credentials: AccountCredentia
 internal suspend fun Request.Builder.configureAccountAuth(
     credentials: AccountCredentialProvider,
     setting: ProviderSetting.Account,
-    customHeaders: List<CustomHeader> = emptyList(),
+    customHeaders: List<CustomHeader>,
     applyHeaders: AccountHeaders,
 ) {
     val credential = credentials.getCredential(setting, rejectedAccessToken = null)
     headers(setting.mergeCustomHeaders(customHeaders))
-    applyHeaders(credential)
+    applyCredential(credential, applyHeaders)
     tag(AccountRequestTag::class.java, AccountRequestTag(setting, applyHeaders))
+}
+
+private fun Request.Builder.applyCredential(credential: OAuthCredential, applyHeaders: AccountHeaders) {
+    header("Authorization", "Bearer ${credential.accessToken}")
+    applyHeaders(credential)
 }
 
 /** 覆盖流式、非流式、模型列表和额度查询请求 */
@@ -52,7 +57,7 @@ private class AccountTokenAuthenticator(
         }.getOrNull() ?: return null
         if (credential.accessToken == rejected) return null
         return response.request.newBuilder()
-            .apply { tag.applyHeaders(this, credential) }
+            .apply { applyCredential(credential, tag.applyHeaders) }
             .build()
     }
 }

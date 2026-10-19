@@ -56,26 +56,6 @@ data class QuotaQuery(
 /** 是否有额度可查，界面据此决定要不要显示 */
 val ProviderSetting.supportsQuota: Boolean
     get() = when (this) {
-        is ProviderSetting.OpenAI -> quotaQuery.enabled
-        is ProviderSetting.Google -> quotaQuery.enabled
-        is ProviderSetting.Claude -> quotaQuery.enabled
-        is ProviderSetting.ChatGPT -> credential != null
-        is ProviderSetting.Grok -> credential != null
+        is ProviderSetting.ApiKey -> quotaQuery.enabled
+        is ProviderSetting.Account -> credential != null
     }
-
-/** 用户自定义的额度查询，账号类没有 */
-val ProviderSetting.quotaQueryOrNull: QuotaQuery?
-    get() = when (this) {
-        is ProviderSetting.OpenAI -> quotaQuery
-        is ProviderSetting.Google -> quotaQuery
-        is ProviderSetting.Claude -> quotaQuery
-        is ProviderSetting.Account -> null
-    }
-
-/** 替换自定义额度查询，账号类原样返回 */
-fun ProviderSetting.withQuotaQuery(query: QuotaQuery): ProviderSetting = when (this) {
-    is ProviderSetting.OpenAI -> copy(quotaQuery = query)
-    is ProviderSetting.Google -> copy(quotaQuery = query)
-    is ProviderSetting.Claude -> copy(quotaQuery = query)
-    is ProviderSetting.Account -> this
-}
