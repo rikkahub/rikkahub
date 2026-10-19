@@ -151,7 +151,7 @@ fun List<UIMessagePart>.isEmptyUIMessage(): Boolean {
             is UIMessagePart.Audio -> message.url.isBlank()
             is UIMessagePart.Tool,
             is UIMessagePart.ServerTool,
-                -> false
+            -> false
             else -> true
         }
     }
@@ -492,8 +492,12 @@ fun <T> List<T>.migrateToolNodes(
                                                 )
                                             )
                                         )
-                                    } else part
-                                } else part
+                                    } else {
+                                        part
+                                    }
+                                } else {
+                                    part
+                                }
                             }
 
                             is UIMessagePart.ToolCall -> {

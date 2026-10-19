@@ -68,7 +68,10 @@ class AgentLoopTest {
 
     @Test
     fun `reply without tool calls completes after one request`() = runTest {
-        provider.stream { text("hello"); finish() }
+        provider.stream {
+            text("hello")
+            finish()
+        }
 
         val events = runToEnd()
 
@@ -91,8 +94,14 @@ class AgentLoopTest {
             received += args
             listOf(UIMessagePart.Text("result"))
         }
-        provider.stream { toolCall("call-1", "search", """{"q":"kotlin"}"""); finish() }
-        provider.stream { text("answer"); finish() }
+        provider.stream {
+            toolCall("call-1", "search", """{"q":"kotlin"}""")
+            finish()
+        }
+        provider.stream {
+            text("answer")
+            finish()
+        }
 
         val finished = runToEnd(request(tools = listOf(search))).finished()
 
@@ -113,10 +122,20 @@ class AgentLoopTest {
     fun `a tool needing approval holds back the whole batch`() = runTest {
         val executed = mutableListOf<String>()
         val tools = listOf(
-            tool("write", needsApproval = true) { executed += "write"; ok() },
-            tool("read") { executed += "read"; ok() },
+            tool("write", needsApproval = true) {
+                executed += "write"
+                ok()
+            },
+            tool("read") {
+                executed += "read"
+                ok()
+            },
         )
-        provider.stream { toolCall("call-1", "write"); toolCall("call-2", "read"); finish() }
+        provider.stream {
+            toolCall("call-1", "write")
+            toolCall("call-2", "read")
+            finish()
+        }
 
         val finished = runToEnd(request(tools = tools)).finished()
 
@@ -131,14 +150,27 @@ class AgentLoopTest {
     fun `resuming after approval runs every remaining tool in call order`() = runTest {
         val executed = mutableListOf<String>()
         val tools = listOf(
-            tool("write", needsApproval = true) { executed += "write"; ok() },
-            tool("read") { executed += "read"; ok() },
+            tool("write", needsApproval = true) {
+                executed += "write"
+                ok()
+            },
+            tool("read") {
+                executed += "read"
+                ok()
+            },
         )
         val user = UIMessage.user("hi")
-        provider.stream { toolCall("call-1", "write"); toolCall("call-2", "read"); finish() }
+        provider.stream {
+            toolCall("call-1", "write")
+            toolCall("call-2", "read")
+            finish()
+        }
         val waiting = runToEnd(request(messages = listOf(user), tools = tools)).finished().message
 
-        provider.stream { text("done"); finish() }
+        provider.stream {
+            text("done")
+            finish()
+        }
         val approved = waiting.withApproval("call-1", ToolApprovalState.Approved)
         val finished = runToEnd(request(messages = listOf(user, approved), tools = tools)).finished()
 
@@ -151,7 +183,10 @@ class AgentLoopTest {
     @Test
     fun `resuming re-checks approval for tools that have not been decided`() = runTest {
         var executed = false
-        val tools = listOf(tool("shell", needsApproval = true) { executed = true; ok() })
+        val tools = listOf(tool("shell", needsApproval = true) {
+            executed = true
+            ok()
+        })
         val message = assistant(UIMessagePart.Tool("call-1", "shell", "{}"))
 
         val finished = runToEnd(request(messages = listOf(UIMessage.user("hi"), message), tools = tools)).finished()
@@ -165,14 +200,23 @@ class AgentLoopTest {
     fun `denied and answered tools get outputs without executing`() = runTest {
         val executed = mutableListOf<String>()
         val tools = listOf(
-            tool("ask_user", needsApproval = true) { executed += "ask_user"; ok() },
-            tool("delete", needsApproval = true) { executed += "delete"; ok() },
+            tool("ask_user", needsApproval = true) {
+                executed += "ask_user"
+                ok()
+            },
+            tool("delete", needsApproval = true) {
+                executed += "delete"
+                ok()
+            },
         )
         val message = assistant(
             UIMessagePart.Tool("call-1", "ask_user", "{}", approvalState = ToolApprovalState.Answered("blue")),
             UIMessagePart.Tool("call-2", "delete", "{}", approvalState = ToolApprovalState.Denied("too risky")),
         )
-        provider.stream { text("ok"); finish() }
+        provider.stream {
+            text("ok")
+            finish()
+        }
 
         val finished = runToEnd(request(messages = listOf(UIMessage.user("hi"), message), tools = tools)).finished()
 
@@ -192,7 +236,11 @@ class AgentLoopTest {
                 awaitCancellation()
             },
         )
-        provider.stream { toolCall("call-1", "first"); toolCall("call-2", "second"); finish() }
+        provider.stream {
+            toolCall("call-1", "first")
+            toolCall("call-2", "second")
+            finish()
+        }
 
         val events = mutableListOf<AgentEvent>()
         val job = launch { runAgent(request(tools = tools), hooks).toList(events) }
@@ -207,8 +255,14 @@ class AgentLoopTest {
     @Test
     fun `tool failures are reported to the model and the run continues`() = runTest {
         val tools = listOf(tool("broken") { throw IllegalStateException("disk full") })
-        provider.stream { toolCall("call-1", "broken"); finish() }
-        provider.stream { text("sorry"); finish() }
+        provider.stream {
+            toolCall("call-1", "broken")
+            finish()
+        }
+        provider.stream {
+            text("sorry")
+            finish()
+        }
 
         val finished = runToEnd(request(tools = tools)).finished()
 
@@ -221,9 +275,19 @@ class AgentLoopTest {
     @Test
     fun `invalid arguments and unknown tools are reported instead of executed`() = runTest {
         var executed = false
-        val tools = listOf(tool("search") { executed = true; ok() })
-        provider.stream { toolCall("call-1", "search", "{bad"); toolCall("call-2", "missing"); finish() }
-        provider.stream { text("ok"); finish() }
+        val tools = listOf(tool("search") {
+            executed = true
+            ok()
+        })
+        provider.stream {
+            toolCall("call-1", "search", "{bad")
+            toolCall("call-2", "missing")
+            finish()
+        }
+        provider.stream {
+            text("ok")
+            finish()
+        }
 
         val message = runToEnd(request(tools = tools)).finished().message
 
@@ -235,10 +299,22 @@ class AgentLoopTest {
     @Test
     fun `a tool returning nothing still counts as executed and does not run again`() = runTest {
         var runs = 0
-        val tools = listOf(tool("silent") { runs++; emptyList() })
-        provider.stream { toolCall("call-1", "silent"); finish() }
-        provider.stream { toolCall("call-2", "silent"); finish() }
-        provider.stream { text("done"); finish() }
+        val tools = listOf(tool("silent") {
+            runs++
+            emptyList()
+        })
+        provider.stream {
+            toolCall("call-1", "silent")
+            finish()
+        }
+        provider.stream {
+            toolCall("call-2", "silent")
+            finish()
+        }
+        provider.stream {
+            text("done")
+            finish()
+        }
 
         val message = runToEnd(request(tools = tools)).finished().message
 
@@ -248,7 +324,10 @@ class AgentLoopTest {
 
     @Test
     fun `step limit ends the run after the last request's tools are executed`() = runTest {
-        provider.stream { toolCall("call-1", "search"); finish() }
+        provider.stream {
+            toolCall("call-1", "search")
+            finish()
+        }
 
         val finished = runToEnd(request(tools = listOf(tool("search")), maxSteps = 1)).finished()
 
@@ -259,8 +338,15 @@ class AgentLoopTest {
 
     @Test
     fun `finishStep only has to process the parts produced by the current step`() = runTest {
-        provider.stream { text("checking"); toolCall("call-1", "search"); finish() }
-        provider.stream { text("done"); finish() }
+        provider.stream {
+            text("checking")
+            toolCall("call-1", "search")
+            finish()
+        }
+        provider.stream {
+            text("done")
+            finish()
+        }
 
         val message = runToEnd(request(tools = listOf(tool("search"))), suffixHooks).finished().message
 
@@ -297,8 +383,16 @@ class AgentLoopTest {
 
     @Test
     fun `usage accumulates across steps while context tokens follow the last request`() = runTest {
-        provider.stream { toolCall("call-1", "search"); usage(100, 10); finish() }
-        provider.stream { text("answer"); usage(150, 20); finish() }
+        provider.stream {
+            toolCall("call-1", "search")
+            usage(100, 10)
+            finish()
+        }
+        provider.stream {
+            text("answer")
+            usage(150, 20)
+            finish()
+        }
 
         val message = runToEnd(request(tools = listOf(tool("search")))).finished().message
 
@@ -314,7 +408,10 @@ class AgentLoopTest {
             text("partial")
             throw IOException("connection reset")
         }
-        provider.stream { text("full"); finish() }
+        provider.stream {
+            text("full")
+            finish()
+        }
 
         val events = runToEnd(request(retry = RetryPolicy.NETWORK))
 
@@ -329,7 +426,10 @@ class AgentLoopTest {
 
     @Test
     fun `failures in the collector are not retried as network errors`() = runTest {
-        provider.stream { text("hello"); finish() }
+        provider.stream {
+            text("hello")
+            finish()
+        }
 
         val error = runCatching {
             runAgent(request(retry = RetryPolicy.NETWORK), hooks).collect { event ->
