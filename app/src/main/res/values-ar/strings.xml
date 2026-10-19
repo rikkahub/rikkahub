@@ -1645,4 +1645,7 @@
   <string name="stats_page_source_translation">الترجمة</string>
   <string name="stats_page_source_memory">ذاكرة</string>
   <string name="stats_page_source_ocr">OCR</string>
+  <string name="assistant_page_memory_empty">لا توجد ذكريات بعد</string>
+  <string name="assistant_page_memory_empty_hint">سيتذكر المساعد ما تخبره به أثناء الدردشة. يمكنك أيضًا الضغط على + لإضافة ذكرى</string>
+  <string name="assistant_page_memory_empty_disabled_hint">الذاكرة معطّلة لهذا المساعد. فعّلها ليتمكن من تذكر ما تخبره به</string>
 </resources>

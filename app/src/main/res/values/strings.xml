@@ -1566,6 +1566,9 @@
   <string name="assistant_page_memory_section_topics">Topics</string>
   <string name="assistant_page_memory_section_areas">Areas</string>
   <string name="assistant_page_memory_section_people">People</string>
+  <string name="assistant_page_memory_empty">No memories yet</string>
+  <string name="assistant_page_memory_empty_hint">The assistant will remember what you tell it as you chat. You can also tap + to add one</string>
+  <string name="assistant_page_memory_empty_disabled_hint">Memory is off for this assistant. Turn it on to let it remember what you tell it</string>
   <string name="memory_file_page_path_conflict">A memory already exists at this path</string>
   <string name="memory_file_page_new">New memory</string>
   <string name="memory_file_page_missing">This memory no longer exists</string>

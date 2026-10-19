@@ -1647,4 +1647,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="stats_page_source_translation">翻訳</string>
   <string name="stats_page_source_memory">記憶</string>
   <string name="stats_page_source_ocr">OCR</string>
+  <string name="assistant_page_memory_empty">まだ記憶がありません</string>
+  <string name="assistant_page_memory_empty_hint">チャット中に伝えた内容をアシスタントが記憶します。+ をタップして追加することもできます</string>
+  <string name="assistant_page_memory_empty_disabled_hint">このアシスタントの記憶はオフになっています。オンにすると、伝えた内容を記憶できるようになります</string>
 </resources>

@@ -1645,4 +1645,7 @@
   <string name="stats_page_source_translation">翻譯</string>
   <string name="stats_page_source_memory">記憶</string>
   <string name="stats_page_source_ocr">OCR</string>
+  <string name="assistant_page_memory_empty">尚無記憶</string>
+  <string name="assistant_page_memory_empty_hint">助理會在聊天時記住你告訴它的內容。你也可以輕觸 + 新增一則記憶</string>
+  <string name="assistant_page_memory_empty_disabled_hint">此助理的記憶功能已關閉。開啟後，它就能記住你告訴它的內容</string>
 </resources>
