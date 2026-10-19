@@ -396,7 +396,7 @@ private fun MessagePartsBlock(
                                     onClick = { onUserMessageClick?.invoke() },
                                     // 用户气泡不占满整行，和助手的回复错开
                                     modifier = Modifier
-                                        .padding(start = 48.dp)
+                                        .padding(start = 24.dp)
                                         .animateContentSize(),
                                 ) {
                                     MarkdownBlock(
@@ -572,7 +572,7 @@ private fun ChatMessageBubble(
                 },
             )
             // MarkdownBlock 自带 4dp 的水平内边距
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp),
     ) {
         CompositionLocalProvider(LocalContentColor provides contentColor) { content() }
     }
