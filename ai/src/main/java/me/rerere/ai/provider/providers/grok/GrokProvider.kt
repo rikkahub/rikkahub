@@ -52,13 +52,11 @@ private const val WEEK_MINUTES = 7 * 24 * 60
  * xAI 对请求体的要求：system 提示以 system 消息放在 `input` 开头；不接受 `reasoning.summary`；
  * `reasoning.effort` 的取值见 [grokEffort]。
  * 不保存会话，所有模型都请求加密推理内容来接上多轮推理。
- * 会话 ID 作为 `prompt_cache_key` 发送，同一会话的请求路由到同一台服务器，命中提示缓存。
  */
 internal val GROK_CAPABILITIES = ResponseProviderCapabilities(
     supportsReasoningSummary = false,
     systemMessageRole = "system",
     alwaysIncludeEncryptedContent = true,
-    sendPromptCacheKey = true,
     reasoningEffort = ::grokEffort,
 )
 

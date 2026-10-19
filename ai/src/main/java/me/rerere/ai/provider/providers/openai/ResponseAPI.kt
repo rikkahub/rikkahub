@@ -283,9 +283,8 @@ class ResponseAPI(
                     add("reasoning.encrypted_content")
                 })
             }
-            if (capabilities.sendPromptCacheKey) {
-                params.sessionId?.let { put("prompt_cache_key", it) }
-            }
+            // 会话 ID 作为 prompt_cache_key，同一会话的请求能命中提示缓存
+            params.sessionId?.let { put("prompt_cache_key", it) }
 
             // tools
             // Response API 的 tools 是扁平数组, 函数工具和内置工具可以共存, 必须写在同一个 key 下,
@@ -784,8 +783,6 @@ internal data class ResponseProviderCapabilities(
     val supportsSamplingParams: Boolean = true,
     // 非推理模型也请求加密推理内容：不保存会话时，自带推理的模型要靠它接上多轮推理
     val alwaysIncludeEncryptedContent: Boolean = false,
-    // 把会话 ID 作为 prompt_cache_key 发送
-    val sendPromptCacheKey: Boolean = false,
     // 推理档位对应的 reasoning.effort（参数依次是档位、模型 id），返回 null 时不带
     val reasoningEffort: (
         ReasoningLevel,
