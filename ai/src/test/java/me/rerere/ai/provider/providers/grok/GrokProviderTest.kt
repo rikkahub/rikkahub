@@ -48,16 +48,35 @@ class GrokProviderTest {
     }
 
     @Test
+    fun `session id is sent as prompt cache key`() {
+        val body = api.buildRequestBody(
+            capabilities = GROK_CAPABILITIES,
+            messages = listOf(UIMessage.user("hello")),
+            params = TextGenerationParams(model = Model(modelId = "grok-4.3"), sessionId = "conv-1"),
+            stream = true,
+        )
+
+        assertEquals("conv-1", body["prompt_cache_key"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `reasoning effort is limited to what xai accepts`() {
         val reasoningModel = Model(modelId = "grok-4.3", abilities = listOf(ModelAbility.TOOL, ModelAbility.REASONING))
 
-        fun effort(level: ReasoningLevel) =
-            grokBody(reasoningModel, level)["reasoning"]?.jsonObject?.get("effort")?.jsonPrimitive?.content
+        fun effort(level: ReasoningLevel, model: Model = reasoningModel) =
+            grokBody(model, level)["reasoning"]?.jsonObject?.get("effort")?.jsonPrimitive?.content
 
-        assertEquals("low", effort(ReasoningLevel.OFF))
+        assertEquals("none", effort(ReasoningLevel.OFF))
         assertEquals("medium", effort(ReasoningLevel.MEDIUM))
         assertEquals("high", effort(ReasoningLevel.XHIGH))
         assertEquals("high", effort(ReasoningLevel.MAX))
+        // 只有 grok-4.6 接受 xhigh
+        val grok46 = reasoningModel.copy(modelId = "grok-4.6")
+        assertEquals("xhigh", effort(ReasoningLevel.XHIGH, grok46))
+        assertEquals("xhigh", effort(ReasoningLevel.MAX, grok46))
+        // grok-4.20 带任何档位都会报错
+        assertNull(effort(ReasoningLevel.HIGH, reasoningModel.copy(modelId = "grok-4.20-0309-reasoning")))
+        assertNull(effort(ReasoningLevel.OFF, reasoningModel.copy(modelId = "grok-4.20-non-reasoning")))
         // 不指定档位时不带 reasoning，也不带 summary
         assertNull(grokBody(reasoningModel, ReasoningLevel.AUTO)["reasoning"])
         // 不接受档位的模型不带 reasoning，但仍然请求加密推理内容

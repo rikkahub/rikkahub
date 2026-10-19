@@ -50,22 +50,35 @@ private const val WEEK_MINUTES = 7 * 24 * 60
 
 /**
  * xAI 对请求体的要求：system 提示以 system 消息放在 `input` 开头；不接受 `reasoning.summary`；
- * 只有部分模型接受 `reasoning.effort`，档位也只有 low/medium/high。
+ * `reasoning.effort` 的取值见 [grokEffort]。
  * 不保存会话，所有模型都请求加密推理内容来接上多轮推理。
+ * 会话 ID 作为 `prompt_cache_key` 发送，同一会话的请求路由到同一台服务器，命中提示缓存。
  */
 internal val GROK_CAPABILITIES = ResponseProviderCapabilities(
     supportsReasoningSummary = false,
     systemMessageRole = "system",
     alwaysIncludeEncryptedContent = true,
+    sendPromptCacheKey = true,
     reasoningEffort = ::grokEffort,
 )
 
-// xAI 只认 low/medium/high；关不掉推理的模型关闭时落到最低档
-private fun grokEffort(level: ReasoningLevel): String? = when (level) {
-    ReasoningLevel.AUTO -> null
-    ReasoningLevel.OFF, ReasoningLevel.LOW -> "low"
-    ReasoningLevel.MEDIUM -> "medium"
-    ReasoningLevel.HIGH, ReasoningLevel.XHIGH, ReasoningLevel.MAX -> "high"
+// grok-4.20 的推理和非推理模型带任何 reasoning.effort（包括 none）都会报参数错误
+private val MODELS_WITHOUT_REASONING_EFFORT = Regex("""^grok-4\.20(-\d{4})?-(non-)?reasoning$""")
+
+/**
+ * 与 Vercel AI SDK 的 xAI provider 一致：关闭发 `none`（grok-4.3 及更新的推理模型支持），
+ * `xhigh` 只有 grok-4.6 支持，其他模型落到 `high`。
+ */
+private fun grokEffort(level: ReasoningLevel, modelId: String): String? {
+    if (MODELS_WITHOUT_REASONING_EFFORT.matches(modelId)) return null
+    return when (level) {
+        ReasoningLevel.AUTO -> null
+        ReasoningLevel.OFF -> "none"
+        ReasoningLevel.LOW -> "low"
+        ReasoningLevel.MEDIUM -> "medium"
+        ReasoningLevel.HIGH -> "high"
+        ReasoningLevel.XHIGH, ReasoningLevel.MAX -> if (modelId == "grok-4.6") "xhigh" else "high"
+    }
 }
 
 /**
@@ -120,7 +133,7 @@ class GrokProvider(
         capabilities = GROK_CAPABILITIES,
         configureRequest = {
             configureAuth(setting, params.customHeaders)
-            // 同一会话的请求能命中提示缓存
+            // Chat Completions 的写法，Responses 以请求体里的 prompt_cache_key 为准，这里一并带上
             params.sessionId?.let { header("x-grok-conv-id", it) }
         },
     )

@@ -240,6 +240,63 @@ class ResponseApiStreamDecoderTest {
     }
 
     @Test
+    fun `text continued in the same item after server tools should become a new part`() {
+        // xAI：搜索前后的正文都写在同一个 message item 里
+        val decoder = ResponseApiStreamDecoder()
+        fun text(delta: String) = buildJsonObject {
+            put("type", "response.output_text.delta")
+            put("item_id", "msg_1")
+            put("output_index", 1)
+            put("content_index", 0)
+            put("delta", delta)
+        }
+        val chunks = buildList {
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.content_part.added")
+                put("item_id", "msg_1")
+                put("content_index", 0)
+                put("part", buildJsonObject { put("type", "output_text") })
+            }))
+            addAll(decoder.decode(text("Let me search. ")))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.output_item.added")
+                put("item", webSearchItem("in_progress"))
+            }))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.output_item.done")
+                put("item", webSearchItem("completed"))
+            }))
+            addAll(decoder.decode(reasoningItemEvent("response.output_item.done", encryptedContent = "tool")))
+            addAll(decoder.decode(text("Here is ")))
+            addAll(decoder.decode(text("the answer.")))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.output_text.done")
+                put("item_id", "msg_1")
+                put("content_index", 0)
+            }))
+            addAll(decoder.decode(buildJsonObject {
+                put("type", "response.completed")
+                put("response", buildJsonObject { put("id", "resp_1") })
+            }))
+        }
+
+        val handler = StreamChunkHandler(Model(modelId = "test-model"))
+        val parts = chunks.fold(listOf(UIMessage.user("news"))) { messages, chunk ->
+            handler.handle(messages, chunk)
+        }.last().parts
+
+        assertEquals(4, parts.size)
+        assertEquals("Let me search. ", (parts[0] as UIMessagePart.Text).text)
+        assertTrue(parts[1] is UIMessagePart.ServerTool)
+        assertTrue(parts[2] is UIMessagePart.Reasoning)
+        assertEquals("Here is the answer.", (parts[3] as UIMessagePart.Text).text)
+        assertEquals(
+            chunks.count { it is StreamChunk.TextStart },
+            chunks.count { it is StreamChunk.TextEnd },
+        )
+    }
+
+    @Test
     fun `non streaming response should parse web search without synthetic output`() {
         val result = api.parseResponseOutput(buildJsonObject {
             put("id", "resp_1")

@@ -266,11 +266,17 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
         val toolCallIdsByOutputIndex = mutableMapOf<Int, String>()
         val toolIdsWithInput = mutableSetOf<String>()
         val reasoningMetadata = mutableMapOf<String, JsonObject>()
-        private val openTextIds = linkedSetOf<String>()
+
+        // 文本 id（item:text:index）到当前 part id。xAI 在服务端工具前后都往同一个 message item 写正文，
+        // 中间插进了其他 part 时要另起一段，part 才能按生成顺序排列
+        private val openTexts = linkedMapOf<String, String>()
+        private val textSegmentCounts = mutableMapOf<String, Int>()
+        private val interruptedTextIds = mutableSetOf<String>()
         private val openReasoningIds = linkedSetOf<String>()
         private val openImageIds = linkedSetOf<String>()
         private val openToolIds = linkedSetOf<String>()
         private val openServerToolIds = linkedSetOf<String>()
+        private val knownServerToolIds = mutableSetOf<String>()
         var finished = false
             private set
 
@@ -278,11 +284,29 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
             finished = true
         }
 
-        fun startText(id: String) = if (openTextIds.add(id)) listOf(StreamChunk.TextStart(id)) else emptyList()
-        fun textDelta(id: String, text: String) = startText(id) + StreamChunk.TextDelta(id, text)
-        fun endText(id: String) = if (openTextIds.remove(id)) listOf(StreamChunk.TextEnd(id)) else emptyList()
+        fun startText(id: String): List<StreamChunk> = buildList {
+            if (interruptedTextIds.remove(id)) addAll(endText(id))
+            if (id !in openTexts) {
+                val segment = textSegmentCounts.merge(id, 1, Int::plus)!! - 1
+                val partId = if (segment == 0) id else "$id#$segment"
+                openTexts[id] = partId
+                add(StreamChunk.TextStart(partId))
+            }
+        }
+        fun textDelta(id: String, text: String) = startText(id) + StreamChunk.TextDelta(openTexts.getValue(id), text)
+        fun endText(id: String): List<StreamChunk> {
+            interruptedTextIds.remove(id)
+            return listOfNotNull(openTexts.remove(id)?.let(StreamChunk::TextEnd))
+        }
+
+        // 正文之后追加了新的 part，正文再有内容就得写到新 part 里
+        private fun interruptTexts() {
+            interruptedTextIds += openTexts.keys
+        }
+
         fun startReasoning(id: String, metadata: JsonObject?, reasoningType: ReasoningType) =
             if (openReasoningIds.add(id)) {
+                interruptTexts()
                 listOf(StreamChunk.ReasoningStart(id, metadata, reasoningType))
             } else {
                 emptyList()
@@ -307,14 +331,25 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
             return startReasoning(id, metadata, ReasoningType.REASONING_TEXT) + endReasoning(id, metadata)
         }
 
-        fun startImage(id: String) = if (openImageIds.add(id)) listOf(StreamChunk.ImageStart(id)) else emptyList()
+        fun startImage(id: String) = if (openImageIds.add(id)) {
+            interruptTexts()
+            listOf(StreamChunk.ImageStart(id))
+        } else {
+            emptyList()
+        }
         fun endImage(id: String) = if (openImageIds.remove(id)) listOf(StreamChunk.ImageEnd(id)) else emptyList()
         fun startTool(id: String, name: String, initialInput: String): List<StreamChunk> = buildList {
-            if (openToolIds.add(id)) add(StreamChunk.ToolCallStart(id, name))
+            if (openToolIds.add(id)) {
+                interruptTexts()
+                add(StreamChunk.ToolCallStart(id, name))
+            }
             if (initialInput.isNotEmpty()) addAll(toolDelta(id, initialInput))
         }
         fun toolDelta(id: String, input: String): List<StreamChunk> = buildList {
-            if (openToolIds.add(id)) add(StreamChunk.ToolCallStart(id))
+            if (openToolIds.add(id)) {
+                interruptTexts()
+                add(StreamChunk.ToolCallStart(id))
+            }
             if (input.isNotEmpty()) {
                 toolIdsWithInput += id
                 add(StreamChunk.ToolCallDelta(id, inputDelta = input))
@@ -336,6 +371,7 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
             input: kotlinx.serialization.json.JsonElement? = null,
             metadata: JsonObject? = null,
         ): List<StreamChunk> = if (openServerToolIds.add(id)) {
+            if (knownServerToolIds.add(id)) interruptTexts()
             listOf(StreamChunk.ServerToolStart(id, toolName, input, metadata))
         } else if (input != null || metadata != null) {
             listOf(StreamChunk.ServerToolStart(id, toolName, input, metadata))
@@ -351,6 +387,8 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
             metadata: JsonObject? = null,
         ): List<StreamChunk> {
             openServerToolIds.remove(id)
+            // 没收到开始事件时 part 在这里新建
+            if (knownServerToolIds.add(id)) interruptTexts()
             return listOf(StreamChunk.ServerToolEnd(id, input, output, status, metadata))
         }
 
@@ -362,7 +400,7 @@ internal class ResponseApiStreamDecoder : StreamChunkDecoder {
             if (finished) return emptyList()
             finished = true
             return buildList {
-                openTextIds.toList().forEach { addAll(endText(it)) }
+                openTexts.keys.toList().forEach { addAll(endText(it)) }
                 reasoningMetadata.toMap().forEach { (itemId, metadata) ->
                     addAll(endReasoningItem(itemId, metadata))
                 }

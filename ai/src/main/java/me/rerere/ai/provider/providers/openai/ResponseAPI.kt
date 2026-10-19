@@ -273,7 +273,7 @@ class ResponseAPI(
                     if (capabilities.supportsReasoningSummary) {
                         put("summary", "auto")
                     }
-                    capabilities.reasoningEffort(params.reasoningLevel)?.let { put("effort", it) }
+                    capabilities.reasoningEffort(params.reasoningLevel, params.model.modelId)?.let { put("effort", it) }
                 }
                 if (reasoning.isNotEmpty()) put("reasoning", reasoning)
             }
@@ -786,10 +786,11 @@ internal data class ResponseProviderCapabilities(
     val alwaysIncludeEncryptedContent: Boolean = false,
     // 把会话 ID 作为 prompt_cache_key 发送
     val sendPromptCacheKey: Boolean = false,
-    // 推理档位对应的 reasoning.effort，返回 null 时不带
+    // 推理档位对应的 reasoning.effort（参数依次是档位、模型 id），返回 null 时不带
     val reasoningEffort: (
-        ReasoningLevel
-    ) -> String? = { level -> level.effort.takeIf { level != ReasoningLevel.AUTO } },
+        ReasoningLevel,
+        String,
+    ) -> String? = { level, _ -> level.effort.takeIf { level != ReasoningLevel.AUTO } },
 )
 
 internal fun resolveResponseProviderCapabilities(host: String): ResponseProviderCapabilities {
