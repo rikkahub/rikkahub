@@ -19,6 +19,7 @@ import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import kotlin.uuid.Uuid
@@ -45,8 +46,8 @@ class WorkspaceRepository(
                 continue
             }
             val statusName = workspace.shellStatus
-            if ((statusName == WorkspaceShellStatus.READY.name || statusName == WorkspaceShellStatus.INSTALLING.name)
-                && !manager.hasRootfs(workspace.root)
+            if ((statusName == WorkspaceShellStatus.READY.name || statusName == WorkspaceShellStatus.INSTALLING.name) &&
+                !manager.hasRootfs(workspace.root)
             ) {
                 Log.w(TAG, "Rootfs missing, resetting shell status: id=${workspace.id}")
                 updateShellState(workspace.id, WorkspaceShellStatus.DISABLED.name)
@@ -191,7 +192,7 @@ class WorkspaceRepository(
             WorkspaceStorageArea.LINUX -> {
                 val size = manager.fileSize(workspace.root, path, area)
                 require(size <= MAX_PREVIEW_BYTES) {
-                    "文件过大, 无法预览 (${size} bytes)"
+                    "文件过大, 无法预览 ($size bytes)"
                 }
                 ByteArrayOutputStream().use { out ->
                     manager.exportFile(workspace.root, path, area, out)
@@ -252,6 +253,17 @@ class WorkspaceRepository(
         manager.rootfsFileSize(workspace.root, path)
     }
 
+    /** 按 Rootfs 内绝对路径解析宿主机上的文件, 不存在或不是文件时返回 null */
+    suspend fun resolveRootfsFile(
+        id: String,
+        path: String,
+    ): File? = withContext(Dispatchers.IO) {
+        val workspace = dao.getById(id) ?: return@withContext null
+        runCatching { manager.resolveRootfsFile(workspace.root, path) }
+            .getOrNull()
+            ?.takeIf { it.isFile }
+    }
+
     /** Rootfs 内执行命令实际使用的 shell 路径 (/bin/bash 或 /bin/sh) */
     suspend fun rootfsShell(id: String): String = withContext(Dispatchers.IO) {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
@@ -305,7 +317,11 @@ class WorkspaceRepository(
         return runInterruptible(Dispatchers.IO) {
             manager.ensureWorkspace(workspace.root)
             manager.executeCommand(
-                workspace.root, command, cwd, timeoutMillis, stdin,
+                workspace.root,
+                command,
+                cwd,
+                timeoutMillis,
+                stdin,
                 shellCompatibilityMode = workspace.shellCompatibilityMode,
             )
         }

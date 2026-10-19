@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -52,6 +53,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
@@ -59,7 +61,9 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Download04
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.context.LocalWorkspaceId
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.ui.markdown.Markdown
@@ -70,6 +74,7 @@ import me.rerere.ui.markdown.MarkdownInline
 import me.rerere.ui.markdown.MarkdownInlineScope
 import me.rerere.ui.markdown.MarkdownInlineWidget
 import me.rerere.ui.markdown.plainText
+import org.koin.compose.koinInject
 import kotlin.time.Clock
 
 @Preview(showBackground = true)
@@ -163,7 +168,7 @@ fun MarkdownBlock(
             },
             image = { image, _ ->
                 ZoomableAsyncImage(
-                    model = image.url,
+                    model = rememberWorkspaceImageUrl(image.url),
                     contentDescription = image.alt,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
@@ -196,6 +201,24 @@ fun MarkdownBlock(
         theme = theme,
         components = components,
     )
+}
+
+/**
+ * 绑定了工作区时, 把 Rootfs 绝对路径 (如 /workspace/out.png) 解析成宿主机上的文件路径;
+ * 解析期间返回 null 显示占位图, 找不到文件时原样返回交给 Coil
+ *
+ * Markdown 解析器会对 src 做百分号编码 (空格、中文等), 需取解码后的 path 并丢掉 query/fragment
+ */
+@Composable
+private fun rememberWorkspaceImageUrl(url: String): String? {
+    val workspaceId = LocalWorkspaceId.current
+    if (workspaceId == null || !url.startsWith("/") || url.startsWith("//")) return url
+    val path = remember(url) { url.toUri().path } ?: return url
+    val workspaceRepository: WorkspaceRepository = koinInject()
+    val resolved by produceState<String?>(initialValue = null, workspaceId, path) {
+        value = workspaceRepository.resolveRootfsFile(workspaceId, path)?.absolutePath ?: url
+    }
+    return resolved
 }
 
 private fun MarkdownInlineScope.inlineMathWidgets(formula: String): List<MarkdownInlineWidget> {

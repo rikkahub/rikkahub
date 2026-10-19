@@ -26,6 +26,7 @@ import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -81,6 +82,7 @@ import me.rerere.rikkahub.ui.components.ui.FaviconRow
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.context.LocalWorkspaceId
 import me.rerere.rikkahub.ui.theme.LocalChatFontFamily
 import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
 import me.rerere.rikkahub.utils.JsonInstant
@@ -162,7 +164,10 @@ fun ChatMessage(
                 )
             }
         }
-        ProvideTextStyle(textStyle) {
+        CompositionLocalProvider(
+            LocalTextStyle provides textStyle,
+            LocalWorkspaceId provides assistant?.workspaceId?.toString(),
+        ) {
             MessagePartsBlock(
                 assistant = assistant,
                 role = message.role,
