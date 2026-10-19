@@ -1659,7 +1659,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_sign_out">退出登录</string>
   <string name="setting_provider_page_waiting_authorization">等待授权</string>
   <string name="setting_provider_page_waiting_authorization_desc">请在浏览器中完成登录，或点击取消</string>
-  <string name="setting_provider_page_sign_in_chatgpt">使用 ChatGPT 登录</string>
   <string name="setting_provider_page_chatgpt_disclaimer">通过 Codex 后端使用你的 ChatGPT 订阅。实验性功能：OpenAI 可能随时更改或限制此功能。</string>
   <string name="setting_provider_page_usage">用量</string>
   <string name="setting_provider_page_usage_loading">正在加载用量</string>
@@ -1674,4 +1673,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_usage_limit_hours">%1$d 小时限额</string>
   <string name="setting_provider_page_usage_limit_minutes">%1$d 分钟限额</string>
   <string name="setting_provider_page_quota_variables">变量：%1$s。API 密钥将随上述请求头发送到此 URL。</string>
+  <string name="setting_provider_page_sign_in_with">使用 %1$s 登录</string>
+  <string name="setting_provider_page_grok_disclaimer">以 Grok CLI 的方式登录，使用你的 SuperGrok 订阅。实验性功能：xAI 可能随时更改或限制此功能。</string>
+  <string name="setting_provider_page_device_code_hint">请在浏览器中确认此验证码</string>
+  <string name="setting_provider_page_device_code_reopen">点击重新打开页面</string>
 </resources>

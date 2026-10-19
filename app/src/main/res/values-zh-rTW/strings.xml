@@ -1654,7 +1654,6 @@
   <string name="setting_provider_page_sign_out">登出</string>
   <string name="setting_provider_page_waiting_authorization">正在等待授權</string>
   <string name="setting_provider_page_waiting_authorization_desc">請在瀏覽器中完成登入，或點按取消</string>
-  <string name="setting_provider_page_sign_in_chatgpt">使用 ChatGPT 登入</string>
   <string name="setting_provider_page_chatgpt_disclaimer">透過 Codex 後端使用您的 ChatGPT 訂閱。實驗性：OpenAI 可能隨時變更或限制此功能。</string>
   <string name="setting_provider_page_usage">用量</string>
   <string name="setting_provider_page_usage_loading">正在載入用量</string>
@@ -1669,4 +1668,8 @@
   <string name="setting_provider_page_usage_limit_hours">%1$d 小時上限</string>
   <string name="setting_provider_page_usage_limit_minutes">%1$d 分鐘上限</string>
   <string name="setting_provider_page_quota_variables">變數：%1$s。API 金鑰會連同上述標頭一併傳送至這個網址。</string>
+  <string name="setting_provider_page_sign_in_with">使用 %1$s 登入</string>
+  <string name="setting_provider_page_grok_disclaimer">以 Grok CLI 的方式登入，使用你的 SuperGrok 訂閱。實驗性功能：xAI 可能隨時變更或限制此功能。</string>
+  <string name="setting_provider_page_device_code_hint">請在瀏覽器中確認此驗證碼</string>
+  <string name="setting_provider_page_device_code_reopen">輕觸重新開啟頁面</string>
 </resources>

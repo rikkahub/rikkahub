@@ -6,7 +6,7 @@
 
 - **API Key 类**：`ProviderSetting.OpenAI` / `Google` / `Claude`。凭据（API Key、Vertex 服务账号）由用户填写，
   请求地址 `baseUrl` 也由用户填写，可以指向官方接口或任意兼容的中转。
-- **账号类**：`ProviderSetting.Account` 的子类，目前只有 `ProviderSetting.ChatGPT`。凭据只能通过账号登录（OAuth）获得，
+- **账号类**：`ProviderSetting.Account` 的子类，目前有 `ProviderSetting.ChatGPT` 和 `ProviderSetting.Grok`。凭据只能通过账号登录（OAuth）获得，
   请求地址写死在代码里。
 
 ai 模块只负责把凭据放进请求。账号类凭据的登录、刷新和持久化在 app 层，通过 `AccountCredentialProvider` 注入进来；
@@ -31,9 +31,9 @@ ai 模块不接触设置存储，也不发起授权流程。
 | 字段             | 说明                                         |
 |----------------|--------------------------------------------|
 | `accessToken`  | 放进 `Authorization: Bearer` 的 token          |
-| `refreshToken` | 用于换新的 access token。ChatGPT 的 refresh token 只能用一次，每次刷新都会轮换 |
+| `refreshToken` | 用于换新的 access token。按只能用一次处理（ChatGPT 每次刷新都会轮换），刷新响应不带新的就沿用旧的 |
 | `expiresAt`    | access token 的过期时间（毫秒时间戳），`0` 表示未知，未知时不主动刷新   |
-| `accountId`    | 厂商侧的账号或工作区 ID，ChatGPT 的请求要带上它                    |
+| `accountId`    | 厂商侧的账号或工作区 ID。ChatGPT 的请求要带上它；Grok 是 token 的 `sub`，只用于区分账号 |
 | `email`、`plan` | 只用于界面展示                                    |
 
 ### API Key 类
@@ -91,10 +91,32 @@ sequenceDiagram
     A-->>M: access_token、refresh_token、id_token
     M->>M: ChatGPTAuth.toCredential：从 JWT 里取 accountId、email、plan、过期时间
     M->>DS: 写入该提供商的 credential
-    M->>M: 提供商还没有模型时，拉取模型列表一并写入
 ```
 
-- 登录状态通过 `ProviderAccountManager.loginStatus` 暴露给界面：进行中是 `Authorizing`，失败是 `Failed(message)`，成功或取消后移除。
+Grok 用设备码登录（RFC 8628），协议参数与 Grok CLI 一致，不需要本地回调：
+
+```mermaid
+sequenceDiagram
+    participant UI as 提供商详情页
+    participant M as ProviderAccountManager
+    participant B as 浏览器（Custom Tabs）
+    participant A as auth.x.ai
+
+    UI->>M: startLogin(providerId)
+    M->>A: POST /oauth2/device/code（client_id、scope）
+    A-->>M: device_code、user_code、verification_uri(_complete)
+    M->>UI: 状态 DeviceCode(userCode, url)，界面显示验证码
+    M->>B: 打开 verification_uri_complete（已带上验证码）
+    loop 按 interval 轮询，slow_down 时加 5 秒
+        M->>A: POST /oauth2/token（device_code）
+        A-->>M: authorization_pending / access_token
+    end
+    M->>M: GrokAuth.toCredential：accountId 取 sub，邮箱取 id_token，没有再查 userinfo
+    M->>M: 写入凭据，同 ChatGPT
+```
+
+- 登录状态通过 `ProviderAccountManager.loginStatus` 暴露给界面：进行中是 `Authorizing`，设备码登录等待确认时是
+  `DeviceCode(userCode, verificationUrl)`，失败是 `Failed(message)`，成功或取消后移除。
 - JWT 只解码 payload、不校验签名：token 直接来自授权服务器的 HTTPS 响应。
 - 授权和刷新请求走应用的 `OkHttpClient`，会使用设置里的代理。
 
@@ -125,7 +147,8 @@ sequenceDiagram
     end
 ```
 
-- 401 重试由 OkHttp 的 `Authenticator`（`AccountTokenAuthenticator`）完成，流式、非流式和模型列表请求都覆盖到。
+- 401 重试由 OkHttp 的 `Authenticator`（`providers/AccountAuth.kt` 的 `AccountTokenAuthenticator`）完成，
+  流式、非流式、模型列表和额度查询请求都覆盖到。各 Provider 通过 `configureAccountAuth` 写鉴权头，重试时用新凭据重写同一组头。
   它通过请求上的 tag 认出账号类请求，每个请求最多重试一次。
 - 刷新失败（网络错误、refresh token 失效等）时抛出「请重新登录」的错误，但**不清除凭据**：临时的网络问题不应该把用户登出。
   重新登录会直接覆盖旧凭据。
@@ -155,30 +178,44 @@ sequenceDiagram
   `primary_window`、`secondary_window`（通常是 5 小时和一周），返回 `ProviderQuota.UsageLimits`；
 - 流式响应不带 `Content-Type`，依赖 common 模块里放宽了这项检查的 SSE 实现（`me.rerere.common.http.sse.newEventSource`）。
 
+#### Grok 的请求约定
+
+SuperGrok 订阅，参照 can1357/oh-my-pi 的 xai-oauth，详见 `GrokProvider`：
+
+- 对话走 `https://api.x.ai/v1/responses`，鉴权头只有 `Authorization: Bearer <accessToken>`；带 `x-grok-conv-id: <sessionId>` 命中提示缓存；
+- 请求体：system 提示以 `system` 消息放在 `input` 开头；不发 `reasoning.summary`；`reasoning.effort` 只有 low/medium/high，
+  只发给模型目录里声明了推理档位的模型；总是请求 `reasoning.encrypted_content`，`store=false` 时多轮推理靠它接上；
+- 模型目录合并 `https://cli-chat-proxy.grok.com/v1/models-v2`（Grok CLI）和 `https://api.x.ai/v1/models`，两边都有的以前者为准，
+  过滤掉图片、语音等非对话模型；
+- 额度查 `https://cli-chat-proxy.grok.com/v1/billing`：先查 `?format=credits` 的按周额度，统一计费账号再查不带参数的按月额度；
+- `cli-chat-proxy.grok.com` 上的请求额外带 `X-XAI-Token-Auth: xai-grok-cli`，和官方 CLI 一致。
+
 ### 代码分布
 
 | 模块     | 文件                                                       | 职责                                                                       |
 |--------|----------------------------------------------------------|--------------------------------------------------------------------------|
-| ai     | `provider/ProviderSetting.kt`                            | `OAuthCredential`、`Account`、`ChatGPT`、`supportsBuiltInSearch`               |
+| ai     | `provider/ProviderSetting.kt`                            | `OAuthCredential`、`Account`、`ChatGPT`、`Grok`、`supportsBuiltInSearch`       |
 | ai     | `provider/AccountCredentialProvider.kt`                  | 凭据接口                                                                     |
 | ai     | `provider/ProviderQuota.kt`、`provider/QuotaQueryRunner.kt` | 额度类型、自定义查询的配置和执行                                                       |
 | ai     | `provider/ProviderManager.kt`                            | 注入 `AccountCredentialProvider`，按类型分发 Provider                              |
-| ai     | `provider/providers/chatgpt/ChatGPTProvider.kt`          | Codex 后端适配、鉴权头、401 重试                                                     |
+| ai     | `provider/providers/AccountAuth.kt`                      | 账号类请求的鉴权头和 401 重试                                                      |
+| ai     | `provider/providers/chatgpt/ChatGPTProvider.kt`          | Codex 后端适配、订阅用量                                                         |
+| ai     | `provider/providers/grok/GrokProvider.kt`                | xAI Responses 适配、模型目录合并、SuperGrok 额度                                     |
 | ai     | `util/KeyRoulette.kt`                                    | 多 key 轮换                                                                 |
 | ai     | `provider/providers/google/vertex/ServiceAccountTokenProvider.kt` | Vertex 服务账号换 token                                                      |
-| oauth  | `OAuthHttpClient.kt`                                     | PKCE、授权地址、授权码换 token、刷新（表单或 JSON）。MCP 的 OAuth 也用它                         |
+| oauth  | `OAuthHttpClient.kt`                                     | PKCE、授权地址、授权码换 token、设备码授权和轮询、刷新（表单或 JSON）。MCP 的 OAuth 也用它            |
 | oauth  | `OAuthLoopbackCallbackServer.kt`、`OAuthCallbackForegroundService.kt` | 本地回调服务器，按 state 分发回调；等待回调期间用前台服务保活                                   |
-| app    | `data/ai/account/ChatGPTAuth.kt`                          | ChatGPT 的授权参数和 JWT 解析                                                    |
+| app    | `data/ai/account/ChatGPTAuth.kt`、`GrokAuth.kt`、`Jwt.kt` | 各家的授权参数、令牌转凭据，以及共用的 JWT 解析                                          |
 | app    | `data/ai/account/ProviderAccountManager.kt`              | 实现 `AccountCredentialProvider`：登录、刷新、写回凭据、`preserveCredential`              |
 | app    | `ui/pages/setting/components/ProviderConfigure.kt`       | 账号登录界面                                                                   |
 
 ### 新增一个账号类提供商
 
 1. ai：新增 `ProviderSetting.Account` 的子类（不要加 `baseUrl` 之类可以改变请求地址的字段），实现对应的 `Provider`，
-   凭据一律从 `AccountCredentialProvider` 获取，然后在 `ProviderManager` 中注册。401 重试的 `AccountTokenAuthenticator`
-   目前是 `ChatGPTProvider.kt` 里的私有实现，接入第二家时把它挪到公共位置复用。
+   用 `withAccountAuthenticator` 包一层 client，请求都通过 `configureAccountAuth` 加鉴权（凭据从 `AccountCredentialProvider`
+   获取，401 时自动刷新重试），然后在 `ProviderManager` 中注册。
 2. 处理编译器报出的分支：`ProviderManager.getProviderByType`、`ProviderAccountManager` 的登录和刷新分发、
    `supportsBuiltInSearch`、`supportsQuota`、`ProviderConfigure` 等用穷举 `when` 写的地方都会要求明确处理新类型。
    有用量接口的话实现 `getQuota`，优先复用 `ProviderQuota` 已有的类型。
-3. app：参照 `ChatGPTAuth` 写协议参数，在 `ProviderAccountManager` 里实现登录流程（授权码 + 本地回调，或设备码），
-   在新增提供商的入口加上模板，再补上登录界面。
+3. app：参照 `ChatGPTAuth`（授权码 + 本地回调）或 `GrokAuth`（设备码）写协议参数，在 `ProviderAccountManager` 里实现登录和刷新，
+   在新增提供商的入口加上模板，在 `ProviderConfigure` 里接上通用的 `ProviderConfigureAccount`。

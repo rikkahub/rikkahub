@@ -98,8 +98,8 @@ class ChatGPTAuthTest {
 
     @Test
     fun `malformed jwt yields null payload`() {
-        assertNull(ChatGPTAuth.decodeJwtPayload("not-a-jwt"))
-        assertNull(ChatGPTAuth.decodeJwtPayload("a.!!!.c"))
+        assertNull(decodeJwtPayload("not-a-jwt"))
+        assertNull(decodeJwtPayload("a.!!!.c"))
     }
 
     @Test

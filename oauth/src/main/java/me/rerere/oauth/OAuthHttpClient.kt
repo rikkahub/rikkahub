@@ -1,12 +1,16 @@
 package me.rerere.oauth
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import okhttp3.Call
 import okhttp3.Callback
@@ -68,6 +72,34 @@ class OAuthHttpClient(
     enum class TokenEncoding { FORM, JSON }
 
     data class Pkce(val verifier: String, val challenge: String)
+
+    /** RFC 8628 设备授权请求。 */
+    data class DeviceAuthorizationRequest(
+        val deviceAuthorizationEndpoint: String,
+        val clientId: String,
+        val scope: String? = null,
+    )
+
+    /** 设备授权响应：让用户打开 [verificationUri] 输入 [userCode]，同时用 [deviceCode] 轮询令牌端点。 */
+    @Serializable
+    data class DeviceAuthorization(
+        @SerialName("device_code") val deviceCode: String,
+        @SerialName("user_code") val userCode: String,
+        @SerialName("verification_uri") val verificationUri: String,
+        // 已带上 user_code 的地址，打开后不用手动输入
+        @SerialName("verification_uri_complete") val verificationUriComplete: String? = null,
+        @SerialName("expires_in") val expiresIn: Long = 600,
+        val interval: Long = 5,
+    )
+
+    data class DeviceTokenRequest(
+        val tokenEndpoint: String,
+        val clientId: String,
+        val deviceCode: String,
+    )
+
+    /** 设备授权没有完成：用户拒绝、设备码过期或令牌端点返回了其他错误。 */
+    class DeviceAuthorizationException(val error: String, message: String) : IOException(message)
 
     data class AuthorizationRequest(
         val authorizationEndpoint: String,
@@ -190,6 +222,68 @@ class OAuthHttpClient(
             postToken(request.tokenEndpoint, body)
         }
 
+    suspend fun requestDeviceAuthorization(
+        request: DeviceAuthorizationRequest,
+    ): DeviceAuthorization = withContext(Dispatchers.IO) {
+        val form = FormBody.Builder()
+            .add("client_id", request.clientId)
+            .apply { if (!request.scope.isNullOrBlank()) add("scope", request.scope) }
+            .build()
+        val httpRequest = Request.Builder()
+            .url(request.deviceAuthorizationEndpoint)
+            .header("Accept", "application/json")
+            .post(form)
+            .build()
+        json.decodeFromString(DeviceAuthorization.serializer(), execute(httpRequest))
+    }
+
+    /**
+     * 按 [DeviceAuthorization.interval] 轮询令牌端点，直到用户在浏览器里完成授权（RFC 8628 3.4、3.5）。
+     *
+     * 收到 `slow_down` 时间隔加 5 秒；用户拒绝、设备码过期或超过 [DeviceAuthorization.expiresIn]
+     * 时抛出 [DeviceAuthorizationException]。取消协程即停止轮询。
+     */
+    suspend fun awaitDeviceToken(
+        request: DeviceTokenRequest,
+        authorization: DeviceAuthorization,
+    ): TokenResponse {
+        var interval = authorization.interval.coerceIn(1, 60)
+        var waited = 0L
+        while (waited < authorization.expiresIn) {
+            delay(interval * 1000)
+            waited += interval
+            val form = FormBody.Builder()
+                .add("grant_type", DEVICE_CODE_GRANT_TYPE)
+                .add("device_code", request.deviceCode)
+                .add("client_id", request.clientId)
+                .build()
+            val httpRequest = Request.Builder()
+                .url(request.tokenEndpoint)
+                .header("Accept", "application/json")
+                .post(form)
+                .build()
+            // 响应体在回调所在的调度器上读，调用方可能在主线程，读网络放到 IO
+            val (code, body) = withContext(Dispatchers.IO) {
+                executeRaw(httpRequest).use { it.code to it.body.string() }
+            }
+            if (code in 200..299) return json.decodeFromString(TokenResponse.serializer(), body)
+            val error = runCatching {
+                json.parseToJsonElement(body).jsonObject["error"]?.jsonPrimitive?.contentOrNull
+            }.getOrNull()
+            when (error) {
+                "authorization_pending" -> {}
+                "slow_down" -> interval += 5
+                "access_denied" -> throw DeviceAuthorizationException(error, "Authorization was denied")
+                "expired_token" -> throw DeviceAuthorizationException(error, "Device code expired")
+                else -> throw DeviceAuthorizationException(
+                    error ?: "http_$code",
+                    "HTTP $code for ${request.tokenEndpoint}: ${body.take(300)}",
+                )
+            }
+        }
+        throw DeviceAuthorizationException("expired_token", "Device code expired")
+    }
+
     private suspend fun postToken(tokenEndpoint: String, body: RequestBody): TokenResponse {
         val request = Request.Builder()
             .url(tokenEndpoint)
@@ -230,5 +324,6 @@ class OAuthHttpClient(
 
     private companion object {
         val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+        const val DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
     }
 }

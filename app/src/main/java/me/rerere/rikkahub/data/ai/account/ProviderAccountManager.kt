@@ -15,16 +15,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.provider.AccountCredentialProvider
 import me.rerere.ai.provider.OAuthCredential
-import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.oauth.CustomTabsOAuthAuthorizationLauncher
 import me.rerere.oauth.OAuthHttpClient
 import me.rerere.oauth.OAuthLoopbackCallbackServer
+import me.rerere.common.http.await
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.utils.JsonInstant
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration.Companion.minutes
 import kotlin.uuid.Uuid
@@ -37,6 +40,10 @@ private val AUTHORIZATION_TIMEOUT = 5.minutes
 
 sealed interface AccountLoginStatus {
     data object Authorizing : AccountLoginStatus
+
+    /** 设备码登录：用户在浏览器里打开 [verificationUrl] 确认 [userCode] */
+    data class DeviceCode(val userCode: String, val verificationUrl: String) : AccountLoginStatus
+
     data class Failed(val message: String) : AccountLoginStatus
 }
 
@@ -48,9 +55,7 @@ sealed interface AccountLoginStatus {
 class ProviderAccountManager(
     private val settingsStore: SettingsStore,
     private val appScope: AppScope,
-    client: OkHttpClient,
-    // ProviderManager 依赖本类提供凭据，这里延迟获取以避开循环依赖
-    private val providerManager: Lazy<ProviderManager>,
+    private val client: OkHttpClient,
 ) : AccountCredentialProvider {
     // 走应用的 OkHttpClient，授权和刷新请求也能用上设置里的代理
     private val oauthClient = OAuthHttpClient(client)
@@ -73,15 +78,18 @@ class ProviderAccountManager(
             try {
                 val credential = when (provider) {
                     is ProviderSetting.ChatGPT -> loginChatGPT(context.applicationContext)
+                    is ProviderSetting.Grok -> loginGrok(providerId, context.applicationContext)
                 }
                 persistCredential(providerId, credential)
                 setStatus(providerId, null)
-                syncModelsIfEmpty(providerId)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Login failed for ${provider.name}", e)
-                setStatus(providerId, AccountLoginStatus.Failed(e.message ?: e.javaClass.simpleName))
+                setStatus(
+                    providerId,
+                    AccountLoginStatus.Failed(e.message ?: e.javaClass.simpleName)
+                )
             }
         }
         loginJobs[providerId] = job
@@ -120,9 +128,10 @@ class ProviderAccountManager(
         return lock.withLock {
             val latest = findAccount(setting.id) ?: setting
             val credential = latest.credential ?: error("${latest.name}: not signed in")
-            val rejected = rejectedAccessToken != null && rejectedAccessToken == credential.accessToken
+            val rejected =
+                rejectedAccessToken != null && rejectedAccessToken == credential.accessToken
             val expiring = credential.expiresAt > 0 &&
-                System.currentTimeMillis() >= credential.expiresAt - TOKEN_REFRESH_LEEWAY_MS
+                    System.currentTimeMillis() >= credential.expiresAt - TOKEN_REFRESH_LEEWAY_MS
             if (!rejected && !expiring) return@withLock credential
 
             val refreshToken = credential.refreshToken
@@ -133,65 +142,94 @@ class ProviderAccountManager(
                         token = oauthClient.refreshToken(ChatGPTAuth.refreshRequest(refreshToken)),
                         previous = credential,
                     )
+
+                    is ProviderSetting.Grok -> GrokAuth.toCredential(
+                        token = oauthClient.refreshToken(GrokAuth.refreshRequest(refreshToken)),
+                        previous = credential,
+                    )
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                throw IllegalStateException("${latest.name}: failed to refresh sign-in, please sign in again", e)
+                throw IllegalStateException(
+                    "${latest.name}: failed to refresh sign-in, please sign in again",
+                    e
+                )
             }
             persistCredential(latest.id, refreshed)
             refreshed
         }
     }
 
-    private suspend fun loginChatGPT(context: Context): OAuthCredential = withContext(Dispatchers.IO) {
-        val pkce = oauthClient.generatePkce()
-        val state = oauthClient.generateState()
-        val session = chatGPTCallbackServer.openSession(context, state)
-        try {
-            val authorizationUrl = oauthClient.buildAuthorizationUrl(
-                ChatGPTAuth.authorizationRequest(pkce = pkce, state = state, redirectUri = session.redirectUri)
-            )
-            withContext(Dispatchers.Main) {
-                CustomTabsOAuthAuthorizationLauncher.launch(context, authorizationUrl)
-            }
-            val callback = session.awaitCallback(AUTHORIZATION_TIMEOUT) ?: error("Authorization timed out")
-            callback.error?.let { code ->
-                error(listOfNotNull(code, callback.errorDescription).joinToString(": "))
-            }
-            val code = callback.code ?: error("No authorization code returned")
-            val token = oauthClient.exchangeAuthorizationCode(
-                OAuthHttpClient.AuthorizationCodeTokenRequest(
-                    tokenEndpoint = ChatGPTAuth.TOKEN_ENDPOINT,
-                    clientId = ChatGPTAuth.CLIENT_ID,
-                    code = code,
-                    codeVerifier = pkce.verifier,
-                    redirectUri = session.redirectUri,
+    private suspend fun loginChatGPT(context: Context): OAuthCredential =
+        withContext(Dispatchers.IO) {
+            val pkce = oauthClient.generatePkce()
+            val state = oauthClient.generateState()
+            val session = chatGPTCallbackServer.openSession(context, state)
+            try {
+                val authorizationUrl = oauthClient.buildAuthorizationUrl(
+                    ChatGPTAuth.authorizationRequest(
+                        pkce = pkce,
+                        state = state,
+                        redirectUri = session.redirectUri
+                    )
                 )
-            )
-            ChatGPTAuth.toCredential(token, previous = null)
-        } finally {
-            withContext(NonCancellable) { session.close() }
-        }
-    }
-
-    // 刚登录、还没有模型时，把账号可用的模型直接加进来
-    private suspend fun syncModelsIfEmpty(providerId: Uuid) {
-        val provider = findAccount(providerId)?.takeIf { it.models.isEmpty() } ?: return
-        val models = runCatching {
-            providerManager.value.getProviderByType(provider).listModels(provider)
-        }.getOrElse {
-            Log.w(TAG, "Failed to fetch models for ${provider.name}", it)
-            return
-        }
-        settingsStore.update { old ->
-            old.copy(
-                providers = old.providers.map { item ->
-                    if (item.id == providerId && item.models.isEmpty()) item.copyProvider(models = models) else item
+                withContext(Dispatchers.Main) {
+                    CustomTabsOAuthAuthorizationLauncher.launch(context, authorizationUrl)
                 }
-            )
+                val callback =
+                    session.awaitCallback(AUTHORIZATION_TIMEOUT) ?: error("Authorization timed out")
+                callback.error?.let { code ->
+                    error(listOfNotNull(code, callback.errorDescription).joinToString(": "))
+                }
+                val code = callback.code ?: error("No authorization code returned")
+                val token = oauthClient.exchangeAuthorizationCode(
+                    OAuthHttpClient.AuthorizationCodeTokenRequest(
+                        tokenEndpoint = ChatGPTAuth.TOKEN_ENDPOINT,
+                        clientId = ChatGPTAuth.CLIENT_ID,
+                        code = code,
+                        codeVerifier = pkce.verifier,
+                        redirectUri = session.redirectUri,
+                    )
+                )
+                ChatGPTAuth.toCredential(token, previous = null)
+            } finally {
+                withContext(NonCancellable) { session.close() }
+            }
         }
-    }
+
+    // 登录由 appScope（主线程）发起，网络请求和读响应体都放到 IO
+    private suspend fun loginGrok(providerId: Uuid, context: Context): OAuthCredential =
+        withContext(Dispatchers.IO) {
+            val authorization =
+                oauthClient.requestDeviceAuthorization(GrokAuth.deviceAuthorizationRequest())
+            // 带 user_code 的地址打开后不用手动输入
+            val url = authorization.verificationUriComplete ?: authorization.verificationUri
+            require(url.startsWith("https://")) { "Invalid verification URL: $url" }
+            setStatus(providerId, AccountLoginStatus.DeviceCode(authorization.userCode, url))
+            withContext(Dispatchers.Main) {
+                CustomTabsOAuthAuthorizationLauncher.launch(context, url)
+            }
+            val token = oauthClient.awaitDeviceToken(
+                GrokAuth.deviceTokenRequest(authorization.deviceCode),
+                authorization
+            )
+            val credential = GrokAuth.toCredential(token, previous = null)
+            if (credential.email != null) credential else credential.copy(email = fetchGrokEmail(credential))
+        }
+
+    // token 里没有邮箱时查 userinfo，只用于界面展示，查不到不影响登录
+    private suspend fun fetchGrokEmail(credential: OAuthCredential): String? = runCatching {
+        val request = Request.Builder()
+            .url(GrokAuth.USERINFO_ENDPOINT)
+            .header("Authorization", "Bearer ${credential.accessToken}")
+            .header("Accept", "application/json")
+            .build()
+        client.newCall(request).await().use { response ->
+            if (!response.isSuccessful) return@use null
+            JsonInstant.parseToJsonElement(response.body.string()).jsonObject.claimString("email")
+        }
+    }.onFailure { Log.w(TAG, "Failed to fetch Grok userinfo", it) }.getOrNull()
 
     private suspend fun persistCredential(providerId: Uuid, credential: OAuthCredential?) {
         settingsStore.update { old ->

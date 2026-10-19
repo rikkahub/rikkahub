@@ -46,6 +46,7 @@ val ProviderSetting.supportsBuiltInSearch: Boolean
         is ProviderSetting.Google -> true
         is ProviderSetting.Claude -> true
         is ProviderSetting.ChatGPT -> true
+        is ProviderSetting.Grok -> true
     }
 
 @Serializable
@@ -288,6 +289,66 @@ sealed class ProviderSetting {
         override val id: Uuid = Uuid.random(),
         override val enabled: Boolean = true,
         override val name: String = "ChatGPT",
+        override val models: List<Model> = emptyList(),
+        override val customHeaders: List<CustomHeader> = emptyList(),
+        @Transient override val builtIn: Boolean = false,
+        @Transient override val description: @Composable (() -> Unit) = {},
+        @Transient override val shortDescription: @Composable (() -> Unit) = {},
+        override val credential: OAuthCredential? = null,
+    ) : Account() {
+        override fun withCredential(credential: OAuthCredential?): Account = copy(credential = credential)
+
+        override fun addModel(model: Model): ProviderSetting {
+            return copy(models = models + model)
+        }
+
+        override fun editModel(model: Model): ProviderSetting {
+            return copy(models = models.map { if (it.id == model.id) model.copy() else it })
+        }
+
+        override fun delModel(model: Model): ProviderSetting {
+            return copy(models = models.filter { it.id != model.id })
+        }
+
+        override fun moveMove(
+            from: Int,
+            to: Int
+        ): ProviderSetting {
+            return copy(models = models.toMutableList().apply {
+                val model = removeAt(from)
+                add(to, model)
+            })
+        }
+
+        override fun copyProvider(
+            id: Uuid,
+            enabled: Boolean,
+            name: String,
+            models: List<Model>,
+            customHeaders: List<CustomHeader>,
+            builtIn: Boolean,
+            description: @Composable (() -> Unit),
+            shortDescription: @Composable (() -> Unit),
+        ): ProviderSetting {
+            return this.copy(
+                id = id,
+                enabled = enabled,
+                name = name,
+                models = models,
+                customHeaders = customHeaders,
+                builtIn = builtIn,
+                description = description,
+                shortDescription = shortDescription,
+            )
+        }
+    }
+
+    @Serializable
+    @SerialName("grok")
+    data class Grok(
+        override val id: Uuid = Uuid.random(),
+        override val enabled: Boolean = true,
+        override val name: String = "Grok",
         override val models: List<Model> = emptyList(),
         override val customHeaders: List<CustomHeader> = emptyList(),
         @Transient override val builtIn: Boolean = false,

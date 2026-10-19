@@ -84,7 +84,7 @@ class ProviderAccountManagerTest {
             ),
         )
         store.update { it.copy(providers = it.providers + provider) }
-        val manager = ProviderAccountManager(store, appScope, client, lazy { error("unused") })
+        val manager = ProviderAccountManager(store, appScope, client)
 
         val caller = launch(Dispatchers.Default) { manager.getCredential(provider, rejectedAccessToken = null) }
         assertTrue(withContext(Dispatchers.IO) { requestArrived.await(10, TimeUnit.SECONDS) })

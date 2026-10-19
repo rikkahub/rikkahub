@@ -60,6 +60,7 @@ val ProviderSetting.supportsQuota: Boolean
         is ProviderSetting.Google -> quotaQuery.enabled
         is ProviderSetting.Claude -> quotaQuery.enabled
         is ProviderSetting.ChatGPT -> credential != null
+        is ProviderSetting.Grok -> credential != null
     }
 
 /** 用户自定义的额度查询，账号类没有 */

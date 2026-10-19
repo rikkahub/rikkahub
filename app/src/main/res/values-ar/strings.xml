@@ -1654,7 +1654,6 @@
   <string name="setting_provider_page_sign_out">تسجيل الخروج</string>
   <string name="setting_provider_page_waiting_authorization">بانتظار التفويض</string>
   <string name="setting_provider_page_waiting_authorization_desc">أكمل تسجيل الدخول في المتصفح، أو اضغط للإلغاء</string>
-  <string name="setting_provider_page_sign_in_chatgpt">تسجيل الدخول باستخدام ChatGPT</string>
   <string name="setting_provider_page_chatgpt_disclaimer">يستخدم اشتراكك في ChatGPT عبر الواجهة الخلفية Codex. تجريبي: قد تغيّر OpenAI هذا أو تقيّده في أي وقت.</string>
   <string name="setting_provider_page_usage">الاستخدام</string>
   <string name="setting_provider_page_usage_loading">جارٍ تحميل الاستخدام</string>
@@ -1669,4 +1668,8 @@
   <string name="setting_provider_page_usage_limit_hours">حد %1$d ساعة</string>
   <string name="setting_provider_page_usage_limit_minutes">حد %1$d دقيقة</string>
   <string name="setting_provider_page_quota_variables">المتغيرات: %1$s. يُرسَل مفتاح API إلى عنوان URL هذا مع الترويسات أعلاه.</string>
+  <string name="setting_provider_page_sign_in_with">تسجيل الدخول باستخدام %1$s</string>
+  <string name="setting_provider_page_grok_disclaimer">يستخدم اشتراك SuperGrok الخاص بك عبر تسجيل الدخول كما في Grok CLI. ميزة تجريبية: قد تغيّر xAI هذا أو تقيّده في أي وقت.</string>
+  <string name="setting_provider_page_device_code_hint">أكّد هذا الرمز في المتصفح</string>
+  <string name="setting_provider_page_device_code_reopen">اضغط لفتح الصفحة مرة أخرى</string>
 </resources>

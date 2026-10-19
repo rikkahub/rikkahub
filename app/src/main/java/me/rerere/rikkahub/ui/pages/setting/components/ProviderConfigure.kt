@@ -41,10 +41,12 @@ import me.rerere.ai.provider.withQuotaQuery
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.account.AccountLoginStatus
 import me.rerere.rikkahub.data.ai.account.ChatGPTAuth
+import me.rerere.oauth.CustomTabsOAuthAuthorizationLauncher
 import me.rerere.rikkahub.data.ai.account.ProviderAccountManager
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.DashboardSpeed02
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Login03
@@ -113,7 +115,21 @@ fun ProviderConfigure(
             is ProviderSetting.OpenAI -> ProviderConfigureOpenAI(provider, onEdit)
             is ProviderSetting.Google -> ProviderConfigureGoogle(provider, onEdit)
             is ProviderSetting.Claude -> ProviderConfigureClaude(provider, onEdit)
-            is ProviderSetting.ChatGPT -> ProviderConfigureChatGPT(provider, onEdit)
+            is ProviderSetting.ChatGPT -> ProviderConfigureAccount(
+                provider = provider,
+                onEdit = onEdit,
+                serviceName = "ChatGPT",
+                plan = provider.credential?.plan?.let { "ChatGPT ${ChatGPTAuth.planDisplayName(it)}" },
+                disclaimer = stringResource(R.string.setting_provider_page_chatgpt_disclaimer),
+            )
+
+            is ProviderSetting.Grok -> ProviderConfigureAccount(
+                provider = provider,
+                onEdit = onEdit,
+                serviceName = "Grok",
+                plan = null,
+                disclaimer = stringResource(R.string.setting_provider_page_grok_disclaimer),
+            )
         }
     }
 }
@@ -357,10 +373,14 @@ private fun ProviderConfigureOpenAI(
     }
 }
 
+// 账号类提供商：登录状态、用量和说明
 @Composable
-private fun ProviderConfigureChatGPT(
-    provider: ProviderSetting.ChatGPT,
-    onEdit: (provider: ProviderSetting) -> Unit
+private fun ProviderConfigureAccount(
+    provider: ProviderSetting.Account,
+    onEdit: (provider: ProviderSetting) -> Unit,
+    serviceName: String,
+    plan: String?,
+    disclaimer: String,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -377,9 +397,7 @@ private fun ProviderConfigureChatGPT(
         if (credential != null) {
             item(
                 leadingContent = { CardGroupIcon(HugeIcons.UserCircle) },
-                supportingContent = credential.plan?.let { plan ->
-                    { Text("ChatGPT ${ChatGPTAuth.planDisplayName(plan)}") }
-                },
+                supportingContent = plan?.let { { Text(it) } },
                 headlineContent = { Text(credential.email ?: stringResource(R.string.setting_provider_page_signed_in)) },
             )
             item(
@@ -392,6 +410,25 @@ private fun ProviderConfigureChatGPT(
                     )
                 },
                 headlineContent = { Text(stringResource(R.string.setting_provider_page_sign_out)) },
+            )
+        } else if (status is AccountLoginStatus.DeviceCode) {
+            item(
+                onClick = { CustomTabsOAuthAuthorizationLauncher.launch(context, status.verificationUrl) },
+                leadingContent = { ContainedLoadingIndicator(modifier = Modifier.size(40.dp)) },
+                overlineContent = { Text(stringResource(R.string.setting_provider_page_device_code_hint)) },
+                supportingContent = { Text(stringResource(R.string.setting_provider_page_device_code_reopen)) },
+                headlineContent = {
+                    Text(
+                        text = status.userCode,
+                        style = MaterialTheme.typography.headlineSmallEmphasized,
+                        fontFamily = JetbrainsMono,
+                    )
+                },
+            )
+            item(
+                onClick = { accountManager.cancelLogin(provider.id) },
+                leadingContent = { CardGroupIcon(HugeIcons.Cancel01) },
+                headlineContent = { Text(stringResource(R.string.cancel)) },
             )
         } else if (status == AccountLoginStatus.Authorizing) {
             item(
@@ -408,17 +445,17 @@ private fun ProviderConfigureChatGPT(
                     { Text(failed.message, color = MaterialTheme.colorScheme.error) }
                 },
                 trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
-                headlineContent = { Text(stringResource(R.string.setting_provider_page_sign_in_chatgpt)) },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_sign_in_with, serviceName)) },
             )
         }
     }
 
     if (provider.supportsQuota) {
-        ChatGPTUsage(provider)
+        AccountUsage(provider)
     }
 
     Text(
-        text = stringResource(R.string.setting_provider_page_chatgpt_disclaimer),
+        text = disclaimer,
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 4.dp),
@@ -446,7 +483,7 @@ private const val WEEK_MINUTES = 7 * DAY_MINUTES
 
 // 订阅用量：每个窗口一条进度和重置时间
 @Composable
-private fun ChatGPTUsage(provider: ProviderSetting.ChatGPT) {
+private fun AccountUsage(provider: ProviderSetting.Account) {
     val result = rememberProviderQuota(provider)
     val limits = result?.getOrNull() as? ProviderQuota.UsageLimits
     CardGroup(title = { Text(stringResource(R.string.setting_provider_page_usage)) }) {

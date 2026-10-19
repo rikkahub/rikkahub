@@ -4,6 +4,7 @@ import android.content.Context
 import me.rerere.ai.provider.providers.chatgpt.ChatGPTProvider
 import me.rerere.ai.provider.providers.claude.ClaudeProvider
 import me.rerere.ai.provider.providers.google.GoogleProvider
+import me.rerere.ai.provider.providers.grok.GrokProvider
 import me.rerere.ai.provider.providers.openai.OpenAIProvider
 import okhttp3.OkHttpClient
 
@@ -24,6 +25,7 @@ class ProviderManager(
         registerProvider("google", GoogleProvider(client, context))
         registerProvider("claude", ClaudeProvider(client, context))
         registerProvider("chatgpt", ChatGPTProvider(client, accountCredentials))
+        registerProvider("grok", GrokProvider(client, accountCredentials))
     }
 
     /**
@@ -59,6 +61,7 @@ class ProviderManager(
             is ProviderSetting.Google -> getProvider("google")
             is ProviderSetting.Claude -> getProvider("claude")
             is ProviderSetting.ChatGPT -> getProvider("chatgpt")
+            is ProviderSetting.Grok -> getProvider("grok")
         } as Provider<T>
     }
 }

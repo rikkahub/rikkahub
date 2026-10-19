@@ -249,7 +249,6 @@ val dataSourceModule = module {
             settingsStore = get(),
             appScope = get(),
             client = get(),
-            providerManager = lazy { get<ProviderManager>() },
         )
     }
 

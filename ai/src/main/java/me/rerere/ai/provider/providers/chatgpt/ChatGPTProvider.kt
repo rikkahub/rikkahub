@@ -2,7 +2,6 @@ package me.rerere.ai.provider.providers.chatgpt
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -30,20 +29,18 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.provider.TextGenerationResult
 import me.rerere.ai.provider.UsageWindow
+import me.rerere.ai.provider.providers.configureAccountAuth
+import me.rerere.ai.provider.providers.withAccountAuthenticator
 import me.rerere.ai.provider.providers.openai.ResponseAPI
 import me.rerere.ai.provider.providers.openai.ResponsesEndpoint
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.StreamChunkHandler
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.util.json
-import me.rerere.ai.util.mergeCustomHeaders
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonPrimitiveOrNull
-import okhttp3.Authenticator
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
-import okhttp3.Route
 import kotlin.time.Instant
 
 // 参照 openai/codex（codex-rs/model-provider-info、codex-rs/login）
@@ -70,9 +67,7 @@ class ChatGPTProvider(
     client: OkHttpClient,
     private val credentials: AccountCredentialProvider,
 ) : Provider<ProviderSetting.ChatGPT> {
-    private val client = client.newBuilder()
-        .authenticator(AccountTokenAuthenticator(credentials))
-        .build()
+    private val client = client.withAccountAuthenticator(credentials)
     private val responseAPI = ResponseAPI(this.client)
 
     override suspend fun listModels(providerSetting: ProviderSetting.ChatGPT): List<Model> =
@@ -149,37 +144,10 @@ class ChatGPTProvider(
     private suspend fun Request.Builder.configureAuth(
         setting: ProviderSetting.ChatGPT,
         params: TextGenerationParams? = null,
-    ) {
-        val credential = credentials.getCredential(setting, rejectedAccessToken = null)
-        // 先放自定义头，鉴权头后写，保证不会被覆盖
-        headers(setting.mergeCustomHeaders(params?.customHeaders.orEmpty()))
+    ) = configureAccountAuth(credentials, setting, params?.customHeaders.orEmpty()) { credential ->
         header("Authorization", "Bearer ${credential.accessToken}")
         credential.accountId?.let { header("ChatGPT-Account-ID", it) }
         header("originator", CODEX_ORIGINATOR)
-        tag(AccountRequestTag::class.java, AccountRequestTag(setting))
-    }
-}
-
-private class AccountRequestTag(val setting: ProviderSetting.Account)
-
-/** 请求被 401 拒绝时刷新一次 token 再重试，覆盖流式、非流式和模型列表请求 */
-private class AccountTokenAuthenticator(
-    private val credentials: AccountCredentialProvider,
-) : Authenticator {
-    override fun authenticate(route: Route?, response: Response): Request? {
-        val tag = response.request.tag(AccountRequestTag::class.java) ?: return null
-        // 已经重试过一次还是 401，说明不是 token 过期的问题
-        if (response.priorResponse != null) return null
-        val rejected = response.request.header("Authorization")?.removePrefix("Bearer ")
-        // OkHttp 在自己的线程上同步调用 Authenticator
-        val credential = runCatching {
-            runBlocking { credentials.getCredential(tag.setting, rejectedAccessToken = rejected) }
-        }.getOrNull() ?: return null
-        if (credential.accessToken == rejected) return null
-        return response.request.newBuilder()
-            .header("Authorization", "Bearer ${credential.accessToken}")
-            .apply { credential.accountId?.let { header("ChatGPT-Account-ID", it) } }
-            .build()
     }
 }
 

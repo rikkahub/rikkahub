@@ -1,14 +1,8 @@
 package me.rerere.rikkahub.data.ai.account
 
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.longOrNull
 import me.rerere.ai.provider.OAuthCredential
 import me.rerere.oauth.OAuthHttpClient
-import me.rerere.rikkahub.utils.JsonInstant
-import java.util.Base64
 
 /**
  * ChatGPT 账号登录的协议参数，与 openai/codex（codex-rs/login）保持一致。
@@ -61,17 +55,17 @@ internal object ChatGPTAuth {
         val accessClaims = decodeJwtPayload(token.accessToken)
         val authClaims = (idClaims ?: accessClaims)?.get(AUTH_CLAIM) as? JsonObject
         val expiresAt = token.expiresIn?.takeIf { it > 0 }?.let { now + it * 1000 }
-            ?: accessClaims?.long("exp")?.let { it * 1000 }
+            ?: accessClaims?.claimLong("exp")?.let { it * 1000 }
             ?: 0L
         return OAuthCredential(
             accessToken = token.accessToken,
             refreshToken = token.refreshToken ?: previous?.refreshToken,
             expiresAt = expiresAt,
-            accountId = authClaims?.string("chatgpt_account_id") ?: previous?.accountId,
-            email = idClaims?.string("email")
-                ?: (idClaims?.get(PROFILE_CLAIM) as? JsonObject)?.string("email")
+            accountId = authClaims?.claimString("chatgpt_account_id") ?: previous?.accountId,
+            email = idClaims?.claimString("email")
+                ?: (idClaims?.get(PROFILE_CLAIM) as? JsonObject)?.claimString("email")
                 ?: previous?.email,
-            plan = authClaims?.string("chatgpt_plan_type") ?: previous?.plan,
+            plan = authClaims?.claimString("chatgpt_plan_type") ?: previous?.plan,
         )
     }
 
@@ -102,19 +96,4 @@ internal object ChatGPTAuth {
         else -> plan.split('_').filter { it.isNotEmpty() }
             .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
     }
-
-    /** 只解码 JWT 的 payload，不校验签名：token 直接来自授权服务器的 HTTPS 响应 */
-    internal fun decodeJwtPayload(jwt: String): JsonObject? {
-        val parts = jwt.split('.')
-        if (parts.size != 3) return null
-        return runCatching {
-            val payload = Base64.getUrlDecoder().decode(parts[1]).decodeToString()
-            JsonInstant.parseToJsonElement(payload).jsonObject
-        }.getOrNull()
-    }
-
-    private fun JsonObject.string(key: String): String? =
-        (get(key) as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
-
-    private fun JsonObject.long(key: String): Long? = (get(key) as? JsonPrimitive)?.longOrNull
 }
