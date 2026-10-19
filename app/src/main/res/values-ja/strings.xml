@@ -1612,4 +1612,18 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_compress_tool_call_response">モデルが要約を作成する代わりにツールを呼び出そうとしました。もう一度お試しください。</string>
   <string name="assistant_page_memory_auto_dream">自動で夢を見る</string>
   <string name="assistant_page_memory_auto_dream_desc">チャットが停止すると、バックグラウンドで記憶に変換されます。オフの場合、これは「今すぐ夢を見る」をタップしたときにのみ実行されます。</string>
+  <string name="chat_message_usage_title">使用量</string>
+  <string name="chat_message_usage_steps">%1$d ステップ</string>
+  <string name="chat_message_usage_context_short">%1$s コンテキスト</string>
+  <string name="chat_message_usage_cached_short">(%1$s キャッシュ済み)</string>
+  <string name="chat_message_usage_context">コンテキスト</string>
+  <string name="chat_message_usage_step_count">ステップ</string>
+  <string name="chat_message_usage_input">入力</string>
+  <string name="chat_message_usage_cached">キャッシュ済み</string>
+  <string name="chat_message_usage_output">出力</string>
+  <string name="chat_message_usage_total_input">入力合計</string>
+  <string name="chat_message_usage_total_cached">キャッシュ合計</string>
+  <string name="chat_message_usage_total_output">合計出力</string>
+  <string name="chat_message_usage_speed">速度</string>
+  <string name="chat_message_usage_duration">所要時間</string>
 </resources>

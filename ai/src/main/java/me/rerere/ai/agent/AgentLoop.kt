@@ -223,8 +223,9 @@ private fun errorOutput(error: String): List<UIMessagePart> =
 private fun UIMessage.withStepStats(stepBase: UIMessage, stepTime: Duration): UIMessage = copy(
     usage = stepBase.usage.sum(usage),
     generationTimeMs = (stepBase.generationTimeMs ?: 0L) + stepTime.inWholeMilliseconds,
-    // 上下文占用只看最后一次请求，usage 是多步累计值
-    contextTokens = usage?.let { it.promptTokens + it.completionTokens } ?: stepBase.contextTokens,
+    // 上下文占用只看最后一次请求，usage 是多步累计值；本步没返回 usage 时沿用之前步骤的
+    lastUsage = usage ?: stepBase.lastUsage,
+    stepCount = (stepBase.stepCount ?: 0) + 1,
 )
 
 private fun now() = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())

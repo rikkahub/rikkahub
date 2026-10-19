@@ -1612,4 +1612,18 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_compress_tool_call_response">模型试图调用工具，而不是编写摘要。请重试。</string>
   <string name="assistant_page_memory_auto_dream">自动做梦</string>
   <string name="assistant_page_memory_auto_dream_desc">聊天暂停后，在后台将聊天内容转为记忆。关闭后，仅在点击“立即做梦”时执行此操作</string>
+  <string name="chat_message_usage_title">用量</string>
+  <string name="chat_message_usage_steps">%1$d 步</string>
+  <string name="chat_message_usage_context_short">%1$s 上下文</string>
+  <string name="chat_message_usage_cached_short">（已缓存 %1$s）</string>
+  <string name="chat_message_usage_context">上下文</string>
+  <string name="chat_message_usage_step_count">步数</string>
+  <string name="chat_message_usage_input">输入</string>
+  <string name="chat_message_usage_cached">缓存</string>
+  <string name="chat_message_usage_output">输出</string>
+  <string name="chat_message_usage_total_input">总输入</string>
+  <string name="chat_message_usage_total_cached">缓存总量</string>
+  <string name="chat_message_usage_total_output">总输出</string>
+  <string name="chat_message_usage_speed">速度</string>
+  <string name="chat_message_usage_duration">时长</string>
 </resources>

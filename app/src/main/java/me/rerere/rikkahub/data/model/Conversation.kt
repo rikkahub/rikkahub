@@ -135,7 +135,9 @@ data class MessageNode(
     val isFavorite: Boolean = false,
 ) {
     val currentMessage get() = if (messages.isEmpty() || selectIndex !in messages.indices) {
-        throw IllegalStateException("MessageNode has no valid current message: messages.size=${messages.size}, selectIndex=$selectIndex")
+        throw IllegalStateException(
+            "MessageNode has no valid current message: messages.size=${messages.size}, selectIndex=$selectIndex"
+        )
     } else {
         messages[selectIndex]
     }
@@ -159,8 +161,7 @@ fun Conversation.lastContextTokens(): Int? {
     val message = messages.lastOrNull { it.role == MessageRole.ASSISTANT } ?: return null
     val checkpoint = messages.lastOrNull { it.isContextCheckpoint }
     if (checkpoint != null && checkpoint.createdAt > message.createdAt) return null
-    // 旧消息没有 contextTokens，那时的 usage 只保留最后一步，可以直接用
-    return message.contextTokens ?: message.usage?.let { it.promptTokens + it.completionTokens }
+    return message.contextTokens()
 }
 
 /** 在 [afterNodeId] 节点之后插入压缩检查点；该节点已不存在时返回 null。 */
@@ -169,7 +170,8 @@ internal fun Conversation.insertContextCheckpoint(afterNodeId: Uuid, summary: St
     if (index == -1) return null
     val checkpoint = UIMessage.user(summary).copy(isContextCheckpoint = true).toMessageNode()
     return copy(
-        messageNodes = messageNodes.subList(0, index + 1) + checkpoint + messageNodes.subList(index + 1, messageNodes.size),
+        messageNodes =
+        messageNodes.subList(0, index + 1) + checkpoint + messageNodes.subList(index + 1, messageNodes.size),
     )
 }
 

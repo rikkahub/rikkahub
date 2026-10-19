@@ -1610,4 +1610,18 @@
   <string name="chat_input_reasoning_placeholder">Reasoning content</string>
   <string name="assistant_page_memory_auto_dream">Auto dream</string>
   <string name="assistant_page_memory_auto_dream_desc">Turn chats into memories in the background once they pause. When off, this only happens when you tap Dream now</string>
+  <string name="chat_message_usage_title">Usage</string>
+  <string name="chat_message_usage_steps">%1$d steps</string>
+  <string name="chat_message_usage_context_short">%1$s ctx</string>
+  <string name="chat_message_usage_cached_short">(%1$s cached)</string>
+  <string name="chat_message_usage_context">Context</string>
+  <string name="chat_message_usage_step_count">Steps</string>
+  <string name="chat_message_usage_input">Input</string>
+  <string name="chat_message_usage_cached">Cached</string>
+  <string name="chat_message_usage_output">Output</string>
+  <string name="chat_message_usage_total_input">Total input</string>
+  <string name="chat_message_usage_total_cached">Total cached</string>
+  <string name="chat_message_usage_total_output">Total output</string>
+  <string name="chat_message_usage_speed">Speed</string>
+  <string name="chat_message_usage_duration">Duration</string>
 </resources>

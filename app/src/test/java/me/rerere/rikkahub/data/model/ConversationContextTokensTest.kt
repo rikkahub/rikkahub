@@ -20,27 +20,31 @@ class ConversationContextTokensTest {
     private fun assistantMessage(
         minute: Int,
         usage: TokenUsage? = null,
-        contextTokens: Int? = null,
+        lastUsage: TokenUsage? = null,
     ) = UIMessage(
         role = MessageRole.ASSISTANT,
         parts = emptyList(),
         createdAt = at(minute),
         usage = usage,
-        contextTokens = contextTokens,
+        lastUsage = lastUsage,
     )
 
     @Test
-    fun `uses context tokens of the last reply instead of accumulated usage`() {
+    fun `uses the last request of the last reply instead of accumulated usage`() {
         val conversation = conversation(
             UIMessage.user("hi"),
-            assistantMessage(1, usage = TokenUsage(promptTokens = 15_000, completionTokens = 140), contextTokens = 7_600),
+            assistantMessage(
+                1,
+                usage = TokenUsage(promptTokens = 15_000, completionTokens = 140),
+                lastUsage = TokenUsage(promptTokens = 7_500, completionTokens = 100),
+            ),
         )
 
         assertEquals(7_600, conversation.lastContextTokens())
     }
 
     @Test
-    fun `falls back to usage for messages without context tokens`() {
+    fun `falls back to usage for messages without last usage`() {
         val conversation = conversation(
             assistantMessage(1, usage = TokenUsage(promptTokens = 7_000, completionTokens = 100)),
         )
@@ -51,7 +55,7 @@ class ConversationContextTokensTest {
     @Test
     fun `returns null when compressed after the last reply`() {
         val conversation = conversation(
-            assistantMessage(1, contextTokens = 7_600),
+            assistantMessage(1, lastUsage = TokenUsage(promptTokens = 7_500, completionTokens = 100)),
             UIMessage.user("summary").copy(createdAt = at(2), isContextCheckpoint = true),
         )
 
@@ -63,7 +67,7 @@ class ConversationContextTokensTest {
         val conversation = conversation(
             UIMessage.user("summary").copy(createdAt = at(1), isContextCheckpoint = true),
             UIMessage.user("hi").copy(createdAt = at(2)),
-            assistantMessage(3, contextTokens = 2_000),
+            assistantMessage(3, lastUsage = TokenUsage(promptTokens = 1_900, completionTokens = 100)),
         )
 
         assertEquals(2_000, conversation.lastContextTokens())

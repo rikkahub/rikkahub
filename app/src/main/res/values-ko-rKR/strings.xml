@@ -1612,4 +1612,18 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_page_compress_tool_call_response">모델이 요약을 작성하는 대신 도구를 호출하려고 했습니다. 다시 시도해 주세요.</string>
   <string name="assistant_page_memory_auto_dream">자동 꿈꾸기</string>
   <string name="assistant_page_memory_auto_dream_desc">대화가 멈추면 백그라운드에서 대화를 기억으로 전환합니다. 이 기능이 꺼져 있으면 \'지금 꿈꾸기\'를 탭할 때만 전환됩니다.</string>
+  <string name="chat_message_usage_title">사용량</string>
+  <string name="chat_message_usage_steps">%1$d단계</string>
+  <string name="chat_message_usage_context_short">%1$s 컨텍스트</string>
+  <string name="chat_message_usage_cached_short">(%1$s 캐시됨)</string>
+  <string name="chat_message_usage_context">컨텍스트</string>
+  <string name="chat_message_usage_step_count">단계</string>
+  <string name="chat_message_usage_input">입력</string>
+  <string name="chat_message_usage_cached">캐시됨</string>
+  <string name="chat_message_usage_output">출력</string>
+  <string name="chat_message_usage_total_input">총 입력</string>
+  <string name="chat_message_usage_total_cached">총 캐시</string>
+  <string name="chat_message_usage_total_output">총 출력</string>
+  <string name="chat_message_usage_speed">속도</string>
+  <string name="chat_message_usage_duration">소요 시간</string>
 </resources>

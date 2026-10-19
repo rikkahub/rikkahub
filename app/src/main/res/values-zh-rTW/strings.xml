@@ -1610,4 +1610,18 @@
   <string name="chat_page_compress_tool_call_response">模型嘗試呼叫工具，而非撰寫摘要。請再試一次。</string>
   <string name="assistant_page_memory_auto_dream">自動做夢</string>
   <string name="assistant_page_memory_auto_dream_desc">對話暫停後，在背景將對話轉為記憶。關閉時，只有在你點選「立即做夢」時才會執行此操作</string>
+  <string name="chat_message_usage_title">用量</string>
+  <string name="chat_message_usage_steps">%1$d 個步驟</string>
+  <string name="chat_message_usage_context_short">%1$s 上下文</string>
+  <string name="chat_message_usage_cached_short">（%1$s 已快取）</string>
+  <string name="chat_message_usage_context">上下文</string>
+  <string name="chat_message_usage_step_count">步數</string>
+  <string name="chat_message_usage_input">輸入</string>
+  <string name="chat_message_usage_cached">已快取</string>
+  <string name="chat_message_usage_output">輸出</string>
+  <string name="chat_message_usage_total_input">總輸入</string>
+  <string name="chat_message_usage_total_cached">快取總計</string>
+  <string name="chat_message_usage_total_output">總輸出</string>
+  <string name="chat_message_usage_speed">速度</string>
+  <string name="chat_message_usage_duration">時長</string>
 </resources>

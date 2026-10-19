@@ -1612,4 +1612,18 @@
   <string name="chat_page_compress_tool_call_response">Модель попыталась вызвать инструмент вместо создания сводки. Пожалуйста, попробуйте ещё раз.</string>
   <string name="assistant_page_memory_auto_dream">Автосновидение</string>
   <string name="assistant_page_memory_auto_dream_desc">Превращать чаты в воспоминания в фоновом режиме после паузы. Если выключено, это происходит только при нажатии «Запустить сновидение сейчас».</string>
+  <string name="chat_message_usage_title">Использование</string>
+  <string name="chat_message_usage_steps">%1$d шагов</string>
+  <string name="chat_message_usage_context_short">%1$s конт.</string>
+  <string name="chat_message_usage_cached_short">(%1$s из кэша)</string>
+  <string name="chat_message_usage_context">Контекст</string>
+  <string name="chat_message_usage_step_count">Шаги</string>
+  <string name="chat_message_usage_input">Ввод</string>
+  <string name="chat_message_usage_cached">Кэшировано</string>
+  <string name="chat_message_usage_output">Вывод</string>
+  <string name="chat_message_usage_total_input">Всего входных</string>
+  <string name="chat_message_usage_total_cached">Всего кэшировано</string>
+  <string name="chat_message_usage_total_output">Общий объём вывода</string>
+  <string name="chat_message_usage_speed">Скорость</string>
+  <string name="chat_message_usage_duration">Длительность</string>
 </resources>

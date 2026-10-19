@@ -1610,4 +1610,18 @@
   <string name="chat_page_compress_tool_call_response">حاول النموذج استدعاء أداة بدلاً من كتابة الملخّص. يُرجى المحاولة مرة أخرى.</string>
   <string name="assistant_page_memory_auto_dream">حلم تلقائي</string>
   <string name="assistant_page_memory_auto_dream_desc">حوّل المحادثات إلى ذكريات في الخلفية بمجرد توقفها. عند إيقاف هذا الخيار، لا يحدث ذلك إلا عند النقر على «احلم الآن».</string>
+  <string name="chat_message_usage_title">الاستخدام</string>
+  <string name="chat_message_usage_steps">%1$d خطوات</string>
+  <string name="chat_message_usage_context_short">%1$s سياق</string>
+  <string name="chat_message_usage_cached_short">(%1$s مخزّن مؤقتًا)</string>
+  <string name="chat_message_usage_context">السياق</string>
+  <string name="chat_message_usage_step_count">الخطوات</string>
+  <string name="chat_message_usage_input">الإدخال</string>
+  <string name="chat_message_usage_cached">مخزّن مؤقتًا</string>
+  <string name="chat_message_usage_output">الإخراج</string>
+  <string name="chat_message_usage_total_input">إجمالي الإدخال</string>
+  <string name="chat_message_usage_total_cached">إجمالي المخزّن مؤقتًا</string>
+  <string name="chat_message_usage_total_output">إجمالي المخرجات</string>
+  <string name="chat_message_usage_speed">السرعة</string>
+  <string name="chat_message_usage_duration">المدة</string>
 </resources>

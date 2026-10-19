@@ -398,7 +398,8 @@ class AgentLoopTest {
 
         assertEquals(250, message.usage?.promptTokens)
         assertEquals(30, message.usage?.completionTokens)
-        assertEquals(170, message.contextTokens)
+        assertEquals(TokenUsage(promptTokens = 150, completionTokens = 20, totalTokens = 170), message.lastUsage)
+        assertEquals(2, message.stepCount)
         assertNotNull(message.generationTimeMs)
     }
 
@@ -471,7 +472,7 @@ class AgentLoopTest {
         assertTrue(message.tool("call-1").isExecuted)
         assertEquals(listOf("let me search", "answer"), message.texts())
         assertEquals(30, message.usage?.promptTokens)
-        assertEquals(23, message.contextTokens)
+        assertEquals(TokenUsage(promptTokens = 20, completionTokens = 3), message.lastUsage)
         assertEquals(setOf(message.id), events.messageIds())
     }
 
