@@ -6,6 +6,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.FormBody
@@ -13,6 +15,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
@@ -57,8 +60,12 @@ class OAuthHttpClient(
         @SerialName("token_type") val tokenType: String = "Bearer",
         @SerialName("expires_in") val expiresIn: Long? = null,
         @SerialName("refresh_token") val refreshToken: String? = null,
+        @SerialName("id_token") val idToken: String? = null,
         val scope: String? = null,
     )
+
+    /** 令牌端点请求体的编码方式。标准 OAuth 用表单，部分厂商（如 ChatGPT 的刷新）只认 JSON。 */
+    enum class TokenEncoding { FORM, JSON }
 
     data class Pkce(val verifier: String, val challenge: String)
 
@@ -92,6 +99,7 @@ class OAuthHttpClient(
         val scope: String? = null,
         val resources: List<String> = emptyList(),
         val additionalParameters: Map<String, String> = emptyMap(),
+        val encoding: TokenEncoding = TokenEncoding.FORM,
     )
 
     suspend fun registerClient(
@@ -160,25 +168,33 @@ class OAuthHttpClient(
 
     suspend fun refreshToken(request: RefreshTokenRequest): TokenResponse =
         withContext(Dispatchers.IO) {
-            val form = FormBody.Builder()
-                .add("grant_type", "refresh_token")
-                .add("refresh_token", request.refreshToken)
-                .add("client_id", request.clientId)
-                .apply {
-                    if (!request.clientSecret.isNullOrBlank()) add("client_secret", request.clientSecret)
-                    if (!request.scope.isNullOrBlank()) add("scope", request.scope)
-                    request.resources.forEach { add("resource", it) }
-                    request.additionalParameters.forEach { (name, value) -> add(name, value) }
-                }
-                .build()
-            postToken(request.tokenEndpoint, form)
+            val parameters = buildList {
+                add("grant_type" to "refresh_token")
+                add("refresh_token" to request.refreshToken)
+                add("client_id" to request.clientId)
+                if (!request.clientSecret.isNullOrBlank()) add("client_secret" to request.clientSecret)
+                if (!request.scope.isNullOrBlank()) add("scope" to request.scope)
+                request.resources.forEach { add("resource" to it) }
+                request.additionalParameters.forEach { (name, value) -> add(name to value) }
+            }
+            val body = when (request.encoding) {
+                TokenEncoding.FORM -> FormBody.Builder()
+                    .apply { parameters.forEach { (name, value) -> add(name, value) } }
+                    .build()
+
+                // JSON 对象不能有重复键，多个 resource 只保留最后一个
+                TokenEncoding.JSON -> buildJsonObject {
+                    parameters.forEach { (name, value) -> put(name, value) }
+                }.toString().toRequestBody(JSON_MEDIA_TYPE)
+            }
+            postToken(request.tokenEndpoint, body)
         }
 
-    private suspend fun postToken(tokenEndpoint: String, form: FormBody): TokenResponse {
+    private suspend fun postToken(tokenEndpoint: String, body: RequestBody): TokenResponse {
         val request = Request.Builder()
             .url(tokenEndpoint)
             .header("Accept", "application/json")
-            .post(form)
+            .post(body)
             .build()
         val text = execute(request)
         return json.decodeFromString(TokenResponse.serializer(), text)
