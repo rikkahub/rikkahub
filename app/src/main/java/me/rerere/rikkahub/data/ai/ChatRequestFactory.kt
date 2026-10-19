@@ -72,6 +72,7 @@ class ChatTurnContext(
 class ChatRequestFactory(
     private val context: Context,
     private val providerManager: ProviderManager,
+    private val usageRecorder: UsageRecorder,
     private val chatToolFactory: ChatToolFactory,
     private val memoryRepository: MemoryRepository,
     templateTransformer: TemplateTransformer,
@@ -128,7 +129,10 @@ class ChatRequestFactory(
         processingStatus: MutableStateFlow<String?>,
     ): Pair<AgentRequest, AgentHooks> {
         val request = AgentRequest(
-            provider = providerManager.getProviderByType(turn.providerSetting),
+            provider = usageRecorder.wrap(
+                providerManager.getProviderByType(turn.providerSetting),
+                UsageTag(UsageSource.CHAT, turn.assistant.id, turn.conversationId),
+            ),
             providerSetting = turn.providerSetting,
             messages = messages,
             tools = turn.tools,
@@ -174,7 +178,10 @@ class ChatRequestFactory(
             policy = turn.settings.retryPolicy(),
             onRetry = { Log.w(TAG, "Compression request failed, retrying in ${it.delay}", it.cause) },
         ) {
-            providerManager.getProviderByType(turn.providerSetting).generateText(
+            usageRecorder.wrap(
+                providerManager.getProviderByType(turn.providerSetting),
+                UsageTag(UsageSource.COMPRESSION, turn.assistant.id, turn.conversationId),
+            ).generateText(
                 providerSetting = turn.providerSetting,
                 messages = requestMessages + UIMessage.user(compressPrompt),
                 // 助手的输出上限是给聊天回复定的，结构化摘要写不完会被截断；max_tokens 不属于请求前缀，改了不影响缓存

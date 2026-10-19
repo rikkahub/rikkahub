@@ -17,6 +17,7 @@ import java.util.Locale
 class ConversationMetaGenerator(
     private val context: Context,
     private val providerManager: ProviderManager,
+    private val usageRecorder: UsageRecorder,
 ) {
     /** 快速模型或它的提供商找不到时抛出异常，提示用户检查设置 */
     suspend fun generateTitle(settings: Settings, conversation: Conversation): String {
@@ -24,14 +25,31 @@ class ConversationMetaGenerator(
             ?: throw IllegalStateException(context.getString(R.string.error_fast_model_not_found))
         val provider = model.findProvider(settings.providers)
             ?: throw IllegalStateException(context.getString(R.string.error_fast_model_provider_not_found))
-        return generate(settings, model, provider, conversation, settings.titlePrompt, recentMessages = 4).trim()
+        return generate(
+            settings,
+            model,
+            provider,
+            conversation,
+            settings.titlePrompt,
+            recentMessages = 4,
+            UsageSource.TITLE
+        )
+            .trim()
     }
 
     /** 没有配置快速模型时返回 null */
     suspend fun generateSuggestions(settings: Settings, conversation: Conversation): List<String>? {
         val model = settings.findModelById(settings.fastModelId) ?: return null
         val provider = model.findProvider(settings.providers) ?: return null
-        return generate(settings, model, provider, conversation, settings.suggestionPrompt, recentMessages = 8)
+        return generate(
+            settings,
+            model,
+            provider,
+            conversation,
+            settings.suggestionPrompt,
+            recentMessages = 8,
+            UsageSource.SUGGESTION,
+        )
             .split("\n")
             .map { it.trim() }
             .filter { it.isNotBlank() }
@@ -45,8 +63,12 @@ class ConversationMetaGenerator(
         conversation: Conversation,
         prompt: String,
         recentMessages: Int,
+        source: UsageSource,
     ): String {
-        val result = providerManager.getProviderByType(provider).generateText(
+        val result = usageRecorder.wrap(
+            providerManager.getProviderByType(provider),
+            UsageTag(source, conversation.assistantId, conversation.id),
+        ).generateText(
             providerSetting = provider,
             messages = listOf(
                 UIMessage.user(

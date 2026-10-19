@@ -22,6 +22,7 @@ import java.util.Locale
 
 class TranslationHandler(
     private val providerManager: ProviderManager,
+    private val usageRecorder: UsageRecorder,
 ) {
     fun translateText(
         settings: Settings,
@@ -34,7 +35,10 @@ class TranslationHandler(
         val provider = model.findProvider(settings.providers)
             ?: error("Translation provider not found")
 
-        val providerHandler = providerManager.getProviderByType(provider)
+        val providerHandler = usageRecorder.wrap(
+            providerManager.getProviderByType(provider),
+            UsageTag(UsageSource.TRANSLATION),
+        )
 
         if (!ModelRegistry.QWEN_MT.match(model.modelId)) {
             // Use regular translation with prompt

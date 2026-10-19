@@ -1626,4 +1626,25 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_message_usage_total_output">总输出</string>
   <string name="chat_message_usage_speed">速度</string>
   <string name="chat_message_usage_duration">时长</string>
+  <string name="stats_page_usage_title">Token 用量</string>
+  <string name="stats_page_range_7d">7 天</string>
+  <string name="stats_page_range_30d">30 天</string>
+  <string name="stats_page_range_90d">90 天</string>
+  <string name="stats_page_range_all">全部</string>
+  <string name="stats_page_cache_hit_rate">缓存命中率</string>
+  <string name="stats_page_usage_daily">每日用量</string>
+  <string name="stats_page_usage_monthly">每月用量</string>
+  <string name="stats_page_usage_period_total">本期总计</string>
+  <string name="stats_page_by_model">按模型</string>
+  <string name="stats_page_by_source">按来源</string>
+  <string name="stats_page_other">其他</string>
+  <string name="stats_page_unknown_model">未知模型</string>
+  <string name="stats_page_no_usage">此期间无 Token 使用量</string>
+  <string name="stats_page_source_chat">聊天</string>
+  <string name="stats_page_source_compression">压缩</string>
+  <string name="stats_page_source_title">标题</string>
+  <string name="stats_page_source_suggestion">建议</string>
+  <string name="stats_page_source_translation">翻译</string>
+  <string name="stats_page_source_memory">记忆</string>
+  <string name="stats_page_source_ocr">OCR</string>
 </resources>

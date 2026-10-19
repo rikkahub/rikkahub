@@ -69,6 +69,7 @@ private const val PENDING_WINDOW_MS = 7L * 24 * 60 * 60 * 1000
  */
 class MemoryConsolidator(
     private val providerManager: ProviderManager,
+    private val usageRecorder: UsageRecorder,
     private val memoryRepository: MemoryRepository,
     private val conversationRepo: ConversationRepository,
     private val consolidationDao: MemoryConsolidationDAO,
@@ -189,7 +190,10 @@ class MemoryConsolidator(
 
         val finished = runAgent(
             request = AgentRequest(
-                provider = providerManager.getProviderByType(providerSetting),
+                provider = usageRecorder.wrap(
+                    providerManager.getProviderByType(providerSetting),
+                    UsageTag(UsageSource.MEMORY),
+                ),
                 providerSetting = providerSetting,
                 messages = listOf(
                     UIMessage.user(

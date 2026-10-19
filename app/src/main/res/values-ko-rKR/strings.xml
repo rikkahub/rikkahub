@@ -1626,4 +1626,25 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_message_usage_total_output">총 출력</string>
   <string name="chat_message_usage_speed">속도</string>
   <string name="chat_message_usage_duration">소요 시간</string>
+  <string name="stats_page_usage_title">Token 사용량</string>
+  <string name="stats_page_range_7d">7일</string>
+  <string name="stats_page_range_30d">30일</string>
+  <string name="stats_page_range_90d">90일</string>
+  <string name="stats_page_range_all">전체</string>
+  <string name="stats_page_cache_hit_rate">캐시 적중률</string>
+  <string name="stats_page_usage_daily">일일 사용량</string>
+  <string name="stats_page_usage_monthly">월간 사용량</string>
+  <string name="stats_page_usage_period_total">이 기간 총계</string>
+  <string name="stats_page_by_model">모델별</string>
+  <string name="stats_page_by_source">소스별</string>
+  <string name="stats_page_other">기타</string>
+  <string name="stats_page_unknown_model">알 수 없는 모델</string>
+  <string name="stats_page_no_usage">이 기간에는 Token 사용량이 없습니다</string>
+  <string name="stats_page_source_chat">채팅</string>
+  <string name="stats_page_source_compression">압축</string>
+  <string name="stats_page_source_title">제목</string>
+  <string name="stats_page_source_suggestion">제안</string>
+  <string name="stats_page_source_translation">번역</string>
+  <string name="stats_page_source_memory">기억</string>
+  <string name="stats_page_source_ocr">OCR</string>
 </resources>
