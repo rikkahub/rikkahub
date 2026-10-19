@@ -263,7 +263,8 @@ class ChatService(
         session.initialize(
             load = { loadConversation(conversationId) },
             create = {
-                if (createIfMissing) newConversation(conversationId) else throw NotFoundException("Conversation not found")
+                if (!createIfMissing) throw NotFoundException("Conversation not found")
+                newConversation(conversationId)
             },
         )
         block(session)
@@ -302,7 +303,7 @@ class ChatService(
     private fun deleteUnreferencedFiles(previous: Conversation, current: Conversation) {
         val session = sessionManager.get(current.id)
         val queuedFiles = (session?.messageQueue?.state?.value?.messages.orEmpty() +
-                listOfNotNull(session?.submittingMessage))
+            listOfNotNull(session?.submittingMessage))
             .flatMap { it.parts }.localFileUrls().map { it.toUri() }
         val retainedFiles = (current.files + queuedFiles).toSet()
         val deletedFiles = previous.files.filter { it !in retainedFiles }
@@ -787,9 +788,16 @@ class ChatService(
 
     // ---- 压缩对话历史 ----
 
+    /**
+     * 把上一个检查点之后的消息压缩成摘要检查点。
+     *
+     * [keepRecentMessages] 为 0 时压缩全部消息，请求和上一轮对话前缀一致，缓存命中最好；
+     * 大于 0 时最近的这些消息不参与压缩、留在检查点之后，对话已经超出模型上下文、整段发不出去时用来缩小压缩请求。
+     */
     suspend fun compressConversation(
         conversationId: Uuid,
         additionalPrompt: String,
+        keepRecentMessages: Int = 0,
     ): Result<Unit> = runCatching {
         withLoadedSession<Unit>(conversationId) { session ->
             // 生成中的回复还没写完，压缩不到它，检查点也不能插到它前面
@@ -797,13 +805,24 @@ class ChatService(
 
             val conversation = session.state.value
             val nodes = conversation.messageNodes
-            // 上一个检查点之后没有新消息，就没什么可压缩的
             val checkpointIndex = nodes.indexOfLast { it.currentMessage.isContextCheckpoint }
-            if (checkpointIndex == nodes.lastIndex) {
-                throw IllegalStateException(context.getString(R.string.chat_page_compress_nothing_to_compress))
+            // 压缩范围是 (checkpointIndex, endIndex)，之后的节点原样保留
+            val endIndex = nodes.size - keepRecentMessages.coerceAtLeast(0)
+            // 上一个检查点之后没有可压缩的消息
+            if (endIndex <= checkpointIndex + 1) {
+                throw IllegalStateException(
+                    context.getString(
+                        if (keepRecentMessages > 0) {
+                            R.string.chat_page_compress_not_enough_messages
+                        } else {
+                            R.string.chat_page_compress_nothing_to_compress
+                        }
+                    )
+                )
             }
             // 未完成的工具调用没有结果，请求会被服务端拒绝；压到检查点之前也再不会执行。
-            check(nodes.subList(checkpointIndex + 1, nodes.size).none { node ->
+            // 保留区里的不发给压缩请求，压缩后照常留在检查点之后，不用检查
+            check(nodes.subList(checkpointIndex + 1, endIndex).none { node ->
                 node.currentMessage.getTools().any { it.isPending || it.canResumeExecution }
             }) { context.getString(R.string.chat_page_compress_handle_pending_tools) }
 
@@ -811,19 +830,19 @@ class ChatService(
             val turn = requestFactory.createContext(settingsStore.awaitLoaded(), conversation)
             val summary = requestFactory.generateCompressionSummary(
                 turn = turn,
-                messages = conversation.currentMessages,
+                messages = conversation.currentMessages.take(endIndex),
                 compressPrompt = buildCompressPrompt(
                     additionalPrompt = additionalPrompt,
                     locale = Locale.getDefault().displayName,
                 ),
             )
 
-            // 原消息原样保留，摘要插在压缩时的最后一条消息之后。摘要生成期间对话可能已变化，
+            // 原消息原样保留，摘要插在压缩范围的最后一条消息之后。摘要生成期间对话可能已变化，
             // 因此按节点定位插入到最新状态。
             session.update { latest ->
                 check(!session.isGenerating) { context.getString(R.string.chat_page_compress_blocked_generating) }
                 val updated = latest.insertContextCheckpoint(
-                    afterNodeId = nodes.last().id,
+                    afterNodeId = nodes[endIndex - 1].id,
                     summary = summary,
                 ) ?: throw IllegalStateException(context.getString(R.string.chat_page_compress_conversation_changed))
                 updated.copy(chatSuggestions = emptyList())

@@ -1541,6 +1541,9 @@
   <string name="chat_page_compress_checkpoint_hint">Messages above this line are no longer sent to the model; this summary replaces them. Delete the summary to send the full history again.</string>
   <string name="chat_page_compress_blocked_generating">Stop the generation before compressing the context</string>
   <string name="chat_page_compress_nothing_to_compress">No new messages to compress since the last summary</string>
+  <string name="chat_page_compress_keep_recent">Keep recent messages</string>
+  <string name="chat_page_compress_keep_recent_desc">These messages are not compressed and stay after the summary. 0 compresses everything and reuses the prompt cache best; if the conversation is too long to compress, keep more messages.</string>
+  <string name="chat_page_compress_not_enough_messages">Not enough messages to compress. Reduce the number of messages to keep.</string>
   <string name="chat_page_compress_handle_pending_tools">Handle the pending tool calls before compressing</string>
   <string name="chat_page_compress_tool_call_response">The model tried to call a tool instead of writing the summary. Please try again.</string>
   <string name="chat_page_compress_conversation_changed">The conversation changed during compression. Please try again.</string>
