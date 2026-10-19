@@ -900,7 +900,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_provider_page_api_key">API Key</string>
   <string name="setting_provider_page_api_path">API 路径</string>
   <string name="setting_provider_page_avaliable_models">可用模型</string>
-  <string name="setting_provider_page_balance_api_path">余额 API 路径</string>
   <string name="setting_provider_page_balance_info">获取账户余额</string>
   <string name="setting_provider_page_balance_json_key">结果 JSON 键</string>
   <string name="setting_provider_page_basic_settings">基本设置</string>
@@ -1655,4 +1654,24 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_memory_empty_disabled_hint">此助手的记忆功能已关闭。开启后，它就能记住你告诉它的内容</string>
   <string name="image_preview_saving">保存中…</string>
   <string name="image_preview_saved">图片已保存</string>
+  <string name="setting_provider_page_account">账户</string>
+  <string name="setting_provider_page_signed_in">已登录</string>
+  <string name="setting_provider_page_sign_out">退出登录</string>
+  <string name="setting_provider_page_waiting_authorization">等待授权</string>
+  <string name="setting_provider_page_waiting_authorization_desc">请在浏览器中完成登录，或点击取消</string>
+  <string name="setting_provider_page_sign_in_chatgpt">使用 ChatGPT 登录</string>
+  <string name="setting_provider_page_chatgpt_disclaimer">通过 Codex 后端使用你的 ChatGPT 订阅。实验性功能：OpenAI 可能随时更改或限制此功能。</string>
+  <string name="setting_provider_page_usage">用量</string>
+  <string name="setting_provider_page_usage_loading">正在加载用量</string>
+  <string name="setting_provider_page_usage_failed">加载用量失败</string>
+  <string name="setting_provider_page_usage_none">无用量限额</string>
+  <string name="setting_provider_page_usage_resets">%1$s 重置</string>
+  <string name="setting_provider_page_usage_limit">用量限额</string>
+  <string name="setting_provider_page_usage_limit_weekly">每周限额</string>
+  <string name="setting_provider_page_usage_limit_daily">每日限额</string>
+  <string name="setting_provider_page_usage_limit_weeks">%1$d 周限额</string>
+  <string name="setting_provider_page_usage_limit_days">%1$d 天限额</string>
+  <string name="setting_provider_page_usage_limit_hours">%1$d 小时限额</string>
+  <string name="setting_provider_page_usage_limit_minutes">%1$d 分钟限额</string>
+  <string name="setting_provider_page_quota_variables">变量：%1$s。API 密钥将随上述请求头发送到此 URL。</string>
 </resources>

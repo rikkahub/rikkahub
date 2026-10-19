@@ -67,6 +67,12 @@ object SettingsJsonMigrator {
                 root["assistants"] = JsonInstant.parseToJsonElement(migrated)
             }
 
+            // V5: 提供商的余额查询 balanceOption 改成自定义额度查询 quotaQuery
+            root["providers"]?.let { element ->
+                val migrated = migrateProvidersQuotaQuery(JsonInstant.encodeToString(element))
+                root["providers"] = JsonInstant.parseToJsonElement(migrated)
+            }
+
             JsonInstant.encodeToString(JsonObject(root))
         }.onFailure {
             Log.e(TAG, "migrate: Failed to migrate settings JSON, using original", it)

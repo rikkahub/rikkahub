@@ -1,7 +1,5 @@
 package me.rerere.rikkahub.data.datastore
 
-import me.rerere.ai.provider.ProviderSetting
-
 /** 读盘后和每次修改后都要过一遍，保证内存里的设置始终是规整的。 */
 internal fun Settings.normalized(): Settings =
     withBuiltInDefaults().withoutInvalidReferences().withValuesInRange()
@@ -54,19 +52,7 @@ internal fun Settings.withoutInvalidReferences(): Settings {
     val asrProviders = settings.asrProviders.distinctBy { it.id }
     return settings.copy(
         providers = settings.providers.distinctBy { it.id }.map { provider ->
-            when (provider) {
-                is ProviderSetting.OpenAI -> provider.copy(
-                    models = provider.models.distinctBy { model -> model.id }
-                )
-
-                is ProviderSetting.Google -> provider.copy(
-                    models = provider.models.distinctBy { model -> model.id }
-                )
-
-                is ProviderSetting.Claude -> provider.copy(
-                    models = provider.models.distinctBy { model -> model.id }
-                )
-            }
+            provider.copyProvider(models = provider.models.distinctBy { model -> model.id })
         },
         assistants = settings.assistants.distinctBy { it.id }.map { assistant ->
             assistant.copy(

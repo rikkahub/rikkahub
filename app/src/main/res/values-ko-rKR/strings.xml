@@ -856,7 +856,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_provider_page_api_key">API 키</string>
   <string name="setting_provider_page_api_path">API 경로</string>
   <string name="setting_provider_page_avaliable_models">사용 가능한 모델</string>
-  <string name="setting_provider_page_balance_api_path">잔액 API 경로</string>
   <string name="setting_provider_page_balance_info">계정 잔액 확인</string>
   <string name="setting_provider_page_balance_json_key">결과 Json 키</string>
   <string name="setting_provider_page_basic_settings">기본 설정</string>
@@ -1652,4 +1651,24 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_memory_empty_disabled_hint">이 어시스턴트의 기억 기능이 꺼져 있습니다. 켜면 말씀하신 내용을 기억합니다</string>
   <string name="image_preview_saving">저장 중…</string>
   <string name="image_preview_saved">이미지가 저장되었습니다</string>
+  <string name="setting_provider_page_account">계정</string>
+  <string name="setting_provider_page_signed_in">로그인됨</string>
+  <string name="setting_provider_page_sign_out">로그아웃</string>
+  <string name="setting_provider_page_waiting_authorization">승인 대기 중</string>
+  <string name="setting_provider_page_waiting_authorization_desc">브라우저에서 로그인을 완료하거나, 취소하려면 탭하세요.</string>
+  <string name="setting_provider_page_sign_in_chatgpt">ChatGPT로 로그인</string>
+  <string name="setting_provider_page_chatgpt_disclaimer">Codex 백엔드를 통해 ChatGPT 구독을 사용합니다. 실험 단계: OpenAI가 언제든지 이를 변경하거나 제한할 수 있습니다.</string>
+  <string name="setting_provider_page_usage">사용량</string>
+  <string name="setting_provider_page_usage_loading">사용량 불러오는 중</string>
+  <string name="setting_provider_page_usage_failed">사용량을 불러오지 못했습니다</string>
+  <string name="setting_provider_page_usage_none">사용 한도 없음</string>
+  <string name="setting_provider_page_usage_resets">재설정: %1$s</string>
+  <string name="setting_provider_page_usage_limit">사용 한도</string>
+  <string name="setting_provider_page_usage_limit_weekly">주간 한도</string>
+  <string name="setting_provider_page_usage_limit_daily">일일 한도</string>
+  <string name="setting_provider_page_usage_limit_weeks">%1$d주 제한</string>
+  <string name="setting_provider_page_usage_limit_days">%1$d일 제한</string>
+  <string name="setting_provider_page_usage_limit_hours">%1$d시간 제한</string>
+  <string name="setting_provider_page_usage_limit_minutes">%1$d분 제한</string>
+  <string name="setting_provider_page_quota_variables">변수: %1$s. API 키는 위의 헤더와 함께 이 URL로 전송됩니다.</string>
 </resources>

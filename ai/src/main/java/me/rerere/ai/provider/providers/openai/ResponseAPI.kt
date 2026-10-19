@@ -62,6 +62,7 @@ import me.rerere.ai.util.stringSafe
 import me.rerere.common.http.await
 import me.rerere.common.http.jsonObjectOrNull
 import me.rerere.common.http.jsonPrimitiveOrNull
+import me.rerere.common.http.sse.newEventSource
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -70,10 +71,22 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.sse.EventSource
 import okhttp3.sse.EventSourceListener
-import okhttp3.sse.EventSources
 import kotlin.time.Clock
 
 private const val TAG = "ResponseAPI"
+
+/**
+ * Responses API 请求的目标：发往哪里、怎么鉴权，以及该网关对请求体的特殊要求。
+ *
+ * OpenAI 兼容提供商由 [ProviderSetting.OpenAI] 生成；地址写死的账号型提供商各自构造。
+ */
+internal class ResponsesEndpoint(
+    val url: String,
+    val capabilities: ResponseProviderCapabilities = ResponseProviderCapabilities(),
+    // 构建请求时调用，负责请求头和鉴权；可挂起，以便先刷新 token
+    val configureRequest: suspend Request.Builder.() -> Unit,
+    val transformBody: (JsonObject) -> JsonObject = { it },
+)
 
 class ResponseAPI(
     private val client: OkHttpClient,
@@ -83,24 +96,43 @@ class ResponseAPI(
         providerSetting: ProviderSetting.OpenAI,
         messages: List<UIMessage>,
         params: TextGenerationParams
+    ): TextGenerationResult = generateText(providerSetting.toResponsesEndpoint(params), messages, params)
+
+    override suspend fun streamText(
+        providerSetting: ProviderSetting.OpenAI,
+        messages: List<UIMessage>,
+        params: TextGenerationParams
+    ): Flow<StreamChunk> = streamText(providerSetting.toResponsesEndpoint(params), messages, params)
+
+    private fun ProviderSetting.OpenAI.toResponsesEndpoint(params: TextGenerationParams) = ResponsesEndpoint(
+        url = "$baseUrl$responsesPath",
+        capabilities = resolveResponseProviderCapabilities(baseUrl.toHttpUrl().host),
+        configureRequest = {
+            headers(mergeCustomHeaders(params.customHeaders))
+            addHeader("Authorization", "Bearer ${keyRoulette.next(apiKey, id.toString())}")
+            configureReferHeaders(baseUrl)
+            configureSessionHeaders(baseUrl, params.sessionId)
+        },
+    )
+
+    internal suspend fun generateText(
+        endpoint: ResponsesEndpoint,
+        messages: List<UIMessage>,
+        params: TextGenerationParams
     ): TextGenerationResult = withContext(Dispatchers.IO) {
-        val requestBody = buildRequestBody(
-            providerSetting = providerSetting,
-            messages = messages,
-            params = params,
-            stream = false,
+        val requestBody = endpoint.transformBody(
+            buildRequestBody(
+                capabilities = endpoint.capabilities,
+                messages = messages,
+                params = params,
+                stream = false,
+            )
         )
         val request = Request.Builder()
-            .url("${providerSetting.baseUrl}${providerSetting.responsesPath}")
-            .headers(providerSetting.mergeCustomHeaders(params.customHeaders))
+            .url(endpoint.url)
+            .apply { endpoint.configureRequest(this) }
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader(
-                "Authorization",
-                "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}"
-            )
             .addHeader("Content-Type", "application/json")
-            .configureReferHeaders(providerSetting.baseUrl)
-            .configureSessionHeaders(providerSetting.baseUrl, params.sessionId)
             .build()
 
         Log.i(TAG, "generateText: ${json.encodeToString(requestBody)}")
@@ -118,27 +150,23 @@ class ResponseAPI(
         }
     }
 
-    override suspend fun streamText(
-        providerSetting: ProviderSetting.OpenAI,
+    internal fun streamText(
+        endpoint: ResponsesEndpoint,
         messages: List<UIMessage>,
         params: TextGenerationParams
     ): Flow<StreamChunk> = callbackFlow {
-        val requestBody = buildRequestBody(
-            providerSetting = providerSetting,
-            messages = messages,
-            params = params,
-            stream = true,
+        val requestBody = endpoint.transformBody(
+            buildRequestBody(
+                capabilities = endpoint.capabilities,
+                messages = messages,
+                params = params,
+                stream = true,
+            )
         )
         val request = Request.Builder()
-            .url("${providerSetting.baseUrl}${providerSetting.responsesPath}")
-            .headers(providerSetting.mergeCustomHeaders(params.customHeaders))
+            .url(endpoint.url)
+            .apply { endpoint.configureRequest(this) }
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
-            .addHeader(
-                "Authorization",
-                "Bearer ${keyRoulette.next(providerSetting.apiKey, providerSetting.id.toString())}"
-            )
-            .configureReferHeaders(providerSetting.baseUrl)
-            .configureSessionHeaders(providerSetting.baseUrl, params.sessionId)
             .build()
 
         Log.i(TAG, "streamText: ${json.encodeToString(requestBody)}")
@@ -198,8 +226,7 @@ class ResponseAPI(
             }
         }
 
-        val eventSource = EventSources.createFactory(client)
-            .newEventSource(request, listener)
+        val eventSource = client.newEventSource(request, listener)
 
         awaitClose {
             println("[awaitClose] 关闭eventSource ")
@@ -213,9 +240,19 @@ class ResponseAPI(
         messages: List<UIMessage>,
         params: TextGenerationParams,
         stream: Boolean
+    ): JsonObject = buildRequestBody(
+        capabilities = resolveResponseProviderCapabilities(providerSetting.baseUrl.toHttpUrl().host),
+        messages = messages,
+        params = params,
+        stream = stream,
+    )
+
+    internal fun buildRequestBody(
+        capabilities: ResponseProviderCapabilities,
+        messages: List<UIMessage>,
+        params: TextGenerationParams,
+        stream: Boolean
     ): JsonObject {
-        val host = providerSetting.baseUrl.toHttpUrl().host
-        val capabilities = resolveResponseProviderCapabilities(host)
         return buildJsonObject {
             put("model", params.model.modelId)
             put("stream", stream)

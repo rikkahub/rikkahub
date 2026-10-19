@@ -856,7 +856,6 @@
   <string name="setting_provider_page_api_key">Ключ API</string>
   <string name="setting_provider_page_api_path">Путь API</string>
   <string name="setting_provider_page_avaliable_models">Доступные модели</string>
-  <string name="setting_provider_page_balance_api_path">Путь API баланса</string>
   <string name="setting_provider_page_balance_info">Получить баланс аккаунта</string>
   <string name="setting_provider_page_balance_json_key">Ключ результата JSON</string>
   <string name="setting_provider_page_basic_settings">Основные настройки</string>
@@ -1652,4 +1651,24 @@
   <string name="assistant_page_memory_empty_disabled_hint">Память для этого ассистента отключена. Включите её, чтобы он запоминал то, что вы ему сообщаете</string>
   <string name="image_preview_saving">Сохранение…</string>
   <string name="image_preview_saved">Изображение сохранено</string>
+  <string name="setting_provider_page_account">Аккаунт</string>
+  <string name="setting_provider_page_signed_in">Вы вошли</string>
+  <string name="setting_provider_page_sign_out">Выйти</string>
+  <string name="setting_provider_page_waiting_authorization">Ожидание авторизации</string>
+  <string name="setting_provider_page_waiting_authorization_desc">Завершите вход в браузере или нажмите, чтобы отменить</string>
+  <string name="setting_provider_page_sign_in_chatgpt">Войти с помощью ChatGPT</string>
+  <string name="setting_provider_page_chatgpt_disclaimer">Использует вашу подписку ChatGPT через бэкенд Codex. Экспериментально: OpenAI может изменить или ограничить это в любое время.</string>
+  <string name="setting_provider_page_usage">Использование</string>
+  <string name="setting_provider_page_usage_loading">Загрузка использования</string>
+  <string name="setting_provider_page_usage_failed">Не удалось загрузить данные об использовании</string>
+  <string name="setting_provider_page_usage_none">Без ограничений использования</string>
+  <string name="setting_provider_page_usage_resets">Сброс %1$s</string>
+  <string name="setting_provider_page_usage_limit">Лимит использования</string>
+  <string name="setting_provider_page_usage_limit_weekly">Недельный лимит</string>
+  <string name="setting_provider_page_usage_limit_daily">Дневной лимит</string>
+  <string name="setting_provider_page_usage_limit_weeks">Лимит на %1$d нед.</string>
+  <string name="setting_provider_page_usage_limit_days">Лимит на %1$d дн.</string>
+  <string name="setting_provider_page_usage_limit_hours">Лимит %1$d ч.</string>
+  <string name="setting_provider_page_usage_limit_minutes">Лимит %1$d мин.</string>
+  <string name="setting_provider_page_quota_variables">Переменные: %1$s. API-ключ отправляется на этот URL с заголовками, указанными выше.</string>
 </resources>

@@ -6,6 +6,11 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalTextStyle
@@ -16,8 +21,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -26,14 +33,29 @@ import androidx.compose.ui.unit.dp
 import me.rerere.ui.toast.ToastType
 import me.rerere.ai.provider.ClaudePromptCacheTtl
 import me.rerere.ai.provider.ProviderSetting
+import me.rerere.ai.provider.ProviderQuota
+import me.rerere.ai.provider.UsageWindow
+import me.rerere.ai.provider.quotaQueryOrNull
+import me.rerere.ai.provider.supportsQuota
+import me.rerere.ai.provider.withQuotaQuery
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.ai.account.AccountLoginStatus
+import me.rerere.rikkahub.data.ai.account.ChatGPTAuth
+import me.rerere.rikkahub.data.ai.account.ProviderAccountManager
 import me.rerere.rikkahub.data.datastore.DEFAULT_PROVIDERS
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.DashboardSpeed02
 import me.rerere.hugeicons.stroke.FileImport
+import me.rerere.hugeicons.stroke.Login03
+import me.rerere.hugeicons.stroke.Logout03
 import me.rerere.hugeicons.stroke.Refresh03
+import me.rerere.hugeicons.stroke.UserCircle
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
+import me.rerere.rikkahub.ui.components.ai.rememberProviderQuota
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
 import me.rerere.rikkahub.ui.components.ui.CardGroupScope
 import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceButtons
 import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
@@ -45,6 +67,13 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.coroutines.launch
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.compose.koinInject
+import me.rerere.rikkahub.utils.toMessageTimeString
+import java.time.LocalDateTime
+import java.time.ZoneId
+import kotlin.math.roundToInt
 import kotlin.reflect.KClass
 
 @Composable
@@ -84,6 +113,7 @@ fun ProviderConfigure(
             is ProviderSetting.OpenAI -> ProviderConfigureOpenAI(provider, onEdit)
             is ProviderSetting.Google -> ProviderConfigureGoogle(provider, onEdit)
             is ProviderSetting.Claude -> ProviderConfigureClaude(provider, onEdit)
+            is ProviderSetting.ChatGPT -> ProviderConfigureChatGPT(provider, onEdit)
         }
     }
 }
@@ -95,11 +125,8 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         is ProviderSetting.OpenAI -> this.apiKey
         is ProviderSetting.Google -> this.apiKey
         is ProviderSetting.Claude -> this.apiKey
-    }
-    val sourceBaseUrl = when (this) {
-        is ProviderSetting.OpenAI -> this.baseUrl
-        is ProviderSetting.Google -> this.baseUrl
-        is ProviderSetting.Claude -> this.baseUrl
+        // 账号凭据不能带到可以自填地址的类型上
+        is ProviderSetting.Account -> ""
     }
     val targetDefaultBaseUrl = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI().baseUrl
@@ -107,55 +134,56 @@ fun ProviderSetting.convertTo(type: KClass<out ProviderSetting>): ProviderSettin
         ProviderSetting.Claude::class -> ProviderSetting.Claude().baseUrl
         else -> error("Unsupported provider type: $type")
     }
-    val convertedBaseUrl = sourceBaseUrl.convertToTargetBaseUrl(targetDefaultBaseUrl)
+    val convertedBaseUrl = baseUrlOrNull()?.convertToTargetBaseUrl(targetDefaultBaseUrl) ?: targetDefaultBaseUrl
 
-    return when (type) {
+    val converted = when (type) {
         ProviderSetting.OpenAI::class -> ProviderSetting.OpenAI(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, customHeaders = this.customHeaders, builtIn = this.builtIn,
+            customHeaders = this.customHeaders, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Google::class -> ProviderSetting.Google(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, customHeaders = this.customHeaders, builtIn = this.builtIn,
+            customHeaders = this.customHeaders, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         ProviderSetting.Claude::class -> ProviderSetting.Claude(
             id = this.id, enabled = this.enabled, name = this.name, models = this.models,
-            balanceOption = this.balanceOption, customHeaders = this.customHeaders, builtIn = this.builtIn,
+            customHeaders = this.customHeaders, builtIn = this.builtIn,
             description = this.description, shortDescription = this.shortDescription,
             apiKey = apiKey, baseUrl = convertedBaseUrl
         )
         else -> error("Unsupported provider type: $type")
     }
+    // 沿用用户配的额度查询；从账号类转过来时用目标类型的默认值
+    return quotaQueryOrNull?.let(converted::withQuotaQuery) ?: converted
+}
+
+// 账号型提供商的地址写死在代码里，没有 baseUrl
+private fun ProviderSetting.baseUrlOrNull(): String? = when (this) {
+    is ProviderSetting.OpenAI -> this.baseUrl
+    is ProviderSetting.Google -> this.baseUrl
+    is ProviderSetting.Claude -> this.baseUrl
+    is ProviderSetting.Account -> null
 }
 
 internal fun ProviderSetting.defaultBaseUrlForReset(): String {
     val defaultProvider = DEFAULT_PROVIDERS.find { it.id == id }
-    if (defaultProvider != null) {
-        when (this) {
-            is ProviderSetting.OpenAI -> if (defaultProvider is ProviderSetting.OpenAI) return defaultProvider.baseUrl
-            is ProviderSetting.Google -> if (defaultProvider is ProviderSetting.Google) return defaultProvider.baseUrl
-            is ProviderSetting.Claude -> if (defaultProvider is ProviderSetting.Claude) return defaultProvider.baseUrl
-        }
+    if (defaultProvider != null && defaultProvider::class == this::class) {
+        defaultProvider.baseUrlOrNull()?.let { return it }
     }
     return when (this) {
         is ProviderSetting.OpenAI -> ProviderSetting.OpenAI().baseUrl
         is ProviderSetting.Google -> ProviderSetting.Google().baseUrl
         is ProviderSetting.Claude -> ProviderSetting.Claude().baseUrl
+        is ProviderSetting.Account -> ""
     }
 }
 
-internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean {
-    val baseUrl = when (this) {
-        is ProviderSetting.OpenAI -> this.baseUrl
-        is ProviderSetting.Google -> this.baseUrl
-        is ProviderSetting.Claude -> this.baseUrl
-    }
-    return baseUrl == defaultBaseUrlForReset()
-}
+internal fun ProviderSetting.isUsingDefaultBaseUrl(): Boolean =
+    (baseUrlOrNull() ?: "") == defaultBaseUrlForReset()
 
 // 地址不是默认值时，输入框右侧出现的恢复默认按钮
 private fun resetBaseUrlButton(
@@ -326,6 +354,153 @@ private fun ProviderConfigureOpenAI(
             onCheckedChange = { onEdit(provider.copy(includeHistoryReasoning = it)) },
             headlineContent = { Text(stringResource(R.string.setting_provider_page_include_history_reasoning)) },
         )
+    }
+}
+
+@Composable
+private fun ProviderConfigureChatGPT(
+    provider: ProviderSetting.ChatGPT,
+    onEdit: (provider: ProviderSetting) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val accountManager = koinInject<ProviderAccountManager>()
+    val loginStatus by accountManager.loginStatus.collectAsStateWithLifecycle()
+    val status = loginStatus[provider.id]
+    val credential = provider.credential
+
+    CardGroup {
+        nameItem(provider, onEdit)
+    }
+
+    CardGroup(title = { Text(stringResource(R.string.setting_provider_page_account)) }) {
+        if (credential != null) {
+            item(
+                leadingContent = { CardGroupIcon(HugeIcons.UserCircle) },
+                supportingContent = credential.plan?.let { plan ->
+                    { Text("ChatGPT ${ChatGPTAuth.planDisplayName(plan)}") }
+                },
+                headlineContent = { Text(credential.email ?: stringResource(R.string.setting_provider_page_signed_in)) },
+            )
+            item(
+                onClick = { scope.launch { accountManager.logout(provider.id) } },
+                leadingContent = {
+                    CardGroupIcon(
+                        icon = HugeIcons.Logout03,
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_sign_out)) },
+            )
+        } else if (status == AccountLoginStatus.Authorizing) {
+            item(
+                onClick = { accountManager.cancelLogin(provider.id) },
+                leadingContent = { ContainedLoadingIndicator(modifier = Modifier.size(40.dp)) },
+                supportingContent = { Text(stringResource(R.string.setting_provider_page_waiting_authorization_desc)) },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_waiting_authorization)) },
+            )
+        } else {
+            item(
+                onClick = { accountManager.startLogin(provider.id, context) },
+                leadingContent = { CardGroupIcon(HugeIcons.Login03) },
+                supportingContent = (status as? AccountLoginStatus.Failed)?.let { failed ->
+                    { Text(failed.message, color = MaterialTheme.colorScheme.error) }
+                },
+                trailingContent = { Icon(HugeIcons.ArrowRight01, contentDescription = null) },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_sign_in_chatgpt)) },
+            )
+        }
+    }
+
+    if (provider.supportsQuota) {
+        ChatGPTUsage(provider)
+    }
+
+    Text(
+        text = stringResource(R.string.setting_provider_page_chatgpt_disclaimer),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 4.dp),
+    )
+}
+
+// 5 小时 -> 5-hour limit，一周 -> Weekly limit
+@Composable
+private fun UsageWindow.longLabel(): String {
+    val minutes = windowMinutes ?: return stringResource(R.string.setting_provider_page_usage_limit)
+    return when {
+        minutes == WEEK_MINUTES -> stringResource(R.string.setting_provider_page_usage_limit_weekly)
+        minutes == DAY_MINUTES -> stringResource(R.string.setting_provider_page_usage_limit_daily)
+        minutes % WEEK_MINUTES == 0 ->
+            stringResource(R.string.setting_provider_page_usage_limit_weeks, minutes / WEEK_MINUTES)
+        minutes % DAY_MINUTES == 0 ->
+            stringResource(R.string.setting_provider_page_usage_limit_days, minutes / DAY_MINUTES)
+        minutes % 60 == 0 -> stringResource(R.string.setting_provider_page_usage_limit_hours, minutes / 60)
+        else -> stringResource(R.string.setting_provider_page_usage_limit_minutes, minutes)
+    }
+}
+
+private const val DAY_MINUTES = 24 * 60
+private const val WEEK_MINUTES = 7 * DAY_MINUTES
+
+// 订阅用量：每个窗口一条进度和重置时间
+@Composable
+private fun ChatGPTUsage(provider: ProviderSetting.ChatGPT) {
+    val result = rememberProviderQuota(provider)
+    val limits = result?.getOrNull() as? ProviderQuota.UsageLimits
+    CardGroup(title = { Text(stringResource(R.string.setting_provider_page_usage)) }) {
+        when {
+            result == null -> item(
+                leadingContent = { ContainedLoadingIndicator(modifier = Modifier.size(40.dp)) },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_usage_loading)) },
+            )
+
+            limits == null -> item(
+                leadingContent = { CardGroupIcon(HugeIcons.DashboardSpeed02) },
+                supportingContent = {
+                    Text(
+                        text = result.exceptionOrNull()?.message.orEmpty(),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_usage_failed)) },
+            )
+
+            limits.windows.isEmpty() -> item(
+                leadingContent = { CardGroupIcon(HugeIcons.DashboardSpeed02) },
+                headlineContent = { Text(stringResource(R.string.setting_provider_page_usage_none)) },
+            )
+
+            else -> limits.windows.forEach { window ->
+                val reached = limits.limitReached || window.usedPercent >= 100
+                formItem(
+                    headlineContent = { Text(window.longLabel()) },
+                    supportingContent = window.resetsAt?.let { resetsAt ->
+                        {
+                            val time = LocalDateTime.ofInstant(
+                                java.time.Instant.ofEpochMilli(resetsAt.toEpochMilliseconds()),
+                                ZoneId.systemDefault(),
+                            )
+                            Text(stringResource(R.string.setting_provider_page_usage_resets, time.toMessageTimeString()))
+                        }
+                    },
+                    trailingContent = {
+                        Text(
+                            text = "${window.usedPercent.roundToInt()}%",
+                            style = MaterialTheme.typography.titleMediumEmphasized,
+                            color = if (reached) MaterialTheme.colorScheme.error else Color.Unspecified,
+                        )
+                    },
+                ) {
+                    LinearWavyProgressIndicator(
+                        progress = { (window.usedPercent / 100).toFloat().coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = if (reached) MaterialTheme.colorScheme.error else ProgressIndicatorDefaults.linearColor,
+                    )
+                }
+            }
+        }
     }
 }
 

@@ -856,7 +856,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_provider_page_api_key">API Key</string>
   <string name="setting_provider_page_api_path">APIパス</string>
   <string name="setting_provider_page_avaliable_models">利用可能なモデル</string>
-  <string name="setting_provider_page_balance_api_path">残高APIパス</string>
   <string name="setting_provider_page_balance_info">アカウント残高を取得</string>
   <string name="setting_provider_page_balance_json_key">結果のJsonキー</string>
   <string name="setting_provider_page_basic_settings">基本設定</string>
@@ -1652,4 +1651,24 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_memory_empty_disabled_hint">このアシスタントの記憶はオフになっています。オンにすると、伝えた内容を記憶できるようになります</string>
   <string name="image_preview_saving">保存中…</string>
   <string name="image_preview_saved">画像を保存しました</string>
+  <string name="setting_provider_page_account">アカウント</string>
+  <string name="setting_provider_page_signed_in">サインイン済み</string>
+  <string name="setting_provider_page_sign_out">サインアウト</string>
+  <string name="setting_provider_page_waiting_authorization">認証待ち</string>
+  <string name="setting_provider_page_waiting_authorization_desc">ブラウザでサインインを完了するか、タップしてキャンセルしてください</string>
+  <string name="setting_provider_page_sign_in_chatgpt">ChatGPT でサインイン</string>
+  <string name="setting_provider_page_chatgpt_disclaimer">Codexバックエンド経由でChatGPTサブスクリプションを使用します。実験的機能: OpenAIはこれをいつでも変更または制限する可能性があります。</string>
+  <string name="setting_provider_page_usage">使用量</string>
+  <string name="setting_provider_page_usage_loading">使用状況を読み込み中</string>
+  <string name="setting_provider_page_usage_failed">使用状況を読み込めませんでした</string>
+  <string name="setting_provider_page_usage_none">使用制限なし</string>
+  <string name="setting_provider_page_usage_resets">%1$sにリセット</string>
+  <string name="setting_provider_page_usage_limit">使用量上限</string>
+  <string name="setting_provider_page_usage_limit_weekly">週間上限</string>
+  <string name="setting_provider_page_usage_limit_daily">1日の上限</string>
+  <string name="setting_provider_page_usage_limit_weeks">%1$d週間の上限</string>
+  <string name="setting_provider_page_usage_limit_days">%1$d日間の制限</string>
+  <string name="setting_provider_page_usage_limit_hours">%1$d時間の制限</string>
+  <string name="setting_provider_page_usage_limit_minutes">制限時間 %1$d分</string>
+  <string name="setting_provider_page_quota_variables">変数: %1$s。APIキーは上記のヘッダーとともにこのURLに送信されます。</string>
 </resources>

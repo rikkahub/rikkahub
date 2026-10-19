@@ -19,8 +19,8 @@ class DefaultProvidersTest {
         assertEquals("https://ai-gateway.vercel.sh/v1", provider.baseUrl)
         assertFalse(provider.enabled)
         assertTrue(provider.builtIn)
-        assertTrue(provider.balanceOption.enabled)
-        assertEquals("/credits", provider.balanceOption.apiPath)
-        assertEquals("balance", provider.balanceOption.resultPath)
+        assertTrue(provider.quotaQuery.enabled)
+        assertEquals("{{baseUrl}}/credits", provider.quotaQuery.url)
+        assertEquals("balance", provider.quotaQuery.resultPath)
     }
 }
