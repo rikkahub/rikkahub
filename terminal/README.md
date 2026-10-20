@@ -1,0 +1,14 @@
+# terminal
+
+终端模拟器核心, 供工作区终端页使用。界面部分 (`TerminalView`) 仍使用上游的 `terminal-view` aar。
+
+## 来源
+
+`src/main/java` 与 `src/test/java` 取自 [termux-app](https://github.com/termux/termux-app) 的
+`terminal-emulator` 模块, tag `v0.118.0` (commit `6e2689f55295fa444be8ac8592c527c2c5ef3253`),
+按 Apache License 2.0 发布, 全文见 [LICENSE](LICENSE)。包名保持 `com.termux.terminal` 不变,
+以便与 `terminal-view` aar 二进制兼容。
+
+## 与上游的差异
+
+- 原生部分不用上游的 `termux.c`, 改为 `src/main/cpp/termux_pty.cpp`, 以 16KB 页对齐编译
