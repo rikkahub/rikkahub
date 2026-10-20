@@ -1674,4 +1674,5 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_provider_page_grok_disclaimer">Grok CLI처럼 로그인하여 SuperGrok 구독을 사용합니다. 실험적 기능: xAI는 언제든지 이를 변경하거나 제한할 수 있습니다.</string>
   <string name="setting_provider_page_device_code_hint">브라우저에서 이 코드를 확인하세요.</string>
   <string name="setting_provider_page_device_code_reopen">페이지를 다시 열려면 탭하세요</string>
+  <string name="setting_provider_page_type_subscription">%s 구독</string>
 </resources>

@@ -1672,4 +1672,5 @@
   <string name="setting_provider_page_grok_disclaimer">以 Grok CLI 的方式登入，使用你的 SuperGrok 訂閱。實驗性功能：xAI 可能隨時變更或限制此功能。</string>
   <string name="setting_provider_page_device_code_hint">請在瀏覽器中確認此驗證碼</string>
   <string name="setting_provider_page_device_code_reopen">輕觸重新開啟頁面</string>
+  <string name="setting_provider_page_type_subscription">%s 訂閱</string>
 </resources>

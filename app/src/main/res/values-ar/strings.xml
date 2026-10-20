@@ -1672,4 +1672,5 @@
   <string name="setting_provider_page_grok_disclaimer">يستخدم اشتراك SuperGrok الخاص بك عبر تسجيل الدخول كما في Grok CLI. ميزة تجريبية: قد تغيّر xAI هذا أو تقيّده في أي وقت.</string>
   <string name="setting_provider_page_device_code_hint">أكّد هذا الرمز في المتصفح</string>
   <string name="setting_provider_page_device_code_reopen">اضغط لفتح الصفحة مرة أخرى</string>
+  <string name="setting_provider_page_type_subscription">اشتراك %s</string>
 </resources>

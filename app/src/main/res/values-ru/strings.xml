@@ -1674,4 +1674,5 @@
   <string name="setting_provider_page_grok_disclaimer">Использует вашу подписку SuperGrok, выполняя вход так же, как в Grok CLI. Экспериментально: xAI может в любое время изменить или ограничить эту функцию.</string>
   <string name="setting_provider_page_device_code_hint">Подтвердите этот код в браузере</string>
   <string name="setting_provider_page_device_code_reopen">Нажмите, чтобы снова открыть страницу</string>
+  <string name="setting_provider_page_type_subscription">Подписка %s</string>
 </resources>

@@ -609,12 +609,13 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                val typeName = template.typeName()
                                 AutoAIIcon(
-                                    name = template.name,
+                                    name = typeName,
                                     modifier = Modifier.size(40.dp)
                                 )
                                 Text(
-                                    text = template.name,
+                                    text = typeName,
                                     style = MaterialTheme.typography.titleMediumEmphasized,
                                     modifier = Modifier.weight(1f),
                                 )
@@ -626,6 +627,16 @@ private fun AddButton(onAdd: (ProviderSetting) -> Unit) {
             }
         }
     }
+}
+
+// 类型的显示名，和用户可改的 ProviderSetting.name 分开
+@Composable
+private fun ProviderSetting.typeName(): String = when (this) {
+    is ProviderSetting.OpenAI -> "OpenAI"
+    is ProviderSetting.Google -> "Google"
+    is ProviderSetting.Claude -> "Claude"
+    is ProviderSetting.ChatGPT -> stringResource(R.string.setting_provider_page_type_subscription, "ChatGPT")
+    is ProviderSetting.Grok -> stringResource(R.string.setting_provider_page_type_subscription, "Grok")
 }
 
 @Composable
