@@ -48,13 +48,14 @@ import org.koin.compose.koinInject
 @Composable
 fun WorkspaceCwdPickerSheet(
     workspaceId: String,
+    workspaceDir: String,
     currentCwd: String?,
     onSelectCwd: (String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val workspaceRepository: WorkspaceRepository = koinInject()
 
-    var browsePath by remember { mutableStateOf(fromAbsolutePath(currentCwd)) }
+    var browsePath by remember { mutableStateOf(fromAbsolutePath(workspaceDir, currentCwd)) }
     var entries by remember { mutableStateOf<List<WorkspaceFileEntry>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
 
@@ -106,7 +107,7 @@ fun WorkspaceCwdPickerSheet(
                     Icon(HugeIcons.ArrowTurnBackward, contentDescription = null)
                 }
                 Text(
-                    text = toAbsolutePath(browsePath),
+                    text = toAbsolutePath(workspaceDir, browsePath),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -175,7 +176,7 @@ fun WorkspaceCwdPickerSheet(
                     }
                 }
                 FilledTonalButton(onClick = {
-                    onSelectCwd(toAbsolutePath(browsePath))
+                    onSelectCwd(toAbsolutePath(workspaceDir, browsePath))
                     onDismiss()
                 }) {
                     Text(stringResource(R.string.workspace_cwd_set))
@@ -185,13 +186,11 @@ fun WorkspaceCwdPickerSheet(
     }
 }
 
-private const val WORKSPACE_PREFIX = "/workspace"
-
-private fun toAbsolutePath(relativePath: String): String {
-    return if (relativePath.isBlank()) WORKSPACE_PREFIX else "$WORKSPACE_PREFIX/$relativePath"
+private fun toAbsolutePath(workspaceDir: String, relativePath: String): String {
+    return if (relativePath.isBlank()) workspaceDir else "${workspaceDir.trimEnd('/')}/$relativePath"
 }
 
-private fun fromAbsolutePath(absolutePath: String?): String {
+private fun fromAbsolutePath(workspaceDir: String, absolutePath: String?): String {
     if (absolutePath.isNullOrBlank()) return ""
-    return absolutePath.removePrefix("$WORKSPACE_PREFIX/").removePrefix(WORKSPACE_PREFIX)
+    return absolutePath.removePrefix("${workspaceDir.trimEnd('/')}/").removePrefix(workspaceDir)
 }

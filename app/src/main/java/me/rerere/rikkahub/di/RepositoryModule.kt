@@ -17,6 +17,7 @@ import me.rerere.workspace.ProotShellRunner
 import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceBindMount
 import me.rerere.workspace.WorkspaceManager
+import me.rerere.workspace.ssh.SshConnectionPool
 import org.koin.dsl.module
 import java.io.File
 
@@ -88,7 +89,11 @@ val repositoryModule = module {
     }
 
     single {
-        WorkspaceRepository(get(), get(), get(), get())
+        SshConnectionPool()
+    }
+
+    single {
+        WorkspaceRepository(get(), get(), get(), get(), get())
     }
 
     single {

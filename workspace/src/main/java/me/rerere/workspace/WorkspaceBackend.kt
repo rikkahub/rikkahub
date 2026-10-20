@@ -19,6 +19,9 @@ interface WorkspaceBackend {
     /** 执行命令实际使用的 shell 路径 */
     fun shell(): String
 
+    /** 执行命令时的 HOME 目录 */
+    fun homeDir(): String
+
     fun listFiles(area: WorkspaceStorageArea, path: String): List<WorkspaceFileEntry>
 
     /** 读取文件区内的文本, 自带大小保护 */
@@ -44,6 +47,9 @@ interface WorkspaceBackend {
     fun absoluteFileSize(path: String): Long
 
     fun exportAbsoluteFile(path: String, outputStream: OutputStream)
+
+    /** 按环境内绝对路径写入 UTF-8 文本, 父目录不存在时自动创建; 返回的条目 path 为绝对路径 */
+    fun writeAbsoluteText(path: String, text: String, overwrite: Boolean): WorkspaceFileEntry
 
     /** 宿主机上可直接访问的文件; 没有本地落点的环境返回 null */
     fun localFile(area: WorkspaceStorageArea, path: String): File?

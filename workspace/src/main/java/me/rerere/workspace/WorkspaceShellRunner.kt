@@ -97,7 +97,7 @@ fun Process.readResult(timeoutMillis: Long, stdin: ByteArray? = null): Workspace
     }
 }
 
-private class StreamWriter(
+internal class StreamWriter(
     private val stream: java.io.OutputStream,
     private val bytes: ByteArray,
 ) {
@@ -118,7 +118,7 @@ private class StreamWriter(
     fun join(millis: Long) = thread.join(millis)
 }
 
-private class StreamCollector(
+internal class StreamCollector(
     stream: InputStream,
     private val maxChars: Int = MAX_OUTPUT_CHARS,
 ) {
@@ -161,3 +161,7 @@ private class StreamCollector(
 
     fun text(): String = synchronized(builder) { builder.toString() }
 }
+
+/** POSIX shell 单引号转义 */
+internal fun String.shellQuote(): String =
+    "'" + replace("'", "'\"'\"'") + "'"

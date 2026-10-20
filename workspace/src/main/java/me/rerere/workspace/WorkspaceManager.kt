@@ -282,6 +282,9 @@ class WorkspaceManager(
         /** Rootfs 内工作区文件区的挂载点 */
         const val ROOTFS_WORKSPACE_DIR = "/workspace"
 
+        /** Rootfs 内执行命令时的 HOME */
+        const val ROOTFS_HOME_DIR = "/root"
+
         /** 由宿主机透传的内核伪文件系统, 只能通过 shell 访问 */
         val KERNEL_FS_MOUNTS = listOf("/dev", "/proc", "/sys")
 

@@ -10,6 +10,14 @@ data class Workspace(
     val lastAccessAt: Long? = null,
 )
 
+enum class WorkspaceType {
+    /** 本机 PRoot Rootfs */
+    LOCAL,
+
+    /** 通过 SSH 连接的远程机器 */
+    SSH,
+}
+
 enum class WorkspaceShellStatus {
     DISABLED,
     INSTALLING,

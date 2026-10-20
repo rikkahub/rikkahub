@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -161,18 +162,23 @@ class WorkspaceDetailVM(
         refresh()
     }
 
+    private var refreshJob: Job? = null
+
     fun refresh() {
-        viewModelScope.launch {
+        // 远程工作区列目录要走网络, 快速切换目录时旧请求可能晚到, 只保留最新一次
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
             _state.update { it.copy(loading = true, error = null) }
-            runCatching {
-                repository.listFiles(
+            try {
+                val entries = repository.listFiles(
                     id = id,
                     area = state.value.area,
                     path = state.value.path,
                 )
-            }.onSuccess { entries ->
                 _state.update { it.copy(entries = entries, loading = false) }
-            }.onFailure { error ->
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
                 _state.update {
                     it.copy(
                         entries = emptyList(),

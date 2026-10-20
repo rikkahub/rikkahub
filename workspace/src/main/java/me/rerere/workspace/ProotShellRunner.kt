@@ -167,7 +167,7 @@ class ProotShellRunner(
         private val ROOTFS_ENV = listOf(
             "/usr/bin/env",
             "-i",
-            "HOME=/root",
+            "HOME=${WorkspaceManager.ROOTFS_HOME_DIR}",
             "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
             "TERM=xterm-256color",
             "LANG=C.UTF-8",

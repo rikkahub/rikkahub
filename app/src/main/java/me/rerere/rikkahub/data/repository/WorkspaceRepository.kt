@@ -10,7 +10,10 @@ import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.dao.WorkspaceDAO
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
+import me.rerere.rikkahub.data.model.SshWorkspaceDraft
+import me.rerere.rikkahub.data.model.SshWorkspaceSettings
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.utils.SecretCipher
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstaller
 import me.rerere.workspace.WorkspaceBackend
@@ -20,8 +23,15 @@ import me.rerere.workspace.WorkspaceLayout
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
+import me.rerere.workspace.WorkspaceType
+import me.rerere.workspace.ssh.SshAuthType
+import me.rerere.workspace.ssh.SshConnectionConfig
+import me.rerere.workspace.ssh.SshConnectionPool
+import me.rerere.workspace.ssh.SshProbeResult
+import me.rerere.workspace.ssh.SshWorkspaceBackend
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import kotlin.uuid.Uuid
@@ -31,12 +41,15 @@ class WorkspaceRepository(
     private val manager: WorkspaceManager,
     private val rootfsInstaller: RootfsInstaller,
     private val settingsStore: SettingsStore,
+    private val sshPool: SshConnectionPool,
 ) {
     fun listFlow(): Flow<List<WorkspaceEntity>> = dao.listFlow()
 
     suspend fun checkIntegrity() = withContext(Dispatchers.IO) {
         val workspaces = dao.getAll()
         for (workspace in workspaces) {
+            // 远程工作区没有本地目录和 Rootfs
+            if (workspace.isSsh()) continue
             val dir = manager.workspaceDir(workspace.root)
             if (!dir.exists()) {
                 // 目录缺失时不删除记录(例如恢复备份后工作区文件未随数据库一起恢复),
@@ -76,6 +89,46 @@ class WorkspaceRepository(
         )
         manager.ensureWorkspace(workspace.root)
         dao.upsert(workspace)
+        return workspace
+    }
+
+    /** 用一条临时连接测试 SSH 配置; [id] 不为空时, 表单里留空的凭据沿用该工作区已保存的值 */
+    suspend fun probeSsh(id: String?, draft: SshWorkspaceDraft): SshProbeResult {
+        val previous = id?.let { dao.getById(it)?.sshSettings() }
+        return runInterruptible(Dispatchers.IO) {
+            sshPool.probe(draft.toSettings(previous).toConnectionConfig())
+        }
+    }
+
+    /** 新建 ([id] 为 null) 或更新 SSH 工作区 */
+    suspend fun saveSsh(id: String?, draft: SshWorkspaceDraft): WorkspaceEntity {
+        val existing = id?.let { dao.getById(it) ?: error("Workspace not found: $it") }
+        require(existing == null || existing.isSsh()) { "Not an SSH workspace: $id" }
+        val finalName = draft.name.trim().ifBlank { "Workspace" }
+        require(!isNameTaken(finalName, excludeId = id)) {
+            "Workspace name already exists: $finalName"
+        }
+        val settings = withContext(Dispatchers.IO) { draft.toSettings(existing?.sshSettings()) }
+        val now = System.currentTimeMillis()
+        val workspace = existing?.copy(
+            name = finalName,
+            sshConfig = JsonInstant.encodeToString(settings),
+            updatedAt = now,
+        ) ?: Uuid.random().toString().let { newId ->
+            WorkspaceEntity(
+                id = newId,
+                name = finalName,
+                root = newId,
+                // 远程工作区不需要安装 Rootfs, 视为 shell 已就绪
+                shellStatus = WorkspaceShellStatus.READY.name,
+                createdAt = now,
+                updatedAt = now,
+                type = WorkspaceType.SSH.name,
+                sshConfig = JsonInstant.encodeToString(settings),
+            )
+        }
+        dao.upsert(workspace)
+        withContext(Dispatchers.IO) { sshPool.close(workspace.id) }
         return workspace
     }
 
@@ -122,6 +175,7 @@ class WorkspaceRepository(
         onProgress: (RootfsInstallProgress) -> Unit = {},
     ): Boolean {
         val workspace = dao.getById(id) ?: return false
+        require(!workspace.isSsh()) { "Rootfs is only available for local workspaces" }
         updateShellState(workspace, WorkspaceShellStatus.INSTALLING.name)
         try {
             // runInterruptible 让协程取消转成线程中断, 打断 install 内阻塞的下载/解压循环
@@ -148,7 +202,14 @@ class WorkspaceRepository(
     }
 
     /** 工作区在执行环境内的目录约定, 工作区不存在时返回 null */
-    suspend fun layout(id: String): WorkspaceLayout? = dao.getById(id)?.let { backendOf(it).layout }
+    suspend fun layout(id: String): WorkspaceLayout? = dao.getById(id)?.let { workspace ->
+        // 只需要目录约定, 不解密凭据也不建立连接
+        if (workspace.isSsh()) {
+            workspace.sshSettings()?.let { SshWorkspaceBackend.layoutOf(it.remoteDir) }
+        } else {
+            manager.layout
+        }
+    }
 
     suspend fun listFiles(
         id: String,
@@ -238,6 +299,22 @@ class WorkspaceRepository(
     /** 执行命令实际使用的 shell 路径 */
     suspend fun shell(id: String): String = withBackend(id) { it.shell() }
 
+    /** 执行命令时的 HOME 目录 */
+    suspend fun homeDir(id: String): String = withBackend(id) { it.homeDir() }
+
+    /** 按环境内绝对路径写入文本; 本地工作区在 Rootfs 内执行 shell 写入, 因此和命令一样支持取消 */
+    suspend fun writeAbsoluteText(
+        id: String,
+        path: String,
+        text: String,
+        overwrite: Boolean,
+    ): WorkspaceFileEntry {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        return runInterruptible(Dispatchers.IO) {
+            backendOf(workspace).writeAbsoluteText(path, text, overwrite)
+        }
+    }
+
     /** 按环境内绝对路径导出文件内容, 本地工作区支持 /workspace、bind mount 与 Rootfs 内部路径 */
     suspend fun exportAbsoluteFile(
         id: String,
@@ -263,10 +340,9 @@ class WorkspaceRepository(
         stdin: ByteArray? = null,
     ): WorkspaceCommandResult {
         val workspace = dao.getById(id) ?: error("Workspace not found: $id")
-        val backend = backendOf(workspace)
         // runInterruptible 让协程取消转化为线程中断，从而打断阻塞的 Process.waitFor 并杀掉进程
         return runInterruptible(Dispatchers.IO) {
-            backend.executeCommand(command, cwd, timeoutMillis, stdin)
+            backendOf(workspace).executeCommand(command, cwd, timeoutMillis, stdin)
         }
     }
 
@@ -274,6 +350,7 @@ class WorkspaceRepository(
         val workspace = dao.getById(id) ?: return false
         dao.deleteById(id)
         withContext(Dispatchers.IO) {
+            sshPool.close(id)
             manager.deleteWorkspace(workspace.root)
         }
         cleanupAssistantReferences(id)
@@ -295,7 +372,72 @@ class WorkspaceRepository(
     }
 
     private fun backendOf(workspace: WorkspaceEntity): WorkspaceBackend =
-        manager.backend(workspace.root, workspace.shellCompatibilityMode)
+        if (workspace.isSsh()) {
+            val settings = workspace.sshSettings() ?: error("SSH workspace config is missing: ${workspace.id}")
+            SshWorkspaceBackend(sshPool, workspace.id, settings.toConnectionConfig())
+        } else {
+            manager.backend(workspace.root, workspace.shellCompatibilityMode)
+        }
+
+    private fun SshWorkspaceSettings.toConnectionConfig() = SshConnectionConfig(
+        host = host,
+        port = port,
+        username = username,
+        authType = authType,
+        password = encryptedPassword?.let(::decryptSecret),
+        privateKey = encryptedPrivateKey?.let(::decryptSecret),
+        passphrase = encryptedPassphrase?.let(::decryptSecret),
+        remoteDir = remoteDir,
+        hostKey = hostKey,
+    )
+
+    /**
+     * 表单转成持久化配置并加密凭据。编辑时留空的凭据沿用 [previous] 的密文;
+     * 私钥口令跟随私钥: 换了新私钥就以表单为准, 沿用旧私钥时口令留空也沿用。
+     */
+    private fun SshWorkspaceDraft.toSettings(previous: SshWorkspaceSettings?): SshWorkspaceSettings {
+        val remoteDir = remoteDir.trim().trimEnd('/').ifEmpty { "/" }
+        require(remoteDir.startsWith("/")) { "Remote directory must be an absolute path" }
+        require(host.isNotBlank()) { "Host is required" }
+        require(username.isNotBlank()) { "Username is required" }
+        require(port in 1..65535) { "Invalid port: $port" }
+        val keepPrivateKey = privateKey.isBlank()
+        return SshWorkspaceSettings(
+            host = host.trim(),
+            port = port,
+            username = username.trim(),
+            authType = authType,
+            remoteDir = remoteDir,
+            hostKey = hostKey,
+            encryptedPassword = if (authType == SshAuthType.PASSWORD) {
+                password.takeIf { it.isNotEmpty() }?.let(SecretCipher::encrypt) ?: previous?.encryptedPassword
+            } else {
+                null
+            },
+            encryptedPrivateKey = if (authType == SshAuthType.PRIVATE_KEY) {
+                privateKey.takeIf { it.isNotBlank() }?.let { SecretCipher.encrypt(it.trim()) }
+                    ?: previous?.encryptedPrivateKey
+            } else {
+                null
+            },
+            encryptedPassphrase = when {
+                authType != SshAuthType.PRIVATE_KEY -> null
+                passphrase.isNotEmpty() -> SecretCipher.encrypt(passphrase)
+                keepPrivateKey -> previous?.encryptedPassphrase
+                else -> null
+            },
+        )
+    }
+
+    private fun decryptSecret(value: String): String = try {
+        SecretCipher.decrypt(value)
+    } catch (e: Exception) {
+        throw IOException(
+            "Saved SSH credentials cannot be decrypted (for example after restoring a backup on another device). " +
+                "Re-enter them in the workspace settings.",
+            e,
+        )
+    }
 
     private suspend fun <T> withBackend(id: String, block: (WorkspaceBackend) -> T): T =
         withContext(Dispatchers.IO) {
