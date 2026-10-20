@@ -15,13 +15,17 @@ import me.rerere.workspace.StreamWriter
 import me.rerere.workspace.WorkspaceCommandResult
 import java.io.Closeable
 import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.SocketTimeoutException
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantLock
 
 /**
  * 一条 SSH 连接: 命令走 exec channel, 文件操作复用同一个 SFTP channel。
  *
  * Session 本身允许并发开多个 channel; SFTP channel 不是线程安全的, 由 [sftp] 串行化。
+ * 阻塞操作响应线程中断, 调用方可以用中断取消卡在网络上的操作。
  */
 internal class SshConnection private constructor(
     val config: SshConnectionConfig,
@@ -29,7 +33,7 @@ internal class SshConnection private constructor(
     val hostKey: SshHostKey,
     private val channelTimeoutMillis: Int,
 ) : Closeable {
-    private val sftpLock = Any()
+    private val sftpLock = ReentrantLock()
     private var sftpChannel: ChannelSftp? = null
     private val ensuredDirs = ConcurrentHashMap.newKeySet<String>()
 
@@ -41,11 +45,26 @@ internal class SshConnection private constructor(
 
     val shell: String by lazy { detectShell() }
 
-    fun <T> sftp(block: (ChannelSftp) -> T): T = synchronized(sftpLock) {
-        val channel = sftpChannel?.takeIf { it.isConnected }
-            ?: openChannel { (session.openChannel("sftp") as ChannelSftp).apply { connect(channelTimeoutMillis) } }
-                .also { sftpChannel = it }
-        block(channel)
+    fun <T> sftp(block: (ChannelSftp) -> T): T {
+        // 可中断地等锁: 前一个操作卡在网络上时, 被取消的等待方能及时返回
+        sftpLock.lockInterruptibly()
+        try {
+            val channel = sftpChannel?.takeIf { it.isConnected }
+                ?: openChannel { (session.openChannel("sftp") as ChannelSftp).apply { connect(channelTimeoutMillis) } }
+                    .also { sftpChannel = it }
+            try {
+                return block(channel)
+            } catch (e: Exception) {
+                // 被打断的请求的回应可能稍后才到, 继续用这个 channel 会读到错位的回应, 关掉下次重开
+                if (e.isInterruption()) {
+                    channel.disconnect()
+                    sftpChannel = null
+                }
+                throw e
+            }
+        } finally {
+            sftpLock.unlock()
+        }
     }
 
     /** 确保远程目录存在, 每条连接对同一目录只检查一次 */
@@ -121,11 +140,8 @@ internal class SshConnection private constructor(
         return SshShell(channel, input, output, this, onClose)
     }
 
+    // 不等 SFTP 锁: 断开 session 会关闭所有 channel, 卡住的 SFTP 操作随之失败并释放锁
     override fun close() {
-        synchronized(sftpLock) {
-            sftpChannel?.disconnect()
-            sftpChannel = null
-        }
         session.disconnect()
     }
 
@@ -251,6 +267,11 @@ internal class SshConnection private constructor(
 
 /** 打开 channel 失败, 请求还没有发到服务器, 重连后重试是安全的 */
 internal class SshChannelOpenException(cause: Throwable) : IOException(cause.message, cause)
+
+/** 是否因线程中断而失败: JSch 会把读管道时的 InterruptedIOException 包进 SftpException 等异常里 */
+internal fun Throwable.isInterruption(): Boolean = generateSequence(this) { it.cause }.any {
+    it is InterruptedException || it is InterruptedIOException && it !is SocketTimeoutException
+}
 
 /** 逐级创建目录, 已存在的跳过 */
 internal fun ChannelSftp.mkdirs(dir: String) {

@@ -11,6 +11,7 @@ import me.rerere.workspace.WorkspaceLayout
 import me.rerere.workspace.WorkspaceStorageArea
 import me.rerere.workspace.shellQuote
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -57,7 +58,8 @@ class SshWorkspaceBackend(
         return withSftp(WorkspaceStorageArea.FILES, retry = true) { sftp ->
             val size = sftp.requireFile(file, path).size
             require(size <= workspaceConfig.maxReadBytes) { "File is too large to read: $size bytes" }
-            sftp.get(file.sftpQuote()).use { it.readBytes() }.toString(Charsets.UTF_8)
+            // 不用 get 返回的流: 它关闭时要读完未到的回应, 读取被打断后会再次卡住
+            ByteArrayOutputStream().also { sftp.get(file.sftpQuote(), it) }.toString(Charsets.UTF_8.name())
         }
     }
 

@@ -4,6 +4,8 @@ import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
@@ -216,15 +218,15 @@ class WorkspaceRepository(
         id: String,
         area: WorkspaceStorageArea,
         path: String,
-    ): List<WorkspaceFileEntry> = withContext(Dispatchers.IO) {
-        val workspace = dao.getById(id) ?: return@withContext emptyList()
-        backendOf(workspace).listFiles(area, path)
+    ): List<WorkspaceFileEntry> {
+        val workspace = dao.getById(id) ?: return emptyList()
+        return runInterruptible(Dispatchers.IO) { backendOf(workspace).listFiles(area, path) }
     }
 
     suspend fun readText(
         id: String,
         path: String,
-    ): String = withBackend(id) { it.readText(path) }
+    ): String = readFromBackend(id) { it.readText(path) }
 
     suspend fun writeText(
         id: String,
@@ -242,7 +244,7 @@ class WorkspaceRepository(
         id: String,
         area: WorkspaceStorageArea,
         path: String,
-    ): String = withBackend(id) { backend ->
+    ): String = readFromBackend(id) { backend ->
         when (area) {
             WorkspaceStorageArea.FILES -> backend.readText(path)
             WorkspaceStorageArea.LINUX -> {
@@ -278,13 +280,13 @@ class WorkspaceRepository(
         area: WorkspaceStorageArea,
         path: String,
         outputStream: OutputStream,
-    ) = withBackend(id) { it.exportFile(area, path, outputStream) }
+    ) = readFromBackend(id) { it.exportFile(area, path, outputStream) }
 
     /** 按环境内绝对路径读取文件大小, 本地工作区支持 /workspace、bind mount 与 Rootfs 内部路径 */
     suspend fun absoluteFileSize(
         id: String,
         path: String,
-    ): Long = withBackend(id) { it.absoluteFileSize(path) }
+    ): Long = readFromBackend(id) { it.absoluteFileSize(path) }
 
     /** 按环境内绝对路径解析宿主机上的文件, 不存在、不是文件或没有本地落点时返回 null */
     suspend fun resolveAbsoluteFile(
@@ -298,7 +300,7 @@ class WorkspaceRepository(
     }
 
     /** 执行命令实际使用的 shell 路径 */
-    suspend fun shell(id: String): String = withBackend(id) { it.shell() }
+    suspend fun shell(id: String): String = readFromBackend(id) { it.shell() }
 
     /** 按环境内绝对路径写入文本; 本地工作区在 Rootfs 内执行 shell 写入, 因此和命令一样支持取消 */
     suspend fun writeAbsoluteText(
@@ -318,7 +320,7 @@ class WorkspaceRepository(
         id: String,
         path: String,
         outputStream: OutputStream,
-    ) = withBackend(id) { it.exportAbsoluteFile(path, outputStream) }
+    ) = readFromBackend(id) { it.exportAbsoluteFile(path, outputStream) }
 
     suspend fun deleteFile(
         id: String,
@@ -442,6 +444,21 @@ class WorkspaceRepository(
                 "Re-enter them in the workspace settings.",
             e,
         )
+    }
+
+    /**
+     * 读操作: 取消时中断线程, 远程读取卡在网络上时也能及时返回。
+     * 中途放弃没有副作用; 写操作被打断会留下写了一半的文件, 走 [withBackend] 照常执行完。
+     */
+    private suspend fun <T> readFromBackend(id: String, block: (WorkspaceBackend) -> T): T {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        return try {
+            runInterruptible(Dispatchers.IO) { block(backendOf(workspace)) }
+        } catch (e: Exception) {
+            // 被中断的读取会抛出 JSch 包装过的 IO 异常, 已取消时统一按取消处理, 免得被当成连接失败
+            currentCoroutineContext().ensureActive()
+            throw e
+        }
     }
 
     private suspend fun <T> withBackend(id: String, block: (WorkspaceBackend) -> T): T =

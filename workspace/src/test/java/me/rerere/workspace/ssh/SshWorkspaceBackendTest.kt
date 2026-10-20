@@ -8,11 +8,15 @@ import org.apache.sshd.server.auth.password.PasswordAuthenticator
 import org.apache.sshd.server.auth.pubkey.PublickeyAuthenticator
 import org.apache.sshd.server.command.CommandFactory
 import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider
+import org.apache.sshd.server.session.ServerSession
 import org.apache.sshd.server.shell.ProcessShellFactory
+import org.apache.sshd.sftp.server.FileHandle
+import org.apache.sshd.sftp.server.SftpEventListener
 import org.apache.sshd.sftp.server.SftpSubsystemFactory
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -46,6 +50,10 @@ class SshWorkspaceBackendTest {
     // 用来复现服务器已经接受命令、客户端却等回应超时
     private val slowReplyRequests = AtomicInteger()
 
+    // 读取 SLOW_READ_FILE 时服务器一直不回应, 直到测试放行, 用来复现 SFTP 读取卡在网络上
+    private val slowReadEntered = CountDownLatch(1)
+    private val slowReadRelease = CountDownLatch(1)
+
     @Before
     fun setUp() {
         remoteDir = tempFolder.newFolder("remote").canonicalFile
@@ -68,7 +76,26 @@ class SshWorkspaceBackendTest {
                 (username == USER || username == SLOW_USER) && password == PASSWORD
             }
             publickeyAuthenticator = PublickeyAuthenticator { username, _, _ -> username == KEY_USER }
-            subsystemFactories = listOf(SftpSubsystemFactory())
+            subsystemFactories = listOf(
+                SftpSubsystemFactory().apply {
+                    addSftpEventListener(object : SftpEventListener {
+                        override fun reading(
+                            session: ServerSession,
+                            remoteHandle: String,
+                            localHandle: FileHandle,
+                            offset: Long,
+                            data: ByteArray,
+                            dataOffset: Int,
+                            dataLen: Int,
+                        ) {
+                            if (localHandle.file.fileName.toString() == SLOW_READ_FILE) {
+                                slowReadEntered.countDown()
+                                slowReadRelease.await(10, TimeUnit.SECONDS)
+                            }
+                        }
+                    })
+                },
+            )
             commandFactory = CommandFactory { channel, command ->
                 // SSHD 在创建命令之后才回应 exec 请求, 在这里等待就能推迟回应
                 if (SLOW_REPLY_MARKER in command) {
@@ -297,6 +324,36 @@ class SshWorkspaceBackendTest {
     }
 
     @Test
+    fun interruptedSftpReadDoesNotBlockLaterOperations() {
+        val backend = backend()
+        File(remoteDir, SLOW_READ_FILE).writeText("slow")
+        File(remoteDir, "fast.txt").writeText("fast")
+        assertEquals("fast", backend.readText("fast.txt"))
+        try {
+            val stuckError = AtomicReference<Throwable>()
+            val stuck = thread { stuckError.set(runCatching { backend.readText(SLOW_READ_FILE) }.exceptionOrNull()) }
+            assertTrue(slowReadEntered.await(5, TimeUnit.SECONDS))
+
+            // 排在后面等 SFTP 锁的操作也能被打断
+            val waiting = thread { runCatching { backend.readText("fast.txt") } }
+            Thread.sleep(200)
+            waiting.interrupt()
+            waiting.join(2_000)
+            assertFalse(waiting.isAlive)
+
+            stuck.interrupt()
+            stuck.join(2_000)
+            assertFalse(stuck.isAlive)
+            assertNotNull(stuckError.get())
+
+            // 卡住的回应还没到, 后续操作换了新 channel, 不会读到错位的回应
+            assertEquals("fast", backend.readText("fast.txt"))
+        } finally {
+            slowReadRelease.countDown()
+        }
+    }
+
+    @Test
     fun reconnectsAfterServerRestart() {
         val config = trustedConfig()
         val backend = backend(config)
@@ -440,6 +497,7 @@ class SshWorkspaceBackendTest {
 
     private companion object {
         const val SLOW_REPLY_MARKER = "rikkahub-slow-reply"
+        const val SLOW_READ_FILE = "slow.txt"
         const val WORKSPACE_ID = "test"
         const val USER = "tester"
         const val PASSWORD = "secret"

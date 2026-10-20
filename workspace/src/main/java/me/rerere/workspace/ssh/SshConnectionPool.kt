@@ -78,7 +78,7 @@ class SshConnectionPool(
         return try {
             block(pooled.connection)
         } catch (e: Exception) {
-            if (e is InterruptedException) throw e
+            if (e.isInterruption()) throw e
             val channelFailed = e is SshChannelOpenException
             if (pooled.connection.isConnected && !channelFailed) throw e
             evict(id, pooled)
@@ -108,7 +108,7 @@ class SshConnectionPool(
             open(pooled.connection, pooled::release)
         } catch (e: Exception) {
             pooled.release()
-            if (e is InterruptedException) throw e
+            if (e.isInterruption()) throw e
             val channelFailed = e is SshChannelOpenException
             if (pooled.connection.isConnected && !channelFailed) throw e
             evict(id, pooled)
