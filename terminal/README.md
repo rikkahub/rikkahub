@@ -12,3 +12,7 @@
 ## 与上游的差异
 
 - 原生部分不用上游的 `termux.c`, 改为 `src/main/cpp/termux_pty.cpp`, 以 16KB 页对齐编译
+- `TerminalSession` 不再直接管理本地进程, 改为通过 `TerminalTransport` 收发数据, 以便接入远程 shell:
+  本地 pty 进程挪到 `LocalPtyTransport` (fd 改由 `ParcelFileDescriptor` 持有, 不再反射 `FileDescriptor` 私有字段);
+  进程在后台线程启动, 启动失败时在终端里打印原因; 退出前等待读线程取完最后的输出;
+  去掉只对本地进程有意义的 `getPid()` / `getCwd()`
