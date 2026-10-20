@@ -6,6 +6,8 @@ import me.rerere.workspace.WorkspaceStorageArea
 import org.apache.sshd.server.SshServer
 import org.apache.sshd.server.auth.password.PasswordAuthenticator
 import org.apache.sshd.server.auth.pubkey.PublickeyAuthenticator
+import org.apache.sshd.server.channel.ChannelSession
+import org.apache.sshd.server.command.Command
 import org.apache.sshd.server.command.CommandFactory
 import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider
 import org.apache.sshd.server.session.ServerSession
@@ -54,6 +56,13 @@ class SshWorkspaceBackendTest {
     private val slowReadEntered = CountDownLatch(1)
     private val slowReadRelease = CountDownLatch(1)
 
+    // 打开时服务器迟迟不回应 SFTP subsystem 请求, 直到测试放行
+    @Volatile
+    private var stallSftpOpen = false
+    private val sftpOpens = AtomicInteger()
+    private val stalledSftpOpenEntered = CountDownLatch(1)
+    private val stalledSftpOpenRelease = CountDownLatch(1)
+
     @Before
     fun setUp() {
         remoteDir = tempFolder.newFolder("remote").canonicalFile
@@ -77,7 +86,17 @@ class SshWorkspaceBackendTest {
             }
             publickeyAuthenticator = PublickeyAuthenticator { username, _, _ -> username == KEY_USER }
             subsystemFactories = listOf(
-                SftpSubsystemFactory().apply {
+                object : SftpSubsystemFactory() {
+                    // SSHD 在创建 subsystem 之后才回应请求, 在这里等待就能推迟回应
+                    override fun createSubsystem(channel: ChannelSession): Command {
+                        sftpOpens.incrementAndGet()
+                        if (stallSftpOpen) {
+                            stalledSftpOpenEntered.countDown()
+                            stalledSftpOpenRelease.await(10, TimeUnit.SECONDS)
+                        }
+                        return super.createSubsystem(channel)
+                    }
+                }.apply {
                     addSftpEventListener(object : SftpEventListener {
                         override fun reading(
                             session: ServerSession,
@@ -351,6 +370,46 @@ class SshWorkspaceBackendTest {
         } finally {
             slowReadRelease.countDown()
         }
+    }
+
+    @Test
+    fun interruptedSftpOpenReturnsWithoutRetrying() {
+        val backend = backend()
+        File(remoteDir, "fast.txt").writeText("fast")
+        stallSftpOpen = true
+        sftpOpens.set(0)
+        try {
+            val stuckError = AtomicReference<Throwable>()
+            val stuck = thread { stuckError.set(runCatching { backend.readText("fast.txt") }.exceptionOrNull()) }
+            assertTrue(stalledSftpOpenEntered.await(5, TimeUnit.SECONDS))
+            stuck.interrupt()
+            stuck.join(2_000)
+            assertFalse(stuck.isAlive)
+            assertTrue(stuckError.get() is InterruptedException)
+        } finally {
+            stallSftpOpen = false
+            stalledSftpOpenRelease.countDown()
+        }
+        // 没有重连重试; 放行后打开的 channel 被丢弃, 下次重新打开
+        assertEquals("fast", backend.readText("fast.txt"))
+        assertEquals(2, sftpOpens.get())
+    }
+
+    @Test
+    fun interruptedConnectReturnsAndReleasesConnection() {
+        val config = trustedConfig().copy(username = SLOW_USER)
+        val stuckError = AtomicReference<Throwable>()
+        val stuck = thread { stuckError.set(runCatching { backend(config).readText("missing.txt") }.exceptionOrNull()) }
+        assertTrue(slowAuthEntered.await(10, TimeUnit.SECONDS))
+        stuck.interrupt()
+        stuck.join(2_000)
+        assertFalse(stuck.isAlive)
+        assertTrue(stuckError.get() is InterruptedException)
+
+        // 放行后建好的连接没有登记进连接池, 直接关掉, 服务器上不会遗留会话
+        slowAuthRelease.countDown()
+        assertFalse(pool.isConnected(WORKSPACE_ID))
+        assertTrue(waitUntil(5_000) { server.activeSessions.isEmpty() })
     }
 
     @Test

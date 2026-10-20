@@ -5,6 +5,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 /**
  * 按工作区复用 SSH 连接; 配置变化或连接断开时重新连接。
@@ -21,7 +23,9 @@ class SshConnectionPool(
     private val channelTimeoutMillis: Int = SshConnection.DEFAULT_CHANNEL_TIMEOUT_MS,
 ) : Closeable {
     private val connections = ConcurrentHashMap<String, PooledConnection>()
-    private val locks = ConcurrentHashMap<String, Any>()
+
+    // 按工作区串行化建连; 可中断地等待, 前一个建连卡住时被取消的调用方能及时返回
+    private val locks = ConcurrentHashMap<String, ReentrantLock>()
 
     // 关闭与新连接登记共用这把锁: close() 在锁内标记关闭并取走已登记的连接,
     // 登记前在锁内检查 closed, 关闭期间才建好的连接会自行释放, 不会遗留在已关闭的池里
@@ -47,7 +51,7 @@ class SshConnectionPool(
     fun probe(config: SshConnectionConfig): SshProbeResult = SshConnection.probe(config)
 
     fun close(id: String) {
-        synchronized(lockOf(id)) {
+        lockOf(id).withLock {
             connections.remove(id)?.connection?.close()
         }
     }
@@ -127,29 +131,40 @@ class SshConnectionPool(
     internal fun isConnected(id: String): Boolean = connections[id]?.connection?.isConnected == true
 
     // 在锁内登记使用, 清理线程同样持锁检查, 保证拿到手的连接不会被当成空闲关掉
-    private fun acquire(id: String, config: SshConnectionConfig): PooledConnection = synchronized(lockOf(id)) {
-        check(!closed) { "SSH connection pool is closed" }
-        connections[id]?.let { existing ->
-            if (existing.connection.config == config && existing.connection.isConnected) {
-                existing.retain()
-                return existing
+    private fun acquire(id: String, config: SshConnectionConfig): PooledConnection {
+        val lock = lockOf(id)
+        lock.lockInterruptibly()
+        try {
+            check(!closed) { "SSH connection pool is closed" }
+            connections[id]?.let { existing ->
+                if (existing.connection.config == config && existing.connection.isConnected) {
+                    existing.retain()
+                    return existing
+                }
+                connections.remove(id)
+                existing.connection.close()
             }
-            connections.remove(id)
-            existing.connection.close()
-        }
-        val pooled = PooledConnection(SshConnection.open(config, channelTimeoutMillis)).also { it.retain() }
-        synchronized(lifecycleLock) {
-            if (!closed) {
-                connections[id] = pooled
-                return pooled
+            // 被取消时放弃等待, 之后建好的连接直接关掉
+            val connection = awaitInterruptibly(
+                step = { SshConnection.open(config, channelTimeoutMillis) },
+                onAbandoned = { it.close() },
+            )
+            val pooled = PooledConnection(connection).also { it.retain() }
+            synchronized(lifecycleLock) {
+                if (!closed) {
+                    connections[id] = pooled
+                    return pooled
+                }
             }
+            pooled.connection.close()
+            throw IllegalStateException("SSH connection pool is closed")
+        } finally {
+            lock.unlock()
         }
-        pooled.connection.close()
-        throw IllegalStateException("SSH connection pool is closed")
     }
 
     private fun evict(id: String, pooled: PooledConnection) {
-        synchronized(lockOf(id)) {
+        lockOf(id).withLock {
             connections.remove(id, pooled)
         }
         pooled.connection.close()
@@ -158,7 +173,7 @@ class SshConnectionPool(
     private fun closeIdle() {
         val now = System.nanoTime()
         connections.forEach { (id, pooled) ->
-            synchronized(lockOf(id)) {
+            lockOf(id).withLock {
                 if (connections[id] === pooled && pooled.isIdle(now, idleTimeoutMillis)) {
                     connections.remove(id)
                     pooled.connection.close()
@@ -167,7 +182,7 @@ class SshConnectionPool(
         }
     }
 
-    private fun lockOf(id: String): Any = locks.computeIfAbsent(id) { Any() }
+    private fun lockOf(id: String): ReentrantLock = locks.computeIfAbsent(id) { ReentrantLock() }
 
     private class PooledConnection(val connection: SshConnection) {
         private val activeUses = AtomicInteger()

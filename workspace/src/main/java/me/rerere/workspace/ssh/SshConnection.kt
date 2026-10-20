@@ -18,7 +18,11 @@ import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
 import java.util.Base64
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import java.util.concurrent.locks.ReentrantLock
 
 /**
@@ -49,9 +53,7 @@ internal class SshConnection private constructor(
         // 可中断地等锁: 前一个操作卡在网络上时, 被取消的等待方能及时返回
         sftpLock.lockInterruptibly()
         try {
-            val channel = sftpChannel?.takeIf { it.isConnected }
-                ?: openChannel { (session.openChannel("sftp") as ChannelSftp).apply { connect(channelTimeoutMillis) } }
-                    .also { sftpChannel = it }
+            val channel = sftpChannel?.takeIf { it.isConnected } ?: openSftpChannel().also { sftpChannel = it }
             try {
                 return block(channel)
             } catch (e: Exception) {
@@ -65,6 +67,13 @@ internal class SshConnection private constructor(
         } finally {
             sftpLock.unlock()
         }
+    }
+
+    private fun openSftpChannel(): ChannelSftp {
+        val channel = openChannel { session.openChannel("sftp") as ChannelSftp }
+        // 启动 subsystem 要等服务器回应, 被取消时放弃等待, 打开成功后再关掉
+        awaitInterruptibly({ openChannel { channel.connect(channelTimeoutMillis) } }, onAbandoned = { channel.disconnect() })
+        return channel
     }
 
     /** 确保远程目录存在, 每条连接对同一目录只检查一次 */
@@ -131,12 +140,8 @@ internal class SshConnection private constructor(
         // 输入流必须在 connect 之前取, 否则开头的输出会丢
         val input = channel.inputStream
         val output = channel.outputStream
-        try {
-            channel.connectExec()
-        } catch (e: Exception) {
-            channel.disconnect()
-            throw e
-        }
+        // 连接失败时 JSch 自己会清理; 被取消时后台可能还在打开, 不能提前断开, 交给 connectExec 的放弃处理
+        channel.connectExec()
         return SshShell(channel, input, output, this, onClose)
     }
 
@@ -158,16 +163,23 @@ internal class SshConnection private constructor(
      *
      * 后一种情况下 JSch 不会给服务器发 channel close, 远端的 channel 和进程会一直留到连接断开,
      * 而单独关闭这个 channel 的方法不对外开放, 所以断开整条连接, 连接上的其他操作也会随之失败。
+     *
+     * 被取消时放弃等待, 之后连上的 channel 直接关掉。
      */
     private fun ChannelExec.connectExec() {
-        try {
-            connect(channelTimeoutMillis)
-        } catch (e: JSchException) {
-            // JSch 没有区分这两个阶段的接口, 只能按打开阶段的异常信息判断
-            if (e.message in CHANNEL_OPEN_FAILURE_MESSAGES) throw SshChannelOpenException(e)
-            this@SshConnection.close()
-            throw e
-        }
+        awaitInterruptibly(
+            step = {
+                try {
+                    connect(channelTimeoutMillis)
+                } catch (e: JSchException) {
+                    // JSch 没有区分这两个阶段的接口, 只能按打开阶段的异常信息判断
+                    if (e.message in CHANNEL_OPEN_FAILURE_MESSAGES) throw SshChannelOpenException(e)
+                    this@SshConnection.close()
+                    throw e
+                }
+            },
+            onAbandoned = { kill() },
+        )
     }
 
     // 不少 sshd 不处理 signal 请求, 断开 channel 后远程进程会在下次读写管道时退出
@@ -251,22 +263,50 @@ internal class SshConnection private constructor(
         }
 
         /** 用一条临时连接验证配置, 并取回远程环境的基本信息 */
-        fun probe(config: SshConnectionConfig): SshProbeResult = open(config).use { connection ->
-            val remoteDir = config.remoteDir.trim()
-            SshProbeResult(
-                hostKey = connection.hostKey,
-                homeDir = connection.homeDir,
-                shell = connection.shell,
-                remoteDirExists = remoteDir.startsWith("/") && connection.sftp { sftp ->
-                    sftp.statOrNull(remoteDir)?.isDir == true
-                },
-            )
+        fun probe(config: SshConnectionConfig): SshProbeResult {
+            // 被取消时放弃等待, 之后建好的连接直接关掉
+            val connection = awaitInterruptibly({ open(config) }, onAbandoned = { it.close() })
+            return connection.use {
+                val remoteDir = config.remoteDir.trim()
+                SshProbeResult(
+                    hostKey = connection.hostKey,
+                    homeDir = connection.homeDir,
+                    shell = connection.shell,
+                    remoteDirExists = remoteDir.startsWith("/") && connection.sftp { sftp ->
+                        sftp.statOrNull(remoteDir)?.isDir == true
+                    },
+                )
+            }
         }
     }
 }
 
 /** 打开 channel 失败, 请求还没有发到服务器, 重连后重试是安全的 */
 internal class SshChannelOpenException(cause: Throwable) : IOException(cause.message, cause)
+
+// JSch 等服务器回应时会吞掉线程中断, 这类步骤放到这里的线程上执行, 见 awaitInterruptibly
+private val blockingSteps: ExecutorService = Executors.newCachedThreadPool { runnable ->
+    Thread(runnable, "ssh-blocking-step").apply { isDaemon = true }
+}
+
+/**
+ * 在后台线程执行 [step], 当前线程可中断地等待结果。
+ *
+ * JSch 建立连接、打开 channel 和等待请求回应时会吞掉线程中断, 直接调用的话, 取消要等到服务器回应或超时,
+ * 中断标记也会丢失。等待被中断时立即抛出 [InterruptedException], [step] 之后成功得到的结果交给 [onAbandoned] 清理。
+ */
+internal fun <T> awaitInterruptibly(step: () -> T, onAbandoned: (T) -> Unit): T {
+    if (Thread.interrupted()) throw InterruptedException()
+    val future = CompletableFuture.supplyAsync({ step() }, blockingSteps)
+    try {
+        return future.get()
+    } catch (e: ExecutionException) {
+        throw e.cause ?: e
+    } catch (e: InterruptedException) {
+        future.thenAccept { onAbandoned(it) }
+        throw e
+    }
+}
 
 /** 是否因线程中断而失败: JSch 会把读管道时的 InterruptedIOException 包进 SftpException 等异常里 */
 internal fun Throwable.isInterruption(): Boolean = generateSequence(this) { it.cause }.any {
