@@ -8,6 +8,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceLayout
+import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import java.io.ByteArrayOutputStream
 import java.nio.file.Paths
@@ -18,8 +19,8 @@ import java.nio.file.Paths
  * 当助手绑定了一个 shell 已就绪的 workspace 时, 在系统提示词中追加一段引导,
  * 让模型了解 workspace 环境与 workspace_* 工具的使用方式。
  * 提示中包含实际使用的 shell 与发行版, 避免模型默认按 bash / apt 来写命令。
- * 同时读取 ~/.agents、工作区目录和会话当前目录中的 AGENTS.md 作为工作区指令。
- * 远程工作区连不上时只注入一段说明, 不阻塞对话。
+ * 本地工作区同时读取 ~/.agents、/workspace 和会话当前目录中的 AGENTS.md 作为工作区指令。
+ * 远程工作区不读取 AGENTS.md, 连不上时只注入一段说明, 不阻塞对话。
  */
 class WorkspaceReminderTransformer(
     private val workspaceRepository: WorkspaceRepository,
@@ -47,8 +48,9 @@ class WorkspaceReminderTransformer(
         val prompt = if (workspace.isSsh()) {
             buildSshWorkspacePrompt(workspace, layout, shell, distro, ctx.workspaceCwd)
         } else {
-            buildWorkspacePrompt(workspace, shell, distro, ctx.workspaceCwd)
-        } + buildAgentsPrompt(workspaceId, layout, ctx.workspaceCwd)
+            buildWorkspacePrompt(workspace, shell, distro, ctx.workspaceCwd) +
+                buildAgentsPrompt(workspaceId, ctx.workspaceCwd)
+        }
         return messages.withPrompt(prompt)
     }
 
@@ -66,19 +68,16 @@ class WorkspaceReminderTransformer(
         }
     }
 
-    private suspend fun buildAgentsPrompt(workspaceId: String, layout: WorkspaceLayout, cwd: String?): String {
-        // 本地 Rootfs 的 HOME 固定为 /root；相对 PWD 按工作区文件目录解析。
-        val homeDir = runCatching { workspaceRepository.homeDir(workspaceId) }
-            .onFailure { if (it is CancellationException) throw it }
-            .getOrNull()
-        val workingDirectory = Paths.get(layout.workspaceDir)
+    private suspend fun buildAgentsPrompt(workspaceId: String, cwd: String?): String {
+        // ProotShellRunner 将 HOME 固定为 /root；相对 PWD 按 /workspace 解析。
+        val workingDirectory = Paths.get(WorkspaceManager.ROOTFS_WORKSPACE_DIR)
             .resolve(cwd?.takeIf { it.isNotBlank() } ?: ".")
             .normalize()
         val paths = linkedSetOf(
-            homeDir?.let { "${it.trimEnd('/')}/.agents/AGENTS.md" },
-            "${layout.workspaceDir}/AGENTS.md",
+            "${WorkspaceManager.ROOTFS_HOME_DIR}/.agents/AGENTS.md",
+            "${WorkspaceManager.ROOTFS_WORKSPACE_DIR}/AGENTS.md",
             workingDirectory.resolve("AGENTS.md").toString(),
-        ).filterNotNull()
+        )
         val instructions = paths.mapNotNull { path ->
             readRootfsText(workspaceId, path, MAX_AGENTS_BYTES)?.let { path to it }
         }

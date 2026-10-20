@@ -299,9 +299,6 @@ class WorkspaceRepository(
     /** 执行命令实际使用的 shell 路径 */
     suspend fun shell(id: String): String = withBackend(id) { it.shell() }
 
-    /** 执行命令时的 HOME 目录 */
-    suspend fun homeDir(id: String): String = withBackend(id) { it.homeDir() }
-
     /** 按环境内绝对路径写入文本; 本地工作区在 Rootfs 内执行 shell 写入, 因此和命令一样支持取消 */
     suspend fun writeAbsoluteText(
         id: String,

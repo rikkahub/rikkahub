@@ -15,8 +15,6 @@ class LocalWorkspaceBackend(
 
     override fun shell(): String = manager.rootfsShell(root)
 
-    override fun homeDir(): String = WorkspaceManager.ROOTFS_HOME_DIR
-
     override fun listFiles(area: WorkspaceStorageArea, path: String): List<WorkspaceFileEntry> {
         manager.ensureWorkspace(root)
         return manager.listFiles(root, path, area)

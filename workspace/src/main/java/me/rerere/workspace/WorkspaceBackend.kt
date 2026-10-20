@@ -19,9 +19,6 @@ interface WorkspaceBackend {
     /** 执行命令实际使用的 shell 路径 */
     fun shell(): String
 
-    /** 执行命令时的 HOME 目录 */
-    fun homeDir(): String
-
     fun listFiles(area: WorkspaceStorageArea, path: String): List<WorkspaceFileEntry>
 
     /** 读取文件区内的文本, 自带大小保护 */

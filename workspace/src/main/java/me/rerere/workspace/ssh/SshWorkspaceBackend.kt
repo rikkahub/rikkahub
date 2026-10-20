@@ -33,8 +33,6 @@ class SshWorkspaceBackend(
 
     override fun shell(): String = pool.use(id, config, retry = true) { it.shell }
 
-    override fun homeDir(): String = pool.use(id, config, retry = true) { it.homeDir }
-
     override fun listFiles(area: WorkspaceStorageArea, path: String): List<WorkspaceFileEntry> {
         val dir = resolve(area, path)
         return withSftp(area, retry = true) { sftp ->
