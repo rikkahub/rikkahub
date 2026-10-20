@@ -43,7 +43,6 @@ import me.rerere.hugeicons.stroke.Share08
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
-import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.compose.koinInject
 import java.io.File
 
@@ -84,9 +83,8 @@ internal fun EditedFilesList(
         val outputStream = context.contentResolver.openOutputStream(uri) ?: return@rememberLauncherForActivityResult
         scope.launch {
             runCatching {
-                val (area, relativePath) = resolveWorkspacePath(path)
                 outputStream.use { output ->
-                    workspaceRepository.exportFile(workspaceId, area, relativePath, output)
+                    workspaceRepository.exportAbsoluteFile(workspaceId, path, output)
                 }
             }
         }
@@ -172,11 +170,10 @@ internal fun EditedFilesList(
                         selectedPath = null
                         scope.launch {
                             runCatching {
-                                val (area, relativePath) = resolveWorkspacePath(p)
                                 val dir = File(context.cacheDir, "workspace_share").apply { mkdirs() }
                                 val file = File(dir, p.substringAfterLast('/'))
                                 file.outputStream().use { output ->
-                                    workspaceRepository.exportFile(workspaceId, area, relativePath, output)
+                                    workspaceRepository.exportAbsoluteFile(workspaceId, p, output)
                                 }
                                 val uri = FileProvider.getUriForFile(
                                     context,
@@ -214,14 +211,5 @@ internal fun EditedFilesList(
                 }
             }
         }
-    }
-}
-
-private fun resolveWorkspacePath(path: String): Pair<WorkspaceStorageArea, String> {
-    val trimmed = path.trimEnd('/')
-    return if (trimmed == "/workspace" || trimmed.startsWith("/workspace/")) {
-        WorkspaceStorageArea.FILES to trimmed.removePrefix("/workspace").trimStart('/')
-    } else {
-        WorkspaceStorageArea.LINUX to trimmed.trimStart('/')
     }
 }

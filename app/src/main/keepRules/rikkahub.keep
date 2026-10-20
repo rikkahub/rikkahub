@@ -36,3 +36,13 @@
 
 # Keep JlatexMath
 -keep class org.scilab.forge.jlatexmath.** { *; }
+
+# JSch loads its cipher, key exchange and compression implementations by class name from its config.
+-keep class com.jcraft.jsch.** { *; }
+
+# JSch's optional integrations (ssh-agent via JNA / junixsocket, logging bridges, GSSAPI) are unused on Android.
+-dontwarn com.sun.jna.**
+-dontwarn org.newsclub.net.unix.**
+-dontwarn org.slf4j.**
+-dontwarn org.apache.logging.log4j.**
+-dontwarn org.ietf.jgss.**

@@ -14,6 +14,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.CloudServer
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.FolderCode
 import me.rerere.hugeicons.stroke.PencilEdit01
@@ -44,6 +46,7 @@ import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
 import me.rerere.rikkahub.ui.components.ui.ItemAction
 import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
@@ -58,6 +61,7 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
     val navController = LocalNavController.current
     val workspaces by vm.workspaces.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    var showTypeSheet by rememberSaveable { mutableStateOf(false) }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<WorkspaceEntity?>(null) }
     var deleteTarget by remember { mutableStateOf<WorkspaceEntity?>(null) }
@@ -72,7 +76,7 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
+            FloatingActionButton(onClick = { showTypeSheet = true }) {
                 Icon(HugeIcons.Add01, contentDescription = null)
             }
         },
@@ -100,6 +104,36 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
                     onRename = { editTarget = workspace },
                     onDelete = { deleteTarget = workspace },
                     onOpen = { navController.navigate(Screen.WorkspaceDetail(workspace.id)) },
+                )
+            }
+        }
+    }
+
+    if (showTypeSheet) {
+        ModalBottomSheet(onDismissRequest = { showTypeSheet = false }) {
+            CardGroup(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp),
+                title = { Text(stringResource(R.string.workspace_page_create)) },
+            ) {
+                item(
+                    onClick = {
+                        showTypeSheet = false
+                        showAddDialog = true
+                    },
+                    leadingContent = { CardGroupIcon(HugeIcons.FolderCode) },
+                    supportingContent = { Text(stringResource(R.string.workspace_page_type_local_desc)) },
+                    headlineContent = { Text(stringResource(R.string.workspace_page_type_local)) },
+                )
+                item(
+                    onClick = {
+                        showTypeSheet = false
+                        navController.navigate(Screen.WorkspaceSshEditor())
+                    },
+                    leadingContent = { CardGroupIcon(HugeIcons.CloudServer) },
+                    supportingContent = { Text(stringResource(R.string.workspace_page_type_ssh_desc)) },
+                    headlineContent = { Text(stringResource(R.string.workspace_page_type_ssh)) },
                 )
             }
         }
@@ -165,7 +199,7 @@ private fun WorkspaceItem(
                 .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            CardGroupIcon(HugeIcons.FolderCode)
+            CardGroupIcon(if (workspace.isSsh()) HugeIcons.CloudServer else HugeIcons.FolderCode)
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -179,7 +213,7 @@ private fun WorkspaceItem(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = workspace.shellStatus.toShellStatusLabel(),
+                    text = workspace.statusLabel(),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,

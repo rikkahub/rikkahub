@@ -48,6 +48,7 @@ import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -56,6 +57,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -76,6 +78,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.CancellationException
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Alert02
@@ -91,6 +94,8 @@ import me.rerere.hugeicons.stroke.FileEdit
 import me.rerere.hugeicons.stroke.FileExport
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.FileView
+import me.rerere.hugeicons.stroke.CloudServer
+import me.rerere.hugeicons.stroke.FingerPrint
 import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.FolderOpen
 import me.rerere.hugeicons.stroke.PencilEdit01
@@ -101,6 +106,7 @@ import me.rerere.hugeicons.stroke.Tag01
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.ai.tools.WorkspaceFileWriteToolNames
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import androidx.compose.ui.res.stringResource
@@ -126,7 +132,6 @@ import me.rerere.ui.components.RikkaConfirmDialog
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
 import me.rerere.workspace.WorkspaceFileEntry
-import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.androidx.compose.koinViewModel
@@ -214,7 +219,7 @@ fun WorkspaceDetailPage(id: String) {
                     IconButton(onClick = { vm.refresh() }) {
                         Icon(HugeIcons.Refresh01, contentDescription = null)
                     }
-                    if (state.workspace?.shellStatus != WorkspaceShellStatus.DISABLED.name) {
+                    if (state.workspace?.supportsTerminal() == true) {
                         IconButton(onClick = { navController.navigate(Screen.WorkspaceTerminal(id)) }) {
                             Icon(HugeIcons.ComputerTerminal01, contentDescription = null)
                         }
@@ -251,6 +256,7 @@ fun WorkspaceDetailPage(id: String) {
                         onInstallRootfs = { showInstallDialog = true },
                         onToolApprovalChange = vm::setToolApproval,
                         onShellCompatibilityModeChange = vm::setShellCompatibilityMode,
+                        onEditSsh = { navController.navigate(Screen.WorkspaceSshEditor(id)) },
                     )
 
                     WorkspaceDetailTab.FILES -> WorkspaceFilesPage(
@@ -409,8 +415,11 @@ private fun WorkspaceBasicPage(
     onInstallRootfs: () -> Unit,
     onToolApprovalChange: (String, Boolean) -> Unit,
     onShellCompatibilityModeChange: (Boolean) -> Unit,
+    onEditSsh: () -> Unit,
 ) {
     val shellStatus = workspace?.shellStatus
+    // 加载完成前按本地工作区展示
+    val hasRootfs = workspace?.capabilities()?.rootfs ?: true
     val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
     val rootfsReady = shellStatus == WorkspaceShellStatus.READY.name
     val installButtonText = when {
@@ -435,48 +444,57 @@ private fun WorkspaceBasicPage(
                     },
                     leadingContent = { CardGroupIcon(HugeIcons.Tag01) },
                 )
-                item(
-                    headlineContent = { Text(stringResource(R.string.workspace_detail_shell_status)) },
-                    leadingContent = { CardGroupIcon(HugeIcons.ComputerTerminal01) },
-                    trailingContent = { ShellStatusBadge(shellStatus) },
-                )
+                if (hasRootfs) {
+                    item(
+                        headlineContent = { Text(stringResource(R.string.workspace_detail_shell_status)) },
+                        leadingContent = { CardGroupIcon(HugeIcons.ComputerTerminal01) },
+                        trailingContent = { ShellStatusBadge(shellStatus) },
+                    )
+                }
             }
         }
 
-        item {
-            CardGroup(
-                title = { Text(stringResource(R.string.workspace_detail_enable_shell)) },
-            ) {
-                formItem(
-                    headlineContent = { Text(stringResource(R.string.workspace_detail_area_rootfs)) },
-                    supportingContent = { Text(stringResource(R.string.workspace_detail_enable_shell_desc)) },
-                    leadingContent = { CardGroupIcon(HugeIcons.Bash) },
+        if (workspace?.isSsh() == true) {
+            item {
+                SshConnectionCard(workspace = workspace, onEdit = onEditSsh)
+            }
+        }
+        if (hasRootfs) {
+            item {
+                CardGroup(
+                    title = { Text(stringResource(R.string.workspace_detail_enable_shell)) },
                 ) {
-                    Button(
-                        onClick = onInstallRootfs,
-                        enabled = workspace != null && !installing,
-                        modifier = Modifier.fillMaxWidth(),
+                    formItem(
+                        headlineContent = { Text(stringResource(R.string.workspace_detail_area_rootfs)) },
+                        supportingContent = { Text(stringResource(R.string.workspace_detail_enable_shell_desc)) },
+                        leadingContent = { CardGroupIcon(HugeIcons.Bash) },
                     ) {
-                        Icon(
-                            imageVector = HugeIcons.Bash,
-                            contentDescription = null,
-                            modifier = Modifier.size(ButtonDefaults.IconSize),
-                        )
-                        Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                        Text(installButtonText)
+                        Button(
+                            onClick = onInstallRootfs,
+                            enabled = workspace != null && !installing,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(
+                                imageVector = HugeIcons.Bash,
+                                contentDescription = null,
+                                modifier = Modifier.size(ButtonDefaults.IconSize),
+                            )
+                            Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                            Text(installButtonText)
+                        }
+                        installProgress?.let { RootfsProgress(it) }
                     }
-                    installProgress?.let { RootfsProgress(it) }
+                    switchItem(
+                        checked = workspace?.shellCompatibilityMode ?: false,
+                        onCheckedChange = onShellCompatibilityModeChange,
+                        enabled = workspace != null,
+                        supportingContent = {
+                            Text(stringResource(R.string.workspace_detail_compatibility_mode_desc))
+                        },
+                        leadingContent = { CardGroupIcon(HugeIcons.Wrench01) },
+                        headlineContent = { Text(stringResource(R.string.workspace_detail_compatibility_mode)) },
+                    )
                 }
-                switchItem(
-                    checked = workspace?.shellCompatibilityMode ?: false,
-                    onCheckedChange = onShellCompatibilityModeChange,
-                    enabled = workspace != null,
-                    supportingContent = {
-                        Text(stringResource(R.string.workspace_detail_compatibility_mode_desc))
-                    },
-                    leadingContent = { CardGroupIcon(HugeIcons.Wrench01) },
-                    headlineContent = { Text(stringResource(R.string.workspace_detail_compatibility_mode)) },
-                )
             }
         }
 
@@ -486,6 +504,45 @@ private fun WorkspaceBasicPage(
                 onToolApprovalChange = onToolApprovalChange,
             )
         }
+    }
+}
+
+@Composable
+private fun SshConnectionCard(
+    workspace: WorkspaceEntity,
+    onEdit: () -> Unit,
+) {
+    val settings = workspace.sshSettings()
+    CardGroup(title = { Text(stringResource(R.string.workspace_detail_ssh_connection)) }) {
+        item(
+            leadingContent = { CardGroupIcon(HugeIcons.CloudServer) },
+            headlineContent = { Text(stringResource(R.string.workspace_detail_ssh_address)) },
+            supportingContent = {
+                Text(settings?.let { "${it.username}@${it.host}:${it.port}" } ?: stringResource(R.string.workspace_detail_ssh_config_missing))
+            },
+        )
+        item(
+            leadingContent = { CardGroupIcon(HugeIcons.Folder01) },
+            headlineContent = { Text(stringResource(R.string.workspace_detail_ssh_remote_dir)) },
+            supportingContent = { Text(settings?.remoteDir ?: "-") },
+        )
+        item(
+            leadingContent = { CardGroupIcon(HugeIcons.FingerPrint) },
+            headlineContent = { Text(stringResource(R.string.workspace_detail_ssh_host_key)) },
+            supportingContent = {
+                val hostKey = settings?.hostKey
+                Text(
+                    text = hostKey?.let { "${it.type}\n${it.fingerprint}" } ?: stringResource(R.string.workspace_detail_ssh_host_key_unconfirmed),
+                    fontFamily = if (hostKey != null) FontFamily.Monospace else null,
+                )
+            },
+        )
+        item(
+            onClick = onEdit,
+            leadingContent = { CardGroupIcon(HugeIcons.PencilEdit01) },
+            headlineContent = { Text(stringResource(R.string.workspace_detail_ssh_edit)) },
+            supportingContent = { Text(stringResource(R.string.workspace_detail_ssh_edit_desc)) },
+        )
     }
 }
 
@@ -518,7 +575,10 @@ private fun WorkspaceToolApprovalCard(
     onToolApprovalChange: (String, Boolean) -> Unit,
 ) {
     val overrides = workspace?.toolApprovalOverrides().orEmpty()
-    val tools = workspaceToolApprovalItems()
+    val fileWriteTools = workspace?.capabilities()?.fileWriteTools ?: true
+    val tools = workspaceToolApprovalItems().filter { (toolName) ->
+        fileWriteTools || toolName !in WorkspaceFileWriteToolNames
+    }
 
     CardGroup(
         title = {
@@ -669,6 +729,7 @@ private fun WorkspaceFilesPage(
     BackHandler(enabled = selecting && isActive) {
         exitSelection()
     }
+    val showLoading = rememberDelayedVisibility(state.loading)
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -687,6 +748,7 @@ private fun WorkspaceFilesPage(
                 ) {
                     WorkspaceAreaSelector(
                         selected = state.area,
+                        hasRootfs = state.workspace?.capabilities()?.rootfs ?: true,
                         onSelected = onSelectArea,
                     )
                     WorkspacePathBar(
@@ -694,6 +756,10 @@ private fun WorkspaceFilesPage(
                         canGoUp = state.path.isNotBlank(),
                         onGoUp = onGoUp,
                     )
+                    // 刷新时保留现有列表, 只在顶部提示正在加载
+                    if (showLoading && state.entries.isNotEmpty()) {
+                        LinearWavyProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
                     if (state.exporting) {
                         ExportProgressCard(
                             completed = state.exportCompleted,
@@ -701,6 +767,19 @@ private fun WorkspaceFilesPage(
                         )
                     }
                     state.error?.let { ErrorCard(it) }
+                }
+            }
+
+            if (showLoading && state.entries.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        LoadingIndicator()
+                    }
                 }
             }
 
@@ -718,6 +797,7 @@ private fun WorkspaceFilesPage(
                 WorkspaceFileItem(
                     entry = entry,
                     area = state.area,
+                    copyPath = state.layout?.absolutePath(state.area, entry.path),
                     shape = cardGroupItemShape(index, state.entries.size),
                     modifier = Modifier.padding(bottom = if (index == state.entries.lastIndex) 0.dp else 2.dp),
                     onResolveImage = { onResolveImage(entry, state.area) },
@@ -783,6 +863,7 @@ private fun WorkspaceFilesPage(
 @Composable
 private fun WorkspaceAreaSelector(
     selected: WorkspaceStorageArea,
+    hasRootfs: Boolean,
     onSelected: (WorkspaceStorageArea) -> Unit,
 ) {
     ConnectedChoiceButtons(
@@ -793,9 +874,15 @@ private fun WorkspaceAreaSelector(
         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
     ) { area, isSelected ->
         ConnectedChoiceLabel(
+            // 没有 Rootfs 的工作区 (如远程) 两个区域分别是工作目录和根目录
             text = when (area) {
-                WorkspaceStorageArea.FILES -> stringResource(R.string.workspace_detail_area_files)
-                WorkspaceStorageArea.LINUX -> stringResource(R.string.workspace_detail_area_rootfs)
+                WorkspaceStorageArea.FILES -> stringResource(
+                    if (hasRootfs) R.string.workspace_detail_area_files else R.string.workspace_detail_area_working_dir
+                )
+
+                WorkspaceStorageArea.LINUX -> stringResource(
+                    if (hasRootfs) R.string.workspace_detail_area_rootfs else R.string.workspace_detail_area_root
+                )
             },
             selected = isSelected,
             icon = HugeIcons.Tick01,
@@ -869,6 +956,8 @@ private fun ExportProgressCard(
 private fun WorkspaceFileItem(
     entry: WorkspaceFileEntry,
     area: WorkspaceStorageArea,
+    // 复制出去的路径要能直接给 AI 工具和终端用，所以按执行环境内的绝对路径给
+    copyPath: String?,
     shape: Shape,
     onResolveImage: suspend () -> File?,
     selecting: Boolean,
@@ -1009,19 +1098,21 @@ private fun WorkspaceFileItem(
                 val context = LocalContext.current
                 ItemActionMenu(
                     actions = buildList {
-                        add(
-                            ItemAction(
-                                text = stringResource(R.string.workspace_detail_copy_path),
-                                icon = HugeIcons.Copy01,
-                                onClick = {
-                                    context.writeClipboardText(entry.rootfsPath(area))
-                                    // Android 13 起系统会自己弹复制提示
-                                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                                        Toast.makeText(context, R.string.workspace_detail_path_copied, Toast.LENGTH_SHORT).show()
-                                    }
-                                },
+                        if (copyPath != null) {
+                            add(
+                                ItemAction(
+                                    text = stringResource(R.string.workspace_detail_copy_path),
+                                    icon = HugeIcons.Copy01,
+                                    onClick = {
+                                        context.writeClipboardText(copyPath)
+                                        // Android 13 起系统会自己弹复制提示
+                                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                                            Toast.makeText(context, R.string.workspace_detail_path_copied, Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                )
                             )
-                        )
+                        }
                         if (!entry.isDirectory) {
                             add(
                                 ItemAction(
@@ -1053,12 +1144,6 @@ private fun WorkspaceFileItem(
     }
 }
 
-// 复制出去的路径要能直接给 AI 工具和终端用，所以按 Rootfs 内的绝对路径给
-private fun WorkspaceFileEntry.rootfsPath(area: WorkspaceStorageArea): String = when (area) {
-    WorkspaceStorageArea.FILES -> "${WorkspaceManager.ROOTFS_WORKSPACE_DIR}/$path"
-    WorkspaceStorageArea.LINUX -> "/$path"
-}
-
 @Composable
 private fun ErrorCard(message: String) {
     Surface(
@@ -1085,6 +1170,30 @@ private fun ErrorCard(message: String) {
         }
     }
 }
+
+/** 加载超过 [delayMillis] 才显示指示器, 本地工作区瞬间完成的加载不会闪一下 */
+@Composable
+private fun rememberDelayedVisibility(loading: Boolean, delayMillis: Long = 300): Boolean {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(loading) {
+        if (loading) {
+            delay(delayMillis)
+            visible = true
+        } else {
+            visible = false
+        }
+    }
+    return visible
+}
+
+/** 列表里展示的状态: 远程工作区显示连接地址, 本地工作区显示 shell 状态 */
+@Composable
+internal fun WorkspaceEntity.statusLabel(): String =
+    if (isSsh()) {
+        sshSettings()?.let { "SSH · ${it.username}@${it.host}" } ?: "SSH"
+    } else {
+        shellStatus.toShellStatusLabel()
+    }
 
 @Composable
 internal fun String.toShellStatusLabel(): String = when (this) {

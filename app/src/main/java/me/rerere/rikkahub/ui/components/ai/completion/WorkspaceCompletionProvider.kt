@@ -16,7 +16,11 @@ class WorkspaceCompletionProvider(
     private val currentCwd: String? = null,
 ) : ChatCompletionProvider {
     override val id: String = "workspace_files"
-    private val relativeCwd = currentCwd.toWorkspaceRelativePath()
+
+    // 工作区目录和类型在第一次补全时从仓库读取
+    private var workspaceDir: String? = null
+    private var remote = false
+    private var relativeCwd = ""
 
     private var cachedAt: Long = 0L
     private var cachedEntries: List<WorkspaceFileEntry> = emptyList()
@@ -24,6 +28,7 @@ class WorkspaceCompletionProvider(
     override suspend fun complete(context: ChatCompletionContext): ChatCompletionList? {
         if (workspaceId.isNullOrBlank() || context.hasSelection) return null
         val mention = findWorkspaceMention(context.text, context.cursor) ?: return null
+        if (!loadWorkspace(workspaceId)) return null
         val query = mention.query.normalizeWorkspaceQuery()
         val absoluteQuery = mention.query.isWorkspaceAbsoluteQuery()
         val entries = loadEntries()
@@ -56,9 +61,21 @@ class WorkspaceCompletionProvider(
         )
     }
 
+    private suspend fun loadWorkspace(id: String): Boolean {
+        if (workspaceDir != null) return true
+        val workspace = repository.getById(id) ?: return false
+        workspaceDir = repository.layout(id)?.workspaceDir ?: return false
+        remote = !workspace.capabilities().localFiles
+        relativeCwd = currentCwd.toWorkspaceRelativePath()
+        return true
+    }
+
     private suspend fun loadEntries(): List<WorkspaceFileEntry> {
         val now = System.currentTimeMillis()
-        if (cachedAt > 0L && now - cachedAt < CACHE_TTL_MILLIS) {
+        // 远程工作区每列一个目录都是一次网络往返, 索引范围更小、缓存更久
+        val cacheTtl = if (remote) REMOTE_CACHE_TTL_MILLIS else CACHE_TTL_MILLIS
+        val maxDirs = if (remote) MAX_REMOTE_INDEXED_DIRS else MAX_INDEXED_DIRS
+        if (cachedAt > 0L && now - cachedAt < cacheTtl) {
             return cachedEntries
         }
 
@@ -75,7 +92,7 @@ class WorkspaceCompletionProvider(
         seenDirs += ""
         var visitedDirs = 0
 
-        while (queue.isNotEmpty() && result.size < MAX_INDEXED_ENTRIES && visitedDirs < MAX_INDEXED_DIRS) {
+        while (queue.isNotEmpty() && result.size < MAX_INDEXED_ENTRIES && visitedDirs < maxDirs) {
             val path = queue.removeFirst()
             visitedDirs++
             val ignoreMatcher = matcherForDirectory(path, matcherCache)
@@ -96,7 +113,7 @@ class WorkspaceCompletionProvider(
                 if (seenEntries.add(entry.path)) {
                     result += entry
                 }
-                if (entry.isDirectory && queue.size < MAX_INDEXED_DIRS && seenDirs.add(entry.path)) {
+                if (entry.isDirectory && queue.size < maxDirs && seenDirs.add(entry.path)) {
                     queue.add(entry.path)
                 }
             }
@@ -153,7 +170,8 @@ class WorkspaceCompletionProvider(
         return result
     }
 
-    private fun WorkspaceFileEntry.workspacePath(): String = "/workspace/$path"
+    private fun WorkspaceFileEntry.workspacePath(): String =
+        workspaceDir.orEmpty().trimEnd('/') + "/" + path
 
     private fun WorkspaceFileEntry.matchScore(query: String, absoluteQuery: Boolean): Int? {
         val normalizedPath = path.lowercase()
@@ -229,16 +247,21 @@ class WorkspaceCompletionProvider(
             .trim('/')
     }
 
+    // 工作区目录本身和省略开头斜杠的写法 (如本地的 workspace/src) 都算绝对路径
     private fun String.isWorkspaceAbsoluteQuery(): Boolean {
         val normalized = replace('\\', '/').trimStart()
-        return normalized.startsWith("/") || normalized == "workspace" || normalized.startsWith("workspace/")
+        val dir = workspaceDir.orEmpty().trim('/')
+        return normalized.startsWith("/") ||
+            dir.isNotEmpty() && (normalized == dir || normalized.startsWith("$dir/"))
     }
 
     private fun String.removeWorkspacePrefix(): String {
+        val dir = workspaceDir.orEmpty().trim('/')
+        if (dir.isEmpty()) return this
         return when {
-            this == "/workspace" || this == "workspace" -> ""
-            startsWith("/workspace/") -> removePrefix("/workspace/")
-            startsWith("workspace/") -> removePrefix("workspace/")
+            this == "/$dir" || this == dir -> ""
+            startsWith("/$dir/") -> removePrefix("/$dir/")
+            startsWith("$dir/") -> removePrefix("$dir/")
             else -> this
         }
     }
@@ -270,7 +293,9 @@ class WorkspaceCompletionProvider(
         private const val MAX_COMPLETION_ITEMS = 8
         private const val MAX_INDEXED_ENTRIES = 500
         private const val MAX_INDEXED_DIRS = 80
+        private const val MAX_REMOTE_INDEXED_DIRS = 20
         private const val CACHE_TTL_MILLIS = 5_000L
+        private const val REMOTE_CACHE_TTL_MILLIS = 60_000L
         private const val DIRECTORY_SCORE_BONUS = 25
         private const val CWD_SCORE_BONUS = 1_500
     }
