@@ -16,3 +16,5 @@
   本地 pty 进程挪到 `LocalPtyTransport` (fd 改由 `ParcelFileDescriptor` 持有, 不再反射 `FileDescriptor` 私有字段);
   进程在后台线程启动, 启动失败时在终端里打印原因; 退出前等待读线程取完最后的输出;
   去掉只对本地进程有意义的 `getPid()` / `getCwd()`
+- 关闭本地终端时杀掉整个会话里的进程, 而不只是会话首进程: 首进程是 PRoot 时,
+  shell 和它的任务是被跟踪的进程, 只杀 PRoot 会让它们脱离跟踪继续运行

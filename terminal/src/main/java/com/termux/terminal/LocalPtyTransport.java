@@ -6,11 +6,16 @@ import android.system.Os;
 import android.system.OsConstants;
 import android.util.Log;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A local subprocess coupled to a new pseudoterminal, see {@link JNI#createSubprocess}.
@@ -18,6 +23,9 @@ import java.io.OutputStream;
 public final class LocalPtyTransport implements TerminalTransport {
 
     private static final String LOG_TAG = "LocalPtyTransport";
+
+    /** Rounds of killing session members, to also catch processes forked while the previous round ran. */
+    private static final int KILL_ROUNDS = 3;
 
     private final String mShellPath;
     private final String mCwd;
@@ -101,12 +109,61 @@ public final class LocalPtyTransport implements TerminalTransport {
         }
     }
 
+    /**
+     * SIGKILL every process in the session of the subprocess, which is the session leader. Killing only the leader is
+     * not enough: when it is PRoot, the shell and its jobs are tracees that keep running once their tracer dies.
+     * Processes that started a session of their own (e.g. with setsid) are not affected.
+     */
     private void sendKill() {
         if (mPid <= 0) return;
+        for (int round = 0; round < KILL_ROUNDS; round++) {
+            List<Integer> members = liveSessionMembers(mPid);
+            if (members.isEmpty()) return;
+            for (int pid : members) {
+                try {
+                    Os.kill(pid, OsConstants.SIGKILL);
+                } catch (ErrnoException e) {
+                    // ESRCH: exited in the meantime.
+                    if (e.errno != OsConstants.ESRCH) Log.w(LOG_TAG, "Failed sending SIGKILL: " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    /** Pids of processes in session {@code sessionId} that have not exited yet, from /proc. */
+    private static List<Integer> liveSessionMembers(int sessionId) {
+        List<Integer> members = new ArrayList<>();
+        String[] entries = new File("/proc").list();
+        if (entries == null) return members;
+        for (String entry : entries) {
+            if (entry.isEmpty() || !Character.isDigit(entry.charAt(0))) continue;
+            String stat;
+            try {
+                byte[] bytes = Files.readAllBytes(new File("/proc/" + entry + "/stat").toPath());
+                stat = new String(bytes, StandardCharsets.UTF_8);
+            } catch (IOException | SecurityException e) {
+                // Exited meanwhile, or not ours to see.
+                continue;
+            }
+            if (isLiveSessionMember(stat, sessionId)) members.add(Integer.parseInt(entry));
+        }
+        return members;
+    }
+
+    /**
+     * Whether a /proc/[pid]/stat line belongs to a process in {@code sessionId} that is not a zombie. The command name in
+     * parentheses may itself contain spaces and parentheses, so fields are counted from the last ')'.
+     */
+    static boolean isLiveSessionMember(String stat, int sessionId) {
+        int commandEnd = stat.lastIndexOf(')');
+        if (commandEnd < 0) return false;
+        // state ppid pgrp session ...
+        String[] fields = stat.substring(commandEnd + 1).trim().split(" ");
+        if (fields.length < 4) return false;
         try {
-            Os.kill(mPid, OsConstants.SIGKILL);
-        } catch (ErrnoException e) {
-            Log.w(LOG_TAG, "Failed sending SIGKILL: " + e.getMessage());
+            return Integer.parseInt(fields[3]) == sessionId && !fields[0].equals("Z");
+        } catch (NumberFormatException e) {
+            return false;
         }
     }
 
