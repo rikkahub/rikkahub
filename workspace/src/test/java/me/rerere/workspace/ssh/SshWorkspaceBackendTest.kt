@@ -24,6 +24,7 @@ import java.io.File
 import java.util.Base64
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
@@ -40,6 +41,10 @@ class SshWorkspaceBackendTest {
     // SLOW_USER 的认证会卡住, 直到测试放行, 用来复现建连期间关闭连接池
     private val slowAuthEntered = CountDownLatch(1)
     private val slowAuthRelease = CountDownLatch(1)
+
+    // 收到带 SLOW_REPLY_MARKER 的命令后拖过客户端的 channel 超时才回应 exec 请求,
+    // 用来复现服务器已经接受命令、客户端却等回应超时
+    private val slowReplyRequests = AtomicInteger()
 
     @Before
     fun setUp() {
@@ -65,6 +70,11 @@ class SshWorkspaceBackendTest {
             publickeyAuthenticator = PublickeyAuthenticator { username, _, _ -> username == KEY_USER }
             subsystemFactories = listOf(SftpSubsystemFactory())
             commandFactory = CommandFactory { channel, command ->
+                // SSHD 在创建命令之后才回应 exec 请求, 在这里等待就能推迟回应
+                if (SLOW_REPLY_MARKER in command) {
+                    slowReplyRequests.incrementAndGet()
+                    Thread.sleep(1_500)
+                }
                 // 固定 SHELL, 交互式 shell 测试不受开发机登录 shell 影响
                 ProcessShellFactory(
                     command,
@@ -270,6 +280,23 @@ class SshWorkspaceBackendTest {
     }
 
     @Test
+    fun commandIsNotRerunWhenExecRequestTimesOut() {
+        SshConnectionPool(channelTimeoutMillis = 500).use { slowPool ->
+            val backend = backend(pool = slowPool)
+            // cat 等着读 stdin, 远端 channel 不清理就会一直留着
+            assertThrows(Exception::class.java) {
+                backend.executeCommand("cat # $SLOW_REPLY_MARKER", "", 10_000, null)
+            }
+            assertEquals(1, slowReplyRequests.get())
+
+            // 断开连接才能清理远端 channel, 下一次使用重新连接
+            assertFalse(slowPool.isConnected(WORKSPACE_ID))
+            assertTrue(waitUntil(5_000) { server.activeSessions.isEmpty() })
+            assertEquals("ok", backend.executeCommand("echo ok", "", 10_000, null).stdout.trim())
+        }
+    }
+
+    @Test
     fun reconnectsAfterServerRestart() {
         val config = trustedConfig()
         val backend = backend(config)
@@ -412,6 +439,7 @@ class SshWorkspaceBackendTest {
     }
 
     private companion object {
+        const val SLOW_REPLY_MARKER = "rikkahub-slow-reply"
         const val WORKSPACE_ID = "test"
         const val USER = "tester"
         const val PASSWORD = "secret"

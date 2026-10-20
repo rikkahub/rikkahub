@@ -17,6 +17,8 @@ import java.util.concurrent.atomic.AtomicInteger
 class SshConnectionPool(
     private val idleTimeoutMillis: Long = DEFAULT_IDLE_TIMEOUT_MS,
     sweepIntervalMillis: Long = DEFAULT_SWEEP_INTERVAL_MS,
+    /** 打开 channel 并等待请求回应的超时 */
+    private val channelTimeoutMillis: Int = SshConnection.DEFAULT_CHANNEL_TIMEOUT_MS,
 ) : Closeable {
     private val connections = ConcurrentHashMap<String, PooledConnection>()
     private val locks = ConcurrentHashMap<String, Any>()
@@ -135,7 +137,7 @@ class SshConnectionPool(
             connections.remove(id)
             existing.connection.close()
         }
-        val pooled = PooledConnection(SshConnection.open(config)).also { it.retain() }
+        val pooled = PooledConnection(SshConnection.open(config, channelTimeoutMillis)).also { it.retain() }
         synchronized(lifecycleLock) {
             if (!closed) {
                 connections[id] = pooled

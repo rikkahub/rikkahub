@@ -27,6 +27,7 @@ internal class SshConnection private constructor(
     val config: SshConnectionConfig,
     private val session: Session,
     val hostKey: SshHostKey,
+    private val channelTimeoutMillis: Int,
 ) : Closeable {
     private val sftpLock = Any()
     private var sftpChannel: ChannelSftp? = null
@@ -42,7 +43,7 @@ internal class SshConnection private constructor(
 
     fun <T> sftp(block: (ChannelSftp) -> T): T = synchronized(sftpLock) {
         val channel = sftpChannel?.takeIf { it.isConnected }
-            ?: openChannel { (session.openChannel("sftp") as ChannelSftp).apply { connect(CHANNEL_TIMEOUT_MS) } }
+            ?: openChannel { (session.openChannel("sftp") as ChannelSftp).apply { connect(channelTimeoutMillis) } }
                 .also { sftpChannel = it }
         block(channel)
     }
@@ -60,7 +61,7 @@ internal class SshConnection private constructor(
         // 输入流必须在 connect 之前取, 否则开头的输出会丢
         val stdoutStream = channel.inputStream
         val stderrStream = channel.extInputStream
-        openChannel { channel.connect(CHANNEL_TIMEOUT_MS) }
+        channel.connectExec()
         val stdout = StreamCollector(stdoutStream)
         val stderr = StreamCollector(stderrStream)
         // 没有 stdin 时立即发送 EOF, 避免按 isatty 判断的工具一直等待输入
@@ -112,7 +113,7 @@ internal class SshConnection private constructor(
         val input = channel.inputStream
         val output = channel.outputStream
         try {
-            openChannel { channel.connect(CHANNEL_TIMEOUT_MS) }
+            channel.connectExec()
         } catch (e: Exception) {
             channel.disconnect()
             throw e
@@ -134,6 +135,25 @@ internal class SshConnection private constructor(
         throw SshChannelOpenException(e)
     }
 
+    /**
+     * 连接 exec channel。JSch 的 connect 先打开 channel, 再发送 exec 请求并等待服务器回应:
+     * 只有打开阶段的失败能确定命令还没发出去, 按 [SshChannelOpenException] 允许重连重试;
+     * 等待回应超时等其余失败时命令可能已经在执行, 原样抛出, 不可重复的命令不会再执行一遍。
+     *
+     * 后一种情况下 JSch 不会给服务器发 channel close, 远端的 channel 和进程会一直留到连接断开,
+     * 而单独关闭这个 channel 的方法不对外开放, 所以断开整条连接, 连接上的其他操作也会随之失败。
+     */
+    private fun ChannelExec.connectExec() {
+        try {
+            connect(channelTimeoutMillis)
+        } catch (e: JSchException) {
+            // JSch 没有区分这两个阶段的接口, 只能按打开阶段的异常信息判断
+            if (e.message in CHANNEL_OPEN_FAILURE_MESSAGES) throw SshChannelOpenException(e)
+            this@SshConnection.close()
+            throw e
+        }
+    }
+
     // 不少 sshd 不处理 signal 请求, 断开 channel 后远程进程会在下次读写管道时退出
     private fun ChannelExec.kill() {
         runCatching { sendSignal("KILL") }
@@ -149,7 +169,7 @@ internal class SshConnection private constructor(
 
     companion object {
         private const val CONNECT_TIMEOUT_MS = 15_000
-        private const val CHANNEL_TIMEOUT_MS = 15_000
+        const val DEFAULT_CHANNEL_TIMEOUT_MS = 15_000
         private const val KEEPALIVE_INTERVAL_MS = 15_000
         private const val KEEPALIVE_COUNT_MAX = 3
         private const val EXEC_POLL_INTERVAL_MS = 20L
@@ -159,7 +179,10 @@ internal class SshConnection private constructor(
         // RFC 4254 的 PTY 模式编码: 开启 IUTF8 (RFC 8160 opcode 42), 让行编辑按 UTF-8 字符退格; 以 TTY_OP_END 结尾
         private val TERMINAL_MODES = byteArrayOf(42, 0, 0, 0, 1, 0)
 
-        fun open(config: SshConnectionConfig): SshConnection {
+        // Channel.sendChannelOpen 失败时的异常信息, 此时 exec 请求还没发出
+        private val CHANNEL_OPEN_FAILURE_MESSAGES = setOf("session is down", "channel is not opened.")
+
+        fun open(config: SshConnectionConfig, channelTimeoutMillis: Int = DEFAULT_CHANNEL_TIMEOUT_MS): SshConnection {
             val jsch = JSch()
             when (config.authType) {
                 SshAuthType.PASSWORD -> {
@@ -208,7 +231,7 @@ internal class SshConnection private constructor(
                 session.disconnect()
                 throw IOException("SSH server did not present a host key")
             }
-            return SshConnection(config, session, hostKey)
+            return SshConnection(config, session, hostKey, channelTimeoutMillis)
         }
 
         /** 用一条临时连接验证配置, 并取回远程环境的基本信息 */
