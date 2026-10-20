@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.AppScope
+import me.rerere.workspace.WorkspaceManager
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -29,6 +30,7 @@ import java.util.concurrent.atomic.AtomicLong
 class WorkspaceTerminalSessionManager internal constructor(
     context: Context,
     private val appScope: AppScope,
+    private val workspaceManager: WorkspaceManager,
 ) {
     private val appContext = context.applicationContext
     private val workspaceStates = MutableStateFlow<Map<String, WorkspaceTerminalTabsState>>(emptyMap())
@@ -113,7 +115,9 @@ class WorkspaceTerminalSessionManager internal constructor(
         job.start()
     }
 
-    private suspend fun createTab(root: String, onlyIfEmpty: Boolean, shellCompatibilityMode: Boolean) = withContext(Dispatchers.Main.immediate) {
+    private suspend fun createTab(root: String, onlyIfEmpty: Boolean, shellCompatibilityMode: Boolean) = withContext(
+        Dispatchers.Main.immediate
+    ) {
         val initialState = currentState(root)
         if (initialState.isCreating || (onlyIfEmpty && initialState.tabs.isNotEmpty())) {
             return@withContext
@@ -125,10 +129,10 @@ class WorkspaceTerminalSessionManager internal constructor(
         } else {
             try {
                 withContext(Dispatchers.IO) {
-                    if (!workspaceRootfsReady(appContext, root)) {
+                    if (!workspaceManager.hasRootfs(root)) {
                         false
                     } else {
-                        prepareWorkspaceTerminalSession(appContext, root)
+                        workspaceManager.prepareTerminal(root, appContext.activeDnsServers())
                         true
                     }
                 }
@@ -158,11 +162,12 @@ class WorkspaceTerminalSessionManager internal constructor(
             onFinished = { markFinished(root = root, tabId = tabId) },
         )
         val session = runCatching {
+            val launch = workspaceManager.terminalLaunch(root, shellCompatibilityMode)
+                ?: error("Interactive terminal is not supported")
             createWorkspaceTerminalSession(
-                context = appContext,
+                launch = launch,
                 root = root,
                 client = client,
-                shellCompatibilityMode = shellCompatibilityMode,
             )
         }.onFailure { error ->
             Log.e(TAG, "Failed to create terminal for workspace $root", error)

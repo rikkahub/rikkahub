@@ -18,9 +18,18 @@ class WorkspaceManager(
     // 按 target 长度降序, 保证 /a/b 优先于 /a 匹配
     private val sortedBindMounts = bindMounts.sortedByDescending { it.target.trimEnd('/').length }
 
+    val layout = WorkspaceLayout(
+        workspaceDir = ROOTFS_WORKSPACE_DIR,
+        writableRoots = listOf(ROOTFS_WORKSPACE_DIR, "/tmp") +
+            bindMounts.filter { it.writable }.map { it.target.trimEnd('/') },
+    )
+
     init {
         baseDir.mkdirs()
     }
+
+    fun backend(root: String, shellCompatibilityMode: Boolean = false): WorkspaceBackend =
+        LocalWorkspaceBackend(this, root, shellCompatibilityMode)
 
     fun ensureWorkspace(root: String): File {
         val dir = workspaceDir(root)
@@ -221,6 +230,24 @@ class WorkspaceManager(
             )
         )
     }
+
+    /** 交互式终端启动前的准备: 补齐目录, 并按当前网络刷新 Rootfs 的 DNS 等配置 */
+    fun prepareTerminal(root: String, nameservers: List<String>) {
+        ensureWorkspace(root)
+        bindMounts.forEach { it.source.mkdirs() }
+        RootfsPatcher().patch(linuxDir(root), RootfsPatchOptions(nameservers = nameservers))
+    }
+
+    fun terminalLaunch(root: String, shellCompatibilityMode: Boolean): WorkspaceTerminalLaunch? =
+        shellRunner.terminalLaunch(
+            WorkspaceTerminalContext(
+                filesDir = filesDir(root),
+                linuxDir = linuxDir(root),
+                tempDir = tempDir(root),
+                bindMounts = bindMounts,
+                shellCompatibilityMode = shellCompatibilityMode,
+            )
+        )
 
     private fun requireValidRoot(root: String) {
         require(root.matches(ROOT_NAME_REGEX)) {

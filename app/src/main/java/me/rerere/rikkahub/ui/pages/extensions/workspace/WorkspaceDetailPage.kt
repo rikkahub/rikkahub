@@ -126,7 +126,6 @@ import me.rerere.ui.components.RikkaConfirmDialog
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
 import me.rerere.workspace.WorkspaceFileEntry
-import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceStorageArea
 import org.koin.androidx.compose.koinViewModel
@@ -718,6 +717,7 @@ private fun WorkspaceFilesPage(
                 WorkspaceFileItem(
                     entry = entry,
                     area = state.area,
+                    copyPath = state.layout?.absolutePath(state.area, entry.path),
                     shape = cardGroupItemShape(index, state.entries.size),
                     modifier = Modifier.padding(bottom = if (index == state.entries.lastIndex) 0.dp else 2.dp),
                     onResolveImage = { onResolveImage(entry, state.area) },
@@ -869,6 +869,8 @@ private fun ExportProgressCard(
 private fun WorkspaceFileItem(
     entry: WorkspaceFileEntry,
     area: WorkspaceStorageArea,
+    // 复制出去的路径要能直接给 AI 工具和终端用，所以按执行环境内的绝对路径给
+    copyPath: String?,
     shape: Shape,
     onResolveImage: suspend () -> File?,
     selecting: Boolean,
@@ -1009,19 +1011,21 @@ private fun WorkspaceFileItem(
                 val context = LocalContext.current
                 ItemActionMenu(
                     actions = buildList {
-                        add(
-                            ItemAction(
-                                text = stringResource(R.string.workspace_detail_copy_path),
-                                icon = HugeIcons.Copy01,
-                                onClick = {
-                                    context.writeClipboardText(entry.rootfsPath(area))
-                                    // Android 13 起系统会自己弹复制提示
-                                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                                        Toast.makeText(context, R.string.workspace_detail_path_copied, Toast.LENGTH_SHORT).show()
-                                    }
-                                },
+                        if (copyPath != null) {
+                            add(
+                                ItemAction(
+                                    text = stringResource(R.string.workspace_detail_copy_path),
+                                    icon = HugeIcons.Copy01,
+                                    onClick = {
+                                        context.writeClipboardText(copyPath)
+                                        // Android 13 起系统会自己弹复制提示
+                                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                                            Toast.makeText(context, R.string.workspace_detail_path_copied, Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                )
                             )
-                        )
+                        }
                         if (!entry.isDirectory) {
                             add(
                                 ItemAction(
@@ -1051,12 +1055,6 @@ private fun WorkspaceFileItem(
             }
         }
     }
-}
-
-// 复制出去的路径要能直接给 AI 工具和终端用，所以按 Rootfs 内的绝对路径给
-private fun WorkspaceFileEntry.rootfsPath(area: WorkspaceStorageArea): String = when (area) {
-    WorkspaceStorageArea.FILES -> "${WorkspaceManager.ROOTFS_WORKSPACE_DIR}/$path"
-    WorkspaceStorageArea.LINUX -> "/$path"
 }
 
 @Composable

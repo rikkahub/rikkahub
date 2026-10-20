@@ -9,22 +9,23 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.File
-import java.io.InputStream
-import java.io.OutputStream
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.RootfsInstallProgress
 import me.rerere.workspace.RootfsInstallStage
-import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceCommandResult
+import me.rerere.workspace.WorkspaceFileEntry
+import me.rerere.workspace.WorkspaceLayout
 import me.rerere.workspace.WorkspaceStorageArea
+import java.io.File
+import java.io.InputStream
+import java.io.OutputStream
 
 class WorkspaceDetailVM(
     private val id: String,
@@ -50,14 +51,22 @@ class WorkspaceDetailVM(
     fun exportFilesToDirectory(treeUri: Uri?, resolver: ContentResolver) {
         val (area, entries) = pendingExport.also { pendingExport = null } ?: return
         if (treeUri == null) return
-        _state.update { it.copy(exporting = true, exportCompleted = 0, exportTotal = entries.size, exportResult = null) }
+        _state.update {
+            it.copy(
+                exporting = true,
+                exportCompleted = 0,
+                exportTotal = entries.size,
+                exportResult = null
+            )
+        }
         viewModelScope.launch {
             var succeeded = 0
             val failures = mutableListOf<String>()
             try {
                 withContext(Dispatchers.IO) {
                     val parent = DocumentsContract.buildDocumentUriUsingTree(
-                        treeUri, DocumentsContract.getTreeDocumentId(treeUri)
+                        treeUri,
+                        DocumentsContract.getTreeDocumentId(treeUri)
                     )
                     entries.forEachIndexed { index, entry ->
                         ensureActive()
@@ -228,7 +237,7 @@ class WorkspaceDetailVM(
     suspend fun resolveImageFile(
         entry: WorkspaceFileEntry,
         area: WorkspaceStorageArea,
-    ): File = repository.resolveFile(id, area, entry.path)
+    ): File? = repository.resolveFile(id, area, entry.path)
 
     /**
      * 把当前区域下的文件导出到 cacheDir 的临时文件, 完成后回调 [onReady].
@@ -350,13 +359,15 @@ class WorkspaceDetailVM(
     private fun loadWorkspace() {
         viewModelScope.launch {
             val workspace = repository.getById(id)
-            _state.update { it.copy(workspace = workspace) }
+            val layout = repository.layout(id)
+            _state.update { it.copy(workspace = workspace, layout = layout) }
         }
     }
 }
 
 data class WorkspaceDetailState(
     val workspace: WorkspaceEntity? = null,
+    val layout: WorkspaceLayout? = null,
     val area: WorkspaceStorageArea = WorkspaceStorageArea.FILES,
     val path: String = "",
     val entries: List<WorkspaceFileEntry> = emptyList(),
