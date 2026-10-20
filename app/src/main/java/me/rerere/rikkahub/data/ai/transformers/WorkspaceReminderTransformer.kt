@@ -12,6 +12,7 @@ import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import java.io.ByteArrayOutputStream
 import java.nio.file.Paths
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Workspace 系统提示注入转换器
@@ -20,11 +21,14 @@ import java.nio.file.Paths
  * 让模型了解 workspace 环境与 workspace_* 工具的使用方式。
  * 提示中包含实际使用的 shell 与发行版, 避免模型默认按 bash / apt 来写命令。
  * 本地工作区同时读取 ~/.agents、/workspace 和会话当前目录中的 AGENTS.md 作为工作区指令。
- * 远程工作区不读取 AGENTS.md, 连不上时只注入一段说明, 不阻塞对话。
+ * 远程工作区不读取 AGENTS.md, shell 与发行版读到一次后缓存 (见 [RemoteEnvironmentCache]),
+ * 连不上时只注入一段说明, 不阻塞对话。
  */
 class WorkspaceReminderTransformer(
     private val workspaceRepository: WorkspaceRepository,
 ) : InputMessageTransformer {
+    private val remoteEnvironments = RemoteEnvironmentCache()
+
     override suspend fun transform(
         ctx: TransformerContext,
         messages: List<UIMessage>,
@@ -35,21 +39,22 @@ class WorkspaceReminderTransformer(
         if (workspace.shellStatus != WorkspaceShellStatus.READY.name) return messages
         val layout = workspaceRepository.layout(workspaceId) ?: return messages
 
-        // 远程工作区的 shell 探测需要连接, 失败时后续读取也必然失败, 直接跳过以免每一步都等超时
-        val shell = try {
-            workspaceRepository.shell(workspaceId)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.w("WorkspaceReminder", "Workspace unreachable: $workspaceId", e)
-            return messages.withPrompt(buildUnreachablePrompt(workspace, layout, e))
-        }
-        val distro = readDistroName(workspaceId)
         val prompt = if (workspace.isSsh()) {
-            buildSshWorkspacePrompt(workspace, layout, shell, distro, ctx.workspaceCwd)
+            val environment = remoteEnvironments.get(workspaceId, workspace.sshConfig) {
+                // shell 探测需要连接, 失败时不再读发行版, 以免再等一次超时
+                RemoteEnvironment(shell = workspaceRepository.shell(workspaceId), distro = readDistroName(workspaceId))
+            }.getOrElse { e ->
+                Log.w("WorkspaceReminder", "Workspace unreachable: $workspaceId", e)
+                return messages.withPrompt(buildUnreachablePrompt(workspace, layout, e))
+            }
+            buildSshWorkspacePrompt(workspace, layout, environment.shell, environment.distro, ctx.workspaceCwd)
         } else {
-            buildWorkspacePrompt(workspace, shell, distro, ctx.workspaceCwd) +
-                buildAgentsPrompt(workspaceId, ctx.workspaceCwd)
+            buildWorkspacePrompt(
+                workspace = workspace,
+                shell = workspaceRepository.shell(workspaceId),
+                distro = readDistroName(workspaceId),
+                cwd = ctx.workspaceCwd,
+            ) + buildAgentsPrompt(workspaceId, ctx.workspaceCwd)
         }
         return messages.withPrompt(prompt)
     }
@@ -122,6 +127,47 @@ class WorkspaceReminderTransformer(
         const val MAX_AGENTS_BYTES = 64L * 1024
         const val MAX_OS_RELEASE_BYTES = 16L * 1024
         val OS_RELEASE_PATHS = listOf("/etc/os-release", "/usr/lib/os-release")
+    }
+}
+
+/** 远程工作区提示词里描述的执行环境 */
+internal data class RemoteEnvironment(val shell: String, val distro: String?)
+
+/**
+ * 按工作区缓存远程执行环境。
+ *
+ * 读一次要好几次网络往返, 而每一步请求都要构建提示词; 远程环境很少变化, 读到后就一直沿用, 直到连接配置改变。
+ * 连不上的结果只保留 [failureTtlMillis]: 期间的后续步骤不必每步都等连接超时, 过期后再重新尝试。
+ */
+internal class RemoteEnvironmentCache(
+    private val failureTtlMillis: Long = DEFAULT_FAILURE_TTL_MS,
+    private val now: () -> Long = { System.nanoTime() / 1_000_000 },
+) {
+    private class Entry(val config: String?, val result: Result<RemoteEnvironment>, val loadedAt: Long)
+
+    private val entries = ConcurrentHashMap<String, Entry>()
+
+    suspend fun get(
+        workspaceId: String,
+        config: String?,
+        load: suspend () -> RemoteEnvironment,
+    ): Result<RemoteEnvironment> {
+        entries[workspaceId]
+            ?.takeIf { it.config == config && (it.result.isSuccess || now() - it.loadedAt < failureTtlMillis) }
+            ?.let { return it.result }
+        val result = try {
+            Result.success(load())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+        entries[workspaceId] = Entry(config, result, now())
+        return result
+    }
+
+    private companion object {
+        const val DEFAULT_FAILURE_TTL_MS = 60_000L
     }
 }
 
@@ -231,7 +277,7 @@ private fun buildSshWorkspacePrompt(
     append("</workspace>")
 }
 
-private fun buildUnreachablePrompt(workspace: WorkspaceEntity, layout: WorkspaceLayout, error: Exception): String =
+private fun buildUnreachablePrompt(workspace: WorkspaceEntity, layout: WorkspaceLayout, error: Throwable): String =
     buildString {
         val address = workspace.sshSettings()?.let { "${it.username}@${it.host}" }
         appendLine("<workspace>")
