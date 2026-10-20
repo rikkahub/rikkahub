@@ -417,6 +417,8 @@ private fun WorkspaceBasicPage(
     onEditSsh: () -> Unit,
 ) {
     val shellStatus = workspace?.shellStatus
+    // 加载完成前按本地工作区展示
+    val hasRootfs = workspace?.capabilities()?.rootfs ?: true
     val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
     val rootfsReady = shellStatus == WorkspaceShellStatus.READY.name
     val installButtonText = when {
@@ -441,7 +443,7 @@ private fun WorkspaceBasicPage(
                     },
                     leadingContent = { CardGroupIcon(HugeIcons.Tag01) },
                 )
-                if (workspace?.isSsh() != true) {
+                if (hasRootfs) {
                     item(
                         headlineContent = { Text(stringResource(R.string.workspace_detail_shell_status)) },
                         leadingContent = { CardGroupIcon(HugeIcons.ComputerTerminal01) },
@@ -455,7 +457,8 @@ private fun WorkspaceBasicPage(
             item {
                 SshConnectionCard(workspace = workspace, onEdit = onEditSsh)
             }
-        } else {
+        }
+        if (hasRootfs) {
             item {
                 CardGroup(
                     title = { Text(stringResource(R.string.workspace_detail_enable_shell)) },
@@ -741,7 +744,7 @@ private fun WorkspaceFilesPage(
                 ) {
                     WorkspaceAreaSelector(
                         selected = state.area,
-                        isSsh = state.workspace?.isSsh() == true,
+                        hasRootfs = state.workspace?.capabilities()?.rootfs ?: true,
                         onSelected = onSelectArea,
                     )
                     WorkspacePathBar(
@@ -856,7 +859,7 @@ private fun WorkspaceFilesPage(
 @Composable
 private fun WorkspaceAreaSelector(
     selected: WorkspaceStorageArea,
-    isSsh: Boolean,
+    hasRootfs: Boolean,
     onSelected: (WorkspaceStorageArea) -> Unit,
 ) {
     ConnectedChoiceButtons(
@@ -867,10 +870,10 @@ private fun WorkspaceAreaSelector(
         containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
     ) { area, isSelected ->
         ConnectedChoiceLabel(
-            // 远程工作区的两个区域分别是工作目录和远程根目录
+            // 没有 Rootfs 的工作区 (如远程) 两个区域分别是工作目录和根目录
             text = when (area) {
-                WorkspaceStorageArea.FILES -> if (isSsh) "工作目录" else stringResource(R.string.workspace_detail_area_files)
-                WorkspaceStorageArea.LINUX -> if (isSsh) "根目录" else stringResource(R.string.workspace_detail_area_rootfs)
+                WorkspaceStorageArea.FILES -> if (hasRootfs) stringResource(R.string.workspace_detail_area_files) else "工作目录"
+                WorkspaceStorageArea.LINUX -> if (hasRootfs) stringResource(R.string.workspace_detail_area_rootfs) else "根目录"
             },
             selected = isSelected,
             icon = HugeIcons.Tick01,

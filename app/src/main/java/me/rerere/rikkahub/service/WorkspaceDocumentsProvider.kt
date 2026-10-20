@@ -38,8 +38,9 @@ class WorkspaceDocumentsProvider : DocumentsProvider() {
 
     private fun dao(): WorkspaceDAO = GlobalContext.get().get()
 
-    // 远程工作区的文件不在本机, 暂不通过系统文件选择器暴露
-    private fun allWorkspaces(): List<WorkspaceEntity> = runBlocking { dao().getAll() }.filterNot { it.isSsh() }
+    // 文件不在本机的工作区 (如远程) 暂不通过系统文件选择器暴露
+    private fun allWorkspaces(): List<WorkspaceEntity> =
+        runBlocking { dao().getAll() }.filter { it.capabilities().localFiles }
 
     private fun workspaceName(root: String): String =
         allWorkspaces().firstOrNull { it.root == root }?.name ?: root

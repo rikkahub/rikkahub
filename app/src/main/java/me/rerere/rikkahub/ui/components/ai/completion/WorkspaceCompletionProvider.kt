@@ -65,7 +65,7 @@ class WorkspaceCompletionProvider(
         if (workspaceDir != null) return true
         val workspace = repository.getById(id) ?: return false
         workspaceDir = repository.layout(id)?.workspaceDir ?: return false
-        remote = workspace.isSsh()
+        remote = !workspace.capabilities().localFiles
         relativeCwd = currentCwd.toWorkspaceRelativePath()
         return true
     }

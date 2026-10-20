@@ -48,8 +48,8 @@ class WorkspaceRepository(
     suspend fun checkIntegrity() = withContext(Dispatchers.IO) {
         val workspaces = dao.getAll()
         for (workspace in workspaces) {
-            // 远程工作区没有本地目录和 Rootfs
-            if (workspace.isSsh()) continue
+            // 文件不在本机的工作区 (如远程) 没有本地目录和 Rootfs
+            if (!workspace.capabilities().localFiles) continue
             val dir = manager.workspaceDir(workspace.root)
             if (!dir.exists()) {
                 // 目录缺失时不删除记录(例如恢复备份后工作区文件未随数据库一起恢复),
@@ -175,7 +175,7 @@ class WorkspaceRepository(
         onProgress: (RootfsInstallProgress) -> Unit = {},
     ): Boolean {
         val workspace = dao.getById(id) ?: return false
-        require(!workspace.isSsh()) { "Rootfs is only available for local workspaces" }
+        require(workspace.capabilities().rootfs) { "Rootfs is not available for ${workspace.type} workspaces" }
         updateShellState(workspace, WorkspaceShellStatus.INSTALLING.name)
         try {
             // runInterruptible 让协程取消转成线程中断, 打断 install 内阻塞的下载/解压循环

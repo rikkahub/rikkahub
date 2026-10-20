@@ -10,13 +10,23 @@ data class Workspace(
     val lastAccessAt: Long? = null,
 )
 
-enum class WorkspaceType {
+enum class WorkspaceType(val capabilities: WorkspaceCapabilities) {
     /** 本机 PRoot Rootfs */
-    LOCAL,
+    LOCAL(WorkspaceCapabilities(rootfs = true, terminal = true, localFiles = true)),
 
     /** 通过 SSH 连接的远程机器 */
-    SSH,
+    SSH(WorkspaceCapabilities(rootfs = false, terminal = false, localFiles = false)),
 }
+
+/** 一种工作区能用哪些功能; 调用方按能力判断, 不直接比较类型 */
+data class WorkspaceCapabilities(
+    /** 运行在本机 PRoot Rootfs 里: 需要安装 Rootfs, 挂载了 /skills、/upload、/tool_outputs 等应用目录 */
+    val rootfs: Boolean,
+    /** 支持交互式终端 */
+    val terminal: Boolean,
+    /** 文件在本机; 否则每次访问都要走网络, 也没法交给系统文件选择器 */
+    val localFiles: Boolean,
+)
 
 enum class WorkspaceShellStatus {
     DISABLED,

@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 import me.rerere.rikkahub.data.model.SshWorkspaceSettings
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.workspace.Workspace
+import me.rerere.workspace.WorkspaceCapabilities
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.WorkspaceShellStatus
 import me.rerere.workspace.WorkspaceType
@@ -47,6 +48,9 @@ data class WorkspaceEntity(
 ) {
     fun isSsh(): Boolean = type == WorkspaceType.SSH.name
 
+    fun capabilities(): WorkspaceCapabilities =
+        runCatching { WorkspaceType.valueOf(type) }.getOrDefault(WorkspaceType.LOCAL).capabilities
+
     fun sshSettings(): SshWorkspaceSettings? = sshConfig?.let { config ->
         runCatching { JsonInstant.decodeFromString<SshWorkspaceSettings>(config) }.getOrNull()
     }
@@ -59,8 +63,8 @@ data class WorkspaceEntity(
             WorkspaceManager.ROOTFS_WORKSPACE_DIR
         }
 
-    /** 交互式终端目前只支持本地 Rootfs */
-    fun supportsTerminal(): Boolean = !isSsh() && shellStatus != WorkspaceShellStatus.DISABLED.name
+    fun supportsTerminal(): Boolean =
+        capabilities().terminal && shellStatus != WorkspaceShellStatus.DISABLED.name
 
     fun toolApprovalOverrides(): Map<String, Boolean> = runCatching {
         JsonInstant.decodeFromString<Map<String, Boolean>>(toolApprovals)
