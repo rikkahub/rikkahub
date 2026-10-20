@@ -160,20 +160,25 @@ internal class AgentLoop(
     private suspend fun executeTools() {
         val tools = checkNotNull(message).getTools().filter { !it.isExecuted }
         for (tool in tools) {
+            // 只给真正运行的工具计时；开始时先写一次，界面才能在执行中实时显示耗时
+            val runs = tool.approvalState == ToolApprovalState.Auto || tool.approvalState == ToolApprovalState.Approved
+            if (runs) updateTool(tool.toolCallId) { it.copy(startedAt = Clock.System.now(), finishedAt = null) }
             val output = execute(tool)
-            val current = checkNotNull(message)
-            update(
-                current.copy(
-                    parts = current.parts.map { part ->
-                        if (part is UIMessagePart.Tool && part.toolCallId == tool.toolCallId) {
-                            part.copy(output = output)
-                        } else {
-                            part
-                        }
-                    }
-                )
-            )
+            updateTool(tool.toolCallId) {
+                it.copy(output = output, finishedAt = if (runs) Clock.System.now() else it.finishedAt)
+            }
         }
+    }
+
+    private suspend fun updateTool(toolCallId: String, transform: (UIMessagePart.Tool) -> UIMessagePart.Tool) {
+        val current = checkNotNull(message)
+        update(
+            current.copy(
+                parts = current.parts.map { part ->
+                    if (part is UIMessagePart.Tool && part.toolCallId == toolCallId) transform(part) else part
+                }
+            )
+        )
     }
 
     private suspend fun execute(tool: UIMessagePart.Tool): List<UIMessagePart> =

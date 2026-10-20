@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -60,6 +62,10 @@ import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.ui.components.DotLoading
+import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.DurationUnit
 
 private const val ASK_USER_TOOL_NAME = "ask_user"
 
@@ -136,6 +142,7 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
     val isPending = tool.isPending
     val isDenied = tool.approvalState is ToolApprovalState.Denied
     val images = tool.output.filterIsInstance<UIMessagePart.Image>()
+    val duration = rememberToolDuration(tool, loading)
 
     // 摘要由注册的渲染器决定; 图片输出与拒绝原因为所有工具通用
     val hasExtraContent = renderer.hasSummary(context) || isDenied || images.isNotEmpty()
@@ -193,6 +200,15 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                         )
                     }
                 }
+            }
+        } else if (duration != null && duration >= 100.milliseconds) {
+            {
+                Text(
+                    text = duration.toString(DurationUnit.SECONDS, 1),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.shimmer(isLoading = loading),
+                )
             }
         } else {
             null
@@ -262,6 +278,28 @@ fun ChainOfThoughtScope.ChatMessageToolStep(
                 }
             },
         )
+    }
+}
+
+/**
+ * 工具执行耗时；执行中随时间刷新，没有计时（拒绝、问答、旧消息）时为 null
+ */
+@Composable
+private fun rememberToolDuration(tool: UIMessagePart.Tool, loading: Boolean): Duration? {
+    val startedAt = tool.startedAt
+    val finishedAt = tool.finishedAt
+    val running = loading && startedAt != null && finishedAt == null
+    val now by produceState(Clock.System.now(), running) {
+        while (running) {
+            value = Clock.System.now()
+            delay(100)
+        }
+    }
+    return when {
+        startedAt == null -> null
+        finishedAt != null -> finishedAt - startedAt
+        running -> now - startedAt
+        else -> null
     }
 }
 

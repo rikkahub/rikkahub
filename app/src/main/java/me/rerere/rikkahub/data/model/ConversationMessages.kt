@@ -4,6 +4,7 @@ import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.finishPendingTools
+import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
 /**
@@ -70,7 +71,9 @@ internal fun Conversation.withNodeFavorite(nodeId: Uuid, favorite: Boolean): Con
 internal fun Conversation.withToolApproval(toolCallId: String, approvalState: ToolApprovalState): Conversation? {
     if (currentMessages.none { message ->
             message.getTools().any { it.toolCallId == toolCallId && it.isPending }
-        }) return null
+        }) {
+        return null
+    }
     return copy(
         messageNodes = messageNodes.map { node ->
             node.copy(messages = node.messages.map { message ->
@@ -102,5 +105,7 @@ private fun cancelToolByUser(tool: UIMessagePart.Tool): UIMessagePart.Tool = too
         UIMessagePart.Text(
             """{"status":"cancelled","error":"Generation cancelled by user before tool execution completed."}"""
         )
-    )
+    ),
+    // 执行到一半被停止的工具，耗时算到取消为止
+    finishedAt = tool.finishedAt ?: tool.startedAt?.let { Clock.System.now() },
 )

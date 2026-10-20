@@ -27,6 +27,7 @@ import me.rerere.ai.ui.UIMessagePart
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
@@ -224,6 +225,9 @@ class AgentLoopTest {
         assertEquals("blue", finished.message.tool("call-1").outputText())
         assertTrue(finished.message.tool("call-2").outputText().contains("too risky"))
         assertTrue(executed.isEmpty())
+        // 没有真正运行的工具不计时
+        assertNull(finished.message.tool("call-1").startedAt)
+        assertNull(finished.message.tool("call-2").startedAt)
     }
 
     @Test
@@ -249,7 +253,12 @@ class AgentLoopTest {
 
         val last = (events.last() as AgentEvent.MessageUpdated).message
         assertEquals("first done", last.tool("call-1").outputText())
+        assertNotNull(last.tool("call-1").startedAt)
+        assertNotNull(last.tool("call-1").finishedAt)
         assertFalse(last.tool("call-2").isExecuted)
+        // 开始执行时就写入了 startedAt，界面能实时计时
+        assertNotNull(last.tool("call-2").startedAt)
+        assertNull(last.tool("call-2").finishedAt)
     }
 
     @Test
