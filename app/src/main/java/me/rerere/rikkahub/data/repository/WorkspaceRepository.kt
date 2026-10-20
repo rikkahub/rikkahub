@@ -28,6 +28,7 @@ import me.rerere.workspace.ssh.SshAuthType
 import me.rerere.workspace.ssh.SshConnectionConfig
 import me.rerere.workspace.ssh.SshConnectionPool
 import me.rerere.workspace.ssh.SshProbeResult
+import me.rerere.workspace.ssh.SshShell
 import me.rerere.workspace.ssh.SshWorkspaceBackend
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -366,6 +367,13 @@ class WorkspaceRepository(
                 }
             )
         }
+    }
+
+    /** 打开 SSH 工作区的交互式 shell, 阻塞到连接和 shell 都建立好, 不能在主线程调用 */
+    fun openSshShell(workspace: WorkspaceEntity, columns: Int, rows: Int): SshShell {
+        val backend = backendOf(workspace) as? SshWorkspaceBackend
+            ?: error("Not an SSH workspace: ${workspace.id}")
+        return backend.openShell(columns, rows)
     }
 
     private fun backendOf(workspace: WorkspaceEntity): WorkspaceBackend =

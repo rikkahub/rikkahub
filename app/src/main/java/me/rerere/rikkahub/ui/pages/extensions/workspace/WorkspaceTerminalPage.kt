@@ -69,7 +69,8 @@ fun WorkspaceTerminalPage(id: String) {
     val vm: WorkspaceDetailVM = koinViewModel(parameters = { parametersOf(id) })
     val state by vm.state.collectAsStateWithLifecycle()
     val sessionManager: WorkspaceTerminalSessionManager = koinInject()
-    val root = state.workspace?.root
+    val workspace = state.workspace
+    val root = workspace?.root
     val terminalStateFlow = remember(root, sessionManager) {
         root?.let(sessionManager::observeWorkspace) ?: flowOf(WorkspaceTerminalTabsState())
     }
@@ -78,9 +79,9 @@ fun WorkspaceTerminalPage(id: String) {
     )
     var pendingCloseTabId by remember(root) { mutableStateOf<Long?>(null) }
 
-    val shellCompatibilityMode = state.workspace?.shellCompatibilityMode ?: false
+    val shellCompatibilityMode = workspace?.shellCompatibilityMode ?: false
     LaunchedEffect(root, shellCompatibilityMode) {
-        root?.let { sessionManager.ensureSession(it, shellCompatibilityMode) }
+        workspace?.let(sessionManager::ensureSession)
     }
 
     RikkahubTheme(colorMode = ColorMode.DARK) {
@@ -89,7 +90,7 @@ fun WorkspaceTerminalPage(id: String) {
                 root = root,
                 state = terminalState,
                 contentPadding = innerPadding,
-                onCreateTab = { root?.let { sessionManager.createTab(it, shellCompatibilityMode) } },
+                onCreateTab = { workspace?.let(sessionManager::createTab) },
                 onSelectTab = { tabId ->
                     root?.let { sessionManager.selectTab(it, tabId) }
                 },

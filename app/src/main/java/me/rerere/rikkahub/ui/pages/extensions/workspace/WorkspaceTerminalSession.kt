@@ -10,28 +10,26 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
 import androidx.core.net.toUri
+import com.termux.terminal.LocalPtyTransport
 import com.termux.terminal.TerminalEmulator
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
+import com.termux.terminal.TerminalTransport
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import me.rerere.workspace.WorkspaceTerminalLaunch
 
 internal fun createWorkspaceTerminalSession(
-    launch: WorkspaceTerminalLaunch,
+    transport: TerminalTransport,
     root: String,
     client: TerminalSessionClient,
 ): TerminalSession =
-    TerminalSession(
-        launch.executable,
-        launch.cwd,
-        launch.args.toTypedArray(),
-        launch.env.toTypedArray(),
-        2_000,
-        client,
-    ).apply {
+    TerminalSession(transport, 2_000, client).apply {
         mSessionName = root
     }
+
+internal fun WorkspaceTerminalLaunch.toTransport(): TerminalTransport =
+    LocalPtyTransport(executable, cwd, args.toTypedArray(), env.toTypedArray())
 
 internal class WorkspaceTerminalSessionClient(
     private val context: Context,

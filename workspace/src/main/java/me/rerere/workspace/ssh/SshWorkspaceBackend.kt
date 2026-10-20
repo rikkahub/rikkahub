@@ -179,6 +179,21 @@ class SshWorkspaceBackend(
         }
     }
 
+    /** 打开交互式终端: 在工作目录下启动用户的登录 shell */
+    fun openShell(columns: Int, rows: Int): SshShell =
+        pool.openShell(id, config) { connection, onClose ->
+            connection.ensureDir(workspaceDir)
+            // 外层交给探测到的 POSIX shell 解析, 再 exec 用户自己的登录 shell ($SHELL 缺失时退回探测结果)
+            val remoteCommand = listOf(
+                connection.shell,
+                "-c",
+                "cd -- \"\$1\"; exec \"\${SHELL:-\$0}\" -l",
+                connection.shell,
+                workspaceDir,
+            ).joinToString(" ") { it.shellQuote() }
+            connection.openShell(remoteCommand, columns, rows, onClose)
+        }
+
     /** 文件区操作前确保远程工作目录存在, 和本地工作区自动创建目录的行为一致 */
     private fun <T> withSftp(area: WorkspaceStorageArea, retry: Boolean, block: (ChannelSftp) -> T): T =
         pool.use(id, config, retry) { connection ->

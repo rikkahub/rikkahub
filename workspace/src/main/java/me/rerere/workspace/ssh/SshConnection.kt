@@ -101,6 +101,25 @@ internal class SshConnection private constructor(
         }
     }
 
+    /** 在带 PTY 的 exec channel 里运行 [command], [onClose] 在 shell 关闭时调用 */
+    fun openShell(command: String, columns: Int, rows: Int, onClose: () -> Unit): SshShell {
+        val channel = openChannel { session.openChannel("exec") as ChannelExec }
+        channel.setCommand(command)
+        channel.setPty(true)
+        channel.setPtyType(TERMINAL_TYPE, columns, rows, 0, 0)
+        channel.setTerminalMode(TERMINAL_MODES)
+        // 输入流必须在 connect 之前取, 否则开头的输出会丢
+        val input = channel.inputStream
+        val output = channel.outputStream
+        try {
+            openChannel { channel.connect(CHANNEL_TIMEOUT_MS) }
+        } catch (e: Exception) {
+            channel.disconnect()
+            throw e
+        }
+        return SshShell(channel, input, output, this, onClose)
+    }
+
     override fun close() {
         synchronized(sftpLock) {
             sftpChannel?.disconnect()
@@ -135,6 +154,10 @@ internal class SshConnection private constructor(
         private const val KEEPALIVE_COUNT_MAX = 3
         private const val EXEC_POLL_INTERVAL_MS = 20L
         private const val SHELL_DETECT_TIMEOUT_MS = 15_000L
+        private const val TERMINAL_TYPE = "xterm-256color"
+
+        // RFC 4254 的 PTY 模式编码: 开启 IUTF8 (RFC 8160 opcode 42), 让行编辑按 UTF-8 字符退格; 以 TTY_OP_END 结尾
+        private val TERMINAL_MODES = byteArrayOf(42, 0, 0, 0, 1, 0)
 
         fun open(config: SshConnectionConfig): SshConnection {
             val jsch = JSch()

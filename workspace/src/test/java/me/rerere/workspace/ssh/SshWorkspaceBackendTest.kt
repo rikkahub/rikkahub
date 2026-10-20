@@ -65,7 +65,16 @@ class SshWorkspaceBackendTest {
             publickeyAuthenticator = PublickeyAuthenticator { username, _, _ -> username == KEY_USER }
             subsystemFactories = listOf(SftpSubsystemFactory())
             commandFactory = CommandFactory { channel, command ->
-                ProcessShellFactory(command, "/usr/bin/env", "HOME=${home.path}", "/bin/sh", "-c", command)
+                // 固定 SHELL, 交互式 shell 测试不受开发机登录 shell 影响
+                ProcessShellFactory(
+                    command,
+                    "/usr/bin/env",
+                    "HOME=${home.path}",
+                    "SHELL=/bin/sh",
+                    "/bin/sh",
+                    "-c",
+                    command
+                )
                     .createShell(channel)
             }
             start()
@@ -340,6 +349,54 @@ class SshWorkspaceBackendTest {
         assertFalse(closingPool.isConnected(WORKSPACE_ID))
         // 建好的连接被立即释放, 服务器上不会遗留会话
         assertTrue(waitUntil(5_000) { server.activeSessions.isEmpty() })
+    }
+
+    @Test
+    fun shellStartsInWorkspaceDirWithRequestedPty() {
+        val shell = backend().openShell(columns = 100, rows = 30)
+        shell.outputStream.write("pwd; echo \"\$COLUMNS \$LINES \$TERM\"; exit 3\n".toByteArray())
+        shell.outputStream.flush()
+
+        // 测试服务器没有真正的 PTY, shell 读完 stdin 里的命令后退出
+        val output = shell.inputStream.bufferedReader().readLines()
+        assertEquals(listOf(remoteDir.path, "100 30 xterm-256color"), output)
+        assertEquals(3, shell.waitFor())
+        assertFalse(shell.connectionLost)
+        shell.close()
+    }
+
+    @Test
+    fun openShellKeepsConnectionFromIdleClose() {
+        SshConnectionPool(idleTimeoutMillis = 100, sweepIntervalMillis = 20).use { idlePool ->
+            val shell = backend(pool = idlePool).openShell(columns = 80, rows = 24)
+            Thread.sleep(500)
+            assertTrue(idlePool.isConnected(WORKSPACE_ID))
+
+            val reader = shell.inputStream.bufferedReader()
+            shell.outputStream.write("echo alive\n".toByteArray())
+            shell.outputStream.flush()
+            assertEquals("alive", reader.readLine())
+            shell.resize(columns = 120, rows = 40)
+
+            // 关闭后挂断远程 shell, 连接回到空闲状态并被断开
+            shell.close()
+            assertEquals(null, shell.waitFor())
+            assertTrue(waitUntil(5_000) { !idlePool.isConnected(WORKSPACE_ID) })
+        }
+    }
+
+    @Test
+    fun shellReportsConnectionLoss() {
+        val shell = backend().openShell(columns = 80, rows = 24)
+        server.stop(true)
+
+        val exitCode = AtomicReference<Int?>(-2)
+        val waiter = thread { exitCode.set(shell.waitFor()) }
+        waiter.join(10_000)
+        assertFalse(waiter.isAlive)
+        assertEquals(null, exitCode.get())
+        assertTrue(shell.connectionLost)
+        shell.close()
     }
 
     private fun sweeperThreads(): Set<Thread> =

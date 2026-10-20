@@ -15,7 +15,7 @@ enum class WorkspaceType(val capabilities: WorkspaceCapabilities) {
     LOCAL(WorkspaceCapabilities(rootfs = true, terminal = true, localFiles = true)),
 
     /** 通过 SSH 连接的远程机器 */
-    SSH(WorkspaceCapabilities(rootfs = false, terminal = false, localFiles = false)),
+    SSH(WorkspaceCapabilities(rootfs = false, terminal = true, localFiles = false)),
 }
 
 /** 一种工作区能用哪些功能; 调用方按能力判断, 不直接比较类型 */
