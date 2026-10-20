@@ -19,6 +19,7 @@ import me.rerere.workspace.WorkspaceBindMount
 import me.rerere.workspace.WorkspaceManager
 import me.rerere.workspace.ssh.SshConnectionPool
 import org.koin.dsl.module
+import org.koin.dsl.onClose
 import java.io.File
 
 val repositoryModule = module {
@@ -90,7 +91,7 @@ val repositoryModule = module {
 
     single {
         SshConnectionPool()
-    }
+    } onClose { it?.close() }
 
     single {
         WorkspaceRepository(get(), get(), get(), get(), get())

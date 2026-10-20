@@ -22,6 +22,10 @@ import org.junit.rules.TemporaryFolder
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.Base64
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.thread
 
 class SshWorkspaceBackendTest {
     @get:Rule
@@ -32,6 +36,10 @@ class SshWorkspaceBackendTest {
     private val pool = SshConnectionPool()
 
     private lateinit var home: File
+
+    // SLOW_USER 的认证会卡住, 直到测试放行, 用来复现建连期间关闭连接池
+    private val slowAuthEntered = CountDownLatch(1)
+    private val slowAuthRelease = CountDownLatch(1)
 
     @Before
     fun setUp() {
@@ -48,7 +56,11 @@ class SshWorkspaceBackendTest {
             this.port = port
             keyPairProvider = SimpleGeneratorHostKeyProvider(File(tempFolder.root, "host_key").toPath())
             passwordAuthenticator = PasswordAuthenticator { username, password, _ ->
-                username == USER && password == PASSWORD
+                if (username == SLOW_USER) {
+                    slowAuthEntered.countDown()
+                    slowAuthRelease.await(10, TimeUnit.SECONDS)
+                }
+                (username == USER || username == SLOW_USER) && password == PASSWORD
             }
             publickeyAuthenticator = PublickeyAuthenticator { username, _, _ -> username == KEY_USER }
             subsystemFactories = listOf(SftpSubsystemFactory())
@@ -61,7 +73,7 @@ class SshWorkspaceBackendTest {
 
     @After
     fun tearDown() {
-        pool.close(WORKSPACE_ID)
+        pool.close()
         server.stop(true)
     }
 
@@ -82,7 +94,7 @@ class SshWorkspaceBackendTest {
         return config(hostKey)
     }
 
-    private fun backend(config: SshConnectionConfig = trustedConfig()) =
+    private fun backend(config: SshConnectionConfig = trustedConfig(), pool: SshConnectionPool = this.pool) =
         SshWorkspaceBackend(pool, WORKSPACE_ID, config)
 
     @Test
@@ -262,10 +274,91 @@ class SshWorkspaceBackendTest {
         assertEquals(emptyList<Any>(), backend.listFiles(WorkspaceStorageArea.FILES, ""))
     }
 
+    @Test
+    fun idleConnectionIsClosedAndReopenedOnNextUse() {
+        SshConnectionPool(idleTimeoutMillis = 200, sweepIntervalMillis = 50).use { idlePool ->
+            val backend = backend(pool = idlePool)
+            assertEquals("1", backend.executeCommand("echo 1", "", 10_000, null).stdout.trim())
+            assertTrue(idlePool.isConnected(WORKSPACE_ID))
+
+            assertTrue(waitUntil(5_000) { !idlePool.isConnected(WORKSPACE_ID) })
+
+            assertEquals("2", backend.executeCommand("echo 2", "", 10_000, null).stdout.trim())
+            assertTrue(idlePool.isConnected(WORKSPACE_ID))
+        }
+    }
+
+    @Test
+    fun connectionInUseIsNotClosedAsIdle() {
+        SshConnectionPool(idleTimeoutMillis = 100, sweepIntervalMillis = 20).use { idlePool ->
+            val result = backend(pool = idlePool)
+                .executeCommand("sleep 1; echo done", "", 10_000, null)
+            assertEquals(0, result.exitCode)
+            assertEquals("done", result.stdout.trim())
+        }
+    }
+
+    @Test
+    fun closedPoolReleasesConnectionsAndSweeperThread() {
+        val existingSweepers = sweeperThreads()
+        val closingPool = SshConnectionPool(sweepIntervalMillis = 20)
+        // 调度器在创建连接池时就启动线程, 找出属于这个连接池的那一个
+        val sweeper = (sweeperThreads() - existingSweepers).single()
+        val backend = backend(pool = closingPool)
+        backend.executeCommand("true", "", 10_000, null)
+        assertTrue(closingPool.isConnected(WORKSPACE_ID))
+
+        closingPool.close()
+
+        assertFalse(closingPool.isConnected(WORKSPACE_ID))
+        assertThrows(IllegalStateException::class.java) {
+            backend.executeCommand("true", "", 10_000, null)
+        }
+        assertTrue(waitUntil(5_000) { !sweeper.isAlive })
+    }
+
+    @Test
+    fun connectionCompletedDuringCloseIsReleased() {
+        val config = trustedConfig().copy(username = SLOW_USER)
+        val closingPool = SshConnectionPool()
+        val failure = AtomicReference<Throwable>()
+        val worker = thread {
+            try {
+                backend(config, closingPool).executeCommand("true", "", 10_000, null)
+            } catch (e: Throwable) {
+                failure.set(e)
+            }
+        }
+
+        // 建连卡在认证, 这时连接还没登记进连接池
+        assertTrue(slowAuthEntered.await(10, TimeUnit.SECONDS))
+        closingPool.close()
+        slowAuthRelease.countDown()
+        worker.join(10_000)
+
+        assertTrue(failure.get() is IllegalStateException)
+        assertFalse(closingPool.isConnected(WORKSPACE_ID))
+        // 建好的连接被立即释放, 服务器上不会遗留会话
+        assertTrue(waitUntil(5_000) { server.activeSessions.isEmpty() })
+    }
+
+    private fun sweeperThreads(): Set<Thread> =
+        Thread.getAllStackTraces().keys.filter { it.name == "ssh-idle-sweeper" && it.isAlive }.toSet()
+
+    private fun waitUntil(timeoutMillis: Long, condition: () -> Boolean): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline) {
+            if (condition()) return true
+            Thread.sleep(20)
+        }
+        return condition()
+    }
+
     private companion object {
         const val WORKSPACE_ID = "test"
         const val USER = "tester"
         const val PASSWORD = "secret"
         const val KEY_USER = "keyuser"
+        const val SLOW_USER = "slowuser"
     }
 }

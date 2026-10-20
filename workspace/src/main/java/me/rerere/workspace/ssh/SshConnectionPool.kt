@@ -1,19 +1,65 @@
 package me.rerere.workspace.ssh
 
+import java.io.Closeable
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
-/** 按工作区复用 SSH 连接; 配置变化或连接断开时重新连接 */
-class SshConnectionPool {
-    private val connections = ConcurrentHashMap<String, SshConnection>()
+/**
+ * 按工作区复用 SSH 连接; 配置变化或连接断开时重新连接。
+ *
+ * 空闲超过 [idleTimeoutMillis] 且没有进行中操作的连接会被关闭, 下次使用时再重连,
+ * 避免连接和 keepalive 在 App 存活期间一直挂着。
+ *
+ * 清理任务持有连接池本身, 不再使用时必须调用 [close] 停止调度线程并关闭所有连接。
+ */
+class SshConnectionPool(
+    private val idleTimeoutMillis: Long = DEFAULT_IDLE_TIMEOUT_MS,
+    sweepIntervalMillis: Long = DEFAULT_SWEEP_INTERVAL_MS,
+) : Closeable {
+    private val connections = ConcurrentHashMap<String, PooledConnection>()
     private val locks = ConcurrentHashMap<String, Any>()
+
+    // 关闭与新连接登记共用这把锁: close() 在锁内标记关闭并取走已登记的连接,
+    // 登记前在锁内检查 closed, 关闭期间才建好的连接会自行释放, 不会遗留在已关闭的池里
+    private val lifecycleLock = Any()
+
+    @Volatile
+    private var closed = false
+    private val sweeper = Executors.newSingleThreadScheduledExecutor { runnable ->
+        Thread(runnable, "ssh-idle-sweeper").apply { isDaemon = true }
+    }
+
+    init {
+        sweeper.scheduleWithFixedDelay(
+            // 定时任务抛异常后不会再被调度, 这里吞掉异常保证后续还能清理
+            { runCatching { closeIdle() } },
+            sweepIntervalMillis,
+            sweepIntervalMillis,
+            TimeUnit.MILLISECONDS,
+        )
+    }
 
     /** 用一条临时连接测试配置, 不进入连接池 */
     fun probe(config: SshConnectionConfig): SshProbeResult = SshConnection.probe(config)
 
     fun close(id: String) {
         synchronized(lockOf(id)) {
-            connections.remove(id)?.close()
+            connections.remove(id)?.connection?.close()
         }
+    }
+
+    /** 停止空闲清理并关闭所有连接, 之后连接池不能再使用 */
+    override fun close() {
+        // 不等正在建立的连接, 它们登记时会看到 closed
+        val remaining = synchronized(lifecycleLock) {
+            if (closed) return
+            closed = true
+            connections.values.toList().also { connections.clear() }
+        }
+        sweeper.shutdownNow()
+        remaining.forEach { it.connection.close() }
     }
 
     /**
@@ -26,34 +72,93 @@ class SshConnectionPool {
         retry: Boolean,
         block: (SshConnection) -> T,
     ): T {
-        val connection = acquire(id, config)
+        val pooled = acquire(id, config)
         return try {
-            block(connection)
+            block(pooled.connection)
         } catch (e: Exception) {
             if (e is InterruptedException) throw e
             val channelFailed = e is SshChannelOpenException
-            if (connection.isConnected && !channelFailed) throw e
-            evict(id, connection)
+            if (pooled.connection.isConnected && !channelFailed) throw e
+            evict(id, pooled)
             if (!retry && !channelFailed) throw e
-            block(acquire(id, config))
+            val retried = acquire(id, config)
+            try {
+                block(retried.connection)
+            } finally {
+                retried.release()
+            }
+        } finally {
+            pooled.release()
         }
     }
 
-    private fun acquire(id: String, config: SshConnectionConfig): SshConnection = synchronized(lockOf(id)) {
+    /** 连接池里 [id] 是否有可用连接, 供测试观察空闲断开 */
+    internal fun isConnected(id: String): Boolean = connections[id]?.connection?.isConnected == true
+
+    // 在锁内登记使用, 清理线程同样持锁检查, 保证拿到手的连接不会被当成空闲关掉
+    private fun acquire(id: String, config: SshConnectionConfig): PooledConnection = synchronized(lockOf(id)) {
+        check(!closed) { "SSH connection pool is closed" }
         connections[id]?.let { existing ->
-            if (existing.config == config && existing.isConnected) return existing
+            if (existing.connection.config == config && existing.connection.isConnected) {
+                existing.retain()
+                return existing
+            }
             connections.remove(id)
-            existing.close()
+            existing.connection.close()
         }
-        SshConnection.open(config).also { connections[id] = it }
+        val pooled = PooledConnection(SshConnection.open(config)).also { it.retain() }
+        synchronized(lifecycleLock) {
+            if (!closed) {
+                connections[id] = pooled
+                return pooled
+            }
+        }
+        pooled.connection.close()
+        throw IllegalStateException("SSH connection pool is closed")
     }
 
-    private fun evict(id: String, connection: SshConnection) {
+    private fun evict(id: String, pooled: PooledConnection) {
         synchronized(lockOf(id)) {
-            connections.remove(id, connection)
+            connections.remove(id, pooled)
         }
-        connection.close()
+        pooled.connection.close()
+    }
+
+    private fun closeIdle() {
+        val now = System.nanoTime()
+        connections.forEach { (id, pooled) ->
+            synchronized(lockOf(id)) {
+                if (connections[id] === pooled && pooled.isIdle(now, idleTimeoutMillis)) {
+                    connections.remove(id)
+                    pooled.connection.close()
+                }
+            }
+        }
     }
 
     private fun lockOf(id: String): Any = locks.computeIfAbsent(id) { Any() }
+
+    private class PooledConnection(val connection: SshConnection) {
+        private val activeUses = AtomicInteger()
+
+        @Volatile
+        private var lastUsedAt = System.nanoTime()
+
+        fun retain() {
+            activeUses.incrementAndGet()
+        }
+
+        fun release() {
+            lastUsedAt = System.nanoTime()
+            activeUses.decrementAndGet()
+        }
+
+        fun isIdle(now: Long, timeoutMillis: Long): Boolean =
+            activeUses.get() == 0 && now - lastUsedAt >= TimeUnit.MILLISECONDS.toNanos(timeoutMillis)
+    }
+
+    private companion object {
+        const val DEFAULT_IDLE_TIMEOUT_MS = 5 * 60_000L
+        const val DEFAULT_SWEEP_INTERVAL_MS = 30_000L
+    }
 }
