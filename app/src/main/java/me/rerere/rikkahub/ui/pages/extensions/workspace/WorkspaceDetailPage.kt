@@ -106,6 +106,7 @@ import me.rerere.hugeicons.stroke.Tag01
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.ai.tools.WorkspaceFileWriteToolNames
 import me.rerere.rikkahub.data.ai.tools.resolveWorkspaceToolApproval
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import androidx.compose.ui.res.stringResource
@@ -574,7 +575,10 @@ private fun WorkspaceToolApprovalCard(
     onToolApprovalChange: (String, Boolean) -> Unit,
 ) {
     val overrides = workspace?.toolApprovalOverrides().orEmpty()
-    val tools = workspaceToolApprovalItems()
+    val fileWriteTools = workspace?.capabilities()?.fileWriteTools ?: true
+    val tools = workspaceToolApprovalItems().filter { (toolName) ->
+        fileWriteTools || toolName !in WorkspaceFileWriteToolNames
+    }
 
     CardGroup(
         title = {

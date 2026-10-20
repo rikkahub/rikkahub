@@ -12,10 +12,10 @@ data class Workspace(
 
 enum class WorkspaceType(val capabilities: WorkspaceCapabilities) {
     /** 本机 PRoot Rootfs */
-    LOCAL(WorkspaceCapabilities(rootfs = true, terminal = true, localFiles = true)),
+    LOCAL(WorkspaceCapabilities(rootfs = true, terminal = true, localFiles = true, fileWriteTools = true)),
 
     /** 通过 SSH 连接的远程机器 */
-    SSH(WorkspaceCapabilities(rootfs = false, terminal = true, localFiles = false)),
+    SSH(WorkspaceCapabilities(rootfs = false, terminal = true, localFiles = false, fileWriteTools = false)),
 }
 
 /** 一种工作区能用哪些功能; 调用方按能力判断, 不直接比较类型 */
@@ -26,6 +26,12 @@ data class WorkspaceCapabilities(
     val terminal: Boolean,
     /** 文件在本机; 否则每次访问都要走网络, 也没法交给系统文件选择器 */
     val localFiles: Boolean,
+    /**
+     * AI 可以用写文件、编辑文件工具直接写入; 否则只能经 shell 修改文件。
+     * SFTP 覆盖写入时服务器打开文件就会清空原内容, 写到一半被取消或断线会留下残缺的文件;
+     * shell 命令连同要写的内容一起发到远程, 在那边本地写入, 写入过程不经过网络。
+     */
+    val fileWriteTools: Boolean,
 )
 
 enum class WorkspaceShellStatus {

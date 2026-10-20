@@ -14,6 +14,7 @@ import me.rerere.ai.ui.toMetadata
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.utils.generateUnifiedDiff
+import me.rerere.workspace.WorkspaceCapabilities
 import me.rerere.workspace.WorkspaceFileEntry
 import me.rerere.workspace.WorkspaceLayout
 import me.rerere.workspace.WorkspaceManager
@@ -30,6 +31,9 @@ val WorkspaceToolDefaultApprovals: Map<String, Boolean> = mapOf(
     "workspace_shell" to true,
 )
 
+/** 直接写文件的工具, 只在支持 [WorkspaceCapabilities.fileWriteTools] 的工作区提供 */
+val WorkspaceFileWriteToolNames: Set<String> = setOf("workspace_write_file", "workspace_edit_file")
+
 fun resolveWorkspaceToolApproval(name: String, overrides: Map<String, Boolean>): Boolean =
     overrides[name] ?: WorkspaceToolDefaultApprovals[name] ?: false
 
@@ -40,17 +44,20 @@ suspend fun createWorkspaceTools(
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
     val layout = workspaceRepository.layout(workspaceId) ?: return emptyList()
-    val approvalOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
+    val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
+    val approvalOverrides = workspace.toolApprovalOverrides()
     fun needsApproval(name: String) = resolveWorkspaceToolApproval(name, approvalOverrides)
 
     val shellCwd = cwd?.let(layout::relativeToWorkspace)
 
-    return listOf(
-        createReadFileTool(workspaceId, layout, ::needsApproval, workspaceRepository),
-        createWriteFileTool(workspaceId, layout, ::needsApproval, workspaceRepository),
-        createEditFileTool(workspaceId, layout, ::needsApproval, workspaceRepository),
-        createShellTool(workspaceId, layout, ::needsApproval, workspaceRepository, shellCwd),
-    )
+    return buildList {
+        add(createReadFileTool(workspaceId, layout, ::needsApproval, workspaceRepository))
+        if (workspace.capabilities().fileWriteTools) {
+            add(createWriteFileTool(workspaceId, layout, ::needsApproval, workspaceRepository))
+            add(createEditFileTool(workspaceId, layout, ::needsApproval, workspaceRepository))
+        }
+        add(createShellTool(workspaceId, layout, ::needsApproval, workspaceRepository, shellCwd))
+    }
 }
 
 private val IMAGE_EXTENSIONS = setOf(

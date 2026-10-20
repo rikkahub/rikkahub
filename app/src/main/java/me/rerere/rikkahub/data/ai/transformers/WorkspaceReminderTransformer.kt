@@ -262,12 +262,9 @@ private fun buildSshWorkspacePrompt(
     appendShellLine(shell)
     appendLine("- Available tools:")
     appendLine("  - `workspace_read_file`: read file contents.")
-    appendLine(
-        "  - `workspace_write_file` / `workspace_edit_file`: create files, or make precise edits to existing files."
-    )
     appendLine("  - `workspace_shell`: run shell commands on the remote machine (defaults to the workspace directory).")
     appendLine(
-        "- Prefer `workspace_shell` for tasks that standard Unix tools handle well, and prefer `workspace_edit_file` for targeted edits over rewriting whole files."
+        "- There are no file write or edit tools in this workspace. Create and modify files with `workspace_shell`, for example a quoted heredoc (`cat > file <<'EOF'`) for new content, or `sed`, `patch` or a short script for targeted edits. Prefer targeted edits over rewriting whole files."
     )
     if (!cwd.isNullOrBlank()) {
         appendLine(
