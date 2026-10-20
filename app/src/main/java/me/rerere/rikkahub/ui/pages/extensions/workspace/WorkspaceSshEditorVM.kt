@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.extensions.workspace
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
@@ -7,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.SshWorkspaceDraft
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.ssh.SshAuthType
@@ -31,7 +33,10 @@ class WorkspaceSshEditorVM(
                 val settings = workspace?.sshSettings()
                 _state.update { state ->
                     if (workspace == null || settings == null) {
-                        state.copy(loading = false, error = "工作区不存在或不是 SSH 工作区")
+                        state.copy(
+                            loading = false,
+                            error = SshEditorError.Resource(R.string.workspace_ssh_editor_not_found)
+                        )
                     } else {
                         state.copy(
                             loading = false,
@@ -100,7 +105,7 @@ class WorkspaceSshEditorVM(
         val current = state.value
         if (current.busy) return
         val draft = current.toDraftOrNull() ?: run {
-            _state.update { it.copy(error = "请填写主机、端口和用户名") }
+            _state.update { it.copy(error = SshEditorError.Resource(R.string.workspace_ssh_editor_missing_fields)) }
             return
         }
         _state.update { it.copy(testing = true, error = null, saveAnywayDraft = null) }
@@ -126,7 +131,7 @@ class WorkspaceSshEditorVM(
                     it.copy(
                         testing = false,
                         probeResult = null,
-                        error = e.message ?: e.javaClass.simpleName,
+                        error = SshEditorError.Message(e.message ?: e.javaClass.simpleName),
                         saveAnywayDraft = draft.takeIf { saveAfter },
                     )
                 }
@@ -136,7 +141,7 @@ class WorkspaceSshEditorVM(
 
     private fun persist(draft: SshWorkspaceDraft) {
         if (draft.remoteDir.isBlank()) {
-            _state.update { it.copy(error = "请填写远程工作目录") }
+            _state.update { it.copy(error = SshEditorError.Resource(R.string.workspace_ssh_editor_missing_remote_dir)) }
             return
         }
         _state.update { it.copy(saving = true) }
@@ -147,7 +152,14 @@ class WorkspaceSshEditorVM(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(saving = false, error = e.message ?: "保存失败") }
+                _state.update {
+                    it.copy(
+                        saving = false,
+                        error =
+                        e.message?.let(SshEditorError::Message)
+                            ?: SshEditorError.Resource(R.string.workspace_ssh_editor_save_failed)
+                    )
+                }
             }
         }
     }
@@ -189,7 +201,7 @@ data class WorkspaceSshEditorState(
     val saving: Boolean = false,
     val probeResult: SshProbeResult? = null,
     val pendingHostKey: PendingHostKey? = null,
-    val error: String? = null,
+    val error: SshEditorError? = null,
     /** 保存前测试失败的配置, 用户可以选择仍然保存它 */
     val saveAnywayDraft: SshWorkspaceDraft? = null,
     val saved: Boolean = false,
@@ -199,6 +211,13 @@ data class WorkspaceSshEditorState(
 
     val canSaveAnyway: Boolean
         get() = saveAnywayDraft != null
+}
+
+/** 表单自己的提示用字符串资源, 连接和保存失败时直接显示异常信息 */
+sealed interface SshEditorError {
+    data class Resource(@StringRes val id: Int) : SshEditorError
+
+    data class Message(val text: String) : SshEditorError
 }
 
 /** 等待用户确认的主机密钥, 属于 [draft] 这份配置; [expected] 不为空表示和之前信任的不一致 */

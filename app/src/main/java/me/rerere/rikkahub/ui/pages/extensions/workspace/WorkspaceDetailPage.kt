@@ -513,26 +513,26 @@ private fun SshConnectionCard(
     onEdit: () -> Unit,
 ) {
     val settings = workspace.sshSettings()
-    CardGroup(title = { Text("SSH 连接") }) {
+    CardGroup(title = { Text(stringResource(R.string.workspace_detail_ssh_connection)) }) {
         item(
             leadingContent = { CardGroupIcon(HugeIcons.CloudServer) },
-            headlineContent = { Text("地址") },
+            headlineContent = { Text(stringResource(R.string.workspace_detail_ssh_address)) },
             supportingContent = {
-                Text(settings?.let { "${it.username}@${it.host}:${it.port}" } ?: "配置缺失")
+                Text(settings?.let { "${it.username}@${it.host}:${it.port}" } ?: stringResource(R.string.workspace_detail_ssh_config_missing))
             },
         )
         item(
             leadingContent = { CardGroupIcon(HugeIcons.Folder01) },
-            headlineContent = { Text("远程目录") },
+            headlineContent = { Text(stringResource(R.string.workspace_detail_ssh_remote_dir)) },
             supportingContent = { Text(settings?.remoteDir ?: "-") },
         )
         item(
             leadingContent = { CardGroupIcon(HugeIcons.FingerPrint) },
-            headlineContent = { Text("主机密钥") },
+            headlineContent = { Text(stringResource(R.string.workspace_detail_ssh_host_key)) },
             supportingContent = {
                 val hostKey = settings?.hostKey
                 Text(
-                    text = hostKey?.let { "${it.type}\n${it.fingerprint}" } ?: "尚未确认，连接前请在编辑页测试连接",
+                    text = hostKey?.let { "${it.type}\n${it.fingerprint}" } ?: stringResource(R.string.workspace_detail_ssh_host_key_unconfirmed),
                     fontFamily = if (hostKey != null) FontFamily.Monospace else null,
                 )
             },
@@ -540,8 +540,8 @@ private fun SshConnectionCard(
         item(
             onClick = onEdit,
             leadingContent = { CardGroupIcon(HugeIcons.PencilEdit01) },
-            headlineContent = { Text("编辑连接") },
-            supportingContent = { Text("修改地址、凭据或工作目录，并重新测试连接") },
+            headlineContent = { Text(stringResource(R.string.workspace_detail_ssh_edit)) },
+            supportingContent = { Text(stringResource(R.string.workspace_detail_ssh_edit_desc)) },
         )
     }
 }
@@ -876,8 +876,13 @@ private fun WorkspaceAreaSelector(
         ConnectedChoiceLabel(
             // 没有 Rootfs 的工作区 (如远程) 两个区域分别是工作目录和根目录
             text = when (area) {
-                WorkspaceStorageArea.FILES -> if (hasRootfs) stringResource(R.string.workspace_detail_area_files) else "工作目录"
-                WorkspaceStorageArea.LINUX -> if (hasRootfs) stringResource(R.string.workspace_detail_area_rootfs) else "根目录"
+                WorkspaceStorageArea.FILES -> stringResource(
+                    if (hasRootfs) R.string.workspace_detail_area_files else R.string.workspace_detail_area_working_dir
+                )
+
+                WorkspaceStorageArea.LINUX -> stringResource(
+                    if (hasRootfs) R.string.workspace_detail_area_rootfs else R.string.workspace_detail_area_root
+                )
             },
             selected = isSelected,
             icon = HugeIcons.Tick01,

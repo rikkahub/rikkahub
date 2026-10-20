@@ -123,8 +123,8 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
                         showAddDialog = true
                     },
                     leadingContent = { CardGroupIcon(HugeIcons.FolderCode) },
-                    supportingContent = { Text("在本机的 Linux 沙箱里运行，需要安装 Rootfs") },
-                    headlineContent = { Text("本地工作区") },
+                    supportingContent = { Text(stringResource(R.string.workspace_page_type_local_desc)) },
+                    headlineContent = { Text(stringResource(R.string.workspace_page_type_local)) },
                 )
                 item(
                     onClick = {
@@ -132,8 +132,8 @@ fun WorkspacePage(vm: WorkspaceVM = koinViewModel()) {
                         navController.navigate(Screen.WorkspaceSshEditor())
                     },
                     leadingContent = { CardGroupIcon(HugeIcons.CloudServer) },
-                    supportingContent = { Text("通过 SSH 连接你自己的服务器") },
-                    headlineContent = { Text("SSH 远程工作区") },
+                    supportingContent = { Text(stringResource(R.string.workspace_page_type_ssh_desc)) },
+                    headlineContent = { Text(stringResource(R.string.workspace_page_type_ssh)) },
                 )
             }
         }

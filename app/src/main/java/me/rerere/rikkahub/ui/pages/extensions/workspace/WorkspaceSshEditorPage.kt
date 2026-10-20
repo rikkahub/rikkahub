@@ -39,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -55,6 +56,7 @@ import me.rerere.hugeicons.stroke.Key01
 import me.rerere.hugeicons.stroke.Tick02
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.ViewOff
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.CardGroupIcon
@@ -92,11 +94,11 @@ fun WorkspaceSshEditorPage(id: String?) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (vm.isNew) "新建 SSH 工作区" else "编辑 SSH 连接") },
+                title = { Text(if (vm.isNew) stringResource(R.string.workspace_ssh_editor_title_new) else stringResource(R.string.workspace_ssh_editor_title_edit)) },
                 navigationIcon = { BackButton() },
                 actions = {
                     IconButton(onClick = vm::save, enabled = !state.busy) {
-                        Icon(HugeIcons.Tick02, contentDescription = "保存")
+                        Icon(HugeIcons.Tick02, contentDescription = stringResource(R.string.workspace_ssh_editor_save))
                     }
                 },
                 colors = CustomColors.topBarColors,
@@ -117,14 +119,14 @@ fun WorkspaceSshEditorPage(id: String?) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                CardGroup(title = { Text("基本信息") }) {
-                    formItem(headlineContent = { Text("名称") }) {
+                CardGroup(title = { Text(stringResource(R.string.workspace_ssh_editor_basic)) }) {
+                    formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_name)) }) {
                         OutlinedTextField(
                             enabled = editable,
                             value = state.name,
                             onValueChange = { value -> vm.update { it.copy(name = value) } },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("我的服务器") },
+                            placeholder = { Text(stringResource(R.string.workspace_ssh_editor_name_placeholder)) },
                             singleLine = true,
                         )
                     }
@@ -132,19 +134,19 @@ fun WorkspaceSshEditorPage(id: String?) {
             }
 
             item {
-                CardGroup(title = { Text("连接") }) {
-                    formItem(headlineContent = { Text("主机") }) {
+                CardGroup(title = { Text(stringResource(R.string.workspace_ssh_editor_connection)) }) {
+                    formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_host)) }) {
                         OutlinedTextField(
                             enabled = editable,
                             value = state.host,
                             onValueChange = { value -> vm.update { it.copy(host = value.trim()) } },
                             modifier = Modifier.fillMaxWidth(),
-                            placeholder = { Text("example.com 或 192.168.1.10") },
+                            placeholder = { Text(stringResource(R.string.workspace_ssh_editor_host_placeholder)) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                         )
                     }
-                    formItem(headlineContent = { Text("端口") }) {
+                    formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_port)) }) {
                         OutlinedTextField(
                             enabled = editable,
                             value = state.port,
@@ -156,7 +158,7 @@ fun WorkspaceSshEditorPage(id: String?) {
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         )
                     }
-                    formItem(headlineContent = { Text("用户名") }) {
+                    formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_username)) }) {
                         OutlinedTextField(
                             enabled = editable,
                             value = state.username,
@@ -169,9 +171,12 @@ fun WorkspaceSshEditorPage(id: String?) {
             }
 
             item {
-                CardGroup(title = { Text("认证") }) {
-                    formItem(headlineContent = { Text("认证方式") }) {
-                        val options = listOf(SshAuthType.PASSWORD to "密码", SshAuthType.PRIVATE_KEY to "私钥")
+                CardGroup(title = { Text(stringResource(R.string.workspace_ssh_editor_auth)) }) {
+                    formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_auth_method)) }) {
+                        val options = listOf(
+                            SshAuthType.PASSWORD to stringResource(R.string.workspace_ssh_editor_password),
+                            SshAuthType.PRIVATE_KEY to stringResource(R.string.workspace_ssh_editor_private_key),
+                        )
                         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                             options.forEachIndexed { index, (type, label) ->
                                 SegmentedButton(
@@ -186,19 +191,19 @@ fun WorkspaceSshEditorPage(id: String?) {
                         }
                     }
                     when (state.authType) {
-                        SshAuthType.PASSWORD -> formItem(headlineContent = { Text("密码") }) {
+                        SshAuthType.PASSWORD -> formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_password)) }) {
                             SecretTextField(
                                 enabled = editable,
                                 value = state.password,
                                 onValueChange = { value -> vm.update { it.copy(password = value) } },
-                                placeholder = if (state.hasSavedPassword) "已保存，留空保持不变" else null,
+                                placeholder = if (state.hasSavedPassword) stringResource(R.string.workspace_ssh_editor_saved_keep) else null,
                             )
                         }
 
                         SshAuthType.PRIVATE_KEY -> {
                             formItem(
-                                headlineContent = { Text("私钥") },
-                                supportingContent = { Text("支持 OpenSSH 和 PEM 格式的 Ed25519、ECDSA、RSA 私钥") },
+                                headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_private_key)) },
+                                supportingContent = { Text(stringResource(R.string.workspace_ssh_editor_private_key_desc)) },
                             ) {
                                 OutlinedTextField(
                                     enabled = editable,
@@ -208,7 +213,7 @@ fun WorkspaceSshEditorPage(id: String?) {
                                     placeholder = {
                                         Text(
                                             if (state.hasSavedPrivateKey) {
-                                                "已保存，留空保持不变"
+                                                stringResource(R.string.workspace_ssh_editor_saved_keep)
                                             } else {
                                                 "-----BEGIN OPENSSH PRIVATE KEY-----"
                                             }
@@ -229,15 +234,15 @@ fun WorkspaceSshEditorPage(id: String?) {
                                         modifier = Modifier.size(ButtonDefaults.IconSize),
                                     )
                                     Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                                    Text("从文件导入")
+                                    Text(stringResource(R.string.workspace_ssh_editor_import_key))
                                 }
                             }
-                            formItem(headlineContent = { Text("私钥口令") }) {
+                            formItem(headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_passphrase)) }) {
                                 SecretTextField(
                                     enabled = editable,
                                     value = state.passphrase,
                                     onValueChange = { value -> vm.update { it.copy(passphrase = value) } },
-                                    placeholder = "私钥未加密时留空",
+                                    placeholder = stringResource(R.string.workspace_ssh_editor_passphrase_placeholder),
                                 )
                             }
                         }
@@ -246,10 +251,10 @@ fun WorkspaceSshEditorPage(id: String?) {
             }
 
             item {
-                CardGroup(title = { Text("工作目录") }) {
+                CardGroup(title = { Text(stringResource(R.string.workspace_ssh_editor_working_dir)) }) {
                     formItem(
-                        headlineContent = { Text("远程目录") },
-                        supportingContent = { Text("AI 默认在这里读写文件和执行命令。留空则测试连接后使用远程用户的主目录") },
+                        headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_remote_dir)) },
+                        supportingContent = { Text(stringResource(R.string.workspace_ssh_editor_remote_dir_desc)) },
                     ) {
                         OutlinedTextField(
                             enabled = editable,
@@ -265,14 +270,14 @@ fun WorkspaceSshEditorPage(id: String?) {
             }
 
             item {
-                CardGroup(title = { Text("安全") }) {
+                CardGroup(title = { Text(stringResource(R.string.workspace_ssh_editor_security)) }) {
                     item(
                         leadingContent = { CardGroupIcon(HugeIcons.FingerPrint) },
-                        headlineContent = { Text("主机密钥") },
+                        headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_host_key)) },
                         supportingContent = {
                             val hostKey = state.hostKey
                             if (hostKey == null) {
-                                Text("尚未确认，测试连接或保存时会请你核对服务器指纹")
+                                Text(stringResource(R.string.workspace_ssh_editor_host_key_unconfirmed))
                             } else {
                                 Text(
                                     text = "${hostKey.type}\n${hostKey.fingerprint}",
@@ -302,24 +307,34 @@ fun WorkspaceSshEditorPage(id: String?) {
         )
     }
 
-    state.error?.let { message ->
+    state.error?.let { error ->
+        val message = when (error) {
+            is SshEditorError.Resource -> stringResource(error.id)
+            is SshEditorError.Message -> error.text
+        }
         AlertDialog(
             onDismissRequest = vm::dismissError,
-            title = { Text(if (state.canSaveAnyway) "连接失败" else "出错了") },
+            title = { Text(
+                    if (state.canSaveAnyway) {
+                        stringResource(R.string.workspace_ssh_editor_connect_failed)
+                    } else {
+                        stringResource(R.string.workspace_ssh_editor_error)
+                    }
+                ) },
             text = {
                 Text(
-                    if (state.canSaveAnyway) "$message\n\n仍要保存吗？之后可以在工作区详情里重新测试连接。" else message
+                    if (state.canSaveAnyway) stringResource(R.string.workspace_ssh_editor_save_anyway_message, message) else message
                 )
             },
             confirmButton = {
                 if (state.canSaveAnyway) {
-                    TextButton(onClick = vm::saveAnyway) { Text("仍然保存") }
+                    TextButton(onClick = vm::saveAnyway) { Text(stringResource(R.string.workspace_ssh_editor_save_anyway)) }
                 } else {
-                    TextButton(onClick = vm::dismissError) { Text("确定") }
+                    TextButton(onClick = vm::dismissError) { Text(stringResource(R.string.confirm)) }
                 }
             },
             dismissButton = if (state.canSaveAnyway) {
-                { TextButton(onClick = vm::dismissError) { Text("取消") } }
+                { TextButton(onClick = vm::dismissError) { Text(stringResource(R.string.cancel)) } }
             } else {
                 null
             },
@@ -369,24 +384,31 @@ private fun ProbeSection(
                 Icon(HugeIcons.Connect, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
             }
             Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-            Text(if (state.testing) "正在连接…" else "测试连接")
+            Text(
+                if (state.testing) {
+                    stringResource(R.string.workspace_ssh_editor_connecting)
+                } else {
+                    stringResource(R.string.workspace_ssh_editor_test)
+                }
+            )
         }
         state.probeResult?.let { result ->
-            CardGroup(title = { Text("连接成功") }) {
+            CardGroup(title = { Text(stringResource(R.string.workspace_ssh_editor_connected)) }) {
                 item(
                     leadingContent = { CardGroupIcon(HugeIcons.CloudServer) },
-                    headlineContent = { Text("Shell") },
+                    headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_shell)) },
                     supportingContent = { Text(result.shell) },
                 )
                 item(
                     leadingContent = { CardGroupIcon(HugeIcons.Folder01) },
-                    headlineContent = { Text("工作目录") },
+                    headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_working_dir)) },
                     supportingContent = {
                         Text(
                             when {
-                                state.remoteDir.isBlank() || state.remoteDir == result.homeDir -> "${result.homeDir}（主目录）"
+                                state.remoteDir.isBlank() || state.remoteDir == result.homeDir ->
+                                    stringResource(R.string.workspace_ssh_editor_home_dir, result.homeDir)
                                 result.remoteDirExists -> state.remoteDir
-                                else -> "${state.remoteDir}（不存在，首次使用时自动创建）"
+                                else -> stringResource(R.string.workspace_ssh_editor_dir_missing, state.remoteDir)
                             }
                         )
                     },
@@ -407,14 +429,25 @@ private fun HostKeyDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(HugeIcons.Key01, contentDescription = null) },
-        title = { Text(if (changed) "主机密钥已变化" else "确认主机密钥") },
+        title = { Text(
+                if (changed) {
+                    stringResource(R.string.workspace_ssh_editor_host_key_changed)
+                } else {
+                    stringResource(R.string.workspace_ssh_editor_host_key_confirm)
+                }
+            ) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     if (changed) {
-                        "$address 出示的主机密钥和之前信任的不一致。可能是服务器重装过，也可能有人在冒充服务器（中间人攻击）。确认无误前不要继续。"
+                        stringResource(R.string.workspace_ssh_editor_host_key_changed_message, address)
                     } else {
-                        "首次连接 $address，请核对服务器的主机密钥指纹。可以在服务器上运行 ssh-keygen -lf /etc/ssh/ssh_host_${pending.actual.type.removePrefix("ssh-").substringBefore('-')}_key.pub 对照。"
+                        val keyFile = pending.actual.type.removePrefix("ssh-").substringBefore('-')
+                        stringResource(
+                            R.string.workspace_ssh_editor_host_key_first_message,
+                            address,
+                            "ssh-keygen -lf /etc/ssh/ssh_host_${keyFile}_key.pub",
+                        )
                     }
                 )
                 Text(
@@ -433,13 +466,13 @@ private fun HostKeyDialog(
                         containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError,
                     ),
-                ) { Text("信任新密钥") }
+                ) { Text(stringResource(R.string.workspace_ssh_editor_trust_new_key)) }
             } else {
-                TextButton(onClick = onTrust) { Text("信任并继续") }
+                TextButton(onClick = onTrust) { Text(stringResource(R.string.workspace_ssh_editor_trust_continue)) }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
         },
     )
 }
