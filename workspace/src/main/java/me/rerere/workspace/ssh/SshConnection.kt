@@ -71,9 +71,17 @@ internal class SshConnection private constructor(
 
     private fun openSftpChannel(): ChannelSftp {
         val channel = openChannel { session.openChannel("sftp") as ChannelSftp }
-        // 启动 subsystem 要等服务器回应, 被取消时放弃等待, 打开成功后再关掉
-        awaitInterruptibly({ openChannel { channel.connect(channelTimeoutMillis) } }, onAbandoned = { channel.disconnect() })
+        connectChannel(step = { openChannel { channel.connect(channelTimeoutMillis) } }, onAbandoned = channel::disconnect)
         return channel
+    }
+
+    /**
+     * 在后台连接 channel, 被取消时放弃等待: 之后连上了就用 [onAbandoned] 关掉 channel; 失败了则断开整条连接。
+     * 失败时 JSch 不会给服务器发 channel close, 远端 channel 可能已经开着, 没被取消时连接池收到异常后会断开连接,
+     * 被取消后没有人处理这个异常, 只能在这里断开。
+     */
+    private fun connectChannel(step: () -> Unit, onAbandoned: () -> Unit) {
+        awaitInterruptibly(step, onAbandoned = { onAbandoned() }, onAbandonedFailure = ::close)
     }
 
     /** 确保远程目录存在, 每条连接对同一目录只检查一次 */
@@ -164,10 +172,10 @@ internal class SshConnection private constructor(
      * 后一种情况下 JSch 不会给服务器发 channel close, 远端的 channel 和进程会一直留到连接断开,
      * 而单独关闭这个 channel 的方法不对外开放, 所以断开整条连接, 连接上的其他操作也会随之失败。
      *
-     * 被取消时放弃等待, 之后连上的 channel 直接关掉。
+     * 被取消时的处理见 [connectChannel]。
      */
     private fun ChannelExec.connectExec() {
-        awaitInterruptibly(
+        connectChannel(
             step = {
                 try {
                     connect(channelTimeoutMillis)
@@ -293,9 +301,14 @@ private val blockingSteps: ExecutorService = Executors.newCachedThreadPool { run
  * 在后台线程执行 [step], 当前线程可中断地等待结果。
  *
  * JSch 建立连接、打开 channel 和等待请求回应时会吞掉线程中断, 直接调用的话, 取消要等到服务器回应或超时,
- * 中断标记也会丢失。等待被中断时立即抛出 [InterruptedException], [step] 之后成功得到的结果交给 [onAbandoned] 清理。
+ * 中断标记也会丢失。等待被中断时立即抛出 [InterruptedException], 之后 [step] 成功得到的结果交给 [onAbandoned] 清理,
+ * 失败则调用 [onAbandonedFailure]。
  */
-internal fun <T> awaitInterruptibly(step: () -> T, onAbandoned: (T) -> Unit): T {
+internal fun <T> awaitInterruptibly(
+    step: () -> T,
+    onAbandoned: (T) -> Unit,
+    onAbandonedFailure: () -> Unit = {},
+): T {
     if (Thread.interrupted()) throw InterruptedException()
     val future = CompletableFuture.supplyAsync({ step() }, blockingSteps)
     try {
@@ -303,7 +316,7 @@ internal fun <T> awaitInterruptibly(step: () -> T, onAbandoned: (T) -> Unit): T 
     } catch (e: ExecutionException) {
         throw e.cause ?: e
     } catch (e: InterruptedException) {
-        future.thenAccept { onAbandoned(it) }
+        future.whenComplete { result, error -> if (error == null) onAbandoned(result) else onAbandonedFailure() }
         throw e
     }
 }

@@ -396,6 +396,28 @@ class SshWorkspaceBackendTest {
     }
 
     @Test
+    fun abandonedSftpOpenThatTimesOutClosesConnection() {
+        SshConnectionPool(channelTimeoutMillis = 1_000).use { slowPool ->
+            val backend = backend(pool = slowPool)
+            stallSftpOpen = true
+            try {
+                val stuck = thread { runCatching { backend.readText("missing.txt") } }
+                assertTrue(stalledSftpOpenEntered.await(5, TimeUnit.SECONDS))
+                stuck.interrupt()
+                stuck.join(2_000)
+                assertFalse(stuck.isAlive)
+
+                // 放弃等待后后台等 subsystem 回应超时, 远端 channel 可能已经开着, JSch 又不会发 close, 断开连接清理
+                assertTrue(waitUntil(5_000) { !slowPool.isConnected(WORKSPACE_ID) })
+            } finally {
+                stallSftpOpen = false
+                stalledSftpOpenRelease.countDown()
+            }
+            assertTrue(waitUntil(5_000) { server.activeSessions.isEmpty() })
+        }
+    }
+
+    @Test
     fun interruptedConnectReturnsAndReleasesConnection() {
         val config = trustedConfig().copy(username = SLOW_USER)
         val stuckError = AtomicReference<Throwable>()
