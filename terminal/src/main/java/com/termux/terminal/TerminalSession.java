@@ -27,7 +27,7 @@ import java.util.UUID;
 public final class TerminalSession extends TerminalOutput {
 
     private static final int MSG_NEW_INPUT = 1;
-    private static final int MSG_STARTED = 2;
+    static final int MSG_STARTED = 2;
     private static final int MSG_START_FAILED = 3;
     private static final int MSG_PROCESS_EXITED = 4;
 
@@ -64,6 +64,14 @@ public final class TerminalSession extends TerminalOutput {
 
     /** Whether {@link #mTransport} has started. Only accessed on the main thread. */
     private boolean mTransportStarted;
+
+    /**
+     * Input written while {@link #mTransport} is starting, moved to {@link #mTerminalToProcessIOQueue} once it has started.
+     * Nothing reads that queue before then, so writing there could block the main thread on a full queue. As large as the
+     * queue, so moving it never blocks. Only accessed on the main thread.
+     */
+    private final byte[] mPendingInput = new byte[4096];
+    private int mPendingInputLength;
 
     /** The window size {@link #mTransport} was last told about. Only accessed on the main thread. */
     private int mTransportColumns, mTransportRows;
@@ -185,6 +193,13 @@ public final class TerminalSession extends TerminalOutput {
                             }
                         } catch (IOException e) {
                             // Ignore.
+                        } finally {
+                            // The transport takes no more input, but the session is only cleaned up once the main thread
+                            // handles the exit: keep discarding until then, so writes from the main thread cannot block
+                            // on a full queue nobody reads.
+                            while (mTerminalToProcessIOQueue.read(buffer, true) != -1) {
+                                // Discard.
+                            }
                         }
                     }
                 }.start();
@@ -201,10 +216,19 @@ public final class TerminalSession extends TerminalOutput {
         }.start();
     }
 
-    /** Write data to the process. Data written while the process is starting is sent once it has started. */
+    /**
+     * Write data to the process. Data written while the process is starting is sent once it has started, up to
+     * {@link #mPendingInput} in total: a write that does not fit is dropped rather than blocking the main thread.
+     */
     @Override
     public void write(byte[] data, int offset, int count) {
-        if (mEmulator != null && isRunning()) mTerminalToProcessIOQueue.write(data, offset, count);
+        if (mEmulator == null || !isRunning()) return;
+        if (mTransportStarted) {
+            mTerminalToProcessIOQueue.write(data, offset, count);
+        } else if (count <= mPendingInput.length - mPendingInputLength) {
+            System.arraycopy(data, offset, mPendingInput, mPendingInputLength, count);
+            mPendingInputLength += count;
+        }
     }
 
     /** Write the Unicode code point to the terminal encoded in UTF-8. */
@@ -326,6 +350,11 @@ public final class TerminalSession extends TerminalOutput {
 
             if (msg.what == MSG_STARTED) {
                 mTransportStarted = true;
+                // The queue is still empty, so the pending input fits without blocking.
+                if (mPendingInputLength > 0) {
+                    mTerminalToProcessIOQueue.write(mPendingInput, 0, mPendingInputLength);
+                    mPendingInputLength = 0;
+                }
                 // The view may have been resized while the process was starting.
                 updateTransportSize();
             } else if (msg.what == MSG_START_FAILED) {
