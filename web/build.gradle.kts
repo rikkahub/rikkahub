@@ -56,7 +56,6 @@ dependencies {
     implementation(libs.ktor.server.compression)
     implementation(libs.ktor.server.cors)
     api(libs.ktor.server.auth)
-    api(libs.ktor.server.auth.jwt)
     api(libs.ktor.server.core)
     implementation(libs.ktor.server.host.common)
     api(libs.ktor.server.content.negotiation)

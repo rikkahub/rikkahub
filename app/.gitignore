@@ -1,4 +1,7 @@
 /build
 /release
+# Android Studio 按渠道导出签名包的目录（Generate Signed APK / Bundle）
+/github
+/play
 google-services.json
 app.key

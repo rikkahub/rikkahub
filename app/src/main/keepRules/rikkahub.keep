@@ -1,7 +1,7 @@
 # Release builds may shrink and optimize code, but must not rename symbols.
 -dontobfuscate
 
-# Kotlin reflection is used to instantiate serializable settings classes at runtime.
+# kotlinx.serialization looks up serializers of @Serializable classes reflectively at runtime.
 -keep @kotlinx.serialization.Serializable class * { *; }
 
 # Keep source locations so release stack traces retain useful line information.
@@ -10,10 +10,6 @@
 # Ktor references JVM-only management APIs from its debug detector.
 -dontwarn java.lang.management.ManagementFactory
 -dontwarn java.lang.management.RuntimeMXBean
-
-# Jackson references these JVM-only java.beans annotations.
--dontwarn java.beans.ConstructorProperties
--dontwarn java.beans.Transient
 
 # SnakeYAML's JavaBean introspection references java.beans, which is unavailable on Android.
 -dontwarn java.beans.BeanInfo
@@ -25,14 +21,8 @@
 # re2j has optional references that are unavailable on Android.
 -dontwarn com.google.re2j.**
 
-# Jackson TypeReference reads its anonymous subclass's generic superclass at runtime.
+# Keep generic signatures and inner class info for libraries that read them reflectively at runtime.
 -keepattributes Signature,InnerClasses,EnclosingMethod
--keep,allowobfuscation class * extends com.fasterxml.jackson.core.type.TypeReference
-
-# The embedded Ktor server signs and verifies JWTs through Auth0/Jackson at runtime.
-# Keep their implementation intact because R8 optimization can break JWT payload parsing.
--keep class com.fasterxml.jackson.** { *; }
--keep class com.auth0.jwt.** { *; }
 
 # Keep JlatexMath
 -keep class org.scilab.forge.jlatexmath.** { *; }

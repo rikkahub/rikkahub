@@ -406,7 +406,7 @@ const [selectedIndex, setSelectedIndex] = useState(0);
 **特性**:
 - **LaTeX 数学公式**: 内联 `\(...\)` 和块 `\[...\]` (转换为 `$...$` 和 `$$...$$`)
 - **GFM 支持**: 表格、删除线、任务列表等
-- **代码高亮**: 基于 Shiki，带复制按钮
+- **代码高亮**: 基于 highlight.js（`highlight.ts`，语言与 App 端 highlight 模块一致，配色共用 Atom One），带复制按钮
 - **`<think>` 标签**: 转换为引用块样式
 - **引用链接**: `[citation,domain](id)` 格式处理
 - **主题适配**: 亮色/暗色主题自动切换

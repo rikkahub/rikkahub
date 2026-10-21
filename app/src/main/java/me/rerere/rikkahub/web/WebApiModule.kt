@@ -1,18 +1,15 @@
 package me.rerere.rikkahub.web
 
 import android.content.Context
-import com.auth0.jwt.JWT
-import com.auth0.jwt.JWTVerifier
-import com.auth0.jwt.algorithms.Algorithm
-import io.ktor.http.auth.HttpAuthHeader
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.auth.Authentication
+import io.ktor.server.auth.AuthenticationFailedCause
+import io.ktor.server.auth.UserIdPrincipal
 import io.ktor.server.auth.authenticate
-import io.ktor.server.auth.jwt.jwt
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.plugins.statuspages.StatusPages
 import io.ktor.server.request.receive
@@ -37,15 +34,13 @@ import me.rerere.rikkahub.web.routes.filesRoutes
 import me.rerere.rikkahub.web.routes.folderRoutes
 import me.rerere.rikkahub.web.routes.settingsRoutes
 import java.security.MessageDigest
-import java.util.Date
-import java.util.UUID
 
 private const val WEB_JWT_ISSUER = "rikkahub-web"
 private const val WEB_JWT_AUDIENCE = "rikkahub-web-client"
 private const val WEB_JWT_SUBJECT = "web-access"
 private const val WEB_JWT_TTL_MILLIS = 30L * 24 * 60 * 60 * 1000
 private const val WEB_ACCESS_TOKEN_QUERY_KEY = "access_token"
-private const val WEB_AUTH_REALM = "rikkahub-web-api"
+private const val WEB_AUTH_PROVIDER = "auth-jwt"
 
 /**
  * Configure Web API for the Ktor application.
@@ -89,48 +84,38 @@ fun Application.configureWebApi(
 
     if (jwtEnabled) {
         install(Authentication) {
-            jwt("auth-jwt") {
-                realm = WEB_AUTH_REALM
-                verifier { _ ->
+            provider(WEB_AUTH_PROVIDER) {
+                authenticate { context ->
                     // Dynamically read the current password on each request so that
                     // tokens signed after a password change are validated correctly.
                     val currentPassword = settingsStore.settingsFlow.value.webServerAccessPassword
-                    val secret = currentPassword.ifBlank {
-                        // Keep protected routes closed when jwt is enabled but password is missing.
-                        "__missing_password_${UUID.randomUUID()}__"
+                    val token = extractAccessToken(
+                        authorizationHeader = context.call.request.headers[HttpHeaders.Authorization],
+                        queryToken = context.call.request.queryParameters[WEB_ACCESS_TOKEN_QUERY_KEY]
+                    )
+                    // Keep protected routes closed when jwt is enabled but password is missing.
+                    if (token != null && currentPassword.isNotBlank() && verifyWebJwt(token, currentPassword)) {
+                        context.principal(WEB_AUTH_PROVIDER, UserIdPrincipal(WEB_JWT_SUBJECT))
+                        return@authenticate
                     }
-                    buildWebJwtVerifier(secret)
-                }
-                authHeader { call ->
-                    extractAccessToken(
-                        authorizationHeader = call.request.headers[HttpHeaders.Authorization],
-                        queryToken = call.request.queryParameters[WEB_ACCESS_TOKEN_QUERY_KEY]
-                    )?.let { token ->
-                        HttpAuthHeader.Single("Bearer", token)
-                    }
-                }
-                validate { credential ->
-                    val currentPassword = settingsStore.settingsFlow.value.webServerAccessPassword
-                    if (currentPassword.isBlank()) {
-                        null
+                    val cause = if (token == null) {
+                        AuthenticationFailedCause.NoCredentials
                     } else {
-                        credential.payload.subject?.takeIf { it == WEB_JWT_SUBJECT }?.let {
-                            io.ktor.server.auth.jwt.JWTPrincipal(credential.payload)
+                        AuthenticationFailedCause.InvalidCredentials
+                    }
+                    context.challenge(WEB_AUTH_PROVIDER, cause) { challenge, call ->
+                        if (currentPassword.isBlank()) {
+                            call.respond(
+                                HttpStatusCode.Forbidden,
+                                ErrorResponse("Access password is not configured", HttpStatusCode.Forbidden.value)
+                            )
+                        } else {
+                            call.respond(
+                                HttpStatusCode.Unauthorized,
+                                ErrorResponse("Unauthorized", HttpStatusCode.Unauthorized.value)
+                            )
                         }
-                    }
-                }
-                challenge { _, _ ->
-                    val currentPassword = settingsStore.settingsFlow.value.webServerAccessPassword
-                    if (currentPassword.isBlank()) {
-                        call.respond(
-                            HttpStatusCode.Forbidden,
-                            ErrorResponse("Access password is not configured", HttpStatusCode.Forbidden.value)
-                        )
-                    } else {
-                        call.respond(
-                            HttpStatusCode.Unauthorized,
-                            ErrorResponse("Unauthorized", HttpStatusCode.Unauthorized.value)
-                        )
+                        challenge.complete()
                     }
                 }
             }
@@ -168,7 +153,7 @@ fun Application.configureWebApi(
             aiIconRoutes(context)
 
             if (jwtEnabled) {
-                authenticate("auth-jwt") {
+                authenticate(WEB_AUTH_PROVIDER) {
                     conversationRoutes(chatService, conversationRepo, folderRepo, settingsStore)
                     folderRoutes(chatService, folderRepo, settingsStore)
                     eventsRoutes(chatService, conversationRepo, folderRepo, settingsStore)
@@ -191,22 +176,25 @@ fun Application.configureWebApi(
 private fun createWebJwt(secret: String): Pair<String, Long> {
     val now = System.currentTimeMillis()
     val expiresAt = now + WEB_JWT_TTL_MILLIS
-    val token = JWT.create()
-        .withIssuer(WEB_JWT_ISSUER)
-        .withAudience(WEB_JWT_AUDIENCE)
-        .withSubject(WEB_JWT_SUBJECT)
-        .withIssuedAt(Date(now))
-        .withExpiresAt(Date(expiresAt))
-        .sign(Algorithm.HMAC256(secret))
+    val token = WebJwt.sign(
+        secret = secret,
+        issuer = WEB_JWT_ISSUER,
+        audience = WEB_JWT_AUDIENCE,
+        subject = WEB_JWT_SUBJECT,
+        issuedAtMillis = now,
+        expiresAtMillis = expiresAt,
+    )
     return token to expiresAt
 }
 
-private fun buildWebJwtVerifier(secret: String): JWTVerifier {
-    return JWT.require(Algorithm.HMAC256(secret))
-        .withIssuer(WEB_JWT_ISSUER)
-        .withAudience(WEB_JWT_AUDIENCE)
-        .withSubject(WEB_JWT_SUBJECT)
-        .build()
+private fun verifyWebJwt(token: String, secret: String): Boolean {
+    return WebJwt.verify(
+        token = token,
+        secret = secret,
+        issuer = WEB_JWT_ISSUER,
+        audience = WEB_JWT_AUDIENCE,
+        subject = WEB_JWT_SUBJECT,
+    )
 }
 
 private fun extractBearerToken(authorizationHeader: String?): String? {

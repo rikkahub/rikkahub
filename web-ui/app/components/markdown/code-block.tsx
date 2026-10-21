@@ -1,16 +1,8 @@
 import * as React from "react";
-import type { ComponentProps, CSSProperties, HTMLAttributes } from "react";
+import type { ComponentProps, HTMLAttributes } from "react";
 
 import { Check, Copy, Download } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import {
-  bundledLanguages,
-  createHighlighter,
-  type BundledLanguage,
-  type BundledTheme,
-  type HighlighterGeneric,
-  type ThemedToken,
-} from "shiki";
 
 import { getCodePreviewLanguage } from "~/components/workbench/code-preview-language";
 import { Button } from "~/components/ui/button";
@@ -24,26 +16,9 @@ import {
 import { copyTextToClipboard } from "~/lib/clipboard";
 import { cn } from "~/lib/utils";
 
-const MAX_SHIKI_CODE_LENGTH = 12000;
-const SHIKI_CACHE_LIMIT = 200;
-const SHIKI_THEME_LIGHT = "catppuccin-latte";
-const SHIKI_THEME_DARK = "catppuccin-mocha";
+import { highlightToLines, resolveHighlightLanguage } from "./highlight";
 
-interface KeyedToken {
-  key: string;
-  token: ThemedToken;
-}
-
-interface KeyedLine {
-  key: string;
-  tokens: KeyedToken[];
-}
-
-interface TokenizedCode {
-  bg: string;
-  fg: string;
-  tokens: ThemedToken[][];
-}
+const MAX_HIGHLIGHT_CODE_LENGTH = 12000;
 
 type CodeBlockProps = HTMLAttributes<HTMLDivElement> & {
   code: string;
@@ -57,10 +32,6 @@ interface CodeBlockContextType {
   code: string;
   language: string;
 }
-
-const ITALIC_STYLES = new Set([1, 3, 5, 7]);
-const BOLD_STYLES = new Set([2, 3, 6, 7]);
-const UNDERLINE_STYLES = new Set([4, 5, 6, 7]);
 
 const CodeBlockContext = React.createContext<CodeBlockContextType>({
   code: "",
@@ -102,193 +73,6 @@ function toDownloadFileName(language: string): string {
   return `code.${safeExtension}`;
 }
 
-const highlighterCache = new Map<
-  BundledLanguage,
-  Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>
->();
-const resolvedHighlighters = new Map<
-  BundledLanguage,
-  HighlighterGeneric<BundledLanguage, BundledTheme>
->();
-const tokensCache = new Map<string, TokenizedCode>();
-const subscribers = new Map<string, Set<(result: TokenizedCode) => void>>();
-
-function resolveShikiLanguage(language: string): BundledLanguage | null {
-  const normalized = language.trim().toLowerCase();
-  if (!normalized) {
-    return null;
-  }
-
-  if (!Object.prototype.hasOwnProperty.call(bundledLanguages, normalized)) {
-    return null;
-  }
-
-  return normalized as BundledLanguage;
-}
-
-function getTokensCacheKey(code: string, language: BundledLanguage): string {
-  return `${language}\u0000${code}`;
-}
-
-function readTokensFromCache(cacheKey: string): TokenizedCode | null {
-  const cached = tokensCache.get(cacheKey);
-  if (!cached) {
-    return null;
-  }
-
-  tokensCache.delete(cacheKey);
-  tokensCache.set(cacheKey, cached);
-  return cached;
-}
-
-function writeTokensToCache(cacheKey: string, tokenized: TokenizedCode): void {
-  if (tokensCache.size >= SHIKI_CACHE_LIMIT) {
-    const oldest = tokensCache.keys().next().value;
-    if (typeof oldest === "string") {
-      tokensCache.delete(oldest);
-    }
-  }
-
-  tokensCache.set(cacheKey, tokenized);
-}
-
-function getHighlighter(
-  language: BundledLanguage,
-): Promise<HighlighterGeneric<BundledLanguage, BundledTheme>> {
-  const cached = highlighterCache.get(language);
-  if (cached) {
-    return cached;
-  }
-
-  const highlighterPromise = createHighlighter({
-    langs: [language],
-    themes: [SHIKI_THEME_LIGHT, SHIKI_THEME_DARK],
-  });
-  highlighterCache.set(language, highlighterPromise);
-  return highlighterPromise;
-}
-
-function createRawTokens(code: string): TokenizedCode {
-  return {
-    bg: "transparent",
-    fg: "inherit",
-    tokens: code.split("\n").map((line) =>
-      line === ""
-        ? []
-        : [
-            {
-              color: "inherit",
-              content: line,
-            } as ThemedToken,
-          ],
-    ),
-  };
-}
-
-function addKeysToTokens(lines: ThemedToken[][]): KeyedLine[] {
-  return lines.map((line, lineIndex) => ({
-    key: `line-${lineIndex}`,
-    tokens: line.map((token, tokenIndex) => ({
-      key: `line-${lineIndex}-${tokenIndex}`,
-      token,
-    })),
-  }));
-}
-
-function isItalic(fontStyle: number | undefined): boolean {
-  return ITALIC_STYLES.has(fontStyle ?? 0);
-}
-
-function isBold(fontStyle: number | undefined): boolean {
-  return BOLD_STYLES.has(fontStyle ?? 0);
-}
-
-function isUnderline(fontStyle: number | undefined): boolean {
-  return UNDERLINE_STYLES.has(fontStyle ?? 0);
-}
-
-export function highlightCode(
-  code: string,
-  language: BundledLanguage,
-  callback?: (result: TokenizedCode) => void,
-): TokenizedCode | null {
-  const tokensCacheKey = getTokensCacheKey(code, language);
-  const cached = readTokensFromCache(tokensCacheKey);
-  if (cached) {
-    return cached;
-  }
-
-  // Synchronous path: if the highlighter is already loaded, highlight immediately
-  const resolved = resolvedHighlighters.get(language);
-  if (resolved) {
-    const tokenResult = resolved.codeToTokens(code, {
-      lang: language,
-      themes: {
-        light: SHIKI_THEME_LIGHT,
-        dark: SHIKI_THEME_DARK,
-      },
-    });
-
-    const tokenized: TokenizedCode = {
-      bg: tokenResult.bg ?? "transparent",
-      fg: tokenResult.fg ?? "inherit",
-      tokens: tokenResult.tokens,
-    };
-
-    writeTokensToCache(tokensCacheKey, tokenized);
-    return tokenized;
-  }
-
-  // Async path: first time loading this language's highlighter
-  if (callback) {
-    if (!subscribers.has(tokensCacheKey)) {
-      subscribers.set(tokensCacheKey, new Set());
-    }
-    subscribers.get(tokensCacheKey)?.add(callback);
-  }
-
-  void getHighlighter(language)
-    .then((highlighter) => {
-      resolvedHighlighters.set(language, highlighter);
-
-      const tokenResult = highlighter.codeToTokens(code, {
-        lang: language,
-        themes: {
-          light: SHIKI_THEME_LIGHT,
-          dark: SHIKI_THEME_DARK,
-        },
-      });
-
-      const tokenized: TokenizedCode = {
-        bg: tokenResult.bg ?? "transparent",
-        fg: tokenResult.fg ?? "inherit",
-        tokens: tokenResult.tokens,
-      };
-
-      writeTokensToCache(tokensCacheKey, tokenized);
-      const subs = subscribers.get(tokensCacheKey);
-      if (subs) {
-        for (const sub of subs) {
-          sub(tokenized);
-        }
-        subscribers.delete(tokensCacheKey);
-      }
-    })
-    .catch((e) => {
-      const fallback = createRawTokens(code);
-      writeTokensToCache(tokensCacheKey, fallback);
-      const subs = subscribers.get(tokensCacheKey);
-      if (subs) {
-        for (const sub of subs) {
-          sub(fallback);
-        }
-        subscribers.delete(tokensCacheKey);
-      }
-    });
-
-  return null;
-}
-
 const LINE_NUMBER_CLASSES = cn(
   "block",
   "before:mr-4",
@@ -302,87 +86,34 @@ const LINE_NUMBER_CLASSES = cn(
   "before:[counter-increment:line]",
 );
 
-function TokenSpan({ token }: { token: ThemedToken }) {
-  return (
-    <span
-      className="dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
-      style={
-        {
-          backgroundColor: token.bgColor,
-          color: token.color,
-          fontStyle: isItalic(token.fontStyle) ? "italic" : undefined,
-          fontWeight: isBold(token.fontStyle) ? "bold" : undefined,
-          textDecoration: isUnderline(token.fontStyle) ? "underline" : undefined,
-          ...token.htmlStyle,
-        } as CSSProperties
-      }
-    >
-      {token.content}
-    </span>
-  );
-}
-
-function LineSpan({
-  keyedLine,
-  showLineNumbers,
-}: {
-  keyedLine: KeyedLine;
-  showLineNumbers: boolean;
-}) {
-  return (
-    <span className={showLineNumbers ? LINE_NUMBER_CLASSES : "block"}>
-      {keyedLine.tokens.length === 0
-        ? "\n"
-        : keyedLine.tokens.map(({ key, token }) => <TokenSpan key={key} token={token} />)}
-    </span>
-  );
-}
-
 const CodeBlockBody = React.memo(
   ({
-    className,
+    lines,
     showLineNumbers,
-    tokenized,
     wrapLines,
   }: {
-    className?: string;
+    lines: string[];
     showLineNumbers: boolean;
-    tokenized: TokenizedCode;
     wrapLines: boolean;
-  }) => {
-    const preStyle = React.useMemo(
-      () => ({
-        backgroundColor: tokenized.bg,
-        color: tokenized.fg,
-      }),
-      [tokenized.bg, tokenized.fg],
-    );
-
-    const keyedLines = React.useMemo(() => addKeysToTokens(tokenized.tokens), [tokenized.tokens]);
-
-    return (
-      <pre
-        className={cn("m-0 p-3 text-sm", wrapLines ? "whitespace-pre-wrap" : "whitespace-pre", className)}
-        style={preStyle}
+  }) => (
+    <pre className={cn("m-0 p-3 text-sm", wrapLines ? "whitespace-pre-wrap" : "whitespace-pre")}>
+      <code
+        className={cn(
+          "font-mono leading-relaxed",
+          showLineNumbers && "[counter-increment:line_0] [counter-reset:line]",
+        )}
       >
-        <code
-          className={cn(
-            "font-mono leading-relaxed",
-            showLineNumbers && "[counter-increment:line_0] [counter-reset:line]",
-          )}
-        >
-          {keyedLines.map((keyedLine) => (
-            <LineSpan key={keyedLine.key} keyedLine={keyedLine} showLineNumbers={showLineNumbers} />
-          ))}
-        </code>
-      </pre>
-    );
-  },
-  (prevProps, nextProps) =>
-    prevProps.className === nextProps.className &&
-    prevProps.showLineNumbers === nextProps.showLineNumbers &&
-    prevProps.wrapLines === nextProps.wrapLines &&
-    prevProps.tokenized === nextProps.tokenized,
+        {lines.map((line, index) => (
+          <span
+            // 行内容只来自 highlight.js 的输出或转义后的原文
+            dangerouslySetInnerHTML={{ __html: line || "\n" }}
+            className={showLineNumbers ? LINE_NUMBER_CLASSES : "block"}
+            key={`line-${index}`}
+          />
+        ))}
+      </code>
+    </pre>
+  ),
 );
 
 CodeBlockBody.displayName = "CodeBlockBody";
@@ -429,59 +160,23 @@ export function CodeBlockContent({
   wrapLines = false,
 }: {
   code: string;
-  language: BundledLanguage | null;
+  language: string | null;
   showLineNumbers?: boolean;
   wrapLines?: boolean;
 }) {
-  const rawTokens = React.useMemo(() => createRawTokens(code), [code]);
-  const shouldHighlight = Boolean(language) && code.length <= MAX_SHIKI_CODE_LENGTH;
-
-  const [tokenized, setTokenized] = React.useState<TokenizedCode>(() => {
-    if (!shouldHighlight || !language) {
-      return rawTokens;
-    }
-
-    return highlightCode(code, language) ?? rawTokens;
-  });
-
-  React.useEffect(() => {
-    if (!shouldHighlight || !language) {
-      setTokenized(rawTokens);
-      return;
-    }
-
-    let cancelled = false;
-    const tokensCacheKey = getTokensCacheKey(code, language);
-    const onHighlighted = (result: TokenizedCode) => {
-      if (!cancelled) {
-        setTokenized(result);
-      }
-    };
-
-    const nextTokenized = highlightCode(code, language, onHighlighted);
-    if (nextTokenized) {
-      setTokenized(nextTokenized);
-    }
-    // If null (async loading), keep previous tokenized state to avoid flash
-
-    return () => {
-      cancelled = true;
-      const subs = subscribers.get(tokensCacheKey);
-      subs?.delete(onHighlighted);
-      if (subs && subs.size === 0) {
-        subscribers.delete(tokensCacheKey);
-      }
-    };
-  }, [code, language, rawTokens, shouldHighlight]);
+  const lines = React.useMemo(
+    () => highlightToLines(code, code.length <= MAX_HIGHLIGHT_CODE_LENGTH ? language : null),
+    [code, language],
+  );
 
   return (
-    <div className={cn("code-block-content relative", wrapLines ? "overflow-y-auto overflow-x-hidden" : "overflow-auto")}>
-      <CodeBlockBody
-        className="dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
-        showLineNumbers={showLineNumbers}
-        tokenized={tokenized}
-        wrapLines={wrapLines}
-      />
+    <div
+      className={cn(
+        "code-block-content relative",
+        wrapLines ? "overflow-y-auto overflow-x-hidden" : "overflow-auto",
+      )}
+    >
+      <CodeBlockBody lines={lines} showLineNumbers={showLineNumbers} wrapLines={wrapLines} />
     </div>
   );
 }
@@ -692,7 +387,7 @@ export function CodeBlock({
   const displayLanguage = language || "text";
   const previewLanguage = React.useMemo(() => getCodePreviewLanguage(language), [language]);
   const canPreview = Boolean(onPreview && previewLanguage);
-  const shikiLanguage = React.useMemo(() => resolveShikiLanguage(language), [language]);
+  const highlightLanguage = React.useMemo(() => resolveHighlightLanguage(language), [language]);
   const contextValue = React.useMemo(
     () => ({ code, language: displayLanguage }),
     [code, displayLanguage],
@@ -711,7 +406,12 @@ export function CodeBlock({
             <CodeBlockCopyButton />
           </CodeBlockActions>
         </CodeBlockHeader>
-        <CodeBlockContent code={code} language={shikiLanguage} showLineNumbers={showLineNumbers} wrapLines={wrapLines} />
+        <CodeBlockContent
+          code={code}
+          language={highlightLanguage}
+          showLineNumbers={showLineNumbers}
+          wrapLines={wrapLines}
+        />
       </CodeBlockContainer>
     </CodeBlockContext.Provider>
   );

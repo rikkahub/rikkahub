@@ -145,6 +145,118 @@
   @apply bg-transparent p-0 font-mono leading-relaxed;
 }
 
+/* Syntax highlighting (highlight.js), Atom One palettes shared with the app (ui/theme/CodeColor.kt) */
+.code-block-content {
+  --code-fg: #383a42;
+  --code-keyword: #a626a4;
+  --code-string: #50a14f;
+  --code-number: #c18401;
+  --code-comment: #9ca0a4;
+  --code-function: #4078f2;
+  --code-operator: #0184bc;
+  --code-class: #c18401;
+  --code-property: #e45649;
+  --code-attr-name: #c18401;
+  --code-attr-value: #50a14f;
+}
+
+.dark .code-block-content {
+  --code-fg: #abb2bf;
+  --code-keyword: #c678dd;
+  --code-string: #98c379;
+  --code-number: #d19a66;
+  --code-comment: #5c6370;
+  --code-function: #61afef;
+  --code-operator: #56b6c2;
+  --code-class: #e5c07b;
+  --code-property: #e06c75;
+  --code-attr-name: #d19a66;
+  --code-attr-value: #98c379;
+}
+
+.code-block-content pre {
+  color: var(--code-fg);
+}
+
+.code-block-content .hljs-comment,
+.code-block-content .hljs-quote {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.code-block-content .hljs-keyword,
+.code-block-content .hljs-doctag,
+.code-block-content .hljs-formula {
+  color: var(--code-keyword);
+}
+
+.code-block-content .hljs-string,
+.code-block-content .hljs-regexp,
+.code-block-content .hljs-addition {
+  color: var(--code-string);
+}
+
+.code-block-content .hljs-attribute {
+  color: var(--code-attr-value);
+}
+
+.code-block-content .hljs-attr,
+.code-block-content .hljs-template-variable {
+  color: var(--code-attr-name);
+}
+
+.code-block-content .hljs-number,
+.code-block-content .hljs-type,
+.code-block-content .hljs-selector-class,
+.code-block-content .hljs-selector-attr,
+.code-block-content .hljs-selector-pseudo {
+  color: var(--code-number);
+}
+
+.code-block-content .hljs-literal,
+.code-block-content .hljs-char,
+.code-block-content .hljs-operator {
+  color: var(--code-operator);
+}
+
+.code-block-content .hljs-built_in {
+  color: var(--code-class);
+}
+
+.code-block-content .hljs-title,
+.code-block-content .hljs-function,
+.code-block-content .hljs-symbol,
+.code-block-content .hljs-bullet,
+.code-block-content .hljs-link,
+.code-block-content .hljs-meta,
+.code-block-content .hljs-selector-id {
+  color: var(--code-function);
+}
+
+.code-block-content .hljs-section,
+.code-block-content .hljs-name,
+.code-block-content .hljs-selector-tag,
+.code-block-content .hljs-deletion,
+.code-block-content .hljs-subst,
+.code-block-content .hljs-property,
+.code-block-content .hljs-tag,
+.code-block-content .hljs-variable {
+  color: var(--code-property);
+}
+
+.code-block-content .hljs-punctuation,
+.code-block-content .hljs-params {
+  color: var(--code-fg);
+}
+
+.code-block-content .hljs-emphasis {
+  font-style: italic;
+}
+
+.code-block-content .hljs-strong {
+  font-weight: bold;
+}
+
 /* Legacy Code - Block (fallback) */
 .markdown pre {
   @apply my-4 rounded-lg border border-border p-4 overflow-x-auto;
