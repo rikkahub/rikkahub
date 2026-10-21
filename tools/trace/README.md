@@ -1,4 +1,4 @@
-# trace-cli
+# trace
 
 使用真实 Provider 的 SSE 响应生成 `ai` 模块可回放的 `events.jsonl`。CLI 只记录 SSE 分帧后的
 `id`、`event`、`data` 和 `retryMillis`，不会记录请求头或 API Key。
@@ -14,7 +14,7 @@
 ## 安装
 
 ```bash
-cd trace-cli
+cd tools/trace
 bun install
 cp .env.example .env
 ```
@@ -67,7 +67,7 @@ CLI 先写入临时文件，请求和 SSE 解析全部成功后再原子替换�
 ```yaml
 version: 1
 defaults:
-  outputRoot: ../ai/src/test/resources/stream-traces/generated
+  outputRoot: ../../ai/src/test/resources/stream-traces/generated
   timeoutMs: 120000
   headers: {}
 
@@ -84,7 +84,7 @@ traces:
     # endpoint 可省略，也可以是相对 baseUrl 的路径或完整 URL。
     endpoint: /responses
     # output 可省略；默认写入 outputRoot/provider/name/events.jsonl。
-    output: ../ai/src/test/resources/stream-traces/openai-responses/responses-tool/events.jsonl
+    output: ../../ai/src/test/resources/stream-traces/openai-responses/responses-tool/events.jsonl
     headers: {}
     timeoutMs: 120000
     body:

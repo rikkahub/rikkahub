@@ -59,7 +59,7 @@ async function run(options: CliOptions): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const cli = cac("trace-cli");
+  const cli = cac("trace");
 
   cli
     .command("<config>", "Record provider SSE responses as JSONL traces")

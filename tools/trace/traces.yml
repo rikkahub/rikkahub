@@ -2,7 +2,7 @@ version: 1
 
 defaults:
   # 相对于本 YAML 文件解析。
-  outputRoot: ../ai/src/test/resources/stream-traces/generated
+  outputRoot: ../../ai/src/test/resources/stream-traces/generated
   timeoutMs: 120000
 
 traces:

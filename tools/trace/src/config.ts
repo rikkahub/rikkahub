@@ -57,7 +57,7 @@ export function resolveTraceCases(
   const configDir = dirname(configPath);
   const outputRoot = resolve(
     configDir,
-    config.defaults.outputRoot ?? "../ai/src/test/resources/stream-traces/generated",
+    config.defaults.outputRoot ?? "../../ai/src/test/resources/stream-traces/generated",
   );
   const selected = selectedName
     ? config.traces.filter((trace) => trace.name === selectedName)
