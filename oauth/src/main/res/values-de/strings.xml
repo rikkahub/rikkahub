@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="oauth_callback_invalid_message">Dem Autorisierungs-Callback fehlen Informationen oder er ist abgelaufen.</string>
+  <string name="oauth_callback_invalid_hint">Kehre zu RikkaHub zurück und starte die Autorisierung erneut.</string>
+  <string name="oauth_callback_handled_title">Autorisierung bereits verarbeitet</string>
+  <string name="oauth_callback_handled_message">Dieser Autorisierungs-Callback wurde bereits verarbeitet.</string>
+  <string name="oauth_callback_handled_hint">Du kannst diesen Tab bedenkenlos schließen und zu RikkaHub zurückkehren.</string>
+  <string name="oauth_notification_channel_name">OAuth-Autorisierung</string>
+  <string name="oauth_notification_title">OAuth-Autorisierung läuft</string>
+  <string name="oauth_notification_text">Warte auf den Autorisierungs-Callback des Browsers…</string>
+  <string name="oauth_callback_success_title">Autorisierung abgeschlossen</string>
+  <string name="oauth_callback_success_message">Das Konto wurde erfolgreich verbunden.</string>
+  <string name="oauth_callback_success_hint">Du kannst diesen Tab schließen und zu RikkaHub zurückkehren.</string>
+  <string name="oauth_callback_error_title">Autorisierung fehlgeschlagen</string>
+  <string name="oauth_callback_error_message">Der Autorisierungsanbieter hat diese Anfrage nicht genehmigt.</string>
+  <string name="oauth_callback_error_hint">Schließe diesen Tab und versuche es erneut von RikkaHub aus.</string>
+  <string name="oauth_callback_invalid_title">Ungültiger Autorisierungs-Callback</string>
+</resources>

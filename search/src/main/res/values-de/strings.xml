@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="bing_desc">Beachte, dass die Bing-Suche crawlerbasiert ist, was instabil sein kann und nicht empfohlen wird.</string>
+  <string name="click_to_get_api_key">Klicken, um API Key zu erhalten</string>
+  <string name="searxng_desc_1">settings.yml muss die Unterstützung des JSON-Formats aktivieren:</string>
+  <string name="searxng_desc_2">search:\n  formats:\n    - html\n    - json</string>
+  <string name="custom_js_desc">Benutzerdefinierter Suchanbieter auf Basis von QuickJS. Implementiere die Funktionen search(query, resultSize) und optional scrape(urls). Verwende fetch(url, options?) für HTTP-Anfragen.</string>
+</resources>

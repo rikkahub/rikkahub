@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<resources>
+  <string name="chart_mode_chart">Diagramm</string>
+  <string name="chart_mode_table">Tabelle</string>
+  <string name="chart_series">Reihe</string>
+  <string name="chart_series_name">Reihe %1$d</string>
+  <string name="sketch_dialog_undo">Rückgängig</string>
+  <string name="sketch_dialog_redo">Wiederholen</string>
+  <string name="sketch_dialog_clear">Leeren</string>
+  <string name="sketch_dialog_eraser">Radierer</string>
+  <string name="sketch_dialog_discard_title">Skizze verwerfen?</string>
+  <string name="sketch_dialog_discard_message">Deine Zeichnung geht verloren.</string>
+  <string name="sketch_dialog_custom_color">Eigene Farbe</string>
+  <string name="sketch_dialog_paper">Leinwand</string>
+  <string name="sketch_dialog_paper_auto">An Bildschirm anpassen</string>
+  <string name="sketch_dialog_choose_image">Bild auswählen</string>
+  <string name="sketch_dialog_remove_image">Bild entfernen</string>
+  <string name="sketch_dialog_image_load_failed">Bild konnte nicht geladen werden</string>
+  <string name="sketch_dialog_brush_pen">Stift</string>
+  <string name="sketch_dialog_brush_marker">Marker</string>
+  <string name="sketch_dialog_brush_highlighter">Textmarker</string>
+  <string name="sketch_dialog_brush_dashed">Gestrichelte Linie</string>
+  <string name="sketch_dialog_brush_calligraphy">Kalligrafiepinsel</string>
+  <string name="sketch_dialog_brush_flat">Flacher Stift</string>
+  <string name="sketch_dialog_text">Text</string>
+  <string name="sketch_dialog_select">Auswählen</string>
+</resources>
