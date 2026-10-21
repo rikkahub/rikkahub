@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.Instant
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -92,29 +93,32 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
         ) {
             item {
                 CardGroup {
-                    item(
-                        onClick = {
-                            selectedUpdatePauseDays = UPDATE_PAUSE_DAY_OPTIONS.first()
-                            showUpdatePauseDialog = true
-                        },
-                        headlineContent = { Text(stringResource(R.string.setting_display_page_show_updates_title)) },
-                        supportingContent = {
-                            Text(
-                                if (updateChecksEnabled) {
-                                    stringResource(R.string.setting_update_reminder_enabled)
-                                } else {
-                                    stringResource(
-                                        R.string.setting_update_reminder_paused_until,
-                                        Instant.ofEpochMilli(displaySetting.updateCheckDisabledUntilEpochMillis)
-                                            .toLocalDateTime(),
-                                    )
-                                }
-                            )
-                        },
-                        trailingContent = {
-                            Icon(HugeIcons.ArrowRight01, contentDescription = null)
-                        },
-                    )
+                    // Play 版由商店负责更新，不提供更新提醒
+                    if (!BuildConfig.IS_PLAY_STORE) {
+                        item(
+                            onClick = {
+                                selectedUpdatePauseDays = UPDATE_PAUSE_DAY_OPTIONS.first()
+                                showUpdatePauseDialog = true
+                            },
+                            headlineContent = { Text(stringResource(R.string.setting_display_page_show_updates_title)) },
+                            supportingContent = {
+                                Text(
+                                    if (updateChecksEnabled) {
+                                        stringResource(R.string.setting_update_reminder_enabled)
+                                    } else {
+                                        stringResource(
+                                            R.string.setting_update_reminder_paused_until,
+                                            Instant.ofEpochMilli(displaySetting.updateCheckDisabledUntilEpochMillis)
+                                                .toLocalDateTime(),
+                                        )
+                                    }
+                                )
+                            },
+                            trailingContent = {
+                                Icon(HugeIcons.ArrowRight01, contentDescription = null)
+                            },
+                        )
+                    }
                     switchItem(
                         checked = displaySetting.enableNotificationOnMessageGeneration,
                         onCheckedChange = {
