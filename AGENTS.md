@@ -101,4 +101,4 @@ Material 3 look (cards with dividers, plain forms).
 - Page-specific strings should use page prefix (e.g., `setting_page_`)
 - If the user does not explicitly request localization, prioritize implementing functionality without considering
   localization. (e.g `Text("Hello world")`)
-- For `locale-tui` operations, use the `locale-tui-localization` skill.
+- Add, translate or clean up strings with the `tools/i18n` CLI (Bun); see the `i18n-localization` skill.

@@ -1,50 +1,25 @@
-# locale-tui 配置文件
+# i18n 配置文件
 
-# 项目根路径 (相对于 locale-tui 目录)
-project_root: ".."
+# 项目根路径 (相对于 tools/i18n 目录)
+project_root: "../.."
 
-# 模块配置
+# 模块配置：每个模块的资源目录
 modules:
   - name: "app"
     res_path: "app/src/main/res"
-    source_patterns:
-      - "app/src/main/java/**/*.kt"
-      - "app/src/main/java/**/*.java"
-      - "app/src/main/AndroidManifest.xml"
-      - "app/src/main/res/xml/*.xml"
-  - name: "ai"
-    res_path: "ai/src/main/res"
-    source_patterns:
-      - "ai/src/main/java/**/*.kt"
-      - "ai/src/main/java/**/*.java"
-  - name: "highlight"
-    res_path: "highlight/src/main/res"
-    source_patterns:
-      - "highlight/src/main/java/**/*.kt"
-      - "highlight/src/main/java/**/*.java"
-      - "highlight/src/main/AndroidManifest.xml"
   - name: "search"
     res_path: "search/src/main/res"
-    source_patterns:
-      - "search/src/main/java/**/*.kt"
-      - "search/src/main/java/**/*.java"
-      - "search/src/main/AndroidManifest.xml"
   - name: "oauth"
     res_path: "oauth/src/main/res"
-    source_patterns:
-      - "oauth/src/main/java/**/*.kt"
-      - "oauth/src/main/AndroidManifest.xml"
   - name: "ui"
     res_path: "ui/src/main/res"
-    source_patterns:
-      - "ui/src/main/java/**/*.kt"
-      - "ui/src/main/AndroidManifest.xml"
-  - name: "rag"
-    res_path: "rag/src/main/res"
-    source_patterns:
-      - "rag/src/main/java/**/*.kt"
-      - "rag/src/main/java/**/*.java"
-      - "rag/src/main/AndroidManifest.xml"
+
+# 扫描这些文件中的 R.string.xxx / @string/xxx 引用，用于检测未使用的条目
+source_patterns:
+  - "*/src/main/**/*.kt"
+  - "*/src/main/**/*.java"
+  - "*/src/main/AndroidManifest.xml"
+  - "*/src/main/res/xml/*.xml"
 
 # 支持的语言列表
 languages:
@@ -105,7 +80,10 @@ languages:
 # AI 翻译配置
 translation:
   batch_size: 10
-  model: "deepseek-v4-flash"
+  temperature: 1.0
+  # 服务端支持 json_schema 时开启，否则使用 json_object 模式
+  structured_outputs: false
+  model: "deepseek-flash"
   prompt_template: |
     You are a professional translator specializing in mobile app localization.
 
@@ -126,10 +104,3 @@ translation:
 
     Respond with a JSON object mapping the same keys to translated values.
     Only output the JSON, no other text.
-
-# 显示设置
-display:
-  column_widths:
-    key: 30
-    translation: 25
-  page_size: 50
