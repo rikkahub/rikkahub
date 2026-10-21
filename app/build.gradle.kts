@@ -120,6 +120,10 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
+        resources {
+            // BouncyCastle 的 Picnic 后量子签名查找表（约 1.2MB），JSch 用不到
+            excludes += "org/bouncycastle/pqc/crypto/picnic/**"
+        }
     }
     tasks.withType<KotlinCompile>().configureEach {
         compilerOptions.optIn.add("androidx.compose.material3.ExperimentalMaterial3Api")
