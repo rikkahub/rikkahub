@@ -2,15 +2,31 @@
 /** Android strings.xml 翻译管理 CLI */
 import { defineCommand, runMain } from "citty";
 import { relative } from "node:path";
-import { loadConfig, stringsPath, type Config, type LanguageConfig, type ModuleConfig } from "./config";
+import {
+  loadConfig,
+  stringsPath,
+  type Config,
+  type LanguageConfig,
+  type ModuleConfig,
+} from "./config";
 import { findReferencedKeys, RESERVED_KEYS } from "./references";
 import { StringsFile } from "./strings-xml";
 import { createLimiter, errorMessage, Translator } from "./translator";
 import { textToXml, validateXml } from "./validation";
 
 // citty 不支持重复选项，多个值用逗号分隔
-const moduleArg = { type: "string", alias: "m", valueHint: "name", description: "模块名（默认第一个模块）" } as const;
-const modulesArg = { type: "string", alias: "m", valueHint: "a,b", description: "模块名，逗号分隔（默认全部）" } as const;
+const moduleArg = {
+  type: "string",
+  alias: "m",
+  valueHint: "name",
+  description: "模块名（默认第一个模块）",
+} as const;
+const modulesArg = {
+  type: "string",
+  alias: "m",
+  valueHint: "a,b",
+  description: "模块名，逗号分隔（默认全部）",
+} as const;
 const langsArg = {
   type: "string",
   alias: "l",
@@ -19,7 +35,13 @@ const langsArg = {
 } as const;
 const rawArg = { type: "boolean", description: "按原始 XML 写入，不转义 & < > 和引号" } as const;
 const translateArgs = {
-  concurrency: { type: "string", alias: "c", default: "8", valueHint: "n", description: "并发请求数" },
+  concurrency: {
+    type: "string",
+    alias: "c",
+    default: "8",
+    valueHint: "n",
+    description: "并发请求数",
+  },
   retries: { type: "string", default: "3", valueHint: "n", description: "每批最大尝试次数" },
 } as const;
 const batchArgs = {
@@ -62,7 +84,10 @@ const add = defineCommand({
     const results = await Promise.all(
       config.targets.map(async (lang) => ({
         lang,
-        result: await translator.translateEntries(new Map([[args.key, xml]]), lang, { limit, retries }),
+        result: await translator.translateEntries(new Map([[args.key, xml]]), lang, {
+          limit,
+          retries,
+        }),
       })),
     );
 
@@ -98,7 +123,10 @@ const set = defineCommand({
     const lang = pickLanguage(config, args.lang ?? config.source.code);
     const xml = toXml(args.value, args.raw);
 
-    if (lang !== config.source && !StringsFile.load(stringsPath(config, module, config.source.code)).has(args.key)) {
+    if (
+      lang !== config.source &&
+      !StringsFile.load(stringsPath(config, module, config.source.code)).has(args.key)
+    ) {
       log(`注意：源语言中没有 ${args.key}`);
     }
     const file = StringsFile.load(stringsPath(config, module, lang.code));
@@ -182,11 +210,18 @@ const translateMissing = defineCommand({
 });
 
 const retranslate = defineCommand({
-  meta: { name: "retranslate", description: "重新翻译已有条目（例如更新术语表后），只覆盖已存在的译文" },
+  meta: {
+    name: "retranslate",
+    description: "重新翻译已有条目（例如更新术语表后），只覆盖已存在的译文",
+  },
   args: {
     ...batchArgs,
     match: { type: "string", valueHint: "regex", description: "按英文原文选择条目（忽略大小写）" },
-    key: { type: "string", valueHint: "a,b", description: "按 key 选择条目，逗号分隔，与 --match 取并集" },
+    key: {
+      type: "string",
+      valueHint: "a,b",
+      description: "按 key 选择条目，逗号分隔，与 --match 取并集",
+    },
   },
   run({ args }) {
     const regex = compileRegex(args.match);
@@ -214,7 +249,9 @@ const unused = defineCommand({
     for (const module of pickModules(config, splitList(args.module))) {
       const source = StringsFile.load(stringsPath(config, module, config.source.code));
       if (!source.exists) continue;
-      const targets = config.targets.map((lang) => StringsFile.load(stringsPath(config, module, lang.code)));
+      const targets = config.targets.map((lang) =>
+        StringsFile.load(stringsPath(config, module, lang.code)),
+      );
 
       const unusedKeys = [...source.entries().keys()].filter(
         (key) => !referenced.has(key) && !RESERVED_KEYS.has(key),
@@ -244,7 +281,8 @@ const unused = defineCommand({
 
     if (total === 0) log("没有发现未使用的条目");
     else if (args.delete) log(`✓ 已删除 ${total} 条`);
-    else log(`\n共 ${total} 条，加 --delete 删除（动态拼接 key 引用的条目也会被列出，删除前请确认）`);
+    else
+      log(`\n共 ${total} 条，加 --delete 删除（动态拼接 key 引用的条目也会被列出，删除前请确认）`);
   },
 });
 
@@ -265,7 +303,13 @@ const testConnection = defineCommand({
 
 async function runBatch(
   config: Config,
-  args: { module?: string; lang?: string; concurrency: string; retries: string; "dry-run"?: boolean },
+  args: {
+    module?: string;
+    lang?: string;
+    concurrency: string;
+    retries: string;
+    "dry-run"?: boolean;
+  },
   action: string,
   select: (source: Map<string, string>, target: StringsFile) => Map<string, string>,
 ) {
@@ -274,7 +318,12 @@ async function runBatch(
   const concurrency = intOption(args.concurrency, "concurrency");
   const retries = intOption(args.retries, "retries");
 
-  const jobs: { label: string; lang: LanguageConfig; target: StringsFile; selected: Map<string, string> }[] = [];
+  const jobs: {
+    label: string;
+    lang: LanguageConfig;
+    target: StringsFile;
+    selected: Map<string, string>;
+  }[] = [];
   for (const module of modules) {
     const source = StringsFile.load(stringsPath(config, module, config.source.code));
     if (!source.exists) continue;
@@ -315,7 +364,9 @@ async function runBatch(
   );
 
   if (failures.length > 0) {
-    console.error(`\n${failures.length} 条翻译失败（未写入，可重新运行）：\n${failures.join("\n")}`);
+    console.error(
+      `\n${failures.length} 条翻译失败（未写入，可重新运行）：\n${failures.join("\n")}`,
+    );
     process.exit(1);
   }
   log("完成！");
@@ -350,7 +401,9 @@ function pickModules(config: Config, names: string[]): ModuleConfig[] {
   if (names.length === 0) return config.modules;
   const unknown = names.filter((n) => !config.modules.some((m) => m.name === n));
   if (unknown.length > 0) {
-    fail(`未找到模块 ${unknown.join(", ")}，可用模块：${config.modules.map((m) => m.name).join(", ")}`);
+    fail(
+      `未找到模块 ${unknown.join(", ")}，可用模块：${config.modules.map((m) => m.name).join(", ")}`,
+    );
   }
   return config.modules.filter((m) => names.includes(m.name));
 }

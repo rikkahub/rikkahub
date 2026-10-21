@@ -10,7 +10,12 @@ import {
 
 describe("validateTranslation", () => {
   test("extracts placeholders", () => {
-    expect(extractPlaceholders("%1$s has %2$d items, %.1f%%")).toEqual(["%%", "%.1f", "%1$s", "%2$d"]);
+    expect(extractPlaceholders("%1$s has %2$d items, %.1f%%")).toEqual([
+      "%%",
+      "%.1f",
+      "%1$s",
+      "%2$d",
+    ]);
     expect(extractPlaceholders("no placeholders")).toEqual([]);
   });
 
@@ -47,7 +52,9 @@ describe("escaping", () => {
   });
 
   test("leaves quotes inside tags alone", () => {
-    expect(escapeAndroidQuotes('<xliff:g id="n">%s</xliff:g>\'s')).toBe('<xliff:g id="n">%s</xliff:g>\\\'s');
+    expect(escapeAndroidQuotes('<xliff:g id="n">%s</xliff:g>\'s')).toBe(
+      '<xliff:g id="n">%s</xliff:g>\\\'s',
+    );
   });
 
   test("normalizes bare ampersands but keeps entities", () => {
@@ -61,7 +68,15 @@ describe("escaping", () => {
 
 describe("validateXml", () => {
   test("accepts well-formed fragments", () => {
-    for (const value of ["A &amp; B", "a &lt; b", "&#169; &#xA9; &gt;", "<b>x</b>", '<xliff:g id="n">%s</xliff:g>', "x > y", ""]) {
+    for (const value of [
+      "A &amp; B",
+      "a &lt; b",
+      "&#169; &#xA9; &gt;",
+      "<b>x</b>",
+      '<xliff:g id="n">%s</xliff:g>',
+      "x > y",
+      "",
+    ]) {
       expect(validateXml(value)).toBeNull();
     }
   });

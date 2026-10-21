@@ -54,4 +54,5 @@ bun run i18n test-connection
 bun test                                        # 离线单元测试
 I18N_LIVE=1 bun test test/translator.live.test.ts  # 调用真实 API
 bun run typecheck
+bun run fmt                                     # oxfmt 格式化（fmt:check 只检查）
 ```

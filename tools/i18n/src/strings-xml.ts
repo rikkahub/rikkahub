@@ -108,9 +108,7 @@ export class StringsFile {
 
   serialize(): string {
     return this.segments
-      .map((s) =>
-        typeof s === "string" ? s : (s.raw ?? `<string${s.attrs}>${s.value}</string>`),
-      )
+      .map((s) => (typeof s === "string" ? s : (s.raw ?? `<string${s.attrs}>${s.value}</string>`)))
       .join("");
   }
 

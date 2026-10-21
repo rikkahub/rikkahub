@@ -16,7 +16,10 @@ const ConfigSchema = z.object({
         name: z.string(),
         is_source: z.boolean().default(false),
         // 术语表：英文术语 -> 目标语言译法，翻译时注入 prompt
-        glossary: z.record(z.string(), z.string()).nullish().transform((g) => g ?? {}),
+        glossary: z
+          .record(z.string(), z.string())
+          .nullish()
+          .transform((g) => g ?? {}),
       }),
     )
     .min(1),

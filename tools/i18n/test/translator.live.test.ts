@@ -15,7 +15,10 @@ describe.skipIf(!process.env.I18N_LIVE)("live translation", () => {
     translator.translateBatch(new Map(Object.entries(entries)), chinese);
 
   test("prompt is translated as 提示词", async () => {
-    const result = await translate({ system_prompt: "System Prompt", prompt_template: "Prompt Template" });
+    const result = await translate({
+      system_prompt: "System Prompt",
+      prompt_template: "Prompt Template",
+    });
     expect(result.system_prompt).toContain("提示词");
     expect(result.prompt_template).toContain("提示词");
   }, 60_000);
@@ -32,7 +35,11 @@ describe.skipIf(!process.env.I18N_LIVE)("live translation", () => {
   }, 60_000);
 
   test("response keys match the input", async () => {
-    const entries = { setting_title: "Settings", cancel_button: "Cancel", confirm_button: "Confirm" };
+    const entries = {
+      setting_title: "Settings",
+      cancel_button: "Cancel",
+      confirm_button: "Confirm",
+    };
     const result = await translate(entries);
     expect(Object.keys(result).sort()).toEqual(Object.keys(entries).sort());
   }, 60_000);

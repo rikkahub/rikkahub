@@ -1,14 +1,16 @@
 {
   "name": "i18n",
   "private": true,
-  "type": "module",
   "bin": {
     "i18n": "src/cli.ts"
   },
+  "type": "module",
   "scripts": {
     "i18n": "bun src/cli.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.75",
@@ -20,6 +22,7 @@
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",
+    "oxfmt": "^0.74.0",
     "typescript": "^7.0.2"
   }
 }
