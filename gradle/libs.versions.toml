@@ -45,9 +45,6 @@ reorderable = "3.1.0"
 mcp = "0.15.0-rikka.4"
 pebble = "4.1.1"
 browser = "1.10.0"
-appcompat = "1.8.0"
-material = "1.14.0"
-ucrop = "2.2.11-native"
 floatingx = "3.0.0"
 haze = "2.0.1"
 uiautomator = "2.4.0"
@@ -152,9 +149,6 @@ pebble = { module = "io.pebbletemplates:pebble", version.ref = "pebble" }
 diffutils = { module = "io.github.java-diff-utils:java-diff-utils", version.ref = "diffutils" }
 snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
-androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
-material = { group = "com.google.android.material", name = "material", version.ref = "material" }
-ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }
 floatingx-app = { group = "io.github.petterpx", name = "floatingx-app", version.ref = "floatingx" }
 floatingx-compose = { group = "io.github.petterpx", name = "floatingx-compose", version.ref = "floatingx" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }

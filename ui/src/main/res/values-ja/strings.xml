@@ -24,4 +24,10 @@
   <string name="chart_mode_table">表</string>
   <string name="chart_series">系列</string>
   <string name="chart_series_name">系列 %1$d</string>
+  <string name="image_crop_rotate">回転</string>
+  <string name="image_crop_reset">リセット</string>
+  <string name="image_crop_free">自由</string>
+  <string name="image_crop_original">オリジナル</string>
+  <string name="image_crop_load_failed">画像を読み込めませんでした</string>
+  <string name="image_crop_failed">画像をトリミングできませんでした</string>
 </resources>

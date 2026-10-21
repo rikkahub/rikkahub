@@ -24,4 +24,10 @@
   <string name="chart_mode_table">表格</string>
   <string name="chart_series">系列</string>
   <string name="chart_series_name">系列 %1$d</string>
+  <string name="image_crop_rotate">旋转</string>
+  <string name="image_crop_reset">重置</string>
+  <string name="image_crop_free">自由</string>
+  <string name="image_crop_original">原图</string>
+  <string name="image_crop_load_failed">无法加载图片</string>
+  <string name="image_crop_failed">无法裁剪图片</string>
 </resources>

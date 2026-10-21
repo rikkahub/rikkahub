@@ -24,4 +24,10 @@
   <string name="chart_mode_table">Table</string>
   <string name="chart_series">Series</string>
   <string name="chart_series_name">Series %1$d</string>
+  <string name="image_crop_rotate">Rotate</string>
+  <string name="image_crop_reset">Reset</string>
+  <string name="image_crop_free">Free</string>
+  <string name="image_crop_original">Original</string>
+  <string name="image_crop_load_failed">Couldn\'t load the image</string>
+  <string name="image_crop_failed">Couldn\'t crop the image</string>
 </resources>

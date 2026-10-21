@@ -24,4 +24,10 @@
   <string name="chart_mode_table">표</string>
   <string name="chart_series">계열</string>
   <string name="chart_series_name">계열 %1$d</string>
+  <string name="image_crop_rotate">회전</string>
+  <string name="image_crop_reset">초기화</string>
+  <string name="image_crop_free">자유</string>
+  <string name="image_crop_original">원본</string>
+  <string name="image_crop_load_failed">이미지를 불러올 수 없습니다</string>
+  <string name="image_crop_failed">이미지를 자를 수 없습니다</string>
 </resources>

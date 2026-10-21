@@ -47,8 +47,6 @@ tasks.named("preBuild") {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.appcompat)
-    implementation(libs.material)
 
     // ktor server
     implementation(libs.ktor.server.default.headers)

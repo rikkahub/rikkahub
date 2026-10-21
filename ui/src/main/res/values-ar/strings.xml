@@ -24,4 +24,10 @@
   <string name="chart_mode_table">جدول</string>
   <string name="chart_series">سلسلة</string>
   <string name="chart_series_name">سلسلة %1$d</string>
+  <string name="image_crop_rotate">تدوير</string>
+  <string name="image_crop_reset">إعادة تعيين</string>
+  <string name="image_crop_free">حر</string>
+  <string name="image_crop_original">الأصلي</string>
+  <string name="image_crop_load_failed">تعذّر تحميل الصورة</string>
+  <string name="image_crop_failed">تعذّر قص الصورة</string>
 </resources>

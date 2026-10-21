@@ -24,4 +24,10 @@
   <string name="chart_mode_table">Таблица</string>
   <string name="chart_series">Ряд</string>
   <string name="chart_series_name">Ряд %1$d</string>
+  <string name="image_crop_rotate">Повернуть</string>
+  <string name="image_crop_reset">Сбросить</string>
+  <string name="image_crop_free">Свободно</string>
+  <string name="image_crop_original">Оригинал</string>
+  <string name="image_crop_load_failed">Не удалось загрузить изображение</string>
+  <string name="image_crop_failed">Не удалось обрезать изображение</string>
 </resources>

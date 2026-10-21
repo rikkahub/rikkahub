@@ -1,86 +1,78 @@
 package me.rerere.rikkahub.ui.components.ai
 
-import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.ActivityResultLauncher
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.net.toFile
-import me.rerere.ui.toast.ToastType
-import com.yalantis.ucrop.UCrop
-import com.yalantis.ucrop.UCropActivity
+import androidx.core.net.toUri
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.common.android.Logging
 import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.ui.crop.ImageCropDialog
+import me.rerere.ui.toast.ToastType
 import java.io.File
 
+/**
+ * 返回一个打开裁剪对话框的函数。裁好的图片先写成临时的 JPEG 交给 [onCroppedImageReady]，回调结束后删除；
+ * 不管裁剪完成还是取消，最后都会调用 [onCleanup]。
+ *
+ * @param aspectRatio 固定的宽高比（宽 / 高），为空时可以自由裁剪
+ */
 @Composable
 internal fun useCropLauncher(
     onCroppedImageReady: (Uri) -> Unit,
     onCleanup: (() -> Unit)? = null,
-    aspectRatio: Pair<Float, Float>? = null,
-    freeStyleCropEnabled: Boolean = true
-): Pair<ActivityResultLauncher<Intent>, (Uri) -> Unit> {
+    aspectRatio: Float? = null,
+): (Uri) -> Unit {
     val context = LocalContext.current
     val toaster = LocalToaster.current
-    var cropOutputUri by remember { mutableStateOf<Uri?>(null) }
+    val scope = rememberCoroutineScope()
+    var source by remember { mutableStateOf<Uri?>(null) }
+    // 写文件期间对话框还开着，防止连点确认存出两张
+    var saving by remember { mutableStateOf(false) }
 
-    val cropActivityLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        when (result.resultCode) {
-            android.app.Activity.RESULT_OK -> {
-                cropOutputUri?.let { croppedUri ->
-                    onCroppedImageReady(croppedUri)
-                }
-            }
-
-            UCrop.RESULT_ERROR -> {
-                val error = result.data?.let { UCrop.getError(it) }
-                Logging.log(
-                    "CropLauncher",
-                    "crop failed: ${error?.message} | ${error?.stackTraceToString()}"
-                )
-                toaster.show(
-                    "Failed to crop image: ${error?.message ?: "unknown error"}",
-                    type = ToastType.Error
-                )
-            }
-        }
-        cropOutputUri?.toFile()?.delete()
-        cropOutputUri = null
+    fun finish() {
+        source = null
         onCleanup?.invoke()
     }
 
-    val launchCrop: (Uri) -> Unit = { sourceUri ->
-        val outputFile = File(context.appTempFolder, "crop_output_${System.currentTimeMillis()}.jpg")
-        cropOutputUri = Uri.fromFile(outputFile)
-
-        var crop = UCrop.of(sourceUri, cropOutputUri!!).withOptions(UCrop.Options().apply {
-            setFreeStyleCropEnabled(freeStyleCropEnabled)
-            setAllowedGestures(
-                UCropActivity.SCALE, UCropActivity.ROTATE, UCropActivity.NONE
-            )
-            // Chat attachments are written to a .jpg output file. PNG encoding is
-            // particularly expensive for large camera/gallery images and provides
-            // no benefit for this flow, so use JPEG to keep confirmation responsive.
-            setCompressionFormat(Bitmap.CompressFormat.JPEG)
-            setCompressionQuality(90)
-        }).withMaxResultSize(4096, 4096)
-        aspectRatio?.let { (x, y) ->
-            crop = crop.withAspectRatio(x, y)
-        }
-        val cropIntent = crop.getIntent(context)
-
-        cropActivityLauncher.launch(cropIntent)
+    source?.let { uri ->
+        ImageCropDialog(
+            image = uri,
+            aspectRatio = aspectRatio,
+            onDismiss = ::finish,
+            onConfirm = { bitmap ->
+                if (saving) return@ImageCropDialog
+                saving = true
+                scope.launch {
+                    val outputFile = File(context.appTempFolder, "crop_output_${System.currentTimeMillis()}.jpg")
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            outputFile.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+                        }
+                        onCroppedImageReady(outputFile.toUri())
+                    }.onFailure { error ->
+                        Logging.log("CropLauncher", "crop failed: ${error.message} | ${error.stackTraceToString()}")
+                        toaster.show(
+                            "Failed to crop image: ${error.message ?: "unknown error"}",
+                            type = ToastType.Error
+                        )
+                    }
+                    outputFile.delete()
+                    saving = false
+                    finish()
+                }
+            },
+        )
     }
 
-    return Pair(cropActivityLauncher, launchCrop)
+    return { source = it }
 }

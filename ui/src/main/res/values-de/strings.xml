@@ -24,4 +24,10 @@
   <string name="sketch_dialog_brush_flat">Flacher Stift</string>
   <string name="sketch_dialog_text">Text</string>
   <string name="sketch_dialog_select">Auswählen</string>
+  <string name="image_crop_rotate">Drehen</string>
+  <string name="image_crop_reset">Zurücksetzen</string>
+  <string name="image_crop_free">Frei</string>
+  <string name="image_crop_original">Original</string>
+  <string name="image_crop_load_failed">Das Bild konnte nicht geladen werden</string>
+  <string name="image_crop_failed">Das Bild konnte nicht zugeschnitten werden</string>
 </resources>
