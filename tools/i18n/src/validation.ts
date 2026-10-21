@@ -1,10 +1,22 @@
 /** 译文校验与规范化。值均为 strings.xml 中 <string> 内部的原始 XML。 */
+import { XMLValidator } from "fast-xml-parser";
 
 // Android/Java 格式符，例如 %s、%d、%1$s、%.2f、%%
 const PLACEHOLDER = /%(\d+\$)?[-#+ 0,(]*\d*(\.\d+)?[sdfxXc%]/g;
 const TAG = /<[^>]+>/g;
 const UNESCAPED_QUOTE = /(?<!\\)(['"])/g;
 const BARE_AMPERSAND = /&(?!(?:[a-zA-Z]+|#\d+|#x[0-9a-fA-F]+);)/g;
+// XMLValidator 不检查实体是否已定义，aapt 只认 XML 预定义实体
+const UNKNOWN_ENTITY = /&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)[a-zA-Z]+;/;
+
+/** 值不能作为 <string> 内容时返回错误信息 */
+export function validateXml(value: string): string | null {
+  const result = XMLValidator.validate(`<string>${value}</string>`);
+  if (result !== true) return `invalid XML: ${result.err.msg}`;
+  const entity = value.match(UNKNOWN_ENTITY);
+  if (entity) return `invalid XML: unknown entity ${entity[0]}`;
+  return null;
+}
 
 /** 返回排序后的格式符，允许译文调整顺序 */
 export function extractPlaceholders(value: string): string[] {
@@ -43,6 +55,8 @@ export function normalizeTranslation(value: string): string {
 /** 译文不能安全替换原文时返回错误信息 */
 export function validateTranslation(source: string, translated: string): string | null {
   if (!translated.trim()) return "empty translation";
+  const xmlError = validateXml(translated);
+  if (xmlError) return xmlError;
   const srcPh = extractPlaceholders(source);
   const dstPh = extractPlaceholders(translated);
   if (srcPh.join() !== dstPh.join()) {

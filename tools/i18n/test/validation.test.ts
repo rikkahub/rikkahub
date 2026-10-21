@@ -5,6 +5,7 @@ import {
   normalizeTranslation,
   textToXml,
   validateTranslation,
+  validateXml,
 } from "../src/validation";
 
 describe("validateTranslation", () => {
@@ -55,5 +56,24 @@ describe("escaping", () => {
 
   test("converts plain text input to xml", () => {
     expect(textToXml("Tom & Jerry's <tag>")).toBe("Tom &amp; Jerry\\'s &lt;tag&gt;");
+  });
+});
+
+describe("validateXml", () => {
+  test("accepts well-formed fragments", () => {
+    for (const value of ["A &amp; B", "a &lt; b", "&#169; &#xA9; &gt;", "<b>x</b>", '<xliff:g id="n">%s</xliff:g>', "x > y", ""]) {
+      expect(validateXml(value)).toBeNull();
+    }
+  });
+
+  test("rejects malformed fragments", () => {
+    for (const value of ["A & B", "a < b", "<b>x", "x</b>", "&nbsp;"]) {
+      expect(validateXml(value)).not.toBeNull();
+    }
+  });
+
+  test("translations must be valid XML", () => {
+    expect(validateTranslation("a &lt; b", "a < b")).toContain("invalid XML");
+    expect(validateTranslation("<b>Bold</b>", "<b>粗体")).toContain("invalid XML");
   });
 });

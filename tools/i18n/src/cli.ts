@@ -6,7 +6,7 @@ import { loadConfig, stringsPath, type Config, type LanguageConfig, type ModuleC
 import { findReferencedKeys, RESERVED_KEYS } from "./references";
 import { StringsFile } from "./strings-xml";
 import { createLimiter, errorMessage, Translator } from "./translator";
-import { textToXml } from "./validation";
+import { textToXml, validateXml } from "./validation";
 
 // citty 不支持重复选项，多个值用逗号分隔
 const moduleArg = { type: "string", alias: "m", valueHint: "name", description: "模块名（默认第一个模块）" } as const;
@@ -42,7 +42,7 @@ const add = defineCommand({
   async run({ args }) {
     const config = loadConfig();
     const module = pickModule(config, args.module);
-    const xml = args.raw ? args.value : textToXml(args.value);
+    const xml = toXml(args.value, args.raw);
 
     const source = StringsFile.load(stringsPath(config, module, config.source.code));
     if (!source.exists) fail(`源语言文件不存在: ${source.path}`);
@@ -96,7 +96,7 @@ const set = defineCommand({
     const config = loadConfig();
     const module = pickModule(config, args.module);
     const lang = pickLanguage(config, args.lang ?? config.source.code);
-    const xml = args.raw ? args.value : textToXml(args.value);
+    const xml = toXml(args.value, args.raw);
 
     if (lang !== config.source && !StringsFile.load(stringsPath(config, module, config.source.code)).has(args.key)) {
       log(`注意：源语言中没有 ${args.key}`);
@@ -324,6 +324,14 @@ async function runBatch(
 function createTranslator(config: Config): Translator {
   if (!config.apiKey) fail("未设置 OPENAI_API_KEY（可写在 tools/i18n/.env）");
   return new Translator(config);
+}
+
+/** 纯文本转义后写入；--raw 时原样写入，但必须是合法的 XML 片段 */
+function toXml(value: string, raw: boolean | undefined): string {
+  if (!raw) return textToXml(value);
+  const error = validateXml(value);
+  if (error) fail(error);
+  return value;
 }
 
 function splitList(value: string | undefined): string[] {
