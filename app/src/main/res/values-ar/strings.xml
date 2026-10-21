@@ -1079,7 +1079,6 @@
   <string name="setting_provider_page_response_api_warning">Response API هي واجهة API من الجيل التالي من OpenAI. لا يدعمها معظم المزوّدين. إذا كنت لا تعرف ما هي، فلا تفعّلها.</string>
   <string name="setting_provider_page_save">حفظ</string>
   <string name="setting_provider_page_save_success">تم الحفظ بنجاح</string>
-  <string name="setting_provider_page_scan_error">خطأ: %s</string>
   <string name="setting_provider_page_scan_qr_code">مسح رمز QR</string>
   <string name="setting_provider_page_search_providers">البحث عن المزوّدين</string>
   <string name="setting_provider_page_select_all">تحديد الكل (%1$d)</string>

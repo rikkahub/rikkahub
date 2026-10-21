@@ -228,6 +228,9 @@ dependencies {
     // DataStore
     implementation(libs.androidx.datastore.preferences)
 
+    // EXIF orientation for picked images
+    implementation(libs.androidx.exifinterface)
+
     // Image metadata extractor
     // https://github.com/drewnoakes/metadata-extractor
     implementation(libs.metadata.extractor)
@@ -279,13 +282,11 @@ dependencies {
     // YAML front matter
     implementation(libs.snakeyaml)
 
-    // zxing
+    // zxing + CameraX (qrcode scanner)
     implementation(libs.zxing.core)
-
-    // quickie (qrcode scanner)
-    implementation(libs.quickie.bundled)
-    implementation(libs.barcode.scanning)
-    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.compose)
 
     // Room
     implementation(libs.androidx.room.runtime)

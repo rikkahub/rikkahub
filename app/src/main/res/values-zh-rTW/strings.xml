@@ -905,7 +905,6 @@
   <string name="setting_provider_page_response_api_warning">Response API是OpenAI新一代API，大部分提供商並不支持，如果你不知道這是什麼，不要開啟</string>
   <string name="setting_provider_page_save">保存</string>
   <string name="setting_provider_page_save_success">保存成功</string>
-  <string name="setting_provider_page_scan_error">錯誤: %s</string>
   <string name="setting_provider_page_scan_qr_code">掃描二維碼</string>
   <string name="setting_provider_page_search_providers">搜尋提供者</string>
   <string name="setting_provider_page_recommend">推薦提供者</string>

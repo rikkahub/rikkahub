@@ -982,7 +982,6 @@
   <string name="setting_provider_page_response_api_warning">Response API is OpenAI\'s next-generation API. Most providers do not support it. If you don\'t know what this is, don\'t enable it.</string>
   <string name="setting_provider_page_save">Save</string>
   <string name="setting_provider_page_save_success">Save successful</string>
-  <string name="setting_provider_page_scan_error">Error: %s</string>
   <string name="setting_provider_page_scan_qr_code">Scan QR Code</string>
   <string name="setting_provider_page_search_providers">Search providers</string>
   <string name="setting_provider_page_recommend">Recommended providers</string>

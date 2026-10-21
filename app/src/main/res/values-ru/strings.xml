@@ -907,7 +907,6 @@
   <string name="setting_provider_page_response_api_warning">Response API — это новое поколение API от OpenAI. Большинство поставщиков его не поддерживают. Если вы не знаете, что это такое, не включайте его.</string>
   <string name="setting_provider_page_save">Сохранить</string>
   <string name="setting_provider_page_save_success">Сохранено успешно</string>
-  <string name="setting_provider_page_scan_error">Ошибка: %s</string>
   <string name="setting_provider_page_scan_qr_code">Сканировать QR-код</string>
   <string name="setting_provider_page_search_providers">Поиск поставщиков</string>
   <string name="setting_provider_page_recommend">Рекомендуемые поставщики</string>

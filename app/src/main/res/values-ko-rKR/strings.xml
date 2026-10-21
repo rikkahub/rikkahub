@@ -907,7 +907,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_provider_page_response_api_warning">Response API는 OpenAI의 차세대 API입니다. 대부분의 제공업체에서 지원하지 않습니다. 이것이 무엇인지 모르는 경우 활성화하지 마세요.</string>
   <string name="setting_provider_page_save">저장</string>
   <string name="setting_provider_page_save_success">저장 성공</string>
-  <string name="setting_provider_page_scan_error">오류: %s</string>
   <string name="setting_provider_page_scan_qr_code">QR 코드 스캔</string>
   <string name="setting_provider_page_search_providers">공급자 검색</string>
   <string name="setting_provider_page_recommend">추천 공급자</string>
