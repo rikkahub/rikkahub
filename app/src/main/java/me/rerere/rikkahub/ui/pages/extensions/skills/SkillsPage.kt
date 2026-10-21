@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.extensions.skills
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.annotation.StringRes
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,14 +55,19 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Download01
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.hugeicons.stroke.Search01
-import me.rerere.rikkahub.data.skills.SkillFrontmatterParser
+import me.rerere.rikkahub.data.skills.InvalidSkillDir
+import me.rerere.rikkahub.data.skills.InvalidSkillReason
 import me.rerere.rikkahub.data.skills.SkillMetadata
+import me.rerere.rikkahub.data.skills.SkillValidationError
+import me.rerere.rikkahub.data.skills.SkillValidationException
+import me.rerere.rikkahub.data.skills.SkillValidator
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -88,8 +94,13 @@ fun SkillsPage() {
     var showImportSheet by rememberSaveable { mutableStateOf(false) }
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
+    val invalidSkillDirs by vm.invalidSkillDirs.collectAsStateWithLifecycle()
     var deleteTarget by remember { mutableStateOf<SkillMetadata?>(null) }
+    var invalidDeleteTarget by remember { mutableStateOf<InvalidSkillDir?>(null) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
+    val filteredInvalidSkillDirs = remember(invalidSkillDirs, searchQuery) {
+        invalidSkillDirs.filter { it.dirName.contains(searchQuery, ignoreCase = true) }
+    }
     val filteredSkills = remember(skills, searchQuery) {
         if (searchQuery.isBlank()) {
             skills
@@ -104,7 +115,7 @@ fun SkillsPage() {
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
         uri ?: return@rememberLauncherForActivityResult
-        vm.importSkillFromFile(context, uri) { success, message ->
+        vm.importSkillFromFile(uri) { success, message ->
             if (success) {
                 toaster.show(context.getString(R.string.skills_page_import_success, message))
             } else {
@@ -163,7 +174,7 @@ fun SkillsPage() {
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
                                 IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(HugeIcons.Cancel01, contentDescription = "Clear")
+                                    Icon(HugeIcons.Cancel01, contentDescription = stringResource(R.string.skills_page_clear_search))
                                 }
                             }
                         },
@@ -199,6 +210,16 @@ fun SkillsPage() {
                     onClick = { navController.navigate(Screen.SkillDetail(skill.name)) },
                     onDelete = { deleteTarget = skill },
                 )
+            }
+
+            // 空目录、缺少 SKILL.md 等无法识别的目录不会出现在技能列表里，单独列出供清理
+            if (filteredInvalidSkillDirs.isNotEmpty()) {
+                item(key = "invalid_skill_dirs") {
+                    InvalidSkillDirsGroup(
+                        dirs = filteredInvalidSkillDirs,
+                        onDelete = { invalidDeleteTarget = it },
+                    )
+                }
             }
         }
     }
@@ -264,12 +285,87 @@ fun SkillsPage() {
         confirmText = stringResource(R.string.delete),
         dismissText = stringResource(R.string.cancel),
         onConfirm = {
-            deleteTarget?.let { vm.deleteSkill(it.name) }
+            deleteTarget?.let { vm.deleteSkill(it) }
             deleteTarget = null
         },
         onDismiss = { deleteTarget = null },
     ) {
         Text(stringResource(R.string.skills_page_delete_message, deleteTarget?.name ?: ""))
+    }
+
+    RikkaConfirmDialog(
+        show = invalidDeleteTarget != null,
+        title = stringResource(R.string.skills_page_delete_dir_title),
+        confirmText = stringResource(R.string.delete),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            invalidDeleteTarget?.let { vm.deleteInvalidSkillDir(it.dirName) }
+            invalidDeleteTarget = null
+        },
+        onDismiss = { invalidDeleteTarget = null },
+    ) {
+        Text(stringResource(R.string.skills_page_delete_dir_message, invalidDeleteTarget?.dirName.orEmpty()))
+    }
+}
+
+@Composable
+private fun invalidSkillReasonText(reason: InvalidSkillReason): String = stringResource(
+    when (reason) {
+        InvalidSkillReason.MissingSkillMd -> R.string.skills_page_invalid_reason_missing_skill_md
+        InvalidSkillReason.MissingName -> R.string.skills_page_invalid_reason_missing_name
+        InvalidSkillReason.MissingDescription -> R.string.skills_page_invalid_reason_missing_description
+        InvalidSkillReason.ReadFailed -> R.string.skills_page_invalid_reason_read_failed
+    }
+)
+
+// 页面和 SkillsVM 的导入提示共用
+@get:StringRes
+internal val SkillValidationError.messageRes: Int
+    get() = when (this) {
+        SkillValidationError.MissingName -> R.string.skills_page_name_error
+        SkillValidationError.NameHasSurroundingWhitespace -> R.string.skills_page_name_whitespace_error
+        SkillValidationError.NameTooLong -> R.string.skills_page_name_too_long_error
+        SkillValidationError.NameStartsWithDot -> R.string.skills_page_name_dot_error
+        SkillValidationError.NameHasInvalidChars -> R.string.skills_page_name_invalid_chars_error
+        SkillValidationError.MissingDescription -> R.string.skills_page_description_error
+    }
+
+internal val SkillValidationError.formatArgs: Array<Any>
+    get() = if (this == SkillValidationError.NameTooLong) arrayOf(SkillValidator.MAX_NAME_LENGTH) else emptyArray()
+
+@Composable
+private fun InvalidSkillDirsGroup(
+    dirs: List<InvalidSkillDir>,
+    onDelete: (InvalidSkillDir) -> Unit,
+) {
+    CardGroup(title = { Text(stringResource(R.string.skills_page_invalid_dirs_title)) }) {
+        dirs.forEach { dir ->
+            item(
+                leadingContent = {
+                    CardGroupIcon(
+                        icon = HugeIcons.Alert01,
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                },
+                headlineContent = {
+                    Text(dir.dirName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                },
+                supportingContent = { Text(invalidSkillReasonText(dir.reason)) },
+                trailingContent = {
+                    ItemActionMenu(
+                        actions = listOf(
+                            ItemAction(
+                                text = stringResource(R.string.delete),
+                                icon = HugeIcons.Delete01,
+                                destructive = true,
+                                onClick = { onDelete(dir) },
+                            ),
+                        )
+                    )
+                },
+            )
+        }
     }
 }
 
@@ -310,7 +406,7 @@ private fun SkillCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                     if (skill.builtin) {
-                        Tag { Text("Built-in") }
+                        Tag { Text(stringResource(R.string.skills_page_builtin_tag)) }
                     }
                 }
                 Text(
@@ -395,10 +491,10 @@ private fun AddSkillDialog(
 ) {
     var content by rememberSaveable { mutableStateOf("") }
 
-    val name = remember(content) {
-        SkillFrontmatterParser.parse(content)["name"]?.trim() ?: ""
-    }
-    val nameError = content.isNotBlank() && name.isBlank()
+    val validation = remember(content) { SkillValidator.validate(content) }
+    val name = validation.getOrNull()
+    val nameError = content.isNotBlank() && name == null
+    val validationError = (validation.exceptionOrNull() as? SkillValidationException)?.error
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -410,16 +506,17 @@ private fun AddSkillDialog(
                 label = { Text(stringResource(R.string.skills_page_skill_content_label)) },
                 placeholder = {
                     Text(
-                        "---\nname: my-skill\ndescription: \"...\"\n---\n\n指令内容...",
+                        "---\nname: my-skill\ndescription: \"...\"\n---\n\n" +
+                            stringResource(R.string.skills_page_skill_body_placeholder),
                         fontFamily = FontFamily.Monospace,
                     )
                 },
                 supportingText = {
                     if (nameError) Text(
-                        stringResource(R.string.skills_page_name_error),
+                        validationError?.let { stringResource(it.messageRes, *it.formatArgs) }.orEmpty(),
                         color = MaterialTheme.colorScheme.error
                     )
-                    else if (name.isNotBlank()) Text(stringResource(R.string.skills_page_skill_name, name))
+                    else if (name != null) Text(stringResource(R.string.skills_page_skill_name, name))
                     else Text(stringResource(R.string.skills_page_paste_hint))
                 },
                 isError = nameError,
@@ -431,8 +528,8 @@ private fun AddSkillDialog(
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(name, content) },
-                enabled = name.isNotBlank() && !nameError,
+                onClick = { name?.let { onConfirm(it, content) } },
+                enabled = name != null,
             ) {
                 Text(stringResource(R.string.skills_page_save))
             }

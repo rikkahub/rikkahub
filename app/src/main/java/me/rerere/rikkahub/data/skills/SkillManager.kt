@@ -2,11 +2,11 @@ package me.rerere.rikkahub.data.skills
 
 import android.content.Context
 import android.util.Log
-import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.files.FileFolders
+import java.io.File
 
 class SkillManager(
     private val context: Context,
@@ -64,29 +64,35 @@ class SkillManager(
         return listSkillsIn(getBuiltinSkillsDir(), builtin = true)
     }
 
-    private fun listSkillsIn(root: File, builtin: Boolean): List<SkillMetadata> {
-        return root.listFiles()
-            // 跳过隐藏目录，如原子写入残留的 .<name>.staging.N.tmp
-            ?.filter { it.isDirectory && !it.name.startsWith(".") }
-            ?.mapNotNull { dir ->
-                val skillFile = dir.resolve("SKILL.md")
-                if (!skillFile.exists()) return@mapNotNull null
-                parseSkillFile(skillFile, dir, builtin)
+    private fun listSkillsIn(root: File, builtin: Boolean): List<SkillMetadata> =
+        skillDirsIn(root).mapNotNull { parseSkillDir(it, builtin).getOrNull() }
+
+    /**
+     * 列出用户技能目录下无法识别为技能的目录，如空目录、缺少 SKILL.md 或 frontmatter 不完整。
+     * 这些目录不会出现在 [listSkills] 中，单独列出来让用户清理。
+     */
+    fun listInvalidSkillDirs(): List<InvalidSkillDir> = skillDirsIn(getSkillsDir())
+        .mapNotNull { dir ->
+            val reason = when (val error = parseSkillDir(dir, builtin = false).exceptionOrNull()) {
+                null -> return@mapNotNull null
+                is InvalidSkillException -> error.reason
+                else -> InvalidSkillReason.ReadFailed
             }
-            ?: emptyList()
+            InvalidSkillDir(dirName = dir.name, reason = reason)
+        }
+        .sortedBy { it.dirName }
+
+    suspend fun deleteInvalidSkillDir(dirName: String): Boolean = withContext(Dispatchers.IO) {
+        val dir = SkillPaths.resolveSkillDir(getSkillsDir(), dirName) ?: return@withContext false
+        if (!dir.isDirectory) return@withContext false
+        // 列表展示期间目录可能已在工作区里补全成有效技能，删除前再确认一次
+        if (parseSkillDir(dir, builtin = false).isSuccess) return@withContext false
+        dir.deleteRecursively()
     }
 
-    fun readSkillBody(skillName: String): String? {
-        val skillFile = resolveSkillDir(skillName)?.resolve("SKILL.md") ?: return null
-        if (!skillFile.exists()) return null
-        return SkillFrontmatterParser.extractBody(skillFile.readText())
-    }
-
-    fun readSkillContent(skillName: String): String? {
-        val skillFile = resolveSkillDir(skillName)?.resolve("SKILL.md") ?: return null
-        if (!skillFile.exists()) return null
-        return skillFile.readText()
-    }
+    // 跳过隐藏目录，如原子写入残留的 .<name>.staging.N.tmp
+    private fun skillDirsIn(root: File): List<File> =
+        root.listFiles()?.filter { it.isDirectory && !it.name.startsWith(".") }.orEmpty()
 
     fun saveSkill(name: String, content: String): SkillMetadata? {
         // 通过原子写入(staging + rename)落盘，避免直接 mkdirs 失败时
@@ -95,16 +101,20 @@ class SkillManager(
             return null
         }
         val skillDir = resolveSkillDir(name) ?: return null
-        return parseSkillFile(skillDir.resolve("SKILL.md"), skillDir)
+        return parseSkillDir(skillDir, builtin = false).getOrNull()
     }
 
-    suspend fun deleteSkill(name: String): Boolean = withContext(Dispatchers.IO) {
-        val skillDir = resolveSkillDir(name) ?: return@withContext false
-        // 目录不存在时 deleteRecursively 也返回 true，需提前拦截，避免误清理内置技能的启用状态
+    suspend fun deleteSkill(skill: SkillMetadata): Boolean = withContext(Dispatchers.IO) {
+        if (skill.builtin) return@withContext false
+        val name = skill.name
+        // 按技能实际所在的目录删除：在工作区里直接创建、复制或改过 name 的技能，
+        // 目录名可能和 frontmatter 的 name 不一致，按 name 拼路径会找不到目录
+        val skillDir = SkillPaths.resolveSkillDir(getSkillsDir(), skill.skillDir.name) ?: return@withContext false
+        // 目录不存在时 deleteRecursively 也返回 true，需提前拦截，避免误清理启用状态
         if (!skillDir.exists()) return@withContext false
         val deleted = skillDir.deleteRecursively()
-        // 删除的是覆盖内置技能的同名用户技能时，内置技能会重新生效，保留启用状态
-        if (deleted && listBuiltinSkills().none { it.name == name }) {
+        // 还有同名技能（被覆盖的内置技能或另一个同名用户技能）会继续生效，保留启用状态
+        if (deleted && listSkills().none { it.name == name }) {
             settingsStore.update { settings ->
                 settings.copy(
                     assistants = settings.assistants.map { assistant ->
@@ -145,8 +155,6 @@ class SkillManager(
         skills
     }
 
-    fun getSkillDir(skillName: String): File? = resolveSkillDir(skillName)
-
     fun saveSkillFile(skillName: String, relativePath: String, content: String): Boolean {
         val skillDir = resolveSkillDir(skillName) ?: return false
         val target = SkillPaths.resolveSkillFile(skillDir, relativePath) ?: return false
@@ -167,6 +175,12 @@ class SkillManager(
     }
 
     fun saveSkillFileBytesAtomically(skillName: String, files: Map<String, ByteArray>): Boolean {
+        val skillMd = files["SKILL.md"] ?: return false
+        // 目录名必须和 SKILL.md 的 name 一致，否则之后按名字找不到目录
+        if (SkillValidator.validate(skillMd.toString(Charsets.UTF_8)).getOrNull() != skillName) {
+            Log.w(TAG, "saveSkillFilesAtomically: Invalid SKILL.md for $skillName")
+            return false
+        }
         val skillsDir = getSkillsDir()
         val targetDir = resolveSkillDir(skillName) ?: return false
         val stagingDir = createTempSkillDir(skillsDir, skillName, "staging") ?: return false
@@ -217,11 +231,6 @@ class SkillManager(
         return target.delete()
     }
 
-    fun resolveSkillFile(skillName: String, relativePath: String): File? {
-        val skillDir = resolveSkillDir(skillName) ?: return null
-        return SkillPaths.resolveSkillFile(skillDir, relativePath)
-    }
-
     private fun resolveSkillDir(skillName: String): File? {
         return SkillPaths.resolveSkillDir(getSkillsDir(), skillName)
     }
@@ -236,25 +245,39 @@ class SkillManager(
         return null
     }
 
-    private fun parseSkillFile(skillFile: File, skillDir: File, builtin: Boolean = false): SkillMetadata? {
-        return runCatching {
-            val content = skillFile.readText()
-            val frontmatter = SkillFrontmatterParser.parse(content)
-            val name = frontmatter["name"]?.takeIf { it.isNotBlank() } ?: return null
-            val description = frontmatter["description"]?.takeIf { it.isNotBlank() } ?: return null
-            SkillMetadata(
-                name = name,
-                description = description,
-                compatibility = frontmatter["compatibility"],
-                skillDir = skillDir,
-                builtin = builtin,
-            )
-        }.getOrElse {
-            Log.w(TAG, "parseSkillFile: Failed to parse ${skillFile.absolutePath}", it)
-            null
-        }
+    /** 解析技能目录；无法识别时为 [InvalidSkillException]，读文件失败时为 IO 异常 */
+    private fun parseSkillDir(skillDir: File, builtin: Boolean): Result<SkillMetadata> = runCatching {
+        val skillFile = skillDir.resolve("SKILL.md")
+        if (!skillFile.isFile) throw InvalidSkillException(InvalidSkillReason.MissingSkillMd)
+        val frontmatter = SkillFrontmatterParser.parse(skillFile.readText())
+        val name = frontmatter["name"]?.takeIf { it.isNotBlank() }
+            ?: throw InvalidSkillException(InvalidSkillReason.MissingName)
+        val description = frontmatter["description"]?.takeIf { it.isNotBlank() }
+            ?: throw InvalidSkillException(InvalidSkillReason.MissingDescription)
+        SkillMetadata(
+            name = name,
+            description = description,
+            compatibility = frontmatter["compatibility"],
+            skillDir = skillDir,
+            builtin = builtin,
+        )
     }
 }
+
+/** 用户技能目录下无法识别为技能的目录 */
+data class InvalidSkillDir(
+    val dirName: String,
+    val reason: InvalidSkillReason,
+)
+
+enum class InvalidSkillReason {
+    MissingSkillMd,
+    MissingName,
+    MissingDescription,
+    ReadFailed,
+}
+
+private class InvalidSkillException(val reason: InvalidSkillReason) : Exception(reason.name)
 
 data class SkillMetadata(
     val name: String,

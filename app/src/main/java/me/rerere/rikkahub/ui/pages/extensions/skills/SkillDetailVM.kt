@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.extensions.skills
 
+import android.app.Application
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -7,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.skills.SkillFrontmatterParser
 import me.rerere.rikkahub.data.skills.SkillManager
 import me.rerere.rikkahub.data.skills.SkillMetadata
@@ -29,6 +31,7 @@ sealed class SkillFileNode {
 }
 
 class SkillDetailVM(
+    private val context: Application,
     private val skillManager: SkillManager,
 ) : ViewModel() {
 
@@ -87,19 +90,25 @@ class SkillDetailVM(
     fun saveFile(relativePath: String, content: String, onResult: (String?) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
             if (_readOnly.value) {
-                withContext(Dispatchers.Main) { onResult("内置技能不可修改") }
+                withContext(
+                    Dispatchers.Main
+                ) { onResult(context.getString(R.string.skill_detail_page_builtin_readonly)) }
                 return@launch
             }
             if (relativePath == "SKILL.md") {
                 val name = SkillFrontmatterParser.parse(content)["name"]
                 if (name != skillName) {
-                    withContext(Dispatchers.Main) { onResult("不允许修改技能名称（name 字段必须为 \"$skillName\"）") }
+                    withContext(
+                        Dispatchers.Main
+                    ) { onResult(context.getString(R.string.skill_detail_page_name_change_error, skillName)) }
                     return@launch
                 }
             }
             val success = skillManager.saveSkillFile(skillName, relativePath, content)
             loadFiles()
-            withContext(Dispatchers.Main) { onResult(if (success) null else "保存失败") }
+            withContext(
+                Dispatchers.Main
+            ) { onResult(if (success) null else context.getString(R.string.skill_detail_page_save_failed)) }
         }
     }
 
