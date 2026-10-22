@@ -190,6 +190,10 @@ class MediaCreationVM(
 
     fun resolve(path: String): File = repository.resolve(path)
 
+    fun rename(title: String) {
+        viewModelScope.launch { repository.renameSession(sessionId, title.trim()) }
+    }
+
     private suspend fun load() {
         val session = repository.getSession(sessionId) ?: return
         val providers = settingsStore.awaitLoaded().mediaGenerationProviders
