@@ -1169,10 +1169,7 @@ class ChatService(
         messageId: Uuid
     ): Conversation {
         val source = withLoadedSession(conversationId) { it.state.value }
-        val existingTitles = conversationRepo
-            .getConversationsOfAssistant(source.assistantId)
-            .first()
-            .mapTo(mutableSetOf()) { it.title }
+        val existingTitles = conversationRepo.getTitlesOfAssistant(source.assistantId)
         val fork = source.fork(messageId, existingTitles, copyFile = ::copyChatFile)
             ?: throw NotFoundException("Message not found")
         // 新会话直接落库，打开时再从数据库加载

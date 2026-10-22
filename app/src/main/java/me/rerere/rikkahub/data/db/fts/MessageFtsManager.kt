@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.db.fts
 
 import android.util.Log
+import androidx.room.withTransaction
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
@@ -19,50 +21,115 @@ data class MessageSearchResult(
 )
 
 enum class MessageSearchSort(val orderBy: String) {
-    RELEVANCE("rank, update_at DESC"),
-    NEWEST_FIRST("update_at DESC, rank"),
-    OLDEST_FIRST("update_at ASC, rank"),
+    RELEVANCE("message_fts.rank, conversation.update_at DESC"),
+    NEWEST_FIRST("conversation.update_at DESC, message_fts.rank"),
+    OLDEST_FIRST("conversation.update_at ASC, message_fts.rank"),
 }
 
 private const val TAG = "MessageFtsManager"
+
+/**
+ * 建立消息索引用到的表，每次打开数据库时调用。
+ *
+ * message_fts 是 FTS5 虚表，除 rowid 外的列都无法用索引定位，按 conversation_id 删除会扫描全部消息；
+ * 所以另用普通表 message_fts_rowid 记录每行索引属于哪个会话，按会话增删都先经它查出 rowid。
+ * title、update_at 两列已不再写入，搜索时从 conversationentity 读取，保留只是为了已有索引不用重建。
+ */
+internal fun createMessageFtsTables(db: SupportSQLiteDatabase) {
+    db.execSQL(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(
+            text,
+            node_id UNINDEXED,
+            message_id UNINDEXED,
+            conversation_id UNINDEXED,
+            title UNINDEXED,
+            update_at UNINDEXED,
+            tokenize = 'simple'
+        )
+        """.trimIndent()
+    )
+    val hasRowidTable = db.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'message_fts_rowid'")
+        .use { it.moveToFirst() }
+    if (hasRowidTable) return
+    db.beginTransaction()
+    try {
+        db.execSQL("CREATE TABLE message_fts_rowid(fts_rowid INTEGER PRIMARY KEY, conversation_id TEXT NOT NULL)")
+        db.execSQL("CREATE INDEX index_message_fts_rowid_conversation_id ON message_fts_rowid(conversation_id)")
+        // 旧版本建好的索引只需补上对应关系，读一遍 message_fts 的内容表，不用重新分词
+        db.execSQL(
+            "INSERT INTO message_fts_rowid(fts_rowid, conversation_id) SELECT rowid, conversation_id FROM message_fts"
+        )
+        db.setTransactionSuccessful()
+    } finally {
+        db.endTransaction()
+    }
+}
+
+private class IndexedMessage(val rowid: Long, val nodeId: String, val text: String)
 
 class MessageFtsManager(private val database: AppDatabase) {
 
     private val db get() = database.openHelper.writableDatabase
 
-    suspend fun indexConversation(conversation: Conversation) = withContext(Dispatchers.IO) {
+    /**
+     * 增量更新会话的索引：只重写新增或内容变了的消息，删掉已不存在的消息。
+     * 每次保存会话都会调用，长会话里大部分消息没变，不必整份删掉重新分词。
+     */
+    suspend fun indexConversation(conversation: Conversation) = database.withTransaction {
         val conversationId = conversation.id.toString()
-        db.execSQL("DELETE FROM message_fts WHERE conversation_id = ?", arrayOf(conversationId))
+        val indexed = HashMap<String, IndexedMessage>()
+        val stale = mutableListOf<Long>()
+        db.query(
+            """
+            SELECT f.rowid, f.node_id, f.message_id, f.text
+            FROM message_fts_rowid AS r JOIN message_fts AS f ON f.rowid = r.fts_rowid
+            WHERE r.conversation_id = ?
+            """.trimIndent(),
+            arrayOf(conversationId)
+        ).use {
+            while (it.moveToNext()) {
+                val row = IndexedMessage(it.getLong(0), it.getString(1), it.getString(3))
+                if (indexed.putIfAbsent(it.getString(2), row) != null) stale.add(row.rowid)
+            }
+        }
         conversation.messageNodes.forEach { node ->
+            val nodeId = node.id.toString()
             node.messages.forEach { message ->
                 val text = message.extractFtsText()
+                val existing = indexed.remove(message.id.toString())
+                if (existing != null && existing.nodeId == nodeId && existing.text == text) return@forEach
+                existing?.let { stale.add(it.rowid) }
                 if (text.isNotBlank()) {
                     db.execSQL(
-                        "INSERT INTO message_fts(text, node_id, message_id, conversation_id, title, update_at) VALUES (?, ?, ?, ?, ?, ?)",
-                        arrayOf(
-                            text,
-                            node.id.toString(),
-                            message.id.toString(),
-                            conversationId,
-                            conversation.title,
-                            conversation.updateAt.toEpochMilli().toString(),
-                        )
+                        "INSERT INTO message_fts(text, node_id, message_id, conversation_id) VALUES (?, ?, ?, ?)",
+                        arrayOf(text, nodeId, message.id.toString(), conversationId)
+                    )
+                    db.execSQL(
+                        "INSERT OR REPLACE INTO message_fts_rowid(fts_rowid, conversation_id) VALUES (last_insert_rowid(), ?)",
+                        arrayOf(conversationId)
                     )
                 }
             }
         }
+        indexed.values.forEach { stale.add(it.rowid) }
+        stale.forEach { rowid ->
+            db.execSQL("DELETE FROM message_fts WHERE rowid = ?", arrayOf(rowid))
+            db.execSQL("DELETE FROM message_fts_rowid WHERE fts_rowid = ?", arrayOf(rowid))
+        }
     }
 
-    suspend fun updateTitle(conversationId: String, title: String) = withContext(Dispatchers.IO) {
-        db.execSQL("UPDATE message_fts SET title = ? WHERE conversation_id = ?", arrayOf(title, conversationId))
+    suspend fun deleteConversation(conversationId: String) = database.withTransaction {
+        db.execSQL(
+            "DELETE FROM message_fts WHERE rowid IN (SELECT fts_rowid FROM message_fts_rowid WHERE conversation_id = ?)",
+            arrayOf(conversationId)
+        )
+        db.execSQL("DELETE FROM message_fts_rowid WHERE conversation_id = ?", arrayOf(conversationId))
     }
 
-    suspend fun deleteConversation(conversationId: String) = withContext(Dispatchers.IO) {
-        db.execSQL("DELETE FROM message_fts WHERE conversation_id = ?", arrayOf(conversationId))
-    }
-
-    suspend fun deleteAll() = withContext(Dispatchers.IO) {
+    suspend fun deleteAll() = database.withTransaction {
         db.execSQL("DELETE FROM message_fts")
+        db.execSQL("DELETE FROM message_fts_rowid")
     }
 
     suspend fun search(
@@ -75,22 +142,19 @@ class MessageFtsManager(private val database: AppDatabase) {
         if (assistantIds != null && assistantIds.isEmpty()) return@withContext results
         val matchQuery = buildFtsMatchQuery(keyword, ::simpleQuery) ?: return@withContext results
         val assistantFilter = if (assistantIds != null) {
-            """
-            AND EXISTS (
-                SELECT 1 FROM conversationentity AS conversation
-                WHERE conversation.id = message_fts.conversation_id
-                  AND conversation.assistant_id IN (${assistantIds.joinToString { "?" }})
-            )
-            """.trimIndent()
+            "AND conversation.assistant_id IN (${assistantIds.joinToString { "?" }})"
         } else {
             ""
         }
+        // 标题和更新时间以会话表为准，改标题、发消息都不用改写索引
         val cursor = db.query(
             """
-            SELECT node_id, message_id, conversation_id, title, update_at,
+            SELECT message_fts.node_id, message_fts.message_id, message_fts.conversation_id,
+                   conversation.title, conversation.update_at,
                    simple_snippet(message_fts, 0, '[', ']', '...', 30) AS snippet
             FROM message_fts
-            WHERE text MATCH ?
+            JOIN conversationentity AS conversation ON conversation.id = message_fts.conversation_id
+            WHERE message_fts.text MATCH ?
             $assistantFilter
             ORDER BY ${sort.orderBy}
             LIMIT 50

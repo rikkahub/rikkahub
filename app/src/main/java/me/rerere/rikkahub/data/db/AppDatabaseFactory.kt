@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import me.rerere.rikkahub.data.db.fts.createMessageFtsTables
 import me.rerere.rikkahub.data.db.migrations.Migration_11_12
 import me.rerere.rikkahub.data.db.migrations.Migration_13_14
 import me.rerere.rikkahub.data.db.migrations.Migration_14_15
@@ -31,19 +32,7 @@ internal object AppDatabaseFactory {
                 override fun onOpen(db: SupportSQLiteDatabase) {
                     // 旧版本搜索用 jieba 分词，会把词典解压到这里（约 14MB），现在不再需要
                     File(context.filesDir, "simple_dict").takeIf { it.exists() }?.deleteRecursively()
-                    db.execSQL(
-                        """
-                        CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(
-                            text,
-                            node_id UNINDEXED,
-                            message_id UNINDEXED,
-                            conversation_id UNINDEXED,
-                            title UNINDEXED,
-                            update_at UNINDEXED,
-                            tokenize = 'simple'
-                        )
-                        """.trimIndent()
-                    )
+                    createMessageFtsTables(db)
                 }
             })
             .openHelperFactory(SQLiteConfiguration.openHelperFactory(context))
