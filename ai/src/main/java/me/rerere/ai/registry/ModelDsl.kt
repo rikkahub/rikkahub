@@ -19,11 +19,6 @@ class ModelDefinition(
         return matcher.score(modelId, tokens) != null
     }
 
-    fun matchScore(modelId: String): Int? {
-        val tokens = tokenize(modelId)
-        return matcher.score(modelId, tokens)
-    }
-
     internal fun matchScore(modelId: String, tokens: List<String>): Int? =
         matcher.score(modelId, tokens)
 }
@@ -164,7 +159,8 @@ private class TokenSequenceMatcher(
     override fun score(modelId: String, tokens: List<String>): Int? {
         if (specs.isEmpty()) return null
         var specIndex = 0
-        for (token in tokens) {
+        for ((index, token) in tokens.withIndex()) {
+            if (isMagnitude(tokens, index)) continue
             if (specs[specIndex].matches(token)) {
                 specIndex += 1
                 if (specIndex == specs.size) return specs.size
@@ -194,7 +190,13 @@ private fun parseTokenSpec(spec: String): TokenSpec {
 
 private const val EXACT_ID_BONUS = 1000
 
-private fun tokenize(modelId: String): List<String> {
+// 紧跟这些单位的数字是参数量或上下文长度（如 8b、a3b、32k），不是版本号
+private val MAGNITUDE_SUFFIXES = setOf("b", "k")
+
+private fun isMagnitude(tokens: List<String>, index: Int): Boolean =
+    tokens[index].first().isDigit() && tokens.getOrNull(index + 1) in MAGNITUDE_SUFFIXES
+
+internal fun tokenize(modelId: String): List<String> {
     val tokens = mutableListOf<String>()
     val input = modelId.lowercase()
     var index = 0

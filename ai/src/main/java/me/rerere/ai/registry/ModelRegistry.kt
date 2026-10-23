@@ -355,6 +355,12 @@ object ModelRegistry {
         toolReasoningAbility()
     }
 
+    private val QWEN_3_VL = defineModel {
+        tokens("qwen", "3", "vl")
+        visionInput()
+        toolReasoningAbility()
+    }
+
     private val QWEN_3_5 = defineModel {
         tokens("qwen", "3", "5")
         visionInput()
@@ -667,6 +673,7 @@ object ModelRegistry {
         DEEPSEEK_V3_1,
         DEEPSEEK_V3_2,
         QWEN_3,
+        QWEN_3_VL,
         QWEN_3_5,
         QWEN_3_6,
         QWEN_3_7,
@@ -739,10 +746,11 @@ object ModelRegistry {
     }
 
     private fun resolveModels(modelId: String): List<ModelDefinition> {
+        val tokens = tokenize(modelId)
         var bestScore: Int? = null
         val matches = mutableListOf<ModelDefinition>()
         for (model in ALL_MODELS) {
-            val score = model.matchScore(modelId) ?: continue
+            val score = model.matchScore(modelId, tokens) ?: continue
             when {
                 bestScore == null || score > bestScore -> {
                     bestScore = score
