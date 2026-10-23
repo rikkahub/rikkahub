@@ -14,6 +14,7 @@ import com.petterp.floatingx.app.appHost
 import com.petterp.floatingx.compose.compose
 import com.petterp.floatingx.core.FloatingX
 import com.petterp.floatingx.core.FxControl
+import com.petterp.floatingx.core.FxState
 import com.petterp.floatingx.core.animation.FxAnimations
 import com.petterp.floatingx.core.layout.FxGravity
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
@@ -29,11 +30,7 @@ fun FloatingWindow(
     var window: FxControl? by remember { mutableStateOf(null) }
 
     LaunchedEffect(window, visibility) {
-        if (visibility) {
-            window?.show()
-        } else {
-            window?.hide()
-        }
+        window?.setVisible(visibility)
     }
 
     DisposableEffect(context, tag) {
@@ -48,9 +45,15 @@ fun FloatingWindow(
             }
         }
         window = control
-        if (visibility) control.show() else control.hide()
+        control.setVisible(visibility)
         onDispose {
             control.cancel()
         }
     }
+}
+
+// 同 tag 再次 install 会 cancel 旧的 control（例如同时存在两个 Activity 实例），已 cancel 的不能再操作
+private fun FxControl.setVisible(visible: Boolean) {
+    if (state == FxState.CANCELLED) return
+    if (visible) show() else hide()
 }
