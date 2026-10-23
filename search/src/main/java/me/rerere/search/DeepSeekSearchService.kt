@@ -48,7 +48,7 @@ object DeepSeekSearchService : SearchService<SearchServiceOptions.DeepSeekOption
                     put("type", "string")
                     put(
                         "description",
-                        "search keyword, 1-128 characters. Supports operators: site:, -site:, -keyword, \"exact phrase\", " +
+                        "$SEARCH_QUERY_DESCRIPTION 1-128 characters. Supports operators: site:, -site:, -keyword, \"exact phrase\", " +
                             "lang:zh,en, after:2025-01-01, before:2026-06-01"
                     )
                 })

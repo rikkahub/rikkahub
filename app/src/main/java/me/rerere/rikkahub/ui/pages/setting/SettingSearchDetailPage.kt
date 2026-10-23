@@ -394,6 +394,23 @@ internal fun TavilyOptions(
             }
         }
     }
+
+    FormItem(
+        label = {
+            Text("Include Answer")
+        },
+        description = {
+            Text("Let Tavily generate an answer summary alongside the search results")
+        },
+        tail = {
+            Switch(
+                checked = options.includeAnswer,
+                onCheckedChange = { checked ->
+                    onUpdateOptions(options.copy(includeAnswer = checked))
+                }
+            )
+        }
+    )
 }
 
 @Composable

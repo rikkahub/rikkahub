@@ -20,6 +20,12 @@ import kotlin.coroutines.resumeWithException
 import kotlin.reflect.KClass
 import kotlin.uuid.Uuid
 
+internal const val SEARCH_QUERY_DESCRIPTION =
+    "Concise search keywords, not a full sentence. Write them in the language the best sources on the topic " +
+        "are written in: usually English for technology, science and international topics; the local language " +
+        "for region-specific topics such as local news, policies, communities or products. " +
+        "Keep proper nouns, product names and error messages verbatim."
+
 interface SearchService<T : SearchServiceOptions> {
     val name: String
 
@@ -226,6 +232,7 @@ sealed class SearchServiceOptions {
         override val id: Uuid = Uuid.random(),
         val apiKey: String = "",
         val depth: String = "advanced",
+        val includeAnswer: Boolean = true,
     ) : SearchServiceOptions()
 
     @Serializable

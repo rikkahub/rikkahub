@@ -47,7 +47,7 @@ object FirecrawlSearchService : SearchService<SearchServiceOptions.FirecrawlOpti
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
-                    put("description", "Search query string")
+                    put("description", SEARCH_QUERY_DESCRIPTION)
                 })
                 put("sources", buildJsonObject {
                     put("type", "array")

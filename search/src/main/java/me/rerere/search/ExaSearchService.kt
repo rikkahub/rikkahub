@@ -52,7 +52,7 @@ object ExaSearchService : SearchService<SearchServiceOptions.ExaOptions> {
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
-                    put("description", "search keyword")
+                    put("description", SEARCH_QUERY_DESCRIPTION)
                 })
                 put("type", buildJsonObject {
                     put("type", "string")

@@ -31,7 +31,7 @@ object RikkaHubSearchService : SearchService<SearchServiceOptions.RikkaHubOption
             properties = buildJsonObject {
                 put("query", buildJsonObject {
                     put("type", "string")
-                    put("description", "search keyword")
+                    put("description", SEARCH_QUERY_DESCRIPTION)
                 })
             },
             required = listOf("query")
