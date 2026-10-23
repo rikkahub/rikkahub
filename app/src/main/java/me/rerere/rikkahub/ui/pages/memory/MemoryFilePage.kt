@@ -116,7 +116,10 @@ fun MemoryFilePage(memoryId: String, path: String?) {
     val unchangedContent = remember(file) {
         file?.run { contentWith(title, description, aliases, editableBody) }
     }
-    val draftContentValid = draftContent.toByteArray().size <= MemoryFile.MAX_BYTES
+    // 和仓库层一样只拦变大的超限：迁移来的旧记忆可能本来就超限，得允许分几次删小
+    val currentSize = remember(file) { file?.content?.toByteArray()?.size ?: 0 }
+    val draftSize = draftContent.toByteArray().size
+    val draftContentValid = draftSize <= MemoryFile.MAX_BYTES || draftSize <= currentSize
     val canSave = draftContentValid && if (isNew) draftPathValid else draftContent != unchangedContent
 
     fun onSaved(result: MemoryWriteResult) {
