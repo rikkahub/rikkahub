@@ -1081,7 +1081,7 @@
   <string name="setting_page_preferences_theme">Тема</string>
   <string name="setting_page_preferences_theme_desc">Динамические цвета, тема, тёмный режим AMOLED</string>
   <string name="setting_page_preferences_notification">Уведомления</string>
-  <string name="setting_page_preferences_notification_desc">Уведомления об обновлениях и генерации сообщений</string>
+  <string name="setting_page_preferences_notification_desc">Оповещения об обновлениях, уведомления о генерации сообщений, фоновое плавающее окно</string>
   <string name="setting_page_preferences_general">Общие</string>
   <string name="setting_page_preferences_general_desc">Поведение взаимодействия, прокрутка, настройки ввода</string>
   <string name="setting_page_preferences_ui">Настройки интерфейса</string>
@@ -1765,4 +1765,22 @@
   <string name="skill_detail_page_builtin_readonly">Встроенные навыки нельзя изменить</string>
   <string name="skill_detail_page_name_change_error">Название навыка нельзя изменить. Поле name должно быть %1$s</string>
   <string name="skill_detail_page_save_failed">Не удалось сохранить</string>
+  <string name="setting_page_preferences_notification_background_generation">Генерация в фоне</string>
+  <string name="setting_page_preferences_notification_floating_window">Фоновое плавающее окно</string>
+  <string name="setting_page_preferences_notification_floating_window_desc">Показывать плавающий значок, если вы выходите из приложения, пока ИИ ещё отвечает. Нажмите на него, чтобы проверить ход выполнения, подтвердить вызовы инструментов и быстро ответить.</string>
+  <string name="setting_page_preferences_notification_overlay_permission">Разрешить наложение поверх других приложений</string>
+  <string name="setting_page_preferences_notification_overlay_permission_desc">Без этого разрешения плавающее окно не будет отображаться</string>
+  <string name="floating_chat_open_conversation">Открыть беседу</string>
+  <string name="floating_chat_collapse">Свернуть</string>
+  <string name="floating_chat_close">Закрыть плавающее окно</string>
+  <string name="floating_chat_ask_user">У ИИ есть вопрос к вам</string>
+  <string name="floating_chat_tool_request">Хочет вызвать инструмент: %1$s</string>
+  <string name="floating_chat_answer">Ответ</string>
+  <string name="floating_chat_reply_placeholder">Быстрый ответ…</string>
+  <string name="floating_chat_reply_queued_placeholder">Ваш ответ будет отправлен после завершения текущего хода</string>
+  <string name="floating_chat_status_failed">Ошибка генерации</string>
+  <string name="floating_chat_status_awaiting_answer">Ожидание вашего ответа</string>
+  <string name="floating_chat_status_awaiting_approval">Ожидание подтверждения вызова инструмента</string>
+  <string name="floating_chat_status_done">Ответ готов</string>
+  <string name="floating_chat_status_idle">Неактивно</string>
 </resources>

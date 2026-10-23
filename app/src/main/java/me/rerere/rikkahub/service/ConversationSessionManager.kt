@@ -97,6 +97,12 @@ class ConversationSessionManager(
     fun getProcessingStatusFlow(conversationId: Uuid): StateFlow<String?> =
         getOrCreate(conversationId).processingStatus
 
+    fun getReplyMessageIdFlow(conversationId: Uuid): StateFlow<Uuid?> =
+        getOrCreate(conversationId).replyMessageId
+
+    fun getGenerationStartedAtFlow(conversationId: Uuid): StateFlow<Long?> =
+        getOrCreate(conversationId).generationStartedAt
+
     fun getMessageQueueFlow(conversationId: Uuid): StateFlow<MessageQueueState> =
         getOrCreate(conversationId).messageQueue.state
 

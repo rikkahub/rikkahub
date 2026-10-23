@@ -3,7 +3,6 @@ package me.rerere.rikkahub.service
 import android.app.Application
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
@@ -13,15 +12,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessage
-import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.RouteActivity
+import me.rerere.rikkahub.conversationIntent
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
+import me.rerere.rikkahub.data.model.GenerationPhase
+import me.rerere.rikkahub.data.model.generationPhase
 import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.rikkahub.utils.sendNotification
 import java.util.concurrent.ConcurrentHashMap
@@ -115,7 +115,7 @@ class ChatNotificationManager(
         senderName: String
     ) {
         // 确定当前状态
-        val (chipText, statusText, contentText) = determineNotificationContent(lastMessage.parts)
+        val (chipText, statusText, contentText) = determineNotificationContent(lastMessage)
 
         context.sendNotification(
             channelId = CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID,
@@ -135,48 +135,32 @@ class ChatNotificationManager(
         }
     }
 
-    private fun determineNotificationContent(parts: List<UIMessagePart>): Triple<String, String, String> {
-        // 检查最近的 part 来确定状态
-        val lastReasoning = parts.filterIsInstance<UIMessagePart.Reasoning>().lastOrNull()
-        val lastTool = parts.filterIsInstance<UIMessagePart.Tool>().lastOrNull()
-        val lastText = parts.filterIsInstance<UIMessagePart.Text>().lastOrNull()
+    private fun determineNotificationContent(message: UIMessage): Triple<String, String, String> =
+        when (val phase = message.generationPhase()) {
+            is GenerationPhase.RunningTool -> Triple(
+                context.getString(R.string.notification_live_update_chip_tool),
+                context.getString(R.string.notification_live_update_tool, phase.toolName),
+                phase.input.take(100)
+            )
 
-        return when {
-            // 正在执行工具
-            lastTool != null && !lastTool.isExecuted -> {
-                val toolName = lastTool.toolName.substringAfterLast("__")
-                Triple(
-                    context.getString(R.string.notification_live_update_chip_tool),
-                    context.getString(R.string.notification_live_update_tool, toolName),
-                    lastTool.input.take(100)
-                )
-            }
-            // 正在思考（Reasoning 未结束）
-            lastReasoning != null && lastReasoning.finishedAt == null -> {
-                Triple(
-                    context.getString(R.string.notification_live_update_chip_thinking),
-                    context.getString(R.string.notification_live_update_thinking),
-                    lastReasoning.reasoning.takeLast(200)
-                )
-            }
-            // 正在写回复
-            lastText != null -> {
-                Triple(
-                    context.getString(R.string.notification_live_update_chip_writing),
-                    context.getString(R.string.notification_live_update_writing),
-                    lastText.text.takeLast(200)
-                )
-            }
-            // 默认状态
-            else -> {
-                Triple(
-                    context.getString(R.string.notification_live_update_chip_writing),
-                    context.getString(R.string.notification_live_update_title),
-                    ""
-                )
-            }
+            is GenerationPhase.Thinking -> Triple(
+                context.getString(R.string.notification_live_update_chip_thinking),
+                context.getString(R.string.notification_live_update_thinking),
+                phase.reasoning.takeLast(200)
+            )
+
+            is GenerationPhase.Writing -> Triple(
+                context.getString(R.string.notification_live_update_chip_writing),
+                context.getString(R.string.notification_live_update_writing),
+                phase.text.takeLast(200)
+            )
+
+            GenerationPhase.Waiting -> Triple(
+                context.getString(R.string.notification_live_update_chip_writing),
+                context.getString(R.string.notification_live_update_title),
+                ""
+            )
         }
-    }
 
     private fun cancelLiveUpdateNotification(conversationId: Uuid) {
         liveUpdateLastSentAt.remove(conversationId)
@@ -185,14 +169,10 @@ class ChatNotificationManager(
     }
 
     private fun getPendingIntent(context: Context, conversationId: Uuid): PendingIntent {
-        val intent = Intent(context, RouteActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("conversationId", conversationId.toString())
-        }
         return PendingIntent.getActivity(
             context,
             conversationId.hashCode(),
-            intent,
+            conversationIntent(context, conversationId.toString()),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
     }

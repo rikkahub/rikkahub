@@ -22,8 +22,8 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,7 +35,8 @@ class ConversationSessionTest {
         val id = Uuid.random()
         val oldAssistant = Uuid.random()
         val targetAssistant = Uuid.random()
-        val store = FakeConversationStore(Conversation.ofId(id, assistantId = oldAssistant).copy(folderId = Uuid.random()))
+        val store =
+            FakeConversationStore(Conversation.ofId(id, assistantId = oldAssistant).copy(folderId = Uuid.random()))
         val session = ConversationSession(id, Conversation.ofId(id), this, store, {})
         session.initialize(load = { store.persisted })
         val streaming = session.update { it.updateCurrentMessages(listOf(partialReply())) }
@@ -168,10 +169,16 @@ class ConversationSessionTest {
         val loaded = CompletableDeferred<Conversation>()
         var loads = 0
         val first = launch(start = CoroutineStart.UNDISPATCHED) {
-            session.initialize(load = { loads++; loaded.await() })
+            session.initialize(load = {
+                loads++
+                loaded.await()
+            })
         }
         val second = launch(start = CoroutineStart.UNDISPATCHED) {
-            session.initialize(load = { loads++; initial })
+            session.initialize(load = {
+                loads++
+                initial
+            })
         }
         val otherId = Uuid.random()
         val other = ConversationSession(otherId, Conversation.ofId(otherId), this, FakeConversationStore(), {})
@@ -543,8 +550,14 @@ class ConversationSessionTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
         val id = Uuid.random()
         val completions = mutableListOf<Throwable?>()
-        val session = ConversationSession(id, Conversation.ofId(id), scope, FakeConversationStore(), {},
-            { _, cause -> completions.add(cause) })
+        val session = ConversationSession(
+            id,
+            Conversation.ofId(id),
+            scope,
+            FakeConversationStore(),
+            {},
+            { _, cause -> completions.add(cause) }
+        )
         try {
             val save = CompletableDeferred<Unit>()
             val decisions = mutableListOf<String>()
@@ -624,7 +637,8 @@ class ConversationSessionTest {
             scope,
             FakeConversationStore(),
             {},
-            { _, cause -> completions.add(cause) })
+            { _, cause -> completions.add(cause) }
+        )
         try {
             val releaseOld = CompletableDeferred<Unit>()
             val releaseNew = CompletableDeferred<Unit>()
@@ -663,6 +677,23 @@ class ConversationSessionTest {
             session.setJob(scope.launch(start = CoroutineStart.LAZY) {})
             assertNull(session.getJob())
             assertFalse(session.isGenerating)
+        } finally {
+            session.cleanup()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `generation start time is recorded before the job runs`() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+        val id = Uuid.random()
+        val session = ConversationSession(id, Conversation.ofId(id), scope, FakeConversationStore(), {})
+        try {
+            var seenByJob: Long? = null
+            // 立刻失败的任务报错时，开始时间必须已经记下，否则这次的错误会被当成上一轮的
+            session.setJob(scope.launch(start = CoroutineStart.LAZY) { seenByJob = session.generationStartedAt.value })
+            assertNotNull(seenByJob)
+            assertTrue(seenByJob!! <= System.currentTimeMillis())
         } finally {
             session.cleanup()
             scope.cancel()

@@ -964,7 +964,7 @@
   <string name="setting_page_preferences_network_user_agent">User-Agent</string>
   <string name="setting_page_preferences_network_user_agent_desc">اتركه فارغًا لاستخدام %1$s</string>
   <string name="setting_page_preferences_notification">الإشعارات</string>
-  <string name="setting_page_preferences_notification_desc">تنبيهات التحديث، إشعارات توليد الرسائل</string>
+  <string name="setting_page_preferences_notification_desc">تنبيهات التحديث، إشعارات توليد الرسائل، النافذة العائمة في الخلفية</string>
   <string name="setting_page_preferences_theme">المظهر</string>
   <string name="setting_page_preferences_theme_desc">الألوان الديناميكية، السمة، وضع AMOLED الداكن</string>
   <string name="setting_page_preferences_ui">تفضيلات واجهة المستخدم</string>
@@ -1763,4 +1763,22 @@
   <string name="skill_detail_page_builtin_readonly">لا يمكن تعديل المهارات المدمجة</string>
   <string name="skill_detail_page_name_change_error">لا يمكن تغيير اسم المهارة. يجب أن يكون حقل name %1$s</string>
   <string name="skill_detail_page_save_failed">فشل الحفظ</string>
+  <string name="setting_page_preferences_notification_background_generation">التوليد في الخلفية</string>
+  <string name="setting_page_preferences_notification_floating_window">نافذة عائمة في الخلفية</string>
+  <string name="setting_page_preferences_notification_floating_window_desc">عند مغادرتك التطبيق بينما لا يزال الذكاء الاصطناعي يردّ، اعرض أيقونة عائمة. انقر عليها للتحقق من التقدم وتأكيد استدعاءات الأدوات والرد بسرعة</string>
+  <string name="setting_page_preferences_notification_overlay_permission">منح إذن العرض فوق التطبيقات</string>
+  <string name="setting_page_preferences_notification_overlay_permission_desc">لن تظهر النافذة العائمة دون هذا الإذن</string>
+  <string name="floating_chat_open_conversation">فتح المحادثة</string>
+  <string name="floating_chat_collapse">طيّ</string>
+  <string name="floating_chat_close">إغلاق النافذة العائمة</string>
+  <string name="floating_chat_ask_user">لدى الذكاء الاصطناعي سؤال لك</string>
+  <string name="floating_chat_tool_request">يريد استدعاء الأداة: %1$s</string>
+  <string name="floating_chat_answer">إجابة</string>
+  <string name="floating_chat_reply_placeholder">رد سريع…</string>
+  <string name="floating_chat_reply_queued_placeholder">سيُرسَل ردك عند انتهاء هذا الدور</string>
+  <string name="floating_chat_status_failed">فشل التوليد</string>
+  <string name="floating_chat_status_awaiting_answer">بانتظار إجابتك</string>
+  <string name="floating_chat_status_awaiting_approval">في انتظار تأكيد استدعاء الأداة</string>
+  <string name="floating_chat_status_done">اكتمل الرد</string>
+  <string name="floating_chat_status_idle">خامل</string>
 </resources>

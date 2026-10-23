@@ -829,7 +829,7 @@
   <string name="setting_page_preferences_theme">Theme</string>
   <string name="setting_page_preferences_theme_desc">Dynamic color, theme, AMOLED dark mode</string>
   <string name="setting_page_preferences_notification">Notifications</string>
-  <string name="setting_page_preferences_notification_desc">Update alerts, message generation notifications</string>
+  <string name="setting_page_preferences_notification_desc">Update alerts, message generation notifications, background floating window</string>
   <string name="setting_page_preferences_general">General</string>
   <string name="setting_page_preferences_general_desc">Interaction behavior, scrolling, input settings</string>
   <string name="setting_page_preferences_ui">UI Preferences</string>
@@ -1766,4 +1766,22 @@
   <string name="skill_detail_page_builtin_readonly">Built-in skills cannot be modified</string>
   <string name="skill_detail_page_name_change_error">The skill name cannot be changed. The name field must be %1$s</string>
   <string name="skill_detail_page_save_failed">Save failed</string>
+  <string name="setting_page_preferences_notification_background_generation">Background generation</string>
+  <string name="setting_page_preferences_notification_floating_window">Background floating window</string>
+  <string name="setting_page_preferences_notification_floating_window_desc">When you leave the app while the AI is still replying, show a floating icon. Tap it to check progress, confirm tool calls and reply quickly</string>
+  <string name="setting_page_preferences_notification_overlay_permission">Grant overlay permission</string>
+  <string name="setting_page_preferences_notification_overlay_permission_desc">The floating window will not appear without this permission</string>
+  <string name="floating_chat_open_conversation">Open conversation</string>
+  <string name="floating_chat_collapse">Collapse</string>
+  <string name="floating_chat_close">Close floating window</string>
+  <string name="floating_chat_ask_user">The AI has a question for you</string>
+  <string name="floating_chat_tool_request">Wants to call tool: %1$s</string>
+  <string name="floating_chat_answer">Answer</string>
+  <string name="floating_chat_reply_placeholder">Quick reply…</string>
+  <string name="floating_chat_reply_queued_placeholder">Your reply will be sent when this turn ends</string>
+  <string name="floating_chat_status_failed">Generation failed</string>
+  <string name="floating_chat_status_awaiting_answer">Waiting for your answer</string>
+  <string name="floating_chat_status_awaiting_approval">Waiting for tool call confirmation</string>
+  <string name="floating_chat_status_done">Reply finished</string>
+  <string name="floating_chat_status_idle">Idle</string>
 </resources>

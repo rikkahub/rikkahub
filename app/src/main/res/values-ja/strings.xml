@@ -1081,7 +1081,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_page_preferences_theme">テーマ</string>
   <string name="setting_page_preferences_theme_desc">ダイナミックカラー、テーマ、AMOLEDダークモード</string>
   <string name="setting_page_preferences_notification">通知</string>
-  <string name="setting_page_preferences_notification_desc">アップデート通知、メッセージ生成通知</string>
+  <string name="setting_page_preferences_notification_desc">アップデート通知、メッセージ生成通知、バックグラウンドのフローティングウィンドウ</string>
   <string name="setting_page_preferences_general">一般</string>
   <string name="setting_page_preferences_general_desc">操作動作、スクロール、入力設定</string>
   <string name="setting_page_preferences_ui">UI設定</string>
@@ -1765,4 +1765,22 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="skill_detail_page_builtin_readonly">組み込みスキルは変更できません</string>
   <string name="skill_detail_page_name_change_error">スキル名は変更できません。name フィールドは%1$sである必要があります。</string>
   <string name="skill_detail_page_save_failed">保存に失敗しました</string>
+  <string name="setting_page_preferences_notification_background_generation">バックグラウンド生成</string>
+  <string name="setting_page_preferences_notification_floating_window">バックグラウンドのフローティングウィンドウ</string>
+  <string name="setting_page_preferences_notification_floating_window_desc">AIが返信中にアプリを離れると、フローティングアイコンが表示されます。タップすると進行状況を確認し、ツール呼び出しを確認してすばやく返信できます</string>
+  <string name="setting_page_preferences_notification_overlay_permission">オーバーレイ権限を許可</string>
+  <string name="setting_page_preferences_notification_overlay_permission_desc">この権限がないとフローティングウィンドウは表示されません</string>
+  <string name="floating_chat_open_conversation">会話を開く</string>
+  <string name="floating_chat_collapse">折りたたむ</string>
+  <string name="floating_chat_close">フローティングウィンドウを閉じる</string>
+  <string name="floating_chat_ask_user">AIから質問があります</string>
+  <string name="floating_chat_tool_request">ツールを呼び出そうとしています: %1$s</string>
+  <string name="floating_chat_answer">回答</string>
+  <string name="floating_chat_reply_placeholder">クイック返信…</string>
+  <string name="floating_chat_reply_queued_placeholder">このターンが終了すると返信が送信されます</string>
+  <string name="floating_chat_status_failed">生成に失敗しました</string>
+  <string name="floating_chat_status_awaiting_answer">回答をお待ちしています</string>
+  <string name="floating_chat_status_awaiting_approval">ツール呼び出しの確認待ち</string>
+  <string name="floating_chat_status_done">返信完了</string>
+  <string name="floating_chat_status_idle">待機中</string>
 </resources>

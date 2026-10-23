@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.RouteActivity
+import me.rerere.rikkahub.conversationIntent
 import org.koin.android.ext.android.inject
 import kotlin.uuid.Uuid
 
@@ -162,14 +162,10 @@ class ChatGenerationForegroundService : Service() {
             .build()
 
     private fun getConversationPendingIntent(conversationId: String): PendingIntent {
-        val intent = Intent(this, RouteActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("conversationId", conversationId)
-        }
         return PendingIntent.getActivity(
             this,
             NOTIFICATION_ID,
-            intent,
+            conversationIntent(this, conversationId),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
     }

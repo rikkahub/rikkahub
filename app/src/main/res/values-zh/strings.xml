@@ -1121,7 +1121,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_preferences_theme">主题</string>
   <string name="setting_page_preferences_theme_desc">动态配色、主题、AMOLED深色模式</string>
   <string name="setting_page_preferences_notification">通知</string>
-  <string name="setting_page_preferences_notification_desc">更新提醒、消息生成通知</string>
+  <string name="setting_page_preferences_notification_desc">更新提醒、消息生成通知、后台悬浮窗</string>
   <string name="setting_page_preferences_general">常规</string>
   <string name="setting_page_preferences_general_desc">交互行为、滚动、输入设置</string>
   <string name="setting_page_preferences_ui">界面偏好设置</string>
@@ -1768,4 +1768,22 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="skill_detail_page_builtin_readonly">内置技能不可修改</string>
   <string name="skill_detail_page_name_change_error">技能名称无法更改。name 字段必须为 %1$s</string>
   <string name="skill_detail_page_save_failed">保存失败</string>
+  <string name="setting_page_preferences_notification_background_generation">后台生成</string>
+  <string name="setting_page_preferences_notification_floating_window">后台悬浮窗</string>
+  <string name="setting_page_preferences_notification_floating_window_desc">切到后台时 AI 还在回复，显示一个悬浮图标，点开可查看进度、确认工具调用和快速回复</string>
+  <string name="setting_page_preferences_notification_overlay_permission">授予悬浮窗权限</string>
+  <string name="setting_page_preferences_notification_overlay_permission_desc">没有权限时不会显示悬浮窗</string>
+  <string name="floating_chat_open_conversation">打开对话</string>
+  <string name="floating_chat_collapse">收起</string>
+  <string name="floating_chat_close">关闭悬浮窗</string>
+  <string name="floating_chat_ask_user">AI 有问题需要你回答</string>
+  <string name="floating_chat_tool_request">请求调用工具：%1$s</string>
+  <string name="floating_chat_answer">去回答</string>
+  <string name="floating_chat_reply_placeholder">快速回复…</string>
+  <string name="floating_chat_reply_queued_placeholder">回复将在本轮结束后发送</string>
+  <string name="floating_chat_status_failed">生成失败</string>
+  <string name="floating_chat_status_awaiting_answer">等待你回答问题</string>
+  <string name="floating_chat_status_awaiting_approval">等待确认工具调用</string>
+  <string name="floating_chat_status_done">回复完成</string>
+  <string name="floating_chat_status_idle">空闲</string>
 </resources>

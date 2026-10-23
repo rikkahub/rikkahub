@@ -179,6 +179,10 @@ internal fun Conversation.insertContextCheckpoint(afterNodeId: Uuid, summary: St
 internal val Conversation.isAwaitingToolApproval: Boolean
     get() = currentMessages.any { message -> message.getTools().any { it.isPending } }
 
+/** 等待用户审批的工具调用，和 [isAwaitingToolApproval] 的判断一致 */
+internal val Conversation.pendingToolCalls: List<UIMessagePart.Tool>
+    get() = currentMessages.flatMap { message -> message.getTools().filter { it.isPending } }
+
 /**
  * 去掉还有未执行、又没法继续执行的工具调用的消息（比如还在等待审批），这样的消息发给模型会被拒绝。
  * 已经批准、拒绝或回答过的工具调用之后会继续执行，保留。只处理下标小于 [untilNode] 的节点。

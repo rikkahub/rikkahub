@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -22,8 +24,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.Instant
 import me.rerere.hugeicons.HugeIcons
@@ -70,6 +75,20 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
     )
     PermissionManager(permissionState = permissionState)
 
+    val context = LocalContext.current
+    var canDrawOverlays by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    // 从系统设置页授权回来后刷新
+    LifecycleResumeEffect(Unit) {
+        canDrawOverlays = Settings.canDrawOverlays(context)
+        onPauseOrDispose {}
+    }
+
+    fun requestOverlayPermission() {
+        context.startActivity(
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
+        )
+    }
+
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
@@ -91,10 +110,10 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
             contentPadding = contentPadding + PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item {
-                CardGroup {
-                    // Play 版由商店负责更新，不提供更新提醒
-                    if (!BuildConfig.IS_PLAY_STORE) {
+            // Play 版由商店负责更新，不提供更新提醒
+            if (!BuildConfig.IS_PLAY_STORE) {
+                item {
+                    CardGroup {
                         item(
                             onClick = {
                                 selectedUpdatePauseDays = UPDATE_PAUSE_DAY_OPTIONS.first()
@@ -119,6 +138,10 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
                             },
                         )
                     }
+                }
+            }
+            item {
+                CardGroup(title = { Text(stringResource(R.string.setting_page_preferences_notification_background_generation)) }) {
                     switchItem(
                         checked = displaySetting.enableNotificationOnMessageGeneration,
                         onCheckedChange = {
@@ -138,6 +161,27 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
                             },
                             supportingContent = { Text(stringResource(R.string.setting_display_page_live_update_notification_desc)) },
                             headlineContent = { Text(stringResource(R.string.setting_display_page_live_update_notification)) },
+                        )
+                    }
+                    switchItem(
+                        checked = displaySetting.enableFloatingChatWindow,
+                        onCheckedChange = {
+                            if (it && !canDrawOverlays) requestOverlayPermission()
+                            updateDisplaySetting(displaySetting.copy(enableFloatingChatWindow = it))
+                        },
+                        supportingContent = {
+                            Text(stringResource(R.string.setting_page_preferences_notification_floating_window_desc))
+                        },
+                        headlineContent = { Text(stringResource(R.string.setting_page_preferences_notification_floating_window)) },
+                    )
+                    if (displaySetting.enableFloatingChatWindow && !canDrawOverlays) {
+                        item(
+                            onClick = ::requestOverlayPermission,
+                            headlineContent = { Text(stringResource(R.string.setting_page_preferences_notification_overlay_permission)) },
+                            supportingContent = { Text(stringResource(R.string.setting_page_preferences_notification_overlay_permission_desc)) },
+                            trailingContent = {
+                                Icon(HugeIcons.ArrowRight01, contentDescription = null)
+                            },
                         )
                     }
                 }

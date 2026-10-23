@@ -829,7 +829,7 @@
   <string name="setting_page_preferences_theme">Design</string>
   <string name="setting_page_preferences_theme_desc">Dynamische Farben, Design, AMOLED-Dunkelmodus</string>
   <string name="setting_page_preferences_notification">Benachrichtigungen</string>
-  <string name="setting_page_preferences_notification_desc">Update-Hinweise, Benachrichtigungen zur Nachrichtengenerierung</string>
+  <string name="setting_page_preferences_notification_desc">Update-Hinweise, Benachrichtigungen zur Nachrichtengenerierung, schwebendes Hintergrundfenster</string>
   <string name="setting_page_color_mode">Farbmodus</string>
   <string name="setting_page_color_mode_dark">Dunkel</string>
   <string name="setting_page_color_mode_light">Hell</string>
@@ -1766,4 +1766,22 @@
   <string name="setting_page_web_server_jwt_enable_desc">Passwortprüfung beim Zugriff auf die Weboberfläche erforderlich</string>
   <string name="setting_page_web_server_lan_address">LAN-Adresse</string>
   <string name="setting_page_web_server_local_address">Lokale Adresse</string>
+  <string name="setting_page_preferences_notification_background_generation">Hintergrundgenerierung</string>
+  <string name="setting_page_preferences_notification_floating_window">Schwebefenster im Hintergrund</string>
+  <string name="setting_page_preferences_notification_floating_window_desc">Wenn du die App verlässt, während die KI noch antwortet, wird ein schwebendes Symbol eingeblendet. Tippe darauf, um den Fortschritt zu prüfen, Tool-Aufrufe zu bestätigen und schnell zu antworten</string>
+  <string name="setting_page_preferences_notification_overlay_permission">Overlay-Berechtigung erteilen</string>
+  <string name="setting_page_preferences_notification_overlay_permission_desc">Ohne diese Berechtigung wird das schwebende Fenster nicht angezeigt.</string>
+  <string name="floating_chat_open_conversation">Unterhaltung öffnen</string>
+  <string name="floating_chat_collapse">Einklappen</string>
+  <string name="floating_chat_close">Schwebendes Fenster schließen</string>
+  <string name="floating_chat_ask_user">Die KI hat eine Frage an dich</string>
+  <string name="floating_chat_tool_request">Möchte Tool aufrufen: %1$s</string>
+  <string name="floating_chat_answer">Antworten</string>
+  <string name="floating_chat_reply_placeholder">Schnellantwort…</string>
+  <string name="floating_chat_reply_queued_placeholder">Deine Antwort wird gesendet, sobald diese Runde endet</string>
+  <string name="floating_chat_status_failed">Generierung fehlgeschlagen</string>
+  <string name="floating_chat_status_awaiting_answer">Warte auf deine Antwort</string>
+  <string name="floating_chat_status_awaiting_approval">Warten auf Bestätigung des Tool-Aufrufs</string>
+  <string name="floating_chat_status_done">Antwort abgeschlossen</string>
+  <string name="floating_chat_status_idle">Inaktiv</string>
 </resources>

@@ -1079,7 +1079,7 @@
   <string name="setting_page_preferences_theme">主題</string>
   <string name="setting_page_preferences_theme_desc">動態色彩、主題、AMOLED 深色模式</string>
   <string name="setting_page_preferences_notification">通知</string>
-  <string name="setting_page_preferences_notification_desc">更新提醒、訊息產生通知</string>
+  <string name="setting_page_preferences_notification_desc">更新提醒、訊息產生通知、背景懸浮視窗</string>
   <string name="setting_page_preferences_general">一般</string>
   <string name="setting_page_preferences_general_desc">互動行為、捲動、輸入設定</string>
   <string name="setting_page_preferences_ui">UI 偏好設定</string>
@@ -1763,4 +1763,22 @@
   <string name="skill_detail_page_builtin_readonly">內建技能無法修改</string>
   <string name="skill_detail_page_name_change_error">技能名稱無法變更。name 欄位必須為 %1$s</string>
   <string name="skill_detail_page_save_failed">儲存失敗</string>
+  <string name="setting_page_preferences_notification_background_generation">背景生成</string>
+  <string name="setting_page_preferences_notification_floating_window">背景懸浮視窗</string>
+  <string name="setting_page_preferences_notification_floating_window_desc">當你離開應用程式而 AI 仍在回覆時，顯示懸浮圖示。點擊即可查看進度、確認工具呼叫並快速回覆</string>
+  <string name="setting_page_preferences_notification_overlay_permission">授予懸浮視窗權限</string>
+  <string name="setting_page_preferences_notification_overlay_permission_desc">沒有此權限，懸浮視窗將不會顯示</string>
+  <string name="floating_chat_open_conversation">開啟對話</string>
+  <string name="floating_chat_collapse">收合</string>
+  <string name="floating_chat_close">關閉懸浮視窗</string>
+  <string name="floating_chat_ask_user">AI 有問題想問你</string>
+  <string name="floating_chat_tool_request">想要呼叫工具：%1$s</string>
+  <string name="floating_chat_answer">去回答</string>
+  <string name="floating_chat_reply_placeholder">快速回覆…</string>
+  <string name="floating_chat_reply_queued_placeholder">本回合結束後將傳送你的回覆</string>
+  <string name="floating_chat_status_failed">生成失敗</string>
+  <string name="floating_chat_status_awaiting_answer">等待你回答問題</string>
+  <string name="floating_chat_status_awaiting_approval">等待工具呼叫確認</string>
+  <string name="floating_chat_status_done">回覆完成</string>
+  <string name="floating_chat_status_idle">閒置</string>
 </resources>

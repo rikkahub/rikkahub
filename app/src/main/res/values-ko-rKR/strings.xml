@@ -1081,7 +1081,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_page_preferences_theme">테마</string>
   <string name="setting_page_preferences_theme_desc">다이나믹 색상, 테마, AMOLED 다크 모드</string>
   <string name="setting_page_preferences_notification">알림</string>
-  <string name="setting_page_preferences_notification_desc">업데이트 알림, 메시지 생성 알림</string>
+  <string name="setting_page_preferences_notification_desc">업데이트 알림, 메시지 생성 알림, 백그라운드 플로팅 창</string>
   <string name="setting_page_preferences_general">일반</string>
   <string name="setting_page_preferences_general_desc">상호작용 방식, 스크롤, 입력 설정</string>
   <string name="setting_page_preferences_ui">UI 환경설정</string>
@@ -1765,4 +1765,22 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="skill_detail_page_builtin_readonly">내장 스킬은 수정할 수 없습니다.</string>
   <string name="skill_detail_page_name_change_error">스킬 이름은 변경할 수 없습니다. name 필드는 %1$s이어야 합니다.</string>
   <string name="skill_detail_page_save_failed">저장 실패</string>
+  <string name="setting_page_preferences_notification_background_generation">백그라운드 생성</string>
+  <string name="setting_page_preferences_notification_floating_window">백그라운드 플로팅 창</string>
+  <string name="setting_page_preferences_notification_floating_window_desc">AI가 응답 중일 때 앱을 나가면 플로팅 아이콘이 표시됩니다. 아이콘을 탭하면 진행 상황을 확인하고 도구 호출을 승인하며 빠르게 답장할 수 있습니다</string>
+  <string name="setting_page_preferences_notification_overlay_permission">오버레이 권한 부여</string>
+  <string name="setting_page_preferences_notification_overlay_permission_desc">이 권한이 없으면 플로팅 창이 나타나지 않습니다</string>
+  <string name="floating_chat_open_conversation">대화 열기</string>
+  <string name="floating_chat_collapse">접기</string>
+  <string name="floating_chat_close">플로팅 창 닫기</string>
+  <string name="floating_chat_ask_user">AI가 질문이 있습니다</string>
+  <string name="floating_chat_tool_request">도구 호출 요청: %1$s</string>
+  <string name="floating_chat_answer">답변</string>
+  <string name="floating_chat_reply_placeholder">빠른 답장…</string>
+  <string name="floating_chat_reply_queued_placeholder">이 턴이 끝나면 답장이 전송됩니다</string>
+  <string name="floating_chat_status_failed">생성 실패</string>
+  <string name="floating_chat_status_awaiting_answer">답변을 기다리는 중</string>
+  <string name="floating_chat_status_awaiting_approval">도구 호출 확인 대기 중</string>
+  <string name="floating_chat_status_done">답변 완료</string>
+  <string name="floating_chat_status_idle">대기 중</string>
 </resources>
