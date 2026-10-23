@@ -27,8 +27,13 @@
 # Keep generic signatures and inner class info for libraries that read them reflectively at runtime.
 -keepattributes Signature,InnerClasses,EnclosingMethod
 
-# Keep JlatexMath
--keep class org.scilab.forge.jlatexmath.** { *; }
+# JLatexMath looks up \newcommand macros and the Greek/Cyrillic alphabet registrations by class name.
+-keep class org.scilab.forge.jlatexmath.NewCommandMacro {
+    <init>();
+    java.lang.String executeMacro(org.scilab.forge.jlatexmath.TeXParser, java.lang.String[]);
+}
+-keep class org.scilab.forge.jlatexmath.cyrillic.CyrillicRegistration { <init>(); }
+-keep class org.scilab.forge.jlatexmath.greek.GreekRegistration { <init>(); }
 
 # JSch loads its cipher, key exchange and compression implementations by class name from its config.
 -keep class com.jcraft.jsch.** { *; }
