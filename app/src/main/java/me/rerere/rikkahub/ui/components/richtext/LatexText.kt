@@ -137,8 +137,12 @@ private val displayDollarRegex = Regex("""^\$\$(.*?)\$\$""", RegexOption.DOT_MAT
 private val inlineParenRegex = Regex("""^\\\((.*?)\\\)""", RegexOption.DOT_MATCHES_ALL)
 private val displayBracketRegex = Regex("""^\\\[(.*?)\\\]""", RegexOption.DOT_MATCHES_ALL)
 
+// JLatexMath 的 \\ 不认识后面的行距参数，[4pt] 会被当成正文画出来，这里去掉行距只保留换行
+private val lineBreakSpacingRegex =
+    Regex("""\\\\\s*\[\s*-?(?:\d+\.?\d*|\.\d+)\s*(?:pt|em|ex|mm|cm|in|bp|pc|dd|cc|sp|mu)\s*]""")
+
 private fun processLatex(latex: String): String {
-    val trimmed = latex.trim()
+    val trimmed = latex.trim().replace(lineBreakSpacingRegex) { """\\""" }
     return when {
         displayDollarRegex.matches(trimmed) ->
             displayDollarRegex.find(trimmed)?.groupValues?.get(1)?.trim() ?: trimmed
