@@ -1781,4 +1781,7 @@
   <string name="floating_chat_status_awaiting_approval">Waiting for tool call confirmation</string>
   <string name="floating_chat_status_done">Reply finished</string>
   <string name="floating_chat_status_idle">Idle</string>
+  <string name="setting_model_page_memory_model">Memory Consolidation Model</string>
+  <string name="setting_model_page_memory_model_desc">Model used to organize conversations into long-term memory in the background; uses the fast model when not set</string>
+  <string name="setting_model_page_memory_model_follow_fast">Same as fast model</string>
 </resources>

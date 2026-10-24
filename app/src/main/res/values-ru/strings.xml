@@ -1780,4 +1780,7 @@
   <string name="floating_chat_status_awaiting_approval">Ожидание подтверждения вызова инструмента</string>
   <string name="floating_chat_status_done">Ответ готов</string>
   <string name="floating_chat_status_idle">Неактивно</string>
+  <string name="setting_model_page_memory_model">Модель консолидации памяти</string>
+  <string name="setting_model_page_memory_model_desc">Модель, которая организует диалоги в долговременную память в фоновом режиме; если не задана, используется быстрая модель</string>
+  <string name="setting_model_page_memory_model_follow_fast">Как у быстрой модели</string>
 </resources>

@@ -263,11 +263,14 @@ internal fun ModelSelectorButton(
 }
 
 // 显示当前模型的胶囊按钮，样式和 Select 保持一致，点击后由调用方打开模型列表
+// 给了 onClear 时，选了模型后右侧显示清除按钮；placeholder 是没选模型时显示的文字
 @Composable
 internal fun ModelField(
     model: Model?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    placeholder: String = stringResource(R.string.model_list_select_model),
+    onClear: (() -> Unit)? = null,
 ) {
     Surface(
         onClick = onClick,
@@ -288,16 +291,26 @@ internal fun ModelField(
                 )
             }
             Text(
-                text = model?.displayName ?: stringResource(R.string.model_list_select_model),
+                text = model?.displayName ?: placeholder,
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
-            Icon(
-                imageVector = HugeIcons.ArrowDown01,
-                contentDescription = null,
-            )
+            if (onClear != null && model != null) {
+                Icon(
+                    imageVector = HugeIcons.Cancel01,
+                    contentDescription = "Clear",
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(onClick = onClear),
+                )
+            } else {
+                Icon(
+                    imageVector = HugeIcons.ArrowDown01,
+                    contentDescription = null,
+                )
+            }
         }
     }
 }

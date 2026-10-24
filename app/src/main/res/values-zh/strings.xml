@@ -1783,4 +1783,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="floating_chat_status_awaiting_approval">等待确认工具调用</string>
   <string name="floating_chat_status_done">回复完成</string>
   <string name="floating_chat_status_idle">空闲</string>
+  <string name="setting_model_page_memory_model">记忆整理模型</string>
+  <string name="setting_model_page_memory_model_desc">用于在后台将对话整理为长期记忆的模型；未设置时使用快速模型</string>
+  <string name="setting_model_page_memory_model_follow_fast">跟随快速模型</string>
 </resources>

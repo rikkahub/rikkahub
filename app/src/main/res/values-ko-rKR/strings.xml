@@ -1780,4 +1780,7 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="floating_chat_status_awaiting_approval">도구 호출 확인 대기 중</string>
   <string name="floating_chat_status_done">답변 완료</string>
   <string name="floating_chat_status_idle">대기 중</string>
+  <string name="setting_model_page_memory_model">기억 통합 모델</string>
+  <string name="setting_model_page_memory_model_desc">백그라운드에서 대화를 장기 기억으로 정리하는 데 사용되는 모델입니다. 설정하지 않으면 빠른 모델을 사용합니다.</string>
+  <string name="setting_model_page_memory_model_follow_fast">빠른 모델과 동일</string>
 </resources>

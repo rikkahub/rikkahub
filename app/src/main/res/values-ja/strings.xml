@@ -1780,4 +1780,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="floating_chat_status_awaiting_approval">ツール呼び出しの確認待ち</string>
   <string name="floating_chat_status_done">返信完了</string>
   <string name="floating_chat_status_idle">待機中</string>
+  <string name="setting_model_page_memory_model">記憶整理モデル</string>
+  <string name="setting_model_page_memory_model_desc">バックグラウンドで会話を長期記憶に整理するために使用されるモデル。未設定の場合は高速モデルを使用します</string>
+  <string name="setting_model_page_memory_model_follow_fast">高速モデルと同じ</string>
 </resources>

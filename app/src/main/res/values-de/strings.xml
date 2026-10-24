@@ -1781,4 +1781,7 @@
   <string name="floating_chat_status_awaiting_approval">Warten auf Bestätigung des Tool-Aufrufs</string>
   <string name="floating_chat_status_done">Antwort abgeschlossen</string>
   <string name="floating_chat_status_idle">Inaktiv</string>
+  <string name="setting_model_page_memory_model">Erinnerungskonsolidierungsmodell</string>
+  <string name="setting_model_page_memory_model_desc">Modell, das Konversationen im Hintergrund in langfristige Erinnerungen organisiert; verwendet das schnelle Modell, wenn nicht festgelegt</string>
+  <string name="setting_model_page_memory_model_follow_fast">Wie das schnelle Modell</string>
 </resources>

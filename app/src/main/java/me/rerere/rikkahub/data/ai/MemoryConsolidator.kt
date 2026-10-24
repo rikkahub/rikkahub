@@ -14,6 +14,7 @@ import me.rerere.ai.agent.AgentRequest
 import me.rerere.ai.agent.StepRequest
 import me.rerere.ai.agent.runAgent
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
@@ -169,7 +170,10 @@ class MemoryConsolidator(
         // 没有新的轮次时，只有手动清理且记忆库里有东西才值得调用模型
         if (batches.isEmpty() && (!fullReview || files.isEmpty())) return null
 
-        val model = settings.consolidationModel(batches.firstOrNull()?.conversation, assistants.first())
+        val (model, reasoningLevel) = settings.consolidationModel(
+            batches.firstOrNull()?.conversation,
+            assistants.first()
+        )
             ?: error("No model available")
         val providerSetting = model.findProvider(settings.providers) ?: error("Provider not found")
         // 自动整理只增改；删文件只在用户手动要求清理整个记忆库时才允许
@@ -178,7 +182,7 @@ class MemoryConsolidator(
             createMemoryConversationTools(conversationRepo, assistantIds)
         val systemPrompt = buildMemoryConsolidationPrompt(fullReview)
         // 整次整理的每一步用同一个会话 ID，服务端才能命中前面几步的缓存
-        val params = backgroundTextGenerationParams(model, Uuid.random(), settings.fastModelReasoningLevel)
+        val params = backgroundTextGenerationParams(model, Uuid.random(), reasoningLevel)
         val hooks = object : AgentHooks {
             override suspend fun prepareStep(messages: List<UIMessage>): StepRequest {
                 val system = (listOf(systemPrompt) + tools.map { it.systemPrompt(model, messages) })
@@ -286,11 +290,18 @@ private fun List<Batch>.withinTranscriptBudget(): List<Batch> {
     }
 }
 
-// 整理要调用工具；快速模型不支持时退回对话模型
-private fun Settings.consolidationModel(conversation: Conversation?, assistant: Assistant): Model? {
-    val fastModel = findModelById(fastModelId)?.takeIf { ModelAbility.TOOL in it.abilities }
-    val chatModel = conversation?.let { getChatModelOf(it) } ?: findModelById(assistant.chatModelId ?: chatModelId)
-    return (fastModel ?: chatModel)?.copy(tools = emptySet())
+// 依次用记忆整理模型、快速模型，推理强度跟着用上的那个；整理要调用工具，都不支持时退回对话模型
+private fun Settings.consolidationModel(
+    conversation: Conversation?,
+    assistant: Assistant,
+): Pair<Model, ReasoningLevel>? {
+    fun toolModel(id: Uuid?) = id?.let { findModelById(it) }?.takeIf { ModelAbility.TOOL in it.abilities }
+    val (model, reasoningLevel) = toolModel(memoryModelId)?.let { it to memoryModelReasoningLevel }
+        ?: toolModel(fastModelId)?.let { it to fastModelReasoningLevel }
+        ?: (conversation?.let { getChatModelOf(it) } ?: findModelById(assistant.chatModelId ?: chatModelId))
+            ?.let { it to fastModelReasoningLevel }
+        ?: return null
+    return model.copy(tools = emptySet()) to reasoningLevel
 }
 
 /**
