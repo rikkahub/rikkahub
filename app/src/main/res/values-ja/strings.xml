@@ -1062,8 +1062,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="use_web_search">ウェブ検索を</string>
   <string name="user_default_name">ユーザー</string>
   <string name="video">動画</string>
-  <string name="web_search_disabled">ウェブ検索が無効になりました</string>
-  <string name="web_search_enabled">ウェブ検索が有効になりました</string>
   <string name="setting_theme_page_import_theme">インポート</string>
   <string name="setting_theme_page_export_success">テーマJSONがクリップボードにコピーされました</string>
   <string name="setting_theme_page_import_success">テーマが正常にインポートされました</string>

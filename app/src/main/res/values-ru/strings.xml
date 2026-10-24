@@ -1062,8 +1062,6 @@
   <string name="use_web_search">Веб-поиск</string>
   <string name="user_default_name">Пользователь</string>
   <string name="video">Видео</string>
-  <string name="web_search_disabled">Веб-поиск отключён</string>
-  <string name="web_search_enabled">Веб-поиск включён</string>
   <string name="setting_theme_page_import_theme">Импорт</string>
   <string name="setting_theme_page_export_success">JSON темы скопирован в буфер обмена</string>
   <string name="setting_theme_page_import_success">Тема успешно импортирована</string>

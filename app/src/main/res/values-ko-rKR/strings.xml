@@ -1062,8 +1062,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="use_web_search">웹 검색 사용</string>
   <string name="user_default_name">사용자</string>
   <string name="video">동영상</string>
-  <string name="web_search_disabled">웹 검색 비활성화됨</string>
-  <string name="web_search_enabled">웹 검색 활성화됨</string>
   <string name="setting_theme_page_import_theme">가져오기</string>
   <string name="setting_theme_page_export_success">테마 JSON이 클립보드에 복사되었습니다</string>
   <string name="setting_theme_page_import_success">테마를 가져왔습니다</string>

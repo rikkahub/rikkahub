@@ -1109,8 +1109,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="use_web_search">网络搜索</string>
   <string name="user_default_name">用户</string>
   <string name="video">视频</string>
-  <string name="web_search_disabled">已禁用网页搜索</string>
-  <string name="web_search_enabled">已启用网页搜索</string>
   <string name="setting_theme_page_import_theme">导入</string>
   <string name="setting_theme_page_export_success">主题 JSON 已复制到剪贴板</string>
   <string name="setting_theme_page_import_success">主题导入成功</string>

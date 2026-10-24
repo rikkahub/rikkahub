@@ -1293,8 +1293,6 @@
   <string name="use_web_search">البحث في الويب</string>
   <string name="user_default_name">المستخدم</string>
   <string name="video">فيديو</string>
-  <string name="web_search_disabled">البحث في الويب معطّل</string>
-  <string name="web_search_enabled">تم تفعيل البحث على الويب</string>
   <string name="workspace_cwd_no_subdirectories">لا توجد أدلة فرعية</string>
   <string name="workspace_cwd_reset">إعادة تعيين</string>
   <string name="workspace_cwd_select_desc">تعيين دليل العمل للجلسة الحالية</string>

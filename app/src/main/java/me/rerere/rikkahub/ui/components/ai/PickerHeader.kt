@@ -84,10 +84,10 @@ internal fun PickerHeader(
     }
 }
 
-// 选择器 sheet 的紧凑头部：左侧依次是小标题、当前选项和说明，右侧放随选项变形的形状
+// 选择器 sheet 的紧凑头部：左侧依次是小标题（可省略）、当前选项和说明，右侧放随选项变形的形状
 @Composable
 internal fun <T : Comparable<T>> PickerValueHeader(
-    title: String,
+    title: String?,
     value: T,
     hint: String,
     modifier: Modifier = Modifier,
@@ -100,13 +100,15 @@ internal fun <T : Comparable<T>> PickerValueHeader(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (title != null) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             PickerValueLabel(value = value, label = label)
             Text(
                 text = hint,

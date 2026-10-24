@@ -1143,8 +1143,6 @@
   <string name="use_web_search">Web Search</string>
   <string name="user_default_name">User</string>
   <string name="video">Video</string>
-  <string name="web_search_disabled">Web search disabled</string>
-  <string name="web_search_enabled">Web search enabled</string>
   <string name="setting_theme_page_delete_theme_title">Delete Theme</string>
   <string name="setting_theme_page_delete_theme_message">Are you sure you want to delete this theme?</string>
   <string name="skills_page_import_from_file">Import from File</string>

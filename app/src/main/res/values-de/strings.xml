@@ -1103,8 +1103,6 @@
   <string name="use_web_search">Websuche</string>
   <string name="user_default_name">Benutzer</string>
   <string name="video">Video</string>
-  <string name="web_search_disabled">Websuche deaktiviert</string>
-  <string name="web_search_enabled">Websuche aktiviert</string>
   <string name="setting_theme_page_delete_theme_title">Design löschen</string>
   <string name="setting_theme_page_delete_theme_message">Möchtest du dieses Design wirklich löschen?</string>
   <string name="skills_page_import_from_file">Aus Datei importieren</string>
