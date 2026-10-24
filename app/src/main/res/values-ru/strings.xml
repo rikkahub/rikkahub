@@ -1467,7 +1467,6 @@
   <string name="setting_page_media">Медиа</string>
   <string name="setting_page_media_desc">Провайдеры генерации изображений и видео, загрузка ресурсов</string>
   <string name="setting_media_page_providers">Провайдеры</string>
-  <string name="setting_media_page_edit_provider">Изменить провайдера</string>
   <string name="setting_media_page_add_provider">Добавить провайдера</string>
   <string name="media_creation_page_summary_watermark_off">Без водяного знака</string>
   <string name="media_creation_page_summary_prompt_enhancement_off">Без улучшения промпта</string>

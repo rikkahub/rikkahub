@@ -1495,7 +1495,6 @@
   <string name="setting_page_media">الوسائط</string>
   <string name="setting_page_media_desc">مزوّدو توليد الصور والفيديو، ورفع الأصول</string>
   <string name="setting_media_page_providers">المزوّدون</string>
-  <string name="setting_media_page_edit_provider">تعديل المزوّد</string>
   <string name="setting_media_page_add_provider">إضافة مزوّد</string>
   <string name="media_creation_page_param_watermark">علامة مائية</string>
   <string name="media_creation_page_param_prompt_enhancement">تحسين المطالبة</string>

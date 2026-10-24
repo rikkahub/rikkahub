@@ -130,6 +130,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMediaPage
+import me.rerere.rikkahub.ui.pages.setting.SettingMediaProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
@@ -512,6 +513,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingMediaPage()
                             }
 
+                            entry<Screen.SettingMediaProviderDetail> { key ->
+                                SettingMediaProviderDetailPage(id = Uuid.parse(key.providerId))
+                            }
+
                             entry<Screen.SettingMcp> {
                                 SettingMcpPage()
                             }
@@ -759,6 +764,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingMedia : Screen
+
+    @Serializable
+    data class SettingMediaProviderDetail(val providerId: String) : Screen
 
     @Serializable
     data object SettingMcp : Screen

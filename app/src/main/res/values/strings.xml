@@ -1516,7 +1516,6 @@
   <string name="setting_page_media">Media</string>
   <string name="setting_page_media_desc">Image and video generation providers, asset upload</string>
   <string name="setting_media_page_providers">Providers</string>
-  <string name="setting_media_page_edit_provider">Edit provider</string>
   <string name="setting_media_page_add_provider">Add provider</string>
   <string name="setting_media_page_empty">No media generation providers yet. Tap + at the top to add one.</string>
   <string name="setting_media_page_s3_desc">Some APIs only accept assets at public URLs (such as reference images and reference videos for video generation). Set up an S3-compatible object storage service here, and local files are uploaded to its bucket first and then passed to the API as temporary URLs; uploaded files are cleaned up automatically after 7 days. This configuration is independent of the S3 used for backups.</string>

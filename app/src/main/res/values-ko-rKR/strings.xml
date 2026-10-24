@@ -1477,7 +1477,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_page_media">미디어</string>
   <string name="setting_page_media_desc">이미지 및 동영상 생성 제공자, 에셋 업로드</string>
   <string name="setting_media_page_providers">제공자</string>
-  <string name="setting_media_page_edit_provider">제공자 편집</string>
   <string name="setting_media_page_add_provider">제공자 추가</string>
   <string name="media_creation_error_interrupted">작업이 완료되기 전에 앱이 종료되었습니다</string>
   <string name="media_creation_error_provider_deleted">제공자 \"%1$s\"이(가) 삭제되었습니다</string>

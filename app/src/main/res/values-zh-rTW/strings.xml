@@ -1485,7 +1485,6 @@
   <string name="setting_page_media">媒體</string>
   <string name="setting_page_media_desc">圖片與影片生成供應商、素材上傳</string>
   <string name="setting_media_page_providers">供應商</string>
-  <string name="setting_media_page_edit_provider">編輯供應商</string>
   <string name="setting_media_page_add_provider">新增供應商</string>
   <string name="media_kind_image">圖片</string>
   <string name="media_provider_type_aliyun">阿里雲百鍊</string>

@@ -2,8 +2,11 @@ package me.rerere.rikkahub.ui.pages.setting.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
@@ -43,24 +46,29 @@ val MediaKind.label: String
         MediaKind.VIDEO -> stringResource(R.string.video)
     }
 
+// 各分页共用：可滚动，底部留出悬浮工具栏的位置
 @Composable
-fun MediaGenerationProviderConfigure(
+private fun ConfigureColumn(
+    modifier: Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 128.dp),
+        content = content,
+    )
+}
+
+@Composable
+fun MediaGenerationProviderBasicConfigure(
     setting: MediaGenerationProviderSetting,
     modifier: Modifier = Modifier,
     onValueChange: (MediaGenerationProviderSetting) -> Unit
 ) {
-    val models = setting.models
-    // 按枚举顺序排列，保证按钮组的顺序稳定
-    val kinds = MediaKind.entries.filter { it in setting.supportedKinds }
-
-    fun updateModels(models: List<MediaGenerationModel>) {
-        onValueChange(setting.copyProvider(models = models))
-    }
-
-    Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = modifier.verticalScroll(rememberScrollState())
-    ) {
+    ConfigureColumn(modifier) {
         CardGroup {
             // 类型在新建时选定，之后不能改
             item(
@@ -118,10 +126,25 @@ fun MediaGenerationProviderConfigure(
                 }
             }
         }
+    }
+}
 
-        CardGroup(
-            title = { Text(stringResource(R.string.setting_media_page_models)) },
-        ) {
+@Composable
+fun MediaGenerationProviderModelsConfigure(
+    setting: MediaGenerationProviderSetting,
+    modifier: Modifier = Modifier,
+    onValueChange: (MediaGenerationProviderSetting) -> Unit
+) {
+    val models = setting.models
+    // 按枚举顺序排列，保证按钮组的顺序稳定
+    val kinds = MediaKind.entries.filter { it in setting.supportedKinds }
+
+    fun updateModels(models: List<MediaGenerationModel>) {
+        onValueChange(setting.copyProvider(models = models))
+    }
+
+    ConfigureColumn(modifier) {
+        CardGroup {
             models.forEach { model ->
                 formItem {
                     Row(

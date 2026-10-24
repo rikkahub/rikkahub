@@ -1477,7 +1477,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_page_media">メディア</string>
   <string name="setting_page_media_desc">画像・動画生成プロバイダー、アセットのアップロード</string>
   <string name="setting_media_page_providers">プロバイダー</string>
-  <string name="setting_media_page_edit_provider">プロバイダーを編集</string>
   <string name="setting_media_page_add_provider">プロバイダーを追加</string>
   <string name="setting_media_page_empty">メディア生成プロバイダーはまだありません。追加するには上部の + をタップしてください。</string>
   <string name="setting_media_page_s3_desc">一部のAPIは、公開URL上のアセット（動画生成用の参照画像や参照動画など）しか受け付けません。ここでS3互換のオブジェクトストレージサービスを設定すると、ローカルファイルはまずそのバケットにアップロードされ、その後、一時URLとしてAPIに渡されます。アップロードされたファイルは7日後に自動的に削除されます。この設定は、バックアップに使用されるS3とは独立しています。</string>

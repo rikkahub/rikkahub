@@ -1456,7 +1456,6 @@
   <string name="setting_page_media">Medien</string>
   <string name="setting_page_media_desc">Anbieter für Bild- und Videogenerierung, Asset-Upload</string>
   <string name="setting_media_page_providers">Anbieter</string>
-  <string name="setting_media_page_edit_provider">Anbieter bearbeiten</string>
   <string name="setting_media_page_add_provider">Anbieter hinzufügen</string>
   <string name="media_creation_page_param_watermark">Wasserzeichen</string>
   <string name="media_creation_page_param_prompt_enhancement">Prompt-Verbesserung</string>

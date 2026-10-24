@@ -58,6 +58,7 @@ import me.rerere.hugeicons.stroke.Image02
 import me.rerere.mediagen.model.MediaKind
 import me.rerere.mediagen.provider.MediaGenerationProviderSetting
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.remote.RemoteFileStore
 import me.rerere.rikkahub.ui.components.ai.ExtensionEmptyState
@@ -73,9 +74,8 @@ import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.longPressReorder
 import me.rerere.rikkahub.ui.components.ui.s3ConnectionItems
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
-import me.rerere.rikkahub.ui.pages.setting.components.MediaGenerationProviderConfigure
-import me.rerere.rikkahub.ui.pages.setting.components.ProviderEditSheet
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderTypeSheet
 import me.rerere.rikkahub.ui.pages.setting.components.label
 import me.rerere.rikkahub.ui.pages.setting.components.typeName
@@ -100,7 +100,7 @@ private enum class MediaTab(
 @Composable
 fun SettingMediaPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
-    var editingProvider by remember { mutableStateOf<MediaGenerationProviderSetting?>(null) }
+    val navController = LocalNavController.current
     val pagerState = rememberPagerState { MediaTab.entries.size }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -115,12 +115,14 @@ fun SettingMediaPage(vm: SettingVM = koinViewModel()) {
                 },
                 actions = {
                     if (MediaTab.entries[pagerState.targetPage] == MediaTab.PROVIDERS) {
-                        AddMediaProviderButton {
+                        AddMediaProviderButton { provider ->
+                            // 先加进列表，具体配置到详情页里填
                             vm.updateSettings { latest ->
                                 latest.copy(
-                                    mediaGenerationProviders = listOf(it) + latest.mediaGenerationProviders
+                                    mediaGenerationProviders = listOf(provider) + latest.mediaGenerationProviders
                                 )
                             }
+                            navController.navigate(Screen.SettingMediaProviderDetail(providerId = provider.id.toString()))
                         }
                     }
                 },
@@ -154,7 +156,9 @@ fun SettingMediaPage(vm: SettingVM = koinViewModel()) {
                     MediaTab.PROVIDERS -> MediaProviderList(
                         settings = settings,
                         onUpdateSettings = vm::updateSettings,
-                        onEdit = { editingProvider = it },
+                        onEdit = {
+                            navController.navigate(Screen.SettingMediaProviderDetail(providerId = it.id.toString()))
+                        },
                     )
 
                     MediaTab.STORAGE -> MediaUploadS3Tab(
@@ -164,24 +168,6 @@ fun SettingMediaPage(vm: SettingVM = koinViewModel()) {
                 }
             }
         }
-    }
-
-    editingProvider?.let { provider ->
-        MediaProviderSheet(
-            title = stringResource(R.string.setting_media_page_edit_provider),
-            initial = provider,
-            confirmText = stringResource(R.string.chat_page_save),
-            onConfirm = { edited ->
-                vm.updateSettings { latest ->
-                    latest.copy(
-                        mediaGenerationProviders = latest.mediaGenerationProviders.map {
-                            if (it.id == provider.id) edited else it
-                        }
-                    )
-                }
-            },
-            onDismiss = { editingProvider = null }
-        )
     }
 }
 
@@ -324,11 +310,10 @@ private fun MediaProviderItem(
     }
 }
 
-// 新建时先选类型，再进配置面板
+// 新建时先选类型，再进详情页
 @Composable
 private fun AddMediaProviderButton(onAdd: (MediaGenerationProviderSetting) -> Unit) {
     var showTypeSheet by remember { mutableStateOf(false) }
-    var newProvider by remember { mutableStateOf<MediaGenerationProviderSetting?>(null) }
     val factories = remember {
         listOf<() -> MediaGenerationProviderSetting>(
             { MediaGenerationProviderSetting.OpenAI() },
@@ -352,45 +337,9 @@ private fun AddMediaProviderButton(onAdd: (MediaGenerationProviderSetting) -> Un
             typeName = { create -> remember(create) { create() }.typeName },
             onSelect = { create ->
                 showTypeSheet = false
-                newProvider = create()
+                onAdd(create())
             },
             onDismiss = { showTypeSheet = false },
-        )
-    }
-
-    newProvider?.let { provider ->
-        MediaProviderSheet(
-            title = stringResource(R.string.setting_media_page_add_provider),
-            initial = provider,
-            confirmText = stringResource(R.string.setting_tts_page_add),
-            onConfirm = onAdd,
-            onDismiss = { newProvider = null }
-        )
-    }
-}
-
-@Composable
-private fun MediaProviderSheet(
-    title: String,
-    initial: MediaGenerationProviderSetting,
-    confirmText: String,
-    onConfirm: (MediaGenerationProviderSetting) -> Unit,
-    onDismiss: () -> Unit
-) {
-    ProviderEditSheet(
-        title = title,
-        initial = initial,
-        confirmText = confirmText,
-        onConfirm = { provider ->
-            // 没填模型 ID 的行不保存
-            onConfirm(provider.copyProvider(models = provider.models.filter { it.modelId.isNotBlank() }))
-        },
-        onDismiss = onDismiss,
-    ) { provider, onValueChange, modifier ->
-        MediaGenerationProviderConfigure(
-            setting = provider,
-            onValueChange = onValueChange,
-            modifier = modifier
         )
     }
 }
