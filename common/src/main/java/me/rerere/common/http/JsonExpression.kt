@@ -353,7 +353,7 @@ private class Evaluator(private val root: JsonObject) {
         return when (elem) {
             is JsonPrimitive -> {
                 if (elem.isString) Value.Str(elem.content)
-                else elem.doubleOrNull()?.let { Value.Num("%.2f".format(it).toDouble()) } ?: Value.Str(elem.content)
+                else elem.doubleOrNull()?.let { Value.Num(it) } ?: Value.Str(elem.content)
             }
             is JsonObject, is JsonArray -> Value.Str(elem.toString())
             else -> Value.Str(elem.toString())

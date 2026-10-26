@@ -51,5 +51,5 @@ internal suspend fun OkHttpClient.runQuotaQuery(
         .get()
         .build()
     val value = json.parseToJsonElement(fetchBody(request)).jsonObject.getByKey(query.resultPath)
-    ProviderQuota.Balance(value.toFloatOrNull()?.let { "%.2f".format(it) } ?: value)
+    ProviderQuota.Balance(value.toDoubleOrNull()?.let { "%.2f".format(it) } ?: value)
 }
