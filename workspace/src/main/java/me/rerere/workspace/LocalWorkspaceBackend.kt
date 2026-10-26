@@ -110,6 +110,11 @@ class LocalWorkspaceBackend(
         )
     }
 
+    override fun startBackgroundCommand(command: String, cwd: String, id: String): WorkspaceBackgroundCommand {
+        manager.ensureWorkspace(root)
+        return manager.startBackgroundCommand(root, command, cwd, id, shellCompatibilityMode)
+    }
+
     private fun runCommand(action: String, command: String, stdin: ByteArray?): WorkspaceCommandResult {
         val result = executeCommand(command, cwd = "", WorkspaceManager.DEFAULT_COMMAND_TIMEOUT_MS, stdin)
         if (result.timedOut) {

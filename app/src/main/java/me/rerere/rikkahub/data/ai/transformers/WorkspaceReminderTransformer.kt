@@ -216,6 +216,12 @@ private fun buildWorkspacePrompt(
     )
     appendLine("  - `workspace_shell`: run shell commands (the files area is mounted at /workspace).")
     appendLine(
+        "  - `workspace_shell_output` / `workspace_shell_kill`: read the output of, or stop, a command started with `run_in_background`."
+    )
+    appendLine(
+        "- Start long-running commands such as dev servers, watchers or long builds with `run_in_background` instead of appending `&`: processes left running with `&` are killed when the shell call returns. You will be notified when a background command finishes."
+    )
+    appendLine(
         "- Prefer `workspace_shell` for tasks that standard Unix tools handle well, and prefer `workspace_edit_file` for targeted edits over rewriting whole files."
     )
     appendLine(
