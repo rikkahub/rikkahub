@@ -12,10 +12,26 @@ data class Workspace(
 
 enum class WorkspaceType(val capabilities: WorkspaceCapabilities) {
     /** 本机 PRoot Rootfs */
-    LOCAL(WorkspaceCapabilities(rootfs = true, terminal = true, localFiles = true, fileWriteTools = true)),
+    LOCAL(
+        WorkspaceCapabilities(
+            rootfs = true,
+            terminal = true,
+            localFiles = true,
+            fileWriteTools = true,
+            backgroundShell = true,
+        )
+    ),
 
     /** 通过 SSH 连接的远程机器 */
-    SSH(WorkspaceCapabilities(rootfs = false, terminal = true, localFiles = false, fileWriteTools = false)),
+    SSH(
+        WorkspaceCapabilities(
+            rootfs = false,
+            terminal = true,
+            localFiles = false,
+            fileWriteTools = false,
+            backgroundShell = false,
+        )
+    ),
 }
 
 /** 一种工作区能用哪些功能; 调用方按能力判断, 不直接比较类型 */
@@ -32,6 +48,8 @@ data class WorkspaceCapabilities(
      * shell 命令连同要写的内容一起发到远程, 在那边本地写入, 写入过程不经过网络。
      */
     val fileWriteTools: Boolean,
+    /** shell 命令可以在后台运行, 由 AI 之后读取输出或终止 */
+    val backgroundShell: Boolean,
 )
 
 enum class WorkspaceShellStatus {

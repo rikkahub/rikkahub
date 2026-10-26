@@ -8,6 +8,10 @@ import java.util.concurrent.TimeUnit
 interface WorkspaceShellRunner {
     fun execute(context: WorkspaceShellContext): WorkspaceCommandResult
 
+    /** 在后台启动命令并立即返回, [id] 用来命名日志文件; [WorkspaceShellContext.timeoutMillis] 不起作用 */
+    fun startBackground(context: WorkspaceShellContext, id: String): WorkspaceBackgroundCommand =
+        throw UnsupportedOperationException("Background commands are not supported by this shell")
+
     /** 交互式终端的启动参数, 不支持交互式终端时返回 null */
     fun terminalLaunch(context: WorkspaceTerminalContext): WorkspaceTerminalLaunch? = null
 }

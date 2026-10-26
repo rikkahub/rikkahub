@@ -114,6 +114,7 @@ class ChatService(
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
     private val folderRepository: FolderRepository,
+    private val backgroundShellManager: BackgroundShellManager,
 ) {
     /** 一轮生成的结果 */
     private sealed interface TurnResult {
@@ -1093,6 +1094,8 @@ class ChatService(
             previous?.let { filesManager.deleteChatFiles(it.files) }
         }
         sessionManager.removeIfIdle(session)
+        // 后台命令随会话一起终止, 撤销删除也不会恢复; 终止要等宽限期, 不阻塞删除
+        appScope.launch { backgroundShellManager.killConversation(conversationId) }
     }
 
     /** 撤销删除：写回删除前的会话，还停在这个会话上的页面也一并换回 */
