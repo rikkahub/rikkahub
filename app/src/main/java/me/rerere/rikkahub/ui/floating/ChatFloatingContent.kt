@@ -81,7 +81,7 @@ import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ui.drawAppLogo
 import me.rerere.rikkahub.ui.components.ui.logoMorphShape
 import me.rerere.rikkahub.ui.components.ui.rememberAppLogoLayers
-import me.rerere.ui.markdown.Markdown
+import me.rerere.rikkahub.ui.components.richtext.MaterialMarkdown
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
@@ -313,7 +313,7 @@ private fun PanelHeader(
     }
 }
 
-// 用 ui 模块的通用 Markdown：应用里的 MarkdownBlock 依赖导航、Activity 等悬浮窗里没有的东西
+// 用不带应用功能的 MaterialMarkdown：应用里的 MarkdownBlock 依赖导航、Activity 等悬浮窗里没有的东西
 @Composable
 private fun MessagePreview(text: String, isReasoning: Boolean, generating: Boolean) {
     val scrollState = rememberScrollState()
@@ -330,9 +330,10 @@ private fun MessagePreview(text: String, isReasoning: Boolean, generating: Boole
             MaterialTheme.colorScheme.onSurface
         },
     ) {
-        Markdown(
+        MaterialMarkdown(
             content = text,
             style = MaterialTheme.typography.bodyMedium,
+            streaming = generating,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 200.dp)

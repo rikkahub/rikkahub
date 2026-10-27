@@ -21,9 +21,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.DisableSelection
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -36,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalClipboard
@@ -47,7 +47,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
@@ -55,10 +54,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import me.rerere.highlight.HighlightTextColorPalette
-import me.rerere.highlight.buildHighlightText
-import me.rerere.highlight.CodeHighlightText
-import me.rerere.highlight.CodeHighlighter
+import me.rerere.bettertext.highlight.HighlightTextColorPalette
+import me.rerere.bettertext.highlight.buildHighlightText
+import me.rerere.bettertext.highlight.CodeHighlighter
+import me.rerere.bettertext.highlight.rememberHighlightedCode
+import me.rerere.bettertext.text.BetterText
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.ArrowDown01
 import me.rerere.hugeicons.stroke.ArrowUp01
@@ -261,32 +261,26 @@ private fun CodeBlockWithLineNumbersWrapped(
     val lineNumberWidth = remember(displayLines.size) {
         displayLines.size.toString().length
     }
-    SelectionContainer {
+    val codeStyle = codeTextStyle(textStyle)
+    // 行号用普通的 Text，不参与选择；每行代码是一个 BetterText，选中多行时以换行连接
+    SelectableContent {
         Column {
             displayLines.forEachIndexed { index, line ->
                 Row(
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    DisableSelection {
-                        Text(
-                            text = (index + 1).toString().padStart(lineNumberWidth, ' '),
-                            fontSize = textStyle.fontSize,
-                            lineHeight = textStyle.lineHeight,
-                            fontFamily = JetbrainsMono,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                            softWrap = false,
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
-                    }
-                    CodeHighlightText(
-                        code = line,
-                        language = language,
+                    Text(
+                        text = (index + 1).toString().padStart(lineNumberWidth, ' '),
                         fontSize = textStyle.fontSize,
                         lineHeight = textStyle.lineHeight,
-                        colors = colorPalette,
-                        overflow = TextOverflow.Visible,
-                        softWrap = true,
                         fontFamily = JetbrainsMono,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        softWrap = false,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    BetterText(
+                        text = rememberHighlightedCode(line, language, colorPalette),
+                        style = codeStyle,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -336,22 +330,26 @@ private fun CodeBlockDefault(
             }
         }
 
-        // 代码列
-        SelectionContainer {
-            CodeHighlightText(
-                code = displayCode,
-                language = language,
+        // 代码列：在横向滚动里宽度不受限，不会折行；自动换行时按可用宽度折行
+        SelectableContent {
+            BetterText(
+                text = rememberHighlightedCode(displayCode, language, colorPalette),
                 modifier = Modifier.animateContentSize(),
-                fontSize = textStyle.fontSize,
-                lineHeight = textStyle.lineHeight,
-                colors = colorPalette,
-                overflow = TextOverflow.Visible,
-                softWrap = autoWrap,
-                fontFamily = JetbrainsMono
+                style = codeTextStyle(textStyle),
             )
         }
     }
 }
+
+/** 代码的文字样式：等宽字体、关掉连字；没有颜色时用 `LocalContentColor`，和 `Text` 一样 */
+@Composable
+private fun codeTextStyle(textStyle: TextStyle): TextStyle = textStyle.merge(
+    TextStyle(
+        color = textStyle.color.takeOrElse { LocalContentColor.current },
+        fontFamily = JetbrainsMono,
+        fontFeatureSettings = "'calt' 0, 'liga' 0, 'clig' 0",
+    )
+)
 
 @Composable
 private fun HighlightCodeActions(

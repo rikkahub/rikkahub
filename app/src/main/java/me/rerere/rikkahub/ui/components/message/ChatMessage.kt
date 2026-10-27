@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -83,6 +82,7 @@ import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+import me.rerere.rikkahub.ui.components.richtext.SelectableContent
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
 import me.rerere.rikkahub.ui.components.ui.ChainOfThought
@@ -388,6 +388,8 @@ private fun MessagePartsBlock(
             is MessagePartBlock.ContentBlock -> key(block.index) {
                 when (val part = block.part) {
                     is UIMessagePart.Text -> {
+                        // 只有正在生成的最后一段文字可能停在没写完的语法上
+                        val streamingText = loading && block.index == parts.lastIndex
                         val textContent = @Composable {
                             if (role == MessageRole.USER) {
                                 ChatMessageBubble(
@@ -421,6 +423,7 @@ private fun MessagePartsBlock(
                                                 scope = AssistantAffectScope.ASSISTANT,
                                                 visual = true,
                                             ),
+                                            streaming = streamingText,
                                             onClickCitation = handleClickCitation,
                                         )
                                     }
@@ -431,6 +434,7 @@ private fun MessagePartsBlock(
                                             scope = AssistantAffectScope.ASSISTANT,
                                             visual = true,
                                         ),
+                                        streaming = streamingText,
                                         onClickCitation = handleClickCitation,
                                         modifier = Modifier
                                             .animateContentSize()
@@ -439,16 +443,9 @@ private fun MessagePartsBlock(
                             }
                         }
 
-                        // 流式生成期间不启用 SelectionContainer：Markdown 在不断重渲染，
-                        // 内部可选择的 Text 会频繁注册/注销，与 Compose 选择工具栏在绘制阶段
-                        // 对 selectable 列表的排序产生并发修改，导致 ConcurrentModificationException。
-                        // 生成结束后内容稳定，再启用文本选择。
-                        if (loading) {
+                        // Markdown 由 BetterText 渲染，要用它自己的选择容器；生成中也可以选择
+                        SelectableContent {
                             textContent()
-                        } else {
-                            SelectionContainer {
-                                textContent()
-                            }
                         }
                     }
 

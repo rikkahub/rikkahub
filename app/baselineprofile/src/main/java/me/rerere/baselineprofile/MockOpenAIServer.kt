@@ -21,7 +21,7 @@ import kotlin.concurrent.thread
  * 流式请求返回思考过程 + Markdown 正文，正文末尾带递增的编号，方便生成器判断这一轮的回复已经渲染完。
  * 非流式请求是标题和建议生成，返回固定文本。
  */
-class MockOpenAIServer(private val port: Int = PORT) {
+class MockOpenAIServer(private val port: Int = PORT, private val reply: String = REPLY) {
     private val serverSocket = ServerSocket()
     private val replyCount = AtomicInteger(0)
 
@@ -78,7 +78,8 @@ class MockOpenAIServer(private val port: Int = PORT) {
                 .put("object", "chat.completion.chunk")
                 .put("model", "mock-model")
                 .put(
-                    "choices", JSONArray().put(
+                    "choices",
+                    JSONArray().put(
                         JSONObject()
                             .put("index", 0)
                             .put("delta", delta)
@@ -91,7 +92,7 @@ class MockOpenAIServer(private val port: Int = PORT) {
         }
 
         REASONING.chunked(CHUNK_SIZE).forEach { send(JSONObject().put("reasoning_content", it)) }
-        "$REPLY\n\n$REPLY_MARKER $index".chunked(CHUNK_SIZE).forEach { send(JSONObject().put("content", it)) }
+        "$reply\n\n$REPLY_MARKER $index".chunked(CHUNK_SIZE).forEach { send(JSONObject().put("content", it)) }
         send(JSONObject(), finishReason = "stop")
         val usage = JSONObject()
             .put("id", "chatcmpl-mock-$index")
@@ -107,7 +108,8 @@ class MockOpenAIServer(private val port: Int = PORT) {
         .put("object", "chat.completion")
         .put("model", "mock-model")
         .put(
-            "choices", JSONArray().put(
+            "choices",
+            JSONArray().put(
                 JSONObject()
                     .put("index", 0)
                     .put("message", JSONObject().put("role", "assistant").put("content", content))
@@ -151,7 +153,7 @@ class MockOpenAIServer(private val port: Int = PORT) {
             先给出简短说明，再分点列出要点，最后附上一段可以运行的代码。
         """.trimIndent()
 
-        private val REPLY = """
+        val REPLY = """
             ## 收到你的消息
 
             这是一段由 **mock 接口** 返回的回复，用来覆盖 *流式渲染* 路径，包含 `行内代码`、~~删除线~~ 和[链接](https://github.com/rikkahub/rikkahub)。

@@ -39,7 +39,6 @@ App 有一个 `distribution` 维度的 product flavor：`github`（默认）和 
 - **ai**: AI SDK abstraction layer for different providers (OpenAI, Google, Anthropic)
 - **common**: Common utilities and extensions
 - **document**: Document parsing module for handling PDF, DOCX, PPTX, and EPUB files
-- **highlight**: Code syntax highlighting implementation
 - **material3**: Material color utility extensions used by the app UI
 - **ui**: Reusable Compose UI components that do not depend on app logic
 - **search**: Search functionality SDK for multiple providers (Exa, Tavily, Zhipu, Bing, Brave, SearXNG, and others)

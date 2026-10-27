@@ -12,13 +12,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,19 +37,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.Placeholder
-import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import kotlinx.coroutines.launch
@@ -66,14 +60,14 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalWorkspaceId
 import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
-import me.rerere.ui.markdown.Markdown
-import me.rerere.ui.markdown.MarkdownBlock
-import me.rerere.ui.markdown.MarkdownComponents
-import me.rerere.ui.markdown.MarkdownDefaults
-import me.rerere.ui.markdown.MarkdownInline
-import me.rerere.ui.markdown.MarkdownInlineScope
-import me.rerere.ui.markdown.MarkdownInlineWidget
-import me.rerere.ui.markdown.plainText
+import me.rerere.bettertext.latex.LatexInline
+import me.rerere.bettertext.markdown.MarkdownBlock
+import me.rerere.bettertext.markdown.MarkdownComponents
+import me.rerere.bettertext.markdown.MarkdownInline
+import me.rerere.bettertext.markdown.plainText
+import me.rerere.bettertext.text.BetterInline
+import me.rerere.bettertext.text.ComposableInline
+import me.rerere.bettertext.text.InlineAlign
 import org.koin.compose.koinInject
 import kotlin.time.Clock
 
@@ -129,12 +123,15 @@ private fun MarkdownPreview() {
 /**
  * 应用内使用的 Markdown：在通用的 [Markdown] 组件上接入代码高亮、图片预览、LaTeX 渲染、
  * 表格工具栏和搜索引用角标这些和应用相关的能力。
+ *
+ * @param streaming 内容还在生成时为 true，末尾没写完的语法（如 `**加粗`、`$\frac{`）会被补全或隐藏
  */
 @Composable
 fun MarkdownBlock(
     content: String,
     modifier: Modifier = Modifier,
     style: TextStyle = LocalTextStyle.current,
+    streaming: Boolean = false,
     onClickCitation: (String) -> Unit = {}
 ) {
     val enableLatexRendering = LocalSettings.current.displaySetting.enableLatexRendering
@@ -142,7 +139,7 @@ fun MarkdownBlock(
     val fontSize = LocalTextStyle.current.merge(style).fontSize
     val density = LocalDensity.current
     val quoteColor = MaterialTheme.colorScheme.tertiary
-    val defaultTheme = MarkdownDefaults.theme(style)
+    val defaultTheme = MaterialMarkdownDefaults.theme(style)
     val theme = remember(defaultTheme, fontSize, density, enableQuoteHighlight, quoteColor) {
         defaultTheme.copy(
             inlineCode = defaultTheme.inlineCode.copy(
@@ -176,30 +173,30 @@ fun MarkdownBlock(
                         .heightIn(min = 120.dp),
                 )
             },
-            mathBlock = { formula ->
-                if (enableLatexRendering) {
-                    MathBlock(
-                        latex = formula,
-                        modifier = Modifier.fillMaxWidth(),
-                        fontSize = LocalTextStyle.current.fontSize,
-                    )
-                } else {
-                    // 禁用 LaTeX 渲染时，以等宽字体显示原始公式
-                    MarkdownDefaults.MathBlock(formula)
-                }
+            // 禁用 LaTeX 渲染时不注册公式组件，公式以等宽字体显示源码
+            mathBlock = if (enableLatexRendering) {
+                { formula -> MathBlock(latex = formula, modifier = Modifier.fillMaxWidth()) }
+            } else {
+                null
             },
             table = { table -> TableCard(table) },
-            inlineMath = MarkdownInlineScope::inlineMathWidgets.takeIf { enableLatexRendering },
+            details = MaterialMarkdownDefaults.components.details,
+            inlineMath = if (enableLatexRendering) {
+                { formula -> LatexInline.cached(formula, context) }
+            } else {
+                null
+            },
             inlineLink = { link -> citationWidget(link) { currentOnClickCitation(it) } },
         )
     }
 
-    Markdown(
+    MaterialMarkdown(
         content = content,
         modifier = modifier.padding(horizontal = 4.dp),
         style = style,
         theme = theme,
         components = components,
+        streaming = streaming,
     )
 }
 
@@ -221,78 +218,27 @@ private fun rememberWorkspaceImageUrl(url: String): String? {
     return resolved
 }
 
-private fun MarkdownInlineScope.inlineMathWidgets(formula: String): List<MarkdownInlineWidget> {
-    val fontSize = style.fontSize
-    if (!fontSize.isSp) return emptyList()
-    return with(density) {
-        val fontSizePx = fontSize.toPx()
-        // 将过长的行内公式按顶层运算符水平拆分为多段，每段最大宽度限制为字号的两倍，
-        // 使其能在文本流中换行，避免单体公式超出可用宽度被挤出屏幕
-        val drawables = splitLatex(
-            latex = formula,
-            maxWidthPx = fontSizePx * 2,
-            fontSize = fontSizePx,
-            color = contentColor.toArgb(),
-        )
-        if (drawables.isNotEmpty()) {
-            drawables.map { drawable ->
-                MarkdownInlineWidget(
-                    placeholder = Placeholder(
-                        width = drawable.bounds.width().toSp(),
-                        height = drawable.bounds.height().toSp(),
-                        placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
-                    ),
-                ) {
-                    LatexDrawable(drawable = drawable)
-                }
-            }
-        } else {
-            // 拆分失败时回退为单体内联渲染；连尺寸都量不出来说明公式有误，交给组件显示公式源码
-            val bounds = assumeLatexSize(latex = formula, fontSize = fontSizePx)
-            if (bounds.isEmpty) return emptyList()
-            listOf(
-                MarkdownInlineWidget(
-                    placeholder = Placeholder(
-                        width = bounds.width().toSp(),
-                        height = bounds.height().toSp(),
-                        placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
-                    ),
-                ) {
-                    MathInline(latex = formula, fontSize = fontSize)
-                }
-            )
-        }
-    }
-}
-
 // 搜索引用在正文里写作 [citation,域名](引用id)，渲染成可点击的角标
-private fun citationWidget(link: MarkdownInline.Link, onClick: (String) -> Unit): MarkdownInlineWidget? {
+private fun citationWidget(link: MarkdownInline.Link, onClick: (String) -> Unit): BetterInline? {
     val text = link.children.plainText()
     if (!text.startsWith("citation,")) return null
     val domain = text.substringAfter("citation,")
     val id = link.destination
     if (id.length != 6) {
         // id 不合法的引用没法跳转，不显示
-        return MarkdownInlineWidget(Placeholder(0.sp, 0.sp, PlaceholderVerticalAlign.TextCenter)) {}
+        return ComposableInline {}
     }
-    return MarkdownInlineWidget(
-        placeholder = Placeholder(
-            width = (domain.length * 7).sp,
-            height = 1.em,
-            placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
-        ),
-    ) {
+    return ComposableInline(align = InlineAlign.Center) {
         Box(
             modifier = Modifier
-                .clickable { onClick(id.trim()) }
-                .fillMaxSize()
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.tertiaryContainer),
+                .clickable { onClick(id.trim()) }
+                .background(MaterialTheme.colorScheme.tertiaryContainer)
+                .padding(horizontal = 6.dp, vertical = 2.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text = domain,
-                modifier = Modifier.wrapContentSize(),
                 style = TextStyle(
                     fontSize = 10.sp,
                     lineHeight = 10.sp,
@@ -393,7 +339,7 @@ private fun TableCard(table: MarkdownBlock.Table) {
                 )
             }
         }
-        MarkdownDefaults.Table(
+        MaterialMarkdownDefaults.Table(
             table = table,
             outerBorder = null,
             shape = RectangleShape,

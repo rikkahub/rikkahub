@@ -1,53 +1,28 @@
 package me.rerere.rikkahub.ui.components.richtext
 
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.takeOrElse
+import me.rerere.bettertext.latex.LatexBlock
 
-@Composable
-fun MathInline(
-    latex: String,
-    modifier: Modifier = Modifier,
-    fontSize: TextUnit = TextUnit.Unspecified
-) {
-    val proceededLatex = latex
-    LatexText(
-        latex = proceededLatex,
-        color = LocalContentColor.current,
-        fontSize = fontSize.takeOrElse { LocalTextStyle.current.fontSize },
-        modifier = modifier,
-    )
-}
-
+/** 块级公式，居中显示，太宽时横向滚动；字号和颜色默认跟随当前文字样式 */
 @Composable
 fun MathBlock(
     latex: String,
     modifier: Modifier = Modifier,
     fontSize: TextUnit = TextUnit.Unspecified
 ) {
-    val proceededLatex = latex
-    Box(
-        modifier = modifier.padding(8.dp)
-    ) {
-        LatexText(
-            latex = proceededLatex,
-            color = LocalContentColor.current,
-            fontSize = fontSize.takeOrElse { LocalTextStyle.current.fontSize },
-            modifier = Modifier
-                .align(Alignment.Center)
-                .horizontalScroll(
-                    rememberScrollState()
-                ),
-        )
-    }
+    val style = LocalTextStyle.current
+    LatexBlock(
+        latex = latex,
+        modifier = modifier.padding(8.dp),
+        fontSize = fontSize.takeOrElse { style.fontSize },
+        color = style.color.takeOrElse { LocalContentColor.current },
+    )
 }

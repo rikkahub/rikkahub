@@ -1,7 +1,7 @@
 [versions]
 agp = "9.4.0"
 camerax = "1.6.2"
-jlatexmath = "1.5"
+bettertext = "v0.1.0"
 kotlin = "2.4.21"
 coreKtx = "1.19.1"
 ink = "1.1.0-alpha10"
@@ -19,7 +19,6 @@ nav3Core = "1.2.0"
 material3AdaptiveNav3 = "1.3.0"
 lifecycleViewmodelNav3 = "2.11.0"
 nav3Material = "1.3.0"
-markdown = "d79a97cc8e"
 okhttp = "5.5.0"
 retrofit = "3.0.0"
 coil = "3.6.3"
@@ -81,9 +80,11 @@ androidx-ink-strokes = { group = "androidx.ink", name = "ink-strokes", version.r
 androidx-media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
 androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
-jlatexmath = { module = "com.github.rikkahub.jlatexmath-android:jlatexmath", version.ref = "jlatexmath" }
-jlatexmath-font-greek = { module = "com.github.rikkahub.jlatexmath-android:jlatexmath-font-greek", version.ref = "jlatexmath" }
-jlatexmath-font-cyrillic = { module = "com.github.rikkahub.jlatexmath-android:jlatexmath-font-cyrillic", version.ref = "jlatexmath" }
+bettertext-bom = { module = "com.github.re-ovo.bettertext:bom", version.ref = "bettertext" }
+bettertext-text = { module = "com.github.re-ovo.bettertext:text" }
+bettertext-latex = { module = "com.github.re-ovo.bettertext:latex" }
+bettertext-markdown = { module = "com.github.re-ovo.bettertext:markdown" }
+bettertext-highlight = { module = "com.github.re-ovo.bettertext:highlight" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
@@ -113,7 +114,6 @@ androidx-paging-runtime = { group = "androidx.paging", name = "paging-runtime", 
 androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workmanager" }
-jetbrains-markdown = { module = "com.github.rikkahub:markdown", version.ref = "markdown" }
 metadata-extractor = { module = "com.drewnoakes:metadata-extractor", version.ref = "metadataExtractor" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 okhttp-sse = { group = "com.squareup.okhttp3", name = "okhttp-sse", version.ref = "okhttp" }

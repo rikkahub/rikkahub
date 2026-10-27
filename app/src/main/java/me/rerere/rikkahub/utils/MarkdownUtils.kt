@@ -1,8 +1,8 @@
 package me.rerere.rikkahub.utils
 
-import me.rerere.ui.markdown.MarkdownBlock
-import me.rerere.ui.markdown.MarkdownInline
-import me.rerere.ui.markdown.parseMarkdown
+import me.rerere.bettertext.markdown.MarkdownBlock
+import me.rerere.bettertext.markdown.MarkdownInline
+import me.rerere.bettertext.markdown.parseMarkdown
 
 /**
  * 移除字符串中的 Markdown 格式，得到用于朗读的纯文本

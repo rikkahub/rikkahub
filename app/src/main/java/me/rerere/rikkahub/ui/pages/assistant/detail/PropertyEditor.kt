@@ -26,7 +26,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.CustomHeader
-import me.rerere.highlight.LocalCodeHighlighter
+import me.rerere.bettertext.highlight.LocalCodeHighlighter
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeVisualTransformation
