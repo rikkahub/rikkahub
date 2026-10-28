@@ -65,9 +65,11 @@ class ExporterState<T>(
 
     internal fun writeToUri(uri: Uri) {
         scope.launch(Dispatchers.IO) {
-            context.contentResolver.openOutputStream(uri)?.use { output ->
-                output.write(value.toByteArray())
-            }
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    output.write(value.toByteArray())
+                }
+            }.onFailure { it.printStackTrace() }
         }
     }
 }

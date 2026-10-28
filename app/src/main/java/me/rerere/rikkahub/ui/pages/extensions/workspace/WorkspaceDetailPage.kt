@@ -181,8 +181,7 @@ fun WorkspaceDetailPage(id: String) {
     ) { uri ->
         val entry = exportTarget.also { exportTarget = null } ?: return@rememberLauncherForActivityResult
         if (uri == null) return@rememberLauncherForActivityResult
-        val outputStream = context.contentResolver.openOutputStream(uri) ?: return@rememberLauncherForActivityResult
-        vm.exportFile(entry, outputStream)
+        vm.exportFile(entry, uri, context.contentResolver)
     }
     val directoryExportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
