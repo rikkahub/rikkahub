@@ -8,7 +8,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.GenerationPhase
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.toMessageNode
-import me.rerere.rikkahub.service.MessageQueueState
+import me.rerere.rikkahub.service.InboxState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -21,7 +21,7 @@ class FloatingChatUiStateTest {
             replyMessageId = replyMessageId,
             generating = generating,
             processingStatus = null,
-            queue = MessageQueueState(),
+            queue = InboxState(),
             error = null,
         )
 

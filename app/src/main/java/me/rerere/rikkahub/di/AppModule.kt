@@ -130,7 +130,6 @@ val appModule = module {
             memoryRepository = get(),
             templateTransformer = get(),
             workspaceRepository = get(),
-            backgroundShellManager = get(),
         )
     }
 
