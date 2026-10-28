@@ -712,9 +712,8 @@ class ChatCompletionsAPI(
     }
 
     private fun parseMessage(jsonObject: JsonObject): UIMessage {
-        val role = MessageRole.valueOf(
-            jsonObject["role"]?.jsonPrimitive?.contentOrNull?.uppercase() ?: "ASSISTANT"
-        )
+        val role = MessageRole.fromValueOrNull(jsonObject["role"]?.jsonPrimitiveOrNull?.contentOrNull)
+            ?: MessageRole.ASSISTANT
 
         // 也许支持其他模态的输出content?
         val content = jsonObject["content"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
