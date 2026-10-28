@@ -15,7 +15,8 @@ import me.rerere.asr.ASRState
 import me.rerere.asr.ASRStatus
 import me.rerere.asr.ASRVoiceTurn
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.service.MessageQueue
+import me.rerere.rikkahub.service.ConversationInbox
+import me.rerere.rikkahub.service.nextMessage
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -40,7 +41,7 @@ class VoiceSessionControllerTest {
 
     private class Rig {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
-        val queue = MessageQueue()
+        val queue = ConversationInbox()
         val asrs = mutableListOf<FakeAsr>()
         val replies = mutableListOf<CompletableDeferred<String?>>()
         val spoken = mutableListOf<String>()
@@ -103,7 +104,7 @@ class VoiceSessionControllerTest {
             val first = rig.recorder()
             first.end("first")
             val second = rig.recorder(first)
-            val generating = rig.queue.takeNext()!!
+            val generating = rig.queue.nextMessage()!!
             assertFalse(generating.reply!!.isCompleted)
             second.end("second")
             val third = rig.recorder(second)

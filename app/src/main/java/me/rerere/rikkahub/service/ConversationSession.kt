@@ -68,7 +68,7 @@ class ConversationSession(
     var incarnation = 0
         private set
 
-    val messageQueue = MessageQueue()
+    val inbox = ConversationInbox()
 
     /**
      * 页面切换和 SSE 重连只加载一次。[load] 返回 null 表示数据库里没有这个会话，改用 [create] 新建。
@@ -235,7 +235,7 @@ class ConversationSession(
     val isGenerating: Boolean get() = _generationJob.value?.isActive == true
     val isInUse: Boolean
         get() = refCount.get() > 0 || _generationJob.value != null ||
-            messageQueue.state.value.messages.isNotEmpty()
+            inbox.state.value.items.isNotEmpty()
 
     // 空闲检查任务
     private var idleCheckJob: Job? = null

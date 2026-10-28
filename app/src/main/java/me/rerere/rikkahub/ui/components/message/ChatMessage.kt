@@ -386,6 +386,8 @@ private fun MessagePartsBlock(
                                     ChatMessageServerToolStep(tool = step.tool)
                                 }
                             }
+
+                            is ThinkingStep.NoticeStep -> ChatMessageNoticeStep(notice = step.notice)
                         }
                     }
                 }

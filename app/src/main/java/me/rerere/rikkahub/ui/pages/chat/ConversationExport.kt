@@ -538,8 +538,11 @@ private fun ExportedChatMessage(
     prevMessage: UIMessage? = null,
     options: ExportOptions = ExportOptions()
 ) {
+    // 通知是发给模型的运行时事件，不导出
     val parts = remember(message.parts, options.includeReasoning) {
-        if (options.includeReasoning) message.parts else message.parts.filterNot { it is UIMessagePart.Reasoning }
+        message.parts.filterNot {
+            it is UIMessagePart.Notice || (!options.includeReasoning && it is UIMessagePart.Reasoning)
+        }
     }
     if (parts.isEmptyUIMessage()) return
     val context = LocalContext.current
@@ -586,6 +589,9 @@ private fun ExportedChatMessage(
                                     is ThinkingStep.ServerToolStep -> {
                                         ChatMessageServerToolStep(tool = step.tool)
                                     }
+
+                                    // 导出前已经去掉了通知
+                                    is ThinkingStep.NoticeStep -> {}
                                 }
                             }
                         }

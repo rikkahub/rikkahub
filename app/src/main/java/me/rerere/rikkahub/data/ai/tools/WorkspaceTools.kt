@@ -282,7 +282,8 @@ private fun createShellTool(
                         put(
                             "description",
                             "Start the command in the background and return a task id immediately instead of waiting for it. " +
-                                "Read its output with workspace_shell_output and stop it with workspace_shell_kill. Defaults to false."
+                                "You will be notified with its exit code and the last lines of its output when it finishes, so do not poll it. " +
+                                "Use workspace_shell_output to check on it earlier and workspace_shell_kill to stop it. Defaults to false."
                         )
                     })
                 }
@@ -321,7 +322,8 @@ private fun createShellOutputTool(background: BackgroundShell) = Tool(
     description = """
         Read the output of a background command started by workspace_shell with run_in_background.
         Returns the combined stdout and stderr produced since the previous read, the command status,
-        and the exit code once it has finished. Set wait to block until the command finishes.
+        and the exit code once it has finished. You are notified automatically when a background command
+        finishes, so only use this when you need its output before then, such as checking that a server started.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
