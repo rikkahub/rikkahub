@@ -61,6 +61,10 @@ interface WorkspaceBackend {
         timeoutMillis: Long,
         stdin: ByteArray?,
     ): WorkspaceCommandResult
+
+    /** 在后台启动命令并立即返回, [cwd] 为相对文件区的路径; 只在支持 [WorkspaceCapabilities.backgroundShell] 的环境可用 */
+    fun startBackgroundCommand(command: String, cwd: String, id: String): WorkspaceBackgroundCommand =
+        throw UnsupportedOperationException("Background commands are not supported in this workspace")
 }
 
 /** 工作区在执行环境内的目录约定 */

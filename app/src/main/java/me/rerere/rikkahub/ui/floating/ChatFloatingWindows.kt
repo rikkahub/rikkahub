@@ -53,7 +53,7 @@ import me.rerere.rikkahub.data.model.pendingToolCalls
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatFloatingTracker
 import me.rerere.rikkahub.service.ChatService
-import me.rerere.rikkahub.service.MessageQueueState
+import me.rerere.rikkahub.service.InboxState
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import kotlin.uuid.Uuid
 
@@ -111,7 +111,7 @@ class ChatFloatingWindows(
             conversation,
             chatService.getGenerationJobStateFlow(id).map { it != null },
             chatService.getProcessingStatusFlow(id),
-            chatService.getMessageQueueFlow(id),
+            chatService.getInboxFlow(id),
             error,
         ) { (conversation, replyMessageId), generating, processingStatus, queue, error ->
             buildFloatingChatUiState(conversation, replyMessageId, generating, processingStatus, queue, error)
@@ -164,7 +164,7 @@ class ChatFloatingWindows(
                     },
                     onStop = { appScope.launch { chatService.stopGeneration(conversationId) } },
                     onSend = { text -> chatService.sendMessage(conversationId, listOf(UIMessagePart.Text(text))) },
-                    onResumeQueue = { chatService.resumeMessageQueue(conversationId) },
+                    onResumeQueue = { chatService.resumeInbox(conversationId) },
                 )
             }
         }
@@ -232,7 +232,7 @@ internal fun buildFloatingChatUiState(
     replyMessageId: Uuid?,
     generating: Boolean,
     processingStatus: String?,
-    queue: MessageQueueState,
+    queue: InboxState,
     error: ChatError?,
 ): FloatingChatUiState {
     // 不看末尾也不看节点选中的分支：重新生成较早的消息时，后面的节点还在，用户也可能切回了旧回复
@@ -253,7 +253,7 @@ internal fun buildFloatingChatUiState(
         previewIsReasoning = text.isEmpty(),
         // 和 ChatService 判断是否在等审批用同一个条件，否则快速回复会被审批挡住却看不到原因
         pendingTools = conversation.pendingToolCalls,
-        queuedCount = queue.messages.size,
+        queuedCount = queue.items.size,
         queuePaused = queue.paused,
         error = error,
     )

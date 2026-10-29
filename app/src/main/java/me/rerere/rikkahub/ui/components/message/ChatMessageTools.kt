@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -50,6 +51,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.BubbleChatQuestion
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Notification01
 import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
@@ -92,6 +94,37 @@ fun ChainOfThoughtScope.ChatMessageServerToolStep(tool: UIMessagePart.ServerTool
                 modifier = Modifier.shimmer(isLoading = loading),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+            )
+        },
+    )
+}
+
+/** 发给模型的运行时通知，例如后台命令结束；展开后显示发给模型的原文 */
+@Composable
+fun ChainOfThoughtScope.ChatMessageNoticeStep(notice: UIMessagePart.Notice) {
+    ChainOfThoughtStep(
+        icon = {
+            Icon(
+                imageVector = HugeIcons.Notification01,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = LocalContentColor.current.copy(alpha = 0.7f),
+            )
+        },
+        label = {
+            Text(
+                text = notice.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.secondary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        content = {
+            Text(
+                text = notice.text,
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         },
     )

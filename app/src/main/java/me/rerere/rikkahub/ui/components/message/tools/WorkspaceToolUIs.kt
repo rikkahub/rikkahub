@@ -396,9 +396,18 @@ object ShellToolUI : ToolUIRenderer {
     }
 }
 
-/** Shell 退出状态文本: exit code 为 0 显示绿色, 超时或非零显示错误色 */
+/** Shell 退出状态文本: exit code 为 0 显示绿色, 超时或非零显示错误色; 后台运行的命令只显示任务 ID */
 @Composable
 private fun ShellExitStatus(content: JsonElement, style: androidx.compose.ui.text.TextStyle) {
+    val taskId = content.getStringContent("taskId")
+    if (taskId != null) {
+        Text(
+            text = "Running in background · $taskId",
+            style = style,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        return
+    }
     val exitCode = content.int("exitCode")
     val timedOut = content.boolean("timedOut") ?: false
     val ok = !timedOut && exitCode == 0

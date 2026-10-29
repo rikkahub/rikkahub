@@ -219,4 +219,19 @@ sealed class UIMessagePart {
             )
         }
     }
+
+    /**
+     * 运行过程中要告诉模型的事件，例如后台命令结束。
+     *
+     * 由 agent 循环在轮到模型回复时追加到助手消息里，和其它 part 一样保存在会话中；
+     * 请求时由 [expandNotices] 在所在位置拆成一条 user 消息，前缀固定，可以命中提示词缓存。
+     * [title] 只用于界面展示，[text] 是发给模型的内容。
+     */
+    @Serializable
+    @SerialName("notice")
+    data class Notice(
+        val title: String,
+        val text: String,
+        override var metadata: JsonObject? = null,
+    ) : UIMessagePart()
 }

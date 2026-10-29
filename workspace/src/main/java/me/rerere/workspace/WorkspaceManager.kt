@@ -208,26 +208,43 @@ class WorkspaceManager(
         timeoutMillis: Long = DEFAULT_COMMAND_TIMEOUT_MS,
         stdin: ByteArray? = null,
         shellCompatibilityMode: Boolean = false,
-    ): WorkspaceCommandResult {
+    ): WorkspaceCommandResult =
+        shellRunner.execute(shellContext(root, command, cwd, timeoutMillis, stdin, shellCompatibilityMode))
+
+    fun startBackgroundCommand(
+        root: String,
+        command: String,
+        cwd: String,
+        id: String,
+        shellCompatibilityMode: Boolean = false,
+    ): WorkspaceBackgroundCommand =
+        shellRunner.startBackground(shellContext(root, command, cwd, 0, null, shellCompatibilityMode), id)
+
+    private fun shellContext(
+        root: String,
+        command: String,
+        cwd: String,
+        timeoutMillis: Long,
+        stdin: ByteArray?,
+        shellCompatibilityMode: Boolean,
+    ): WorkspaceShellContext {
         require(command.isNotBlank()) { "Command is required" }
         val workingDir = fileSystem.resolve(filesDir(root), cwd)
         require(workingDir.exists()) { "Working directory does not exist: $cwd" }
         require(workingDir.isDirectory) { "Working path is not a directory: $cwd" }
 
-        return shellRunner.execute(
-            WorkspaceShellContext(
-                root = root,
-                command = command,
-                cwd = cwd,
-                filesDir = filesDir(root),
-                linuxDir = linuxDir(root),
-                tempDir = tempDir(root),
-                workingDir = workingDir,
-                timeoutMillis = timeoutMillis,
-                stdin = stdin,
-                bindMounts = bindMounts,
-                shellCompatibilityMode = shellCompatibilityMode,
-            )
+        return WorkspaceShellContext(
+            root = root,
+            command = command,
+            cwd = cwd,
+            filesDir = filesDir(root),
+            linuxDir = linuxDir(root),
+            tempDir = tempDir(root),
+            workingDir = workingDir,
+            timeoutMillis = timeoutMillis,
+            stdin = stdin,
+            bindMounts = bindMounts,
+            shellCompatibilityMode = shellCompatibilityMode,
         )
     }
 

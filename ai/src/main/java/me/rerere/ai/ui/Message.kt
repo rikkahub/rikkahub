@@ -163,6 +163,7 @@ fun List<UIMessagePart>.isEmptyUIMessage(): Boolean {
             is UIMessagePart.Audio -> message.url.isBlank()
             is UIMessagePart.Tool,
             is UIMessagePart.ServerTool,
+            is UIMessagePart.Notice,
             -> false
             else -> true
         }
@@ -282,7 +283,8 @@ fun List<UIMessagePart>.toSortedMessageParts(): List<UIMessagePart> {
     // Skip sorting if multiple Reasoning or Text parts exist to preserve semantic order
     val reasoningCount = count { it is UIMessagePart.Reasoning }
     val textCount = count { it is UIMessagePart.Text }
-    if (reasoningCount > 1 || textCount > 1) {
+    // Notice 的位置决定它在请求里插在哪, 排序会把它挪到推理之后
+    if (reasoningCount > 1 || textCount > 1 || any { it is UIMessagePart.Notice }) {
         return this
     }
     return sortedBy { part ->
@@ -294,6 +296,7 @@ fun List<UIMessagePart>.toSortedMessageParts(): List<UIMessagePart> {
             is UIMessagePart.ToolCall -> 0
             is UIMessagePart.ToolResult -> 0
             is UIMessagePart.Search -> 0
+            is UIMessagePart.Notice -> 0
             is UIMessagePart.Image -> 1
             is UIMessagePart.Video -> 1
             is UIMessagePart.Audio -> 1
@@ -559,4 +562,32 @@ fun <T> List<T>.migrateToolNodes(
     }
 
     return result
+}
+
+/**
+ * 把助手消息里的 [UIMessagePart.Notice] 在所在位置拆成 user 消息，组装请求时在最后调用。
+ *
+ * Notice 只会出现在新一轮开头或一批工具执行完之后，拆开后和模型看到的轮次一致：
+ * `[Tool, Notice, Text]` 变成 助手(tool_use) → user(tool_result) → user(notice) → 助手(text)。
+ */
+fun List<UIMessage>.expandNotices(): List<UIMessage> = flatMap { message ->
+    if (message.role != MessageRole.ASSISTANT || message.parts.none { it is UIMessagePart.Notice }) {
+        return@flatMap listOf(message)
+    }
+    buildList {
+        val buffer = mutableListOf<UIMessagePart>()
+        fun flush() {
+            if (buffer.isNotEmpty()) add(message.copy(parts = buffer.toList()))
+            buffer.clear()
+        }
+        message.parts.forEach { part ->
+            if (part is UIMessagePart.Notice) {
+                flush()
+                add(UIMessage.user(part.text).copy(createdAt = message.createdAt, isSynthetic = true))
+            } else {
+                buffer.add(part)
+            }
+        }
+        flush()
+    }
 }
