@@ -11,6 +11,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
@@ -43,6 +44,13 @@ object TinyfishSearchService : SearchService<SearchServiceOptions.TinyfishOption
                     put("type", "string")
                     put("description", SEARCH_QUERY_DESCRIPTION)
                 })
+                put("purpose", buildJsonObject {
+                    put("type", "string")
+                    put(
+                        "description",
+                        "Optional. The goal the results will be used for, e.g. \"Find an open-source library for parsing PDF invoices in Python\". Improves result relevance."
+                    )
+                })
             },
             required = listOf("query")
         )
@@ -65,8 +73,14 @@ object TinyfishSearchService : SearchService<SearchServiceOptions.TinyfishOption
     ): Result<SearchResult> = withContext(Dispatchers.IO) {
         runCatching {
             val query = params["query"]?.jsonPrimitive?.content ?: error("query is required")
-            val url = "https://api.search.tinyfish.ai" +
-                    "?query=${java.net.URLEncoder.encode(query, "UTF-8")}"
+            val purpose = params["purpose"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+            val url = buildString {
+                append("https://api.search.tinyfish.ai")
+                append("?query=${java.net.URLEncoder.encode(query, "UTF-8")}")
+                if (purpose != null) {
+                    append("&purpose=${java.net.URLEncoder.encode(purpose, "UTF-8")}")
+                }
+            }
 
             val request = Request.Builder()
                 .url(url)
