@@ -521,10 +521,11 @@ class ChatService(
                 if (session.state.value.isAwaitingToolApproval) return@launchGenerationJob
                 val notices = session.inbox.takeNotices()
                 if (notices.isEmpty()) return@launchGenerationJob
+                // 存成 user 节点：这一轮的回复是它的下一个节点，重新生成和分支都和普通消息一样
                 session.update {
                     it.copy(
                         messageNodes = it.messageNodes +
-                            UIMessage(role = MessageRole.ASSISTANT, parts = notices).toMessageNode(),
+                            UIMessage(role = MessageRole.USER, parts = notices).toMessageNode(),
                     )
                 }
                 session.flush()

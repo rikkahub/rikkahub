@@ -273,7 +273,10 @@ private fun createShellTool(
                     put("type", "integer")
                     put(
                         "description",
-                        "Command timeout in seconds. Defaults to 30, max $SHELL_TIMEOUT_MAX_SECONDS. Ignored when running in the background."
+                        buildString {
+                            append("Command timeout in seconds. Defaults to 30, max $SHELL_TIMEOUT_MAX_SECONDS.")
+                            if (background != null) append(" Ignored when running in the background.")
+                        }
                     )
                 })
                 if (background != null) {

@@ -74,6 +74,8 @@ function hasRenderablePart(part: UIMessagePart): boolean {
       return part.reasoning.trim().length > 0;
     case "tool":
       return true;
+    case "notice":
+      return false;
   }
 }
 
@@ -93,6 +95,8 @@ function formatPartForCopy(part: UIMessagePart, t: TFunction): string | null {
       return part.reasoning;
     case "tool":
       return `[${t("chat_message.copy_tool")}] ${part.toolName}`;
+    case "notice":
+      return null;
   }
 }
 
@@ -638,6 +642,11 @@ export const ChatMessage = React.memo(({
 
   if (message.isContextCheckpoint) {
     return <ChatMessageContextCheckpoint message={message} onEdit={onEdit} onDelete={onDelete} />;
+  }
+
+  // 运行时通知单独开一轮时存成 user 消息，网页端不展示通知，这里不留空气泡
+  if (isUser && message.parts.length > 0 && !hasMessageContent) {
+    return null;
   }
 
   return (

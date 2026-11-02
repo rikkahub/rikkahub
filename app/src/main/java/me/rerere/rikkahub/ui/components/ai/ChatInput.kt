@@ -139,6 +139,8 @@ fun ChatInput(
     onBeginEditQueuedMessage: (Uuid) -> QueuedMessage? = { null },
     onFinishEditQueuedMessage: (Uuid, List<UIMessagePart>?) -> Unit = { _, _ -> },
     onResumeMessageQueue: () -> Unit = {},
+    runningBackgroundTasks: Int = 0,
+    onShowBackgroundTasks: () -> Unit = {},
     onStartVoiceMode: (() -> Unit)? = null,
     voiceState: VoiceSessionState = VoiceSessionState(),
     onStopVoiceMode: () -> Unit = {},
@@ -227,6 +229,10 @@ fun ChatInput(
                 .padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            BackgroundTasksChip(
+                running = runningBackgroundTasks,
+                onClick = onShowBackgroundTasks,
+            )
             MessageQueuePanel(
                 state = messageQueue,
                 onRemove = onRemoveQueuedMessage,

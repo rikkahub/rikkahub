@@ -57,6 +57,13 @@ data class UIMessage(
         }
     }
 
+    /**
+     * 只有 [UIMessagePart.Notice]，没有用户或模型说的话。
+     * user 消息这样是运行时事件单独开了一轮，助手消息这样是取走通知后回复还没出来或失败了。
+     */
+    val isNoticeOnly: Boolean
+        get() = parts.isNotEmpty() && parts.all { it is UIMessagePart.Notice }
+
     fun getTools() = parts.filterIsInstance<UIMessagePart.Tool>()
 
     fun isValidToUpload() = parts.any { part ->
@@ -565,13 +572,14 @@ fun <T> List<T>.migrateToolNodes(
 }
 
 /**
- * 把助手消息里的 [UIMessagePart.Notice] 在所在位置拆成 user 消息，组装请求时在最后调用。
+ * 把消息里的 [UIMessagePart.Notice] 在所在位置拆成 user 消息，组装请求时在最后调用。
  *
- * Notice 只会出现在新一轮开头或一批工具执行完之后，拆开后和模型看到的轮次一致：
+ * 助手消息里的 Notice 是这一轮中途取走的，只会出现在开头或一批工具执行完之后，拆开后和模型看到的轮次一致：
  * `[Tool, Notice, Text]` 变成 助手(tool_use) → user(tool_result) → user(notice) → 助手(text)。
+ * 空闲时单独开一轮的 Notice 存在 user 消息里（见 [UIMessage.isNoticeOnly]）。
  */
 fun List<UIMessage>.expandNotices(): List<UIMessage> = flatMap { message ->
-    if (message.role != MessageRole.ASSISTANT || message.parts.none { it is UIMessagePart.Notice }) {
+    if (message.parts.none { it is UIMessagePart.Notice }) {
         return@flatMap listOf(message)
     }
     buildList {

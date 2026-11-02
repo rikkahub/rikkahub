@@ -2,6 +2,7 @@ package me.rerere.ai.ui
 
 import me.rerere.ai.core.MessageRole
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -45,6 +46,26 @@ class MessageNoticeTest {
 
         assertEquals(listOf(MessageRole.USER, MessageRole.USER, MessageRole.ASSISTANT), result.map { it.role })
         assertEquals(listOf(UIMessagePart.Text("answer")), result[2].parts)
+    }
+
+    @Test
+    fun `a notice only user message becomes plain user messages`() {
+        val other = UIMessagePart.Notice(title = "other", text = "<notice>other</notice>")
+        val message = UIMessage(role = MessageRole.USER, parts = listOf(notice, other))
+
+        val result = listOf(message).expandNotices()
+
+        assertEquals(listOf("<notice>done</notice>", "<notice>other</notice>"), result.map { it.toText() })
+        assertTrue(result.all { it.role == MessageRole.USER && it.isSynthetic })
+    }
+
+    @Test
+    fun `only messages made of notices count as notice only`() {
+        assertTrue(UIMessage(role = MessageRole.USER, parts = listOf(notice)).isNoticeOnly)
+        assertFalse(UIMessage(role = MessageRole.USER, parts = emptyList()).isNoticeOnly)
+        assertFalse(
+            UIMessage(role = MessageRole.ASSISTANT, parts = listOf(notice, UIMessagePart.Text("answer"))).isNoticeOnly
+        )
     }
 
     @Test

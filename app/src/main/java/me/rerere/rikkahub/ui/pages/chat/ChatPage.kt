@@ -69,7 +69,9 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.service.BackgroundShellStatus
 import me.rerere.rikkahub.service.ChatError
+import me.rerere.rikkahub.ui.components.ai.BackgroundTasksSheet
 import me.rerere.rikkahub.ui.components.ai.ChatAttachmentPickerActions
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.components.ai.FilesPicker
@@ -342,6 +344,15 @@ private fun ChatPageContent(
             bottomBar = {
                 val messageQueue by vm.messageQueue.collectAsStateWithLifecycle()
                 val voiceState by vm.voiceSession.state.collectAsStateWithLifecycle()
+                val backgroundTasks by vm.backgroundTasks.collectAsStateWithLifecycle()
+                var showBackgroundTasks by remember { mutableStateOf(false) }
+                if (showBackgroundTasks) {
+                    BackgroundTasksSheet(
+                        tasks = backgroundTasks,
+                        onStop = vm::stopBackgroundTask,
+                        onDismiss = { showBackgroundTasks = false },
+                    )
+                }
                 ChatInput(
                     onStartVoiceMode = onStartVoiceMode,
                     voiceState = voiceState,
@@ -352,6 +363,8 @@ private fun ChatPageContent(
                     onBeginEditQueuedMessage = vm::beginEditQueuedMessage,
                     onFinishEditQueuedMessage = vm::finishEditQueuedMessage,
                     onResumeMessageQueue = vm::resumeMessageQueue,
+                    runningBackgroundTasks = backgroundTasks.count { it.status == BackgroundShellStatus.RUNNING },
+                    onShowBackgroundTasks = { showBackgroundTasks = true },
                     loading = loadingJob != null,
                     settings = setting,
                     assistant = assistant,

@@ -56,6 +56,12 @@ export interface ToolPart extends BaseMessagePart {
   approvalState: ToolApprovalState;
 }
 
+export interface NoticePart extends BaseMessagePart {
+  type: "notice";
+  title: string;
+  text: string;
+}
+
 /**
  * Union type for all message parts
  * @see ai/src/main/java/me/rerere/ai/ui/Message.kt - UIMessagePart
@@ -67,4 +73,5 @@ export type UIMessagePart =
   | AudioPart
   | DocumentPart
   | ReasoningPart
-  | ToolPart;
+  | ToolPart
+  | NoticePart;

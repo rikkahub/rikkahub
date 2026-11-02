@@ -40,6 +40,9 @@ private const val KILL_EXIT_WAIT_MS = 5_000L
 private const val NOTICE_TAIL_LINES = 20
 private const val NOTICE_TAIL_BYTES = 2 * 1024L
 
+/** 任务面板显示的日志末尾 */
+private const val LOG_TAIL_BYTES = 32 * 1024L
+
 private const val COMMAND_PREVIEW_CHARS = 80
 
 enum class BackgroundShellStatus {
@@ -66,7 +69,7 @@ sealed interface BackgroundShellNoticeEvent {
     val conversationId: Uuid
     val key: String
 
-    /** 命令自行结束 */
+    /** 命令自行结束, 或被用户终止 */
     data class Posted(
         override val conversationId: Uuid,
         override val key: String,
@@ -87,6 +90,12 @@ class BackgroundShellOutput(
     val skippedBytes: Long,
 )
 
+/** 给用户看的日志末尾, [truncated] 表示前面还有更早的内容 */
+data class BackgroundShellLogTail(
+    val text: String,
+    val truncated: Boolean,
+)
+
 /**
  * AI 在工作区里启动的后台命令, 按会话归属: 模型只能读取和终止自己会话启动的命令。
  *
@@ -105,6 +114,10 @@ class BackgroundShellManager(
 
         @Volatile
         var killing = false
+
+        // 要在 killing 之前写: onExit 看到 killing 时, 也就能看到是用户终止的
+        @Volatile
+        var stoppedByUser = false
 
         // 只在 readMutex 内读写
         var readOffset = 0L
@@ -185,6 +198,28 @@ class BackgroundShellManager(
         return requireTask(conversationId, id)
     }
 
+    /**
+     * 用户在任务面板里读取日志末尾; 不动模型的读取位置, 也不撤回结束通知。
+     * 任务已经不存在时返回 null。
+     */
+    suspend fun readLogTail(id: String): BackgroundShellLogTail? {
+        val handle = handles[id] ?: return null
+        return withContext(Dispatchers.IO) {
+            BackgroundShellLogTail(
+                text = readTailLines(handle.command, LOG_TAIL_BYTES).joinToString("\n"),
+                truncated = handle.command.outputSize() > LOG_TAIL_BYTES,
+            )
+        }
+    }
+
+    /** 用户在任务面板里终止命令; 模型在等结束通知, 所以 [onExit] 会和命令自行结束时一样通知它 */
+    suspend fun stop(id: String) {
+        val handle = handles[id] ?: return
+        handle.stoppedByUser = true
+        terminate(handle)
+        withTimeoutOrNull(KILL_EXIT_WAIT_MS) { handle.exited.await() }
+    }
+
     /** 删除会话时终止它的所有后台命令 */
     suspend fun killConversation(conversationId: Uuid) = killAll { it.conversationId == conversationId }
 
@@ -212,11 +247,13 @@ class BackgroundShellManager(
 
     // 在等待退出的线程上调用, 可以直接读日志
     private fun onExit(id: String, handle: Handle, exitCode: Int) {
-        Log.i(TAG, "exit: $id, code=$exitCode, killed=${handle.killing}")
+        // 只读一次: 状态和通知要对同一个结论, 退出时才收到的终止请求算作自行结束
+        val killed = handle.killing
+        val stoppedByUser = killed && handle.stoppedByUser
+        Log.i(TAG, "exit: $id, code=$exitCode, killed=$killed, stoppedByUser=$stoppedByUser")
         val endedAt = System.currentTimeMillis()
-        // 被终止的命令不发通知; 通知内容在这里定下来, 之后每次请求都原样发送
-        val tail = if (handle.killing) {
-            null
+        val tail = if (killed) {
+            ""
         } else {
             runCatching { readTail(handle.command) }
                 .onFailure { Log.w(TAG, "read tail failed: $id", it) }
@@ -225,18 +262,21 @@ class BackgroundShellManager(
         _tasks.update { tasks ->
             val task = tasks[id] ?: return@update tasks
             tasks + (id to task.copy(
-                status = if (handle.killing) BackgroundShellStatus.KILLED else BackgroundShellStatus.EXITED,
+                status = if (killed) BackgroundShellStatus.KILLED else BackgroundShellStatus.EXITED,
                 exitCode = exitCode,
                 endedAt = endedAt,
             ))
         }
+        // 结束通知只在这里发出, 内容也在这里定下来, 之后每次请求都原样发送。
         // 要在标记结束之前发出: 读取输出看到结束后会撤回通知, 撤回必须排在发出之后
-        val task = _tasks.value[id]
-        if (task != null && tail != null) {
-            _noticeEvents.tryEmit(
-                BackgroundShellNoticeEvent.Posted(task.conversationId, noticeKey(id), buildNotice(task, tail))
-            )
+        val notice = _tasks.value[id]?.let { task ->
+            when {
+                stoppedByUser -> buildStoppedNotice(task)
+                killed -> null
+                else -> buildNotice(task, tail)
+            }?.let { BackgroundShellNoticeEvent.Posted(task.conversationId, noticeKey(id), it) }
         }
+        notice?.let(_noticeEvents::tryEmit)
         handle.exited.complete(Unit)
         BackgroundShellForegroundService.release(context, id)
     }
@@ -278,23 +318,40 @@ class BackgroundShellManager(
 
 private fun noticeKey(taskId: String) = "background_shell:$taskId"
 
-/** 日志最后几行; 从中间开始读时第一行可能不完整, 丢掉 */
-private fun readTail(command: WorkspaceBackgroundCommand): String {
+/** 日志最后 [maxBytes] 字节里的行; 从中间开始读时第一行可能不完整, 丢掉 */
+internal fun readTailLines(command: WorkspaceBackgroundCommand, maxBytes: Long): List<String> {
     val size = command.outputSize()
-    val start = (size - NOTICE_TAIL_BYTES).coerceAtLeast(0)
-    val lines = command.readOutput(start, (size - start).toInt()).decodeToString().lines()
-    return lines
-        .let { if (start > 0 && it.size > 1) it.drop(1) else it }
-        .dropLastWhile { it.isBlank() }
-        .takeLast(NOTICE_TAIL_LINES)
-        .joinToString("\n")
+    val start = (size - maxBytes).coerceAtLeast(0)
+    val bytes = command.readOutput(start, (size - start).toInt())
+    val lines = bytes.decodeToString(0, bytes.completeUtf8Length()).lines()
+    return (if (start > 0 && lines.size > 1) lines.drop(1) else lines).dropLastWhile { it.isBlank() }
+}
+
+private fun readTail(command: WorkspaceBackgroundCommand): String =
+    readTailLines(command, NOTICE_TAIL_BYTES).takeLast(NOTICE_TAIL_LINES).joinToString("\n")
+
+private fun BackgroundShellTask.commandPreview(): String = command.replace("\n", " ").trim().let {
+    if (it.length > COMMAND_PREVIEW_CHARS) it.take(COMMAND_PREVIEW_CHARS) + "…" else it
+}
+
+private fun BackgroundShellTask.durationSeconds(): Long = ((endedAt ?: startedAt) - startedAt) / 1000
+
+private fun buildStoppedNotice(task: BackgroundShellTask): UIMessagePart.Notice {
+    val command = task.commandPreview()
+    val text = buildString {
+        appendLine("<background_shell_notice>")
+        appendLine(
+            "Background command `${task.id}` was stopped by the user after ${task.durationSeconds()}s: `$command`"
+        )
+        appendLine("Full log: ${task.logPath}")
+        append("</background_shell_notice>")
+    }
+    return UIMessagePart.Notice(title = "Background command stopped by the user: $command", text = text)
 }
 
 private fun buildNotice(task: BackgroundShellTask, tail: String): UIMessagePart.Notice {
-    val command = task.command.replace("\n", " ").trim().let {
-        if (it.length > COMMAND_PREVIEW_CHARS) it.take(COMMAND_PREVIEW_CHARS) + "…" else it
-    }
-    val seconds = ((task.endedAt ?: task.startedAt) - task.startedAt) / 1000
+    val command = task.commandPreview()
+    val seconds = task.durationSeconds()
     val text = buildString {
         appendLine("<background_shell_notice>")
         appendLine("Background command `${task.id}` exited with code ${task.exitCode} after ${seconds}s: `$command`")
