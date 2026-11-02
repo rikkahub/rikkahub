@@ -96,6 +96,7 @@ val viewModelModule = module {
             id = it.get(),
             repository = get(),
             terminalSessionManager = get(),
+            backgroundShellManager = get(),
         )
     }
     viewModel<WorkspaceSshEditorVM> {

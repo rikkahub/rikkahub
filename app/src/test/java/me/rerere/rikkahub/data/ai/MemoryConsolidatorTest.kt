@@ -124,6 +124,16 @@ class MemoryConsolidatorTest {
         assertEquals(listOf("user 1", "reply 2"), result.turns.first().messages.map { it.value.toText() })
     }
 
+    @Test
+    fun `a notice stored right before a user message is skipped`() {
+        val messages = listOf(user(1), assistant(2), notice(3), user(4), assistant(5))
+
+        val result = pending(messages, consolidatedAt = 0, updatedAt = timeOf(6))
+
+        assertEquals(listOf(0, 3), result.turns.map { it.position })
+        assertEquals(listOf("user 4", "reply 5"), result.turns.last().messages.map { it.value.toText() })
+    }
+
     // 15 轮对话，第 n 轮的用户消息在第 2n-1 分钟
     private val longChat = (1..15).flatMap { turn -> listOf(user(turn * 2 - 1), assistant(turn * 2)) }
 

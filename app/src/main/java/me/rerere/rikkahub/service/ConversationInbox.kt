@@ -44,7 +44,7 @@ data class InboxState(
 
 /** 收件箱决定的下一轮 */
 sealed interface InboxTurn {
-    /** 发送这条用户输入；等待中的通知在这一轮第一步之前一起取走 */
+    /** 发送这条用户输入；要回复时等待中的通知存成它之前的节点 */
     data class Message(val message: QueuedMessage) : InboxTurn
 
     /** 只有通知在等，单独开一轮；通知在开始时用 [ConversationInbox.takeNotices] 取 */

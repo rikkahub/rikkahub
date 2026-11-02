@@ -576,7 +576,7 @@ fun <T> List<T>.migrateToolNodes(
  *
  * 助手消息里的 Notice 是这一轮中途取走的，只会出现在开头或一批工具执行完之后，拆开后和模型看到的轮次一致：
  * `[Tool, Notice, Text]` 变成 助手(tool_use) → user(tool_result) → user(notice) → 助手(text)。
- * 空闲时单独开一轮的 Notice 存在 user 消息里（见 [UIMessage.isNoticeOnly]）。
+ * 开始新的一轮时取走的 Notice 单独存成 user 消息（见 [UIMessage.isNoticeOnly]）。
  */
 fun List<UIMessage>.expandNotices(): List<UIMessage> = flatMap { message ->
     if (message.parts.none { it is UIMessagePart.Notice }) {

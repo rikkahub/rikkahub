@@ -436,6 +436,7 @@ class ChatService(
         synchronized(session) {
             // A pending tool approval is still part of the current turn.
             if (session.getJob() != null || session.state.value.isAwaitingToolApproval) return null
+            if (session.isCompressing) return null
             return when (val next = session.inbox.takeNext() ?: return null) {
                 is InboxTurn.Message -> {
                     session.submittingMessage = next.message
@@ -464,12 +465,17 @@ class ChatService(
 
                 // 添加消息到列表
                 val previousIds = session.state.value.currentMessages.mapTo(HashSet()) { it.id }
+                // 等待中的通知存成用户消息之前的节点：写进回复的话，重新生成时就丢了。
+                // 不回复时留在收件箱，这一轮结束后单独开一轮
+                val notices = if (queued.answer) session.inbox.takeNotices() else emptyList()
                 session.update {
                     it.copy(
-                        messageNodes = it.messageNodes + UIMessage(
-                            role = MessageRole.USER,
-                            parts = processedContent,
-                        ).toMessageNode(),
+                        messageNodes = it.messageNodes +
+                            listOfNotNull(notices.takeIf { n -> n.isNotEmpty() }?.toNoticeNode()) +
+                            UIMessage(
+                                role = MessageRole.USER,
+                                parts = processedContent,
+                            ).toMessageNode(),
                     )
                 }
                 session.flush()
@@ -506,7 +512,7 @@ class ChatService(
         return job
     }
 
-    /** 只有通知在等时开的一轮：通知写在一条新的助手消息开头，模型的回复接在后面 */
+    /** 只有通知在等时开的一轮：通知存成一个 user 节点，模型的回复是它的下一个节点 */
     private fun sendQueuedNotices(session: ConversationSession): Job {
         val conversationId = session.id
         session.replyMessageId.value = null
@@ -521,13 +527,8 @@ class ChatService(
                 if (session.state.value.isAwaitingToolApproval) return@launchGenerationJob
                 val notices = session.inbox.takeNotices()
                 if (notices.isEmpty()) return@launchGenerationJob
-                // 存成 user 节点：这一轮的回复是它的下一个节点，重新生成和分支都和普通消息一样
-                session.update {
-                    it.copy(
-                        messageNodes = it.messageNodes +
-                            UIMessage(role = MessageRole.USER, parts = notices).toMessageNode(),
-                    )
-                }
+                // 存成 user 节点：重新生成和分支都和普通消息一样
+                session.update { it.copy(messageNodes = it.messageNodes + notices.toNoticeNode()) }
                 session.flush()
                 runTurn(session)
                 _generationDoneFlow.emit(conversationId)
@@ -541,6 +542,9 @@ class ChatService(
         session.setJob(job)
         return job
     }
+
+    private fun List<UIMessagePart.Notice>.toNoticeNode() =
+        UIMessage(role = MessageRole.USER, parts = this).toMessageNode()
 
     // 发送、重新生成和审批失败时报告错误并暂停队列，排队的消息等用户处理完再继续
     private fun reportFailure(session: ConversationSession, error: Exception, @StringRes title: Int) {
@@ -890,53 +894,63 @@ class ChatService(
     ): Result<Unit> = runCatching {
         withLoadedSession<Unit>(conversationId) { session ->
             // 生成中的回复还没写完，压缩不到它，检查点也不能插到它前面
-            check(!session.isGenerating) { context.getString(R.string.chat_page_compress_blocked_generating) }
-
-            val conversation = session.state.value
-            val nodes = conversation.messageNodes
-            val checkpointIndex = nodes.indexOfLast { it.currentMessage.isContextCheckpoint }
-            // 压缩范围是 (checkpointIndex, endIndex)，之后的节点原样保留
-            val endIndex = nodes.size - keepRecentMessages.coerceAtLeast(0)
-            // 上一个检查点之后没有可压缩的消息
-            if (endIndex <= checkpointIndex + 1) {
-                throw IllegalStateException(
-                    context.getString(
-                        if (keepRecentMessages > 0) {
-                            R.string.chat_page_compress_not_enough_messages
-                        } else {
-                            R.string.chat_page_compress_nothing_to_compress
-                        }
-                    )
-                )
-            }
-            // 未完成的工具调用没有结果，请求会被服务端拒绝；压到检查点之前也再不会执行。
-            // 保留区里的不发给压缩请求，压缩后照常留在检查点之后，不用检查
-            check(nodes.subList(checkpointIndex + 1, endIndex).none { node ->
-                node.currentMessage.getTools().any { it.isPending || it.canResumeExecution }
-            }) { context.getString(R.string.chat_page_compress_handle_pending_tools) }
-
-            // 必须和对话用同一个模型、同一套请求组装，才能命中提示词缓存
-            val turn = requestFactory.createContext(settingsStore.awaitLoaded(), conversation)
-            val summary = requestFactory.generateCompressionSummary(
-                turn = turn,
-                messages = conversation.currentMessages.take(endIndex),
-                compressPrompt = buildCompressPrompt(
-                    additionalPrompt = additionalPrompt,
-                    locale = Locale.getDefault().displayName,
-                ),
-            )
-
-            // 原消息原样保留，摘要插在压缩范围的最后一条消息之后。摘要生成期间对话可能已变化，
-            // 因此按节点定位插入到最新状态。
-            session.update { latest ->
+            synchronized(session) {
                 check(!session.isGenerating) { context.getString(R.string.chat_page_compress_blocked_generating) }
-                val updated = latest.insertContextCheckpoint(
-                    afterNodeId = nodes[endIndex - 1].id,
-                    summary = summary,
-                ) ?: throw IllegalStateException(context.getString(R.string.chat_page_compress_conversation_changed))
-                updated.copy(chatSuggestions = emptyList())
+                session.isCompressing = true
             }
-            session.flush()
+            try {
+                val conversation = session.state.value
+                val nodes = conversation.messageNodes
+                val checkpointIndex = nodes.indexOfLast { it.currentMessage.isContextCheckpoint }
+                // 压缩范围是 (checkpointIndex, endIndex)，之后的节点原样保留
+                val endIndex = nodes.size - keepRecentMessages.coerceAtLeast(0)
+                // 上一个检查点之后没有可压缩的消息
+                if (endIndex <= checkpointIndex + 1) {
+                    throw IllegalStateException(
+                        context.getString(
+                            if (keepRecentMessages > 0) {
+                                R.string.chat_page_compress_not_enough_messages
+                            } else {
+                                R.string.chat_page_compress_nothing_to_compress
+                            }
+                        )
+                    )
+                }
+                // 未完成的工具调用没有结果，请求会被服务端拒绝；压到检查点之前也再不会执行。
+                // 保留区里的不发给压缩请求，压缩后照常留在检查点之后，不用检查
+                check(nodes.subList(checkpointIndex + 1, endIndex).none { node ->
+                    node.currentMessage.getTools().any { it.isPending || it.canResumeExecution }
+                }) { context.getString(R.string.chat_page_compress_handle_pending_tools) }
+
+                // 必须和对话用同一个模型、同一套请求组装，才能命中提示词缓存
+                val turn = requestFactory.createContext(settingsStore.awaitLoaded(), conversation)
+                val summary = requestFactory.generateCompressionSummary(
+                    turn = turn,
+                    messages = conversation.currentMessages.take(endIndex),
+                    compressPrompt = buildCompressPrompt(
+                        additionalPrompt = additionalPrompt,
+                        locale = Locale.getDefault().displayName,
+                    ),
+                )
+
+                // 原消息原样保留，摘要插在压缩范围的最后一条消息之后。摘要生成期间对话可能已变化，
+                // 因此按节点定位插入到最新状态。
+                session.update { latest ->
+                    check(!session.isGenerating) { context.getString(R.string.chat_page_compress_blocked_generating) }
+                    val updated = latest.insertContextCheckpoint(
+                        afterNodeId = nodes[endIndex - 1].id,
+                        summary = summary,
+                    ) ?: throw IllegalStateException(
+                        context.getString(R.string.chat_page_compress_conversation_changed)
+                    )
+                    updated.copy(chatSuggestions = emptyList())
+                }
+                session.flush()
+            } finally {
+                // 补上压缩期间收到的通知和消息
+                session.isCompressing = false
+                dispatchInbox(conversationId)
+            }
         }
     }
 
