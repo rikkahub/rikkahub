@@ -7,6 +7,7 @@ import me.rerere.ai.agent.AgentHooks
 import me.rerere.ai.agent.AgentRequest
 import me.rerere.ai.agent.RetryPolicy
 import me.rerere.ai.agent.StepRequest
+import me.rerere.ai.agent.expandNotices
 import me.rerere.ai.agent.withRetry
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
@@ -16,7 +17,6 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.expandNotices
 import me.rerere.ai.ui.limitContext
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.prompts.buildMemoryPrompt

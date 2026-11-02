@@ -225,7 +225,7 @@ sealed class UIMessagePart {
      *
      * 生成中由 agent 循环在轮到模型回复时追加到助手消息里，开始新的一轮时单独存成一条 user 消息，
      * 和其它 part 一样保存在会话中；
-     * 请求时由 [expandNotices] 在所在位置拆成一条 user 消息，前缀固定，可以命中提示词缓存。
+     * 请求时由 [me.rerere.ai.agent.expandNotices] 在所在位置拆成一条 user 消息，前缀固定，可以命中提示词缓存。
      * [title] 只用于界面展示，[text] 是发给模型的内容。
      */
     @Serializable
