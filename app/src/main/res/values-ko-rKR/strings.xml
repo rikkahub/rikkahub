@@ -436,7 +436,7 @@
   <string name="permission_diaog_title">권한 요청</string>
   <string name="permission_go_to_settings">앱 설정으로 이동</string>
   <string name="permission_local_network">로컬 네트워크</string>
-  <string name="permission_local_network_desc">같은 로컬 네트워크의 기기에서 Web 서버에 접근할 수 있도록 허용합니다</string>
+  <string name="permission_local_network_desc">로컬 네트워크의 자체 호스팅 서비스에 연결하거나 다른 기기에서 Web 서버에 접근하려면 필요합니다</string>
   <string name="permission_microphone">마이크</string>
   <string name="permission_microphone_desc">음성 인식을 위해 마이크 권한이 필요합니다</string>
   <string name="permission_notification">알림</string>

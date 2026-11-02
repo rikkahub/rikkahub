@@ -436,7 +436,7 @@
   <string name="permission_diaog_title">権限リクエスト</string>
   <string name="permission_go_to_settings">アプリ設定へ移動</string>
   <string name="permission_local_network">ローカルネットワーク</string>
-  <string name="permission_local_network_desc">同じローカルネットワーク上のデバイスから Web サーバーへアクセスできるようにします</string>
+  <string name="permission_local_network_desc">ローカルネットワーク上のセルフホストサービスへの接続や、他のデバイスから Web サーバーへのアクセスに必要です</string>
   <string name="permission_microphone">マイク</string>
   <string name="permission_microphone_desc">音声認識にはマイクの権限が必要です</string>
   <string name="permission_notification">通知</string>

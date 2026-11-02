@@ -430,7 +430,7 @@
   <string name="permission_diaog_title">Berechtigungsanfrage</string>
   <string name="permission_go_to_settings">Zu den Einstellungen</string>
   <string name="permission_local_network">Lokales Netzwerk</string>
-  <string name="permission_local_network_desc">Erlaube den Zugriff auf den Webserver von Geräten im selben lokalen Netzwerk</string>
+  <string name="permission_local_network_desc">Erforderlich, um eine Verbindung zu selbst gehosteten Diensten im lokalen Netzwerk herzustellen und anderen Geräten den Zugriff auf den Webserver zu ermöglichen</string>
   <string name="permission_microphone">Mikrofon</string>
   <string name="permission_microphone_desc">Die Mikrofonberechtigung wird für die Spracherkennung benötigt</string>
   <string name="permission_notification">Benachrichtigung</string>

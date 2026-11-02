@@ -436,7 +436,7 @@
   <string name="permission_diaog_title">Запрос разрешения</string>
   <string name="permission_go_to_settings">Перейти в настройки приложения</string>
   <string name="permission_local_network">Локальная сеть</string>
-  <string name="permission_local_network_desc">Разрешить устройствам в той же локальной сети доступ к веб-серверу</string>
+  <string name="permission_local_network_desc">Необходимо для подключения к собственным сервисам в локальной сети и для доступа других устройств к веб-серверу</string>
   <string name="permission_microphone">Микрофон</string>
   <string name="permission_microphone_desc">Для распознавания речи требуется разрешение на использование микрофона</string>
   <string name="permission_notification">Уведомление</string>

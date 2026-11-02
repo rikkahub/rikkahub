@@ -436,7 +436,7 @@
   <string name="permission_diaog_title">權限請求</string>
   <string name="permission_go_to_settings">前往設定</string>
   <string name="permission_local_network">本地網路</string>
-  <string name="permission_local_network_desc">允許同一區域網路內的裝置存取 Web 伺服器</string>
+  <string name="permission_local_network_desc">連線區域網路內的自建服務，以及讓其他裝置存取 Web 伺服器時需要此權限</string>
   <string name="permission_microphone">麥克風</string>
   <string name="permission_microphone_desc">需要麥克風權限才能進行語音辨識</string>
   <string name="permission_notification">通知</string>

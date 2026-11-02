@@ -539,7 +539,7 @@
   <string name="permission_diaog_title">طلب الإذن</string>
   <string name="permission_go_to_settings">الانتقال إلى الإعدادات</string>
   <string name="permission_local_network">الشبكة المحلية</string>
-  <string name="permission_local_network_desc">السماح بالوصول إلى خادم الويب من الأجهزة الموجودة على نفس الشبكة المحلية</string>
+  <string name="permission_local_network_desc">مطلوب للاتصال بالخدمات المستضافة ذاتيًا على الشبكة المحلية، وللسماح للأجهزة الأخرى بالوصول إلى خادم الويب</string>
   <string name="permission_microphone">الميكروفون</string>
   <string name="permission_microphone_desc">إذن الميكروفون مطلوب للتعرف على الكلام</string>
   <string name="permission_notification">الإشعارات</string>
