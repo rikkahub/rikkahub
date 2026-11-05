@@ -16,6 +16,25 @@ import kotlin.uuid.Uuid
  */
 val RECOMMENDED_PROVIDERS: List<ProviderSetting> = listOf(
     ProviderSetting.OpenAI(
+        id = Uuid.parse("3de58b04-7ac6-4f25-8880-2e2638aeb1d6"),
+        name = "STA1N API🍪",
+        baseUrl = "https://sta1n.ai/v1",
+        apiKey = "",
+        enabled = true,
+        description = {
+            Text(
+                text = buildAnnotatedString {
+                    append("官网：")
+                    withLink(LinkAnnotation.Url("https://sta1n.ai")) {
+                        withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
+                            append("https://sta1n.ai")
+                        }
+                    }
+                }
+            )
+        },
+    ),
+    ProviderSetting.OpenAI(
         id = Uuid.parse("2a05506f-3a59-450a-a493-33a82bc85a81"),
         name = "APIMart",
         baseUrl = "https://api.apimart.ai/v1",
