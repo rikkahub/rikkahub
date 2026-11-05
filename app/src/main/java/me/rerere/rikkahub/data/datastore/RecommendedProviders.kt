@@ -24,6 +24,8 @@ val RECOMMENDED_PROVIDERS: List<ProviderSetting> = listOf(
         description = {
             Text(
                 text = buildAnnotatedString {
+                    append("主营 RP 的站")
+                    appendLine()
                     append("官网：")
                     withLink(LinkAnnotation.Url("https://sta1n.ai")) {
                         withStyle(SpanStyle(MaterialTheme.colorScheme.primary)) {
