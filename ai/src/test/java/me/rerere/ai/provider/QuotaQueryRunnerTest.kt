@@ -72,6 +72,28 @@ class QuotaQueryRunnerTest {
     }
 
     @Test
+    fun `post query sends rendered json body`() = runTest {
+        val setting = ProviderSetting.OpenAI(baseUrl = "https://api.example.com/v1")
+        val query = QuotaQuery(
+            enabled = true,
+            method = QuotaQueryMethod.POST,
+            url = "{{baseUrl}}/balance",
+            body = """{"key":"{{apiKey}}"}""",
+            resultPath = "balance",
+        )
+
+        val quota = client("""{"balance":3}""").runQuotaQuery(setting.copy(quotaQuery = query)) { "sk-1" }
+
+        val request = captured!!
+        val buffer = okio.Buffer()
+        request.body!!.writeTo(buffer)
+        assertEquals("POST", request.method)
+        assertEquals("""{"key":"sk-1"}""", buffer.readUtf8())
+        assertEquals("application/json; charset=utf-8", request.body!!.contentType().toString())
+        assertEquals(ProviderQuota.Balance("%.2f".format(3.0)), quota)
+    }
+
+    @Test
     fun `non numeric result is returned as is`() = runTest {
         val setting = ProviderSetting.Claude()
         val query = setting.quotaQuery.copy(enabled = true, url = "https://x.example.com/me", resultPath = "plan")
