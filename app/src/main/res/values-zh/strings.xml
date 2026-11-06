@@ -1786,4 +1786,24 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_model_page_memory_model">记忆整理模型</string>
   <string name="setting_model_page_memory_model_desc">用于在后台将对话整理为长期记忆的模型；未设置时使用快速模型</string>
   <string name="setting_model_page_memory_model_follow_fast">跟随快速模型</string>
+  <string name="background_tasks_running">后台任务：%1$d 个运行中</string>
+  <string name="background_tasks_title">后台任务</string>
+  <string name="background_tasks_empty">此对话中没有后台任务</string>
+  <string name="background_tasks_stopping">正在停止…</string>
+  <string name="background_tasks_log_truncated">显示的是日志末尾部分。完整日志：%1$s</string>
+  <string name="background_tasks_no_output_yet">暂无输出</string>
+  <string name="background_tasks_no_output">无输出</string>
+  <string name="background_tasks_status_running">运行中 · %1$s</string>
+  <string name="background_tasks_status_exited">已退出，退出码 %1$d · %2$s</string>
+  <string name="background_tasks_status_stopped">已停止 · %1$s</string>
+  <string name="background_tasks_duration_seconds">%1$d秒</string>
+  <string name="background_tasks_duration_minutes">%1$d分 %2$d秒</string>
+  <string name="background_tasks_duration_hours">%1$d小时 %2$d分</string>
+  <string name="tool_ui_shell_background_running">后台运行中 · %1$s</string>
+  <string name="tool_ui_shell_background_stopped">已停止 · %1$s</string>
+  <string name="tool_ui_shell_background">后台 · %1$s</string>
+  <string name="chat_page_notice_retry">重试</string>
+  <string name="notification_background_shell_running">后台命令运行中：%1$d</string>
+  <string name="background_shell_notice_exited">后台命令已退出，退出码为 %1$d：%2$s</string>
+  <string name="background_shell_notice_stopped">后台命令已被你停止：%1$s</string>
 </resources>

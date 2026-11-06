@@ -22,6 +22,11 @@ export function getCurrentMessages(conversation: Conversation): UIMessage[] {
   return conversation.messageNodes.map(getCurrentMessage);
 }
 
+/** 运行时通知单独开一轮时的消息：只有 notice，不是用户说的话 */
+export function isNoticeOnly(message: Pick<UIMessage, "parts">): boolean {
+  return message.parts.length > 0 && message.parts.every((part) => part.type === "notice");
+}
+
 export function isTextPart(part: UIMessagePart): part is TextPart {
   return part.type === "text";
 }

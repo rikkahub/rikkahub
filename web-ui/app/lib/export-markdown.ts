@@ -1,4 +1,4 @@
-import type { ConversationDto, MessageDto } from "~/types";
+import { type ConversationDto, type MessageDto, isNoticeOnly } from "~/types";
 
 export function convertMessageToMarkdown(
   message: MessageDto,
@@ -41,7 +41,7 @@ export function convertConversationToMarkdown(
 
   for (const node of detail.messages) {
     const message = node.messages[node.selectIndex] ?? node.messages[0];
-    if (!message) continue;
+    if (!message || isNoticeOnly(message)) continue;
 
     const roleLabel =
       message.role === "USER"

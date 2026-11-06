@@ -41,6 +41,8 @@ import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.model.getAssistantOf
 import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.repository.FavoriteRepository
+import me.rerere.rikkahub.service.BackgroundShellManager
+import me.rerere.rikkahub.service.BackgroundShellTask
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
@@ -62,6 +64,7 @@ class ChatVM(
     private val analytics: FirebaseAnalytics,
     private val filesManager: FilesManager,
     private val favoriteRepository: FavoriteRepository,
+    private val backgroundShellManager: BackgroundShellManager,
 ) : ViewModel() {
     private val _conversationId: Uuid = Uuid.parse(id)
     val conversation: StateFlow<Conversation> = chatService.getConversationFlow(_conversationId)
@@ -135,16 +138,23 @@ class ChatVM(
 
     fun clearAllErrors() = chatService.clearAllErrors()
 
-    val messageQueue = chatService.getMessageQueueFlow(_conversationId)
+    val messageQueue = chatService.getInboxFlow(_conversationId)
 
-    fun removeQueuedMessage(id: Uuid) = chatService.removeQueuedMessage(_conversationId, id)
+    fun removeQueuedMessage(id: Uuid) = chatService.removeInboxItem(_conversationId, id)
 
     fun beginEditQueuedMessage(id: Uuid) = chatService.beginEditQueuedMessage(_conversationId, id)
 
     fun finishEditQueuedMessage(id: Uuid, parts: List<UIMessagePart>?) =
         chatService.finishEditQueuedMessage(_conversationId, id, parts)
 
-    fun resumeMessageQueue() = chatService.resumeMessageQueue(_conversationId)
+    fun resumeMessageQueue() = chatService.resumeInbox(_conversationId)
+
+    // 这个会话启动的后台命令，按启动时间排序
+    val backgroundTasks: StateFlow<List<BackgroundShellTask>> = backgroundShellManager.tasks
+        .map { tasks -> tasks.values.filter { it.conversationId == _conversationId }.sortedBy { it.startedAt } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    suspend fun stopBackgroundTask(id: String) = backgroundShellManager.stop(id)
 
     // 生成完成
     val generationDoneFlow: SharedFlow<Uuid> = chatService.generationDoneFlow

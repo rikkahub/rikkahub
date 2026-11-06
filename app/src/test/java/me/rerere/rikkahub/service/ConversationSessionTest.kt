@@ -707,8 +707,8 @@ class ConversationSessionTest {
         val session = ConversationSession(id, Conversation.ofId(id), scope, FakeConversationStore(), {})
         try {
             assertFalse(session.isInUse)
-            session.messageQueue.enqueue(listOf(UIMessagePart.Text("next")))
-            session.messageQueue.pause()
+            session.inbox.enqueue(listOf(UIMessagePart.Text("next")))
+            session.inbox.pause()
             assertTrue(session.isInUse)
         } finally {
             session.cleanup()

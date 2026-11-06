@@ -18,49 +18,57 @@ class ProotShellRunner(
     private val patcher: RootfsPatcher = RootfsPatcher(),
 ) : WorkspaceShellRunner {
     override fun execute(context: WorkspaceShellContext): WorkspaceCommandResult {
-        if (!WorkspaceManager.isUsableRootfs(context.linuxDir)) {
+        unavailableReason(context)?.let { reason ->
             return WorkspaceCommandResult(
                 exitCode = 127,
                 stdout = "",
-                stderr = "Rootfs is not installed",
+                stderr = reason,
             )
         }
+        val process = processBuilder(context, buildCommand(context, EXEC_SCRIPT))
+            .redirectErrorStream(false)
+            .start()
+        return process.readResult(context.timeoutMillis, context.stdin)
+    }
 
-        val proot = File(nativeLibraryDir, PROOT_EXEC)
-        val loader = File(nativeLibraryDir, PROOT_LOADER)
-        if (!proot.isFile) {
-            return WorkspaceCommandResult(
-                exitCode = 127,
-                stdout = "",
-                stderr = "proot executable not found: ${proot.absolutePath}",
-            )
-        }
-        if (!loader.isFile) {
-            return WorkspaceCommandResult(
-                exitCode = 127,
-                stdout = "",
-                stderr = "proot loader not found: ${loader.absolutePath}",
-            )
-        }
+    override fun startBackground(context: WorkspaceShellContext, id: String): WorkspaceBackgroundCommand {
+        unavailableReason(context)?.let { error(it) }
+        // 日志放在 Rootfs 的 /tmp 下, 模型可以用 shell 直接 tail/grep; 应用启动时随 /tmp 一起清理
+        val dir = File(context.linuxDir, BACKGROUND_DIR.trimStart('/')).apply { mkdirs() }
+        val logFile = File(dir, "$id.log")
+        val pidFile = File(dir, "$id.pid")
+        val process = processBuilder(context, buildCommand(context, BACKGROUND_SCRIPT, "$BACKGROUND_DIR/$id.pid"))
+            .redirectErrorStream(true)
+            .redirectOutput(logFile)
+            .redirectInput(File("/dev/null"))
+            .start()
+        return ProotBackgroundCommand(process, logFile, "$BACKGROUND_DIR/$id.log", pidFile)
+    }
 
+    private fun unavailableReason(context: WorkspaceShellContext): String? = when {
+        !WorkspaceManager.isUsableRootfs(context.linuxDir) -> "Rootfs is not installed"
+        !File(nativeLibraryDir, PROOT_EXEC).isFile ->
+            "proot executable not found: ${File(nativeLibraryDir, PROOT_EXEC).absolutePath}"
+        !File(nativeLibraryDir, PROOT_LOADER).isFile ->
+            "proot loader not found: ${File(nativeLibraryDir, PROOT_LOADER).absolutePath}"
+        else -> null
+    }
+
+    private fun processBuilder(context: WorkspaceShellContext, command: List<String>): ProcessBuilder {
         context.tempDir.mkdirs()
         patcher.patch(context.linuxDir)
-        val process = ProcessBuilder(buildCommand(context, proot))
+        return ProcessBuilder(command)
             .directory(context.filesDir)
-            .redirectErrorStream(false)
             .apply {
                 if (context.shellCompatibilityMode) {
                     environment()["PROOT_NO_SECCOMP"] = "1"
                 } else {
                     environment().remove("PROOT_NO_SECCOMP")
                 }
-                environment()["PROOT_LOADER"] = loader.absolutePath
+                environment()["PROOT_LOADER"] = File(nativeLibraryDir, PROOT_LOADER).absolutePath
                 environment()["PROOT_TMP_DIR"] = context.tempDir.absolutePath
                 environment()["TMPDIR"] = context.tempDir.absolutePath
             }
-            .start()
-
-        return process.readResult(context.timeoutMillis, context.stdin)
     }
 
     override fun terminalLaunch(context: WorkspaceTerminalContext): WorkspaceTerminalLaunch {
@@ -92,9 +100,10 @@ class ProotShellRunner(
 
     private fun buildCommand(
         context: WorkspaceShellContext,
-        proot: File,
+        script: String,
+        vararg extraArgs: String,
     ): List<String> {
-        val command = mutableListOf(proot.absolutePath)
+        val command = mutableListOf(File(nativeLibraryDir, PROOT_EXEC).absolutePath)
         command += prootArgs(context.linuxDir, context.filesDir, context.prootCwd(), context.bindMounts)
         command += ROOTFS_ENV
         command += listOf(
@@ -105,12 +114,12 @@ class ProotShellRunner(
             WorkspaceManager.rootfsShell(context.linuxDir),
             "-l",
             "-c",
-            // 命令通过位置参数传入, 避免任何转义; eval "$2" 对命令文本只求值一次, 等价于 bash -c "$cmd"
-            "cd -- \"\$1\" && eval \"\$2\"",
+            script,
             "rikkahub",
             context.prootCwd(),
             context.command,
         )
+        command += extraArgs
         return command
     }
 
@@ -162,6 +171,15 @@ class ProotShellRunner(
         private const val PROOT_EXEC = "libproot_exec.so"
         private const val PROOT_LOADER = "libproot_loader.so"
         private val WORKSPACE_DIR = WorkspaceManager.ROOTFS_WORKSPACE_DIR
+
+        // 命令通过位置参数传入, 避免任何转义; eval "$2" 对命令文本只求值一次, 等价于 bash -c "$cmd"
+        private const val EXEC_SCRIPT = "cd -- \"\$1\" && eval \"\$2\""
+
+        // 后台命令先把 shell 与 PRoot 的进程号写入 $3, 终止时据此给整组进程发信号, 见 ProotBackgroundCommand
+        private const val BACKGROUND_SCRIPT = "echo \"\$\$ \$PPID\" > \"\$3\"; $EXEC_SCRIPT"
+
+        /** Rootfs 内存放后台命令日志与进程号的目录 */
+        private const val BACKGROUND_DIR = "/tmp/rikkahub/background"
 
         /** 清空宿主机环境变量后 Rootfs 内的基础环境 */
         private val ROOTFS_ENV = listOf(

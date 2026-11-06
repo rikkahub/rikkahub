@@ -1781,4 +1781,24 @@
   <string name="setting_model_page_memory_model">نموذج توطيد الذاكرة</string>
   <string name="setting_model_page_memory_model_desc">النموذج المستخدم لتنظيم المحادثات في الذاكرة طويلة المدى في الخلفية؛ يستخدم النموذج السريع عند عدم تعيينه</string>
   <string name="setting_model_page_memory_model_follow_fast">نفس النموذج السريع</string>
+  <string name="background_tasks_running">المهام في الخلفية: %1$d قيد التشغيل</string>
+  <string name="background_tasks_title">المهام في الخلفية</string>
+  <string name="background_tasks_empty">لا توجد مهام خلفية في هذه المحادثة</string>
+  <string name="background_tasks_stopping">جارٍ الإيقاف…</string>
+  <string name="background_tasks_log_truncated">عرض نهاية السجل. السجل الكامل: %1$s</string>
+  <string name="background_tasks_no_output_yet">لا يوجد ناتج بعد</string>
+  <string name="background_tasks_no_output">لا يوجد إخراج</string>
+  <string name="background_tasks_status_running">قيد التشغيل · %1$s</string>
+  <string name="background_tasks_status_exited">خرج بالرمز %1$d · %2$s</string>
+  <string name="background_tasks_status_stopped">متوقف · %1$s</string>
+  <string name="background_tasks_duration_seconds">%1$d ث</string>
+  <string name="background_tasks_duration_minutes">%1$d د %2$d ث</string>
+  <string name="background_tasks_duration_hours">%1$d س %2$d د</string>
+  <string name="tool_ui_shell_background_running">قيد التشغيل في الخلفية · %1$s</string>
+  <string name="tool_ui_shell_background_stopped">تم الإيقاف · %1$s</string>
+  <string name="tool_ui_shell_background">الخلفية · %1$s</string>
+  <string name="chat_page_notice_retry">إعادة المحاولة</string>
+  <string name="notification_background_shell_running">أوامر تعمل في الخلفية: %1$d</string>
+  <string name="background_shell_notice_exited">انتهى أمر الخلفية برمز %1$d: %2$s</string>
+  <string name="background_shell_notice_stopped">تم إيقاف أمر الخلفية بواسطتك: %1$s</string>
 </resources>

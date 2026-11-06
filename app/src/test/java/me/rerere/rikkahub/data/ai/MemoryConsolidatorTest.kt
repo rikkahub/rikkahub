@@ -97,6 +97,43 @@ class MemoryConsolidatorTest {
         assertEquals(listOf("user 4", "reply 5"), result.turns.single().messages.map { it.value.toText() })
     }
 
+    private fun notice(minute: Int) = UIMessage(
+        role = MessageRole.USER,
+        parts = listOf(UIMessagePart.Notice(title = "done", text = "<notice>done</notice>")),
+        createdAt = minute(minute),
+    )
+
+    @Test
+    fun `a notice left without a reply does not hold back the turn before it`() {
+        val messages = listOf(user(1), assistant(2), notice(3))
+
+        val result = pending(messages, consolidatedAt = 0, updatedAt = timeOf(4))
+
+        assertEquals(listOf(0), result.turns.map { it.position })
+        assertEquals(listOf("user 1", "reply 2"), result.turns.single().messages.map { it.value.toText() })
+        assertEquals(timeOf(3) - 1, result.consolidatedThrough)
+    }
+
+    @Test
+    fun `a notice and its reply are skipped`() {
+        val messages = listOf(user(1), assistant(2), notice(3), assistant(4), user(5), assistant(6))
+
+        val result = pending(messages, consolidatedAt = 0, updatedAt = timeOf(7))
+
+        assertEquals(listOf(0, 4), result.turns.map { it.position })
+        assertEquals(listOf("user 1", "reply 2"), result.turns.first().messages.map { it.value.toText() })
+    }
+
+    @Test
+    fun `a notice stored right before a user message is skipped`() {
+        val messages = listOf(user(1), assistant(2), notice(3), user(4), assistant(5))
+
+        val result = pending(messages, consolidatedAt = 0, updatedAt = timeOf(6))
+
+        assertEquals(listOf(0, 3), result.turns.map { it.position })
+        assertEquals(listOf("user 4", "reply 5"), result.turns.last().messages.map { it.value.toText() })
+    }
+
     // 15 轮对话，第 n 轮的用户消息在第 2n-1 分钟
     private val longChat = (1..15).flatMap { turn -> listOf(user(turn * 2 - 1), assistant(turn * 2)) }
 

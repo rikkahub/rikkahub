@@ -1783,4 +1783,24 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_model_page_memory_model">記憶整理モデル</string>
   <string name="setting_model_page_memory_model_desc">バックグラウンドで会話を長期記憶に整理するために使用されるモデル。未設定の場合は高速モデルを使用します</string>
   <string name="setting_model_page_memory_model_follow_fast">高速モデルと同じ</string>
+  <string name="background_tasks_running">バックグラウンドタスク: %1$d件実行中</string>
+  <string name="background_tasks_title">バックグラウンドタスク</string>
+  <string name="background_tasks_empty">この会話にはバックグラウンドタスクはありません</string>
+  <string name="background_tasks_stopping">停止中…</string>
+  <string name="background_tasks_log_truncated">ログの末尾を表示しています。完全なログ: %1$s</string>
+  <string name="background_tasks_no_output_yet">まだ出力がありません</string>
+  <string name="background_tasks_no_output">出力なし</string>
+  <string name="background_tasks_status_running">実行中 · %1$s</string>
+  <string name="background_tasks_status_exited">コード %1$d で終了 · %2$s</string>
+  <string name="background_tasks_status_stopped">停止 · %1$s</string>
+  <string name="background_tasks_duration_seconds">%1$d秒</string>
+  <string name="background_tasks_duration_minutes">%1$d分 %2$d秒</string>
+  <string name="background_tasks_duration_hours">%1$d時間%2$d分</string>
+  <string name="tool_ui_shell_background_running">バックグラウンドで実行中 · %1$s</string>
+  <string name="tool_ui_shell_background_stopped">停止 · %1$s</string>
+  <string name="tool_ui_shell_background">バックグラウンド · %1$s</string>
+  <string name="chat_page_notice_retry">再試行</string>
+  <string name="notification_background_shell_running">バックグラウンドで実行中のコマンド: %1$d</string>
+  <string name="background_shell_notice_exited">バックグラウンドコマンドがコード %1$d で終了しました: %2$s</string>
+  <string name="background_shell_notice_stopped">バックグラウンドコマンドを停止しました: %1$s</string>
 </resources>

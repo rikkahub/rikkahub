@@ -7,12 +7,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,6 +24,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
@@ -37,6 +40,9 @@ import me.rerere.hugeicons.stroke.FileAdd
 import me.rerere.hugeicons.stroke.FileEdit
 import me.rerere.hugeicons.stroke.FileView
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.service.BackgroundShellManager
+import me.rerere.rikkahub.service.BackgroundShellStatus
+import me.rerere.rikkahub.ui.components.ai.BackgroundTaskLog
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 import me.rerere.rikkahub.ui.modifier.shimmer
 import me.rerere.rikkahub.utils.generateUnifiedDiff
@@ -45,6 +51,7 @@ import me.rerere.ui.richtext.DiffAddedColor
 import me.rerere.ui.richtext.DiffRemovedColor
 import me.rerere.ui.richtext.DiffView
 import me.rerere.ui.richtext.parseDiffStats
+import org.koin.compose.koinInject
 
 /**
  * 工作空间编辑文件: 摘要显示增删统计与精简 diff, 详情为完整 diff view
@@ -372,6 +379,7 @@ object ShellToolUI : ToolUIRenderer {
                 language = "bash",
                 modifier = Modifier.fillMaxWidth(),
             )
+            content.getStringContent("taskId")?.let { BackgroundTaskPreviewLog(it) }
             if (stdout.isNotEmpty()) {
                 Text(text = "stdout", style = MaterialTheme.typography.labelMedium)
                 HighlightCodeBlock(
@@ -396,9 +404,51 @@ object ShellToolUI : ToolUIRenderer {
     }
 }
 
+/** 后台命令的实时状态; 任务只存在内存里, 应用重启后查不到时只显示任务 ID */
+@Composable
+private fun BackgroundTaskStatus(taskId: String, style: androidx.compose.ui.text.TextStyle) {
+    val manager = koinInject<BackgroundShellManager>()
+    val tasks by manager.tasks.collectAsStateWithLifecycle()
+    val task = tasks[taskId]
+    val colors = MaterialTheme.colorScheme
+    Text(
+        text = when (task?.status) {
+            BackgroundShellStatus.RUNNING -> stringResource(R.string.tool_ui_shell_background_running, taskId)
+            BackgroundShellStatus.EXITED -> stringResource(R.string.tool_ui_shell_exit, "${task.exitCode}") + " · $taskId"
+            BackgroundShellStatus.KILLED -> stringResource(R.string.tool_ui_shell_background_stopped, taskId)
+            null -> stringResource(R.string.tool_ui_shell_background, taskId)
+        },
+        style = style,
+        color = when {
+            task?.status == BackgroundShellStatus.RUNNING -> colors.primary
+            task?.status == BackgroundShellStatus.EXITED -> if (task.exitCode == 0) DiffAddedColor else colors.error
+            else -> colors.onSurfaceVariant
+        },
+    )
+}
+
+/** 工具卡片详情里的日志, 任务已经不存在时不显示 */
+@Composable
+private fun BackgroundTaskPreviewLog(taskId: String) {
+    val manager = koinInject<BackgroundShellManager>()
+    val tasks by manager.tasks.collectAsStateWithLifecycle()
+    val task = tasks[taskId] ?: return
+    BackgroundTaskLog(
+        task = task,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 360.dp),
+    )
+}
+
 /** Shell 退出状态文本: exit code 为 0 显示绿色, 超时或非零显示错误色 */
 @Composable
 private fun ShellExitStatus(content: JsonElement, style: androidx.compose.ui.text.TextStyle) {
+    val taskId = content.getStringContent("taskId")
+    if (taskId != null) {
+        BackgroundTaskStatus(taskId, style)
+        return
+    }
     val exitCode = content.int("exitCode")
     val timedOut = content.boolean("timedOut") ?: false
     val ok = !timedOut && exitCode == 0

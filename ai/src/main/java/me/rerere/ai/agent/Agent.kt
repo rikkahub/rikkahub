@@ -7,6 +7,7 @@ import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 
 /**
  * 一次 agent 运行的输入。
@@ -47,6 +48,14 @@ interface AgentHooks {
      * 下标 [newPartsFrom] 及之后的 part 是这一步新生成的；之前的来自更早的步骤，已经处理过一次。
      */
     suspend fun finishStep(message: UIMessage, newPartsFrom: Int): UIMessage = message
+
+    /**
+     * 请求模型之前、[prepareStep] 之前调用，返回要追加到本轮助手消息末尾的 part，通常是 [UIMessagePart.Notice]。
+     *
+     * 只在轮到模型回复时调用：新的一轮开始时，一批工具执行完之后，或消息以通知结尾时；续写已有的回复时不调用，
+     * 否则追加的内容会变成新的一轮。返回的 part 会立即写回消息，调用方取出后应当不再重复返回。
+     */
+    suspend fun pendingParts(): List<UIMessagePart> = emptyList()
 }
 
 data class StepRequest(

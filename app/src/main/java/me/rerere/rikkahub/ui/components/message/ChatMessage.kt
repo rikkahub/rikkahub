@@ -134,6 +134,17 @@ fun ChatMessage(
         )
         return
     }
+    // 助手消息在第一个 token 之前也可能只有 Notice，那时要走下面的流程才有加载状态和操作栏
+    if (message.role == MessageRole.USER && message.isNoticeOnly) {
+        ChatMessageNotices(
+            message = message,
+            // 回复失败时这是最后一个节点，没有助手消息可以点重新生成
+            onRetry = onRegenerate.takeIf { lastMessage && !loading },
+            onDelete = onDelete,
+            modifier = modifier,
+        )
+        return
+    }
     val settings = LocalSettings.current.displaySetting
     val chatFontFamily = LocalChatFontFamily.current ?: rememberChatFontFamily(settings)
     val textStyle = LocalTextStyle.current.copy(
@@ -386,6 +397,8 @@ private fun MessagePartsBlock(
                                     ChatMessageServerToolStep(tool = step.tool)
                                 }
                             }
+
+                            is ThinkingStep.NoticeStep -> ChatMessageNoticeStep(notice = step.notice)
                         }
                     }
                 }

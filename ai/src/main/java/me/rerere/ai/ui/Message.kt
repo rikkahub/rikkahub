@@ -57,6 +57,13 @@ data class UIMessage(
         }
     }
 
+    /**
+     * 只有 [UIMessagePart.Notice]，没有用户或模型说的话。
+     * user 消息这样是运行时事件单独开了一轮，助手消息这样是取走通知后回复还没出来或失败了。
+     */
+    val isNoticeOnly: Boolean
+        get() = parts.isNotEmpty() && parts.all { it is UIMessagePart.Notice }
+
     fun getTools() = parts.filterIsInstance<UIMessagePart.Tool>()
 
     fun isValidToUpload() = parts.any { part ->
@@ -163,6 +170,7 @@ fun List<UIMessagePart>.isEmptyUIMessage(): Boolean {
             is UIMessagePart.Audio -> message.url.isBlank()
             is UIMessagePart.Tool,
             is UIMessagePart.ServerTool,
+            is UIMessagePart.Notice,
             -> false
             else -> true
         }
@@ -282,7 +290,8 @@ fun List<UIMessagePart>.toSortedMessageParts(): List<UIMessagePart> {
     // Skip sorting if multiple Reasoning or Text parts exist to preserve semantic order
     val reasoningCount = count { it is UIMessagePart.Reasoning }
     val textCount = count { it is UIMessagePart.Text }
-    if (reasoningCount > 1 || textCount > 1) {
+    // Notice 的位置决定它在请求里插在哪, 排序会把它挪到推理之后
+    if (reasoningCount > 1 || textCount > 1 || any { it is UIMessagePart.Notice }) {
         return this
     }
     return sortedBy { part ->
@@ -294,6 +303,7 @@ fun List<UIMessagePart>.toSortedMessageParts(): List<UIMessagePart> {
             is UIMessagePart.ToolCall -> 0
             is UIMessagePart.ToolResult -> 0
             is UIMessagePart.Search -> 0
+            is UIMessagePart.Notice -> 0
             is UIMessagePart.Image -> 1
             is UIMessagePart.Video -> 1
             is UIMessagePart.Audio -> 1
