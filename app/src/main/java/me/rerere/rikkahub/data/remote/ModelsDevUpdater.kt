@@ -9,12 +9,12 @@ import me.rerere.ai.registry.ModelsDevCatalog
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
-import kotlin.time.Duration.Companion.days
+import kotlin.time.Duration.Companion.hours
 
 private const val TAG = "ModelsDevUpdater"
 private const val API_URL = "https://models.dev/api.json"
 private const val ASSET_NAME = "models_dev.json"
-private val REFRESH_INTERVAL = 1.days
+private val REFRESH_INTERVAL = 4.hours
 
 // 至少要有这么多条才认为下载的数据可用，防止接口异常返回的空数据覆盖本地缓存
 private const val MIN_CATALOG_SIZE = 100
