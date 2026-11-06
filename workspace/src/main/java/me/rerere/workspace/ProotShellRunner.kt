@@ -1,6 +1,7 @@
 package me.rerere.workspace
 
 import java.io.File
+import java.util.UUID
 
 data class WorkspaceBindMount(
     val source: File,
@@ -25,10 +26,17 @@ class ProotShellRunner(
                 stderr = reason,
             )
         }
-        val process = processBuilder(context, buildCommand(context, EXEC_SCRIPT))
+        val pidFile = File(context.linuxDir, "${EXEC_DIR.trimStart('/')}/${UUID.randomUUID()}.pid")
+        pidFile.parentFile?.mkdirs()
+        val process = processBuilder(context, buildCommand(context, TRACKED_SCRIPT, "$EXEC_DIR/${pidFile.name}"))
             .redirectErrorStream(false)
             .start()
-        return process.readResult(context.timeoutMillis, context.stdin)
+        return try {
+            // 超时或取消时直接结束, 不留宽限期: 调用方已经不再等这条命令
+            process.readResult(context.timeoutMillis, context.stdin) { terminateProot(this, pidFile) }
+        } finally {
+            pidFile.delete()
+        }
     }
 
     override fun startBackground(context: WorkspaceShellContext, id: String): WorkspaceBackgroundCommand {
@@ -37,7 +45,7 @@ class ProotShellRunner(
         val dir = File(context.linuxDir, BACKGROUND_DIR.trimStart('/')).apply { mkdirs() }
         val logFile = File(dir, "$id.log")
         val pidFile = File(dir, "$id.pid")
-        val process = processBuilder(context, buildCommand(context, BACKGROUND_SCRIPT, "$BACKGROUND_DIR/$id.pid"))
+        val process = processBuilder(context, buildCommand(context, TRACKED_SCRIPT, "$BACKGROUND_DIR/$id.pid"))
             .redirectErrorStream(true)
             .redirectOutput(logFile)
             .redirectInput(File("/dev/null"))
@@ -175,11 +183,14 @@ class ProotShellRunner(
         // 命令通过位置参数传入, 避免任何转义; eval "$2" 对命令文本只求值一次, 等价于 bash -c "$cmd"
         private const val EXEC_SCRIPT = "cd -- \"\$1\" && eval \"\$2\""
 
-        // 后台命令先把 shell 与 PRoot 的进程号写入 $3, 终止时据此给整组进程发信号, 见 ProotBackgroundCommand
-        private const val BACKGROUND_SCRIPT = "echo \"\$\$ \$PPID\" > \"\$3\"; $EXEC_SCRIPT"
+        // 先把 shell 与 PRoot 的进程号写入 $3, 终止时据此给整组进程发信号, 见 terminateProot
+        private const val TRACKED_SCRIPT = "echo \"\$\$ \$PPID\" > \"\$3\"; $EXEC_SCRIPT"
 
         /** Rootfs 内存放后台命令日志与进程号的目录 */
         private const val BACKGROUND_DIR = "/tmp/rikkahub/background"
+
+        /** Rootfs 内存放前台命令进程号的目录 */
+        private const val EXEC_DIR = "/tmp/rikkahub/exec"
 
         /** 清空宿主机环境变量后 Rootfs 内的基础环境 */
         private val ROOTFS_ENV = listOf(
