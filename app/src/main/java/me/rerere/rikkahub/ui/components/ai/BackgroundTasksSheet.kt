@@ -34,6 +34,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,6 +48,7 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.StopCircle
 import me.rerere.hugeicons.stroke.Tick01
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.service.BackgroundShellLogTail
 import me.rerere.rikkahub.service.BackgroundShellManager
 import me.rerere.rikkahub.service.BackgroundShellStatus
@@ -83,7 +85,7 @@ internal fun BackgroundTasksChip(
                 strokeWidth = 2.dp,
             )
             Text(
-                text = if (running == 1) "1 background task running" else "$running background tasks running",
+                text = stringResource(R.string.background_tasks_chip_running, running),
                 style = MaterialTheme.typography.labelMedium,
             )
         }
@@ -158,10 +160,10 @@ private fun TaskList(
     onSelect: (String) -> Unit,
     onStop: (String) -> Unit,
 ) {
-    Text(text = "Background tasks", style = MaterialTheme.typography.titleMedium)
+    Text(text = stringResource(R.string.background_tasks_title), style = MaterialTheme.typography.titleMedium)
     if (tasks.isEmpty()) {
         Text(
-            text = "No background tasks in this conversation",
+            text = stringResource(R.string.background_tasks_empty),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -211,7 +213,7 @@ private fun ColumnScope.TaskDetail(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         IconButton(onClick = onBack) {
-            Icon(HugeIcons.ArrowLeft01, contentDescription = "Back")
+            Icon(HugeIcons.ArrowLeft01, contentDescription = stringResource(R.string.back))
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(text = task.id, style = MaterialTheme.typography.titleMedium, fontFamily = FontFamily.Monospace)
@@ -223,7 +225,7 @@ private fun ColumnScope.TaskDetail(
         }
         if (task.status == BackgroundShellStatus.RUNNING) {
             FilledTonalButton(onClick = onStop, enabled = !stopping) {
-                Text(if (stopping) "Stopping…" else "Stop")
+                Text(stringResource(if (stopping) R.string.background_tasks_stopping else R.string.stop))
             }
         }
     }
@@ -264,7 +266,7 @@ private fun StopButton(stopping: Boolean, onClick: () -> Unit) {
         if (stopping) {
             CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
         } else {
-            Icon(HugeIcons.StopCircle, contentDescription = "Stop")
+            Icon(HugeIcons.StopCircle, contentDescription = stringResource(R.string.stop))
         }
     }
 }
@@ -304,7 +306,7 @@ fun BackgroundTaskLog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (log?.truncated == true) {
                     Text(
-                        text = "Showing the end of the log. Full log: ${task.logPath}",
+                        text = stringResource(R.string.background_tasks_log_truncated, task.logPath),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -312,7 +314,7 @@ fun BackgroundTaskLog(
                 val text = log?.text.orEmpty()
                 if (text.isEmpty()) {
                     Text(
-                        text = if (running) "No output yet" else "No output",
+                        text = stringResource(if (running) R.string.background_tasks_no_output_yet else R.string.background_tasks_no_output),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -331,20 +333,24 @@ fun BackgroundTaskLog(
     }
 }
 
+@Composable
 private fun BackgroundShellTask.statusText(now: Long): String {
     val duration = formatDuration((endedAt ?: now) - startedAt)
     return when (status) {
-        BackgroundShellStatus.RUNNING -> "Running · $duration"
-        BackgroundShellStatus.EXITED -> "Exited with code $exitCode · $duration"
-        BackgroundShellStatus.KILLED -> "Stopped · $duration"
+        BackgroundShellStatus.RUNNING -> stringResource(R.string.background_tasks_status_running, duration)
+        BackgroundShellStatus.EXITED ->
+            stringResource(R.string.background_tasks_status_exited, exitCode ?: -1, duration)
+
+        BackgroundShellStatus.KILLED -> stringResource(R.string.background_tasks_status_stopped, duration)
     }
 }
 
+@Composable
 private fun formatDuration(millis: Long): String {
-    val seconds = (millis / 1000).coerceAtLeast(0)
+    val seconds = (millis / 1000).coerceAtLeast(0).toInt()
     return when {
-        seconds < 60 -> "${seconds}s"
-        seconds < 3600 -> "${seconds / 60}m ${seconds % 60}s"
-        else -> "${seconds / 3600}h ${seconds % 3600 / 60}m"
+        seconds < 60 -> stringResource(R.string.background_tasks_duration_seconds, seconds)
+        seconds < 3600 -> stringResource(R.string.background_tasks_duration_minutes, seconds / 60, seconds % 60)
+        else -> stringResource(R.string.background_tasks_duration_hours, seconds / 3600, seconds % 3600 / 60)
     }
 }

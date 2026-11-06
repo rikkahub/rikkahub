@@ -1781,4 +1781,24 @@
   <string name="setting_model_page_memory_model">記憶整理模型</string>
   <string name="setting_model_page_memory_model_desc">用於在背景將對話整理為長期記憶的模型；未設定時會使用快速模型</string>
   <string name="setting_model_page_memory_model_follow_fast">跟隨快速模型</string>
+  <string name="background_tasks_chip_running">背景任務：%1$d 個執行中</string>
+  <string name="background_tasks_title">背景任務</string>
+  <string name="background_tasks_empty">此對話中沒有背景任務</string>
+  <string name="background_tasks_stopping">正在停止…</string>
+  <string name="background_tasks_log_truncated">顯示日誌結尾。完整日誌：%1$s</string>
+  <string name="background_tasks_no_output_yet">尚無輸出</string>
+  <string name="background_tasks_no_output">無輸出</string>
+  <string name="background_tasks_status_running">執行中 · %1$s</string>
+  <string name="background_tasks_status_exited">已退出，退出碼 %1$d · %2$s</string>
+  <string name="background_tasks_status_stopped">已停止 · %1$s</string>
+  <string name="background_tasks_duration_seconds">%1$d秒</string>
+  <string name="background_tasks_duration_minutes">%1$d分 %2$d秒</string>
+  <string name="background_tasks_duration_hours">%1$d小時 %2$d分</string>
+  <string name="tool_ui_shell_background_running">背景執行中 · %1$s</string>
+  <string name="tool_ui_shell_background_stopped">已停止 · %1$s</string>
+  <string name="tool_ui_shell_background">背景 · %1$s</string>
+  <string name="chat_page_notice_retry">重試</string>
+  <string name="notification_background_shell_running">背景指令執行中：%1$d</string>
+  <string name="background_shell_notice_exited">背景指令已結束，結束代碼 %1$d：%2$s</string>
+  <string name="background_shell_notice_stopped">背景指令已被你停止：%1$s</string>
 </resources>

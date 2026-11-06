@@ -1783,4 +1783,24 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_model_page_memory_model">기억 통합 모델</string>
   <string name="setting_model_page_memory_model_desc">백그라운드에서 대화를 장기 기억으로 정리하는 데 사용되는 모델입니다. 설정하지 않으면 빠른 모델을 사용합니다.</string>
   <string name="setting_model_page_memory_model_follow_fast">빠른 모델과 동일</string>
+  <string name="background_tasks_chip_running">백그라운드 작업: %1$d개 실행 중</string>
+  <string name="background_tasks_title">백그라운드 작업</string>
+  <string name="background_tasks_empty">이 대화에는 백그라운드 작업이 없습니다</string>
+  <string name="background_tasks_stopping">중지 중…</string>
+  <string name="background_tasks_log_truncated">로그의 끝부분을 표시합니다. 전체 로그: %1$s</string>
+  <string name="background_tasks_no_output_yet">아직 출력이 없습니다</string>
+  <string name="background_tasks_no_output">출력 없음</string>
+  <string name="background_tasks_status_running">실행 중 · %1$s</string>
+  <string name="background_tasks_status_exited">코드 %1$d(으)로 종료됨 · %2$s</string>
+  <string name="background_tasks_status_stopped">중지됨 · %1$s</string>
+  <string name="background_tasks_duration_seconds">%1$d초</string>
+  <string name="background_tasks_duration_minutes">%1$d분 %2$d초</string>
+  <string name="background_tasks_duration_hours">%1$d시간 %2$d분</string>
+  <string name="tool_ui_shell_background_running">백그라운드에서 실행 중 · %1$s</string>
+  <string name="tool_ui_shell_background_stopped">중지됨 · %1$s</string>
+  <string name="tool_ui_shell_background">백그라운드 · %1$s</string>
+  <string name="chat_page_notice_retry">재시도</string>
+  <string name="notification_background_shell_running">백그라운드 명령 실행 중: %1$d</string>
+  <string name="background_shell_notice_exited">백그라운드 명령이 코드 %1$d(으)로 종료되었습니다: %2$s</string>
+  <string name="background_shell_notice_stopped">백그라운드 명령을 사용자가 중지했습니다: %1$s</string>
 </resources>

@@ -24,6 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,6 +32,7 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Notification01
+import me.rerere.rikkahub.R
 
 /**
  * 空闲时单独开一轮的运行时通知。角色是 user 但不是用户说的话，
@@ -94,9 +96,9 @@ fun ChatMessageNotices(
                         horizontalArrangement = Arrangement.End,
                     ) {
                         if (onRetry != null) {
-                            TextButton(onClick = onRetry) { Text("Retry") }
+                            TextButton(onClick = onRetry) { Text(stringResource(R.string.chat_page_notice_retry)) }
                         }
-                        TextButton(onClick = onDelete) { Text("Delete") }
+                        TextButton(onClick = onDelete) { Text(stringResource(R.string.delete)) }
                     }
                 }
             }

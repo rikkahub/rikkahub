@@ -19,6 +19,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceBackgroundCommand
 import java.util.concurrent.ConcurrentHashMap
@@ -271,9 +272,9 @@ class BackgroundShellManager(
         // 要在标记结束之前发出: 读取输出看到结束后会撤回通知, 撤回必须排在发出之后
         val notice = _tasks.value[id]?.let { task ->
             when {
-                stoppedByUser -> buildStoppedNotice(task)
+                stoppedByUser -> buildStoppedNotice(context, task)
                 killed -> null
-                else -> buildNotice(task, tail)
+                else -> buildNotice(context, task, tail)
             }?.let { BackgroundShellNoticeEvent.Posted(task.conversationId, noticeKey(id), it) }
         }
         notice?.let(_noticeEvents::tryEmit)
@@ -336,7 +337,7 @@ private fun BackgroundShellTask.commandPreview(): String = command.replace("\n",
 
 private fun BackgroundShellTask.durationSeconds(): Long = ((endedAt ?: startedAt) - startedAt) / 1000
 
-private fun buildStoppedNotice(task: BackgroundShellTask): UIMessagePart.Notice {
+private fun buildStoppedNotice(context: Context, task: BackgroundShellTask): UIMessagePart.Notice {
     val command = task.commandPreview()
     val text = buildString {
         appendLine("<background_shell_notice>")
@@ -346,10 +347,13 @@ private fun buildStoppedNotice(task: BackgroundShellTask): UIMessagePart.Notice 
         appendLine("Full log: ${task.logPath}")
         append("</background_shell_notice>")
     }
-    return UIMessagePart.Notice(title = "Background command stopped by the user: $command", text = text)
+    return UIMessagePart.Notice(
+        title = context.getString(R.string.background_shell_notice_stopped, command),
+        text = text,
+    )
 }
 
-private fun buildNotice(task: BackgroundShellTask, tail: String): UIMessagePart.Notice {
+private fun buildNotice(context: Context, task: BackgroundShellTask, tail: String): UIMessagePart.Notice {
     val command = task.commandPreview()
     val seconds = task.durationSeconds()
     val text = buildString {
@@ -365,7 +369,8 @@ private fun buildNotice(task: BackgroundShellTask, tail: String): UIMessagePart.
         append("</background_shell_notice>")
     }
     return UIMessagePart.Notice(
-        title = "Background command exited with code ${task.exitCode}: $command",
+        // 标题只给界面看, 按发出时的语言写入; 发给模型的 text 保持英文
+        title = context.getString(R.string.background_shell_notice_exited, task.exitCode ?: -1, command),
         text = text,
     )
 }

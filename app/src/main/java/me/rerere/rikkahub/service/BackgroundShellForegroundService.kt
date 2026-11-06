@@ -136,14 +136,7 @@ class BackgroundShellForegroundService : Service() {
         NotificationCompat.Builder(this, CHAT_LIVE_UPDATE_NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_rikkahub)
             .setContentTitle(getString(R.string.app_name))
-            .setContentText(
-                if (activeTasks.size ==
-                    1) {
-                    "1 background command running"
-                } else {
-                    "${activeTasks.size} background commands running"
-                }
-            )
+            .setContentText(getString(R.string.notification_background_shell_running, activeTasks.size))
             .setContentIntent(getConversationPendingIntent(activeTasks.values.last()))
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setOngoing(true)

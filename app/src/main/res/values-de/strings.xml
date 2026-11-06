@@ -1784,4 +1784,24 @@
   <string name="setting_model_page_memory_model">Erinnerungskonsolidierungsmodell</string>
   <string name="setting_model_page_memory_model_desc">Modell, das Konversationen im Hintergrund in langfristige Erinnerungen organisiert; verwendet das schnelle Modell, wenn nicht festgelegt</string>
   <string name="setting_model_page_memory_model_follow_fast">Wie das schnelle Modell</string>
+  <string name="background_tasks_chip_running">Hintergrundaufgaben: %1$d laufen</string>
+  <string name="background_tasks_title">Hintergrundaufgaben</string>
+  <string name="background_tasks_empty">Keine Hintergrundaufgaben in dieser Unterhaltung</string>
+  <string name="background_tasks_stopping">Wird beendet…</string>
+  <string name="background_tasks_log_truncated">Zeigt das Ende des Protokolls an. Vollständiges Protokoll: %1$s</string>
+  <string name="background_tasks_no_output_yet">Noch keine Ausgabe</string>
+  <string name="background_tasks_no_output">Keine Ausgabe</string>
+  <string name="background_tasks_status_running">Läuft · %1$s</string>
+  <string name="background_tasks_status_exited">Beendet mit Code %1$d · %2$s</string>
+  <string name="background_tasks_status_stopped">Gestoppt · %1$s</string>
+  <string name="background_tasks_duration_seconds">%1$ds</string>
+  <string name="background_tasks_duration_minutes">%1$d Min. %2$d Sek.</string>
+  <string name="background_tasks_duration_hours">%1$d Std. %2$d Min.</string>
+  <string name="tool_ui_shell_background_running">Läuft im Hintergrund · %1$s</string>
+  <string name="tool_ui_shell_background_stopped">Gestoppt · %1$s</string>
+  <string name="tool_ui_shell_background">Hintergrund · %1$s</string>
+  <string name="chat_page_notice_retry">Erneut versuchen</string>
+  <string name="notification_background_shell_running">Hintergrundbefehle laufen: %1$d</string>
+  <string name="background_shell_notice_exited">Hintergrundbefehl mit Code %1$d beendet: %2$s</string>
+  <string name="background_shell_notice_stopped">Hintergrundbefehl von dir gestoppt: %1$s</string>
 </resources>

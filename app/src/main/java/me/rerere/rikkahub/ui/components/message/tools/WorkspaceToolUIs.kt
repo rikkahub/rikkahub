@@ -413,10 +413,10 @@ private fun BackgroundTaskStatus(taskId: String, style: androidx.compose.ui.text
     val colors = MaterialTheme.colorScheme
     Text(
         text = when (task?.status) {
-            BackgroundShellStatus.RUNNING -> "Running in background · $taskId"
+            BackgroundShellStatus.RUNNING -> stringResource(R.string.tool_ui_shell_background_running, taskId)
             BackgroundShellStatus.EXITED -> stringResource(R.string.tool_ui_shell_exit, "${task.exitCode}") + " · $taskId"
-            BackgroundShellStatus.KILLED -> "Stopped · $taskId"
-            null -> "Background · $taskId"
+            BackgroundShellStatus.KILLED -> stringResource(R.string.tool_ui_shell_background_stopped, taskId)
+            null -> stringResource(R.string.tool_ui_shell_background, taskId)
         },
         style = style,
         color = when {
