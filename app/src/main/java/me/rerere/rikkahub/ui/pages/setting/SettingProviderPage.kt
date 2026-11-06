@@ -78,6 +78,7 @@ import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Image02
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Sparkles
+import me.rerere.hugeicons.stroke.Tick02
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.QRCodeScannerDialog
 import me.rerere.rikkahub.Screen
@@ -142,6 +143,8 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
         searchQuery = ""
         pendingScrollId = provider.id.toString()
         vm.updateSettings { latest ->
+            // 连点时第二次写入已经能看到第一次的结果，避免出现重复 id
+            if (latest.providers.any { it.id == provider.id }) return@updateSettings latest
             latest.copy(providers = listOf(provider) + latest.providers)
         }
     }
@@ -156,8 +159,11 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
                     BackButton()
                 },
                 actions = {
-                    RecommendProviderButton { provider ->
-                        addProvider(provider.copyProvider(Uuid.random()))
+                    // 推荐提供商保留固定 id，读盘后才能按 id 补回不落盘的描述
+                    RecommendProviderButton(
+                        addedIds = settings.providers.map { it.id }.toSet(),
+                    ) { provider ->
+                        addProvider(provider.copyProvider())
                     }
                     ImportProviderButton {
                         addProvider(it.copyProvider(Uuid.random()))
@@ -260,6 +266,7 @@ fun SettingProviderPage(vm: SettingVM = koinViewModel()) {
 
 @Composable
 private fun RecommendProviderButton(
+    addedIds: Set<Uuid>,
     onAdd: (ProviderSetting) -> Unit
 ) {
     val toaster = LocalToaster.current
@@ -297,6 +304,7 @@ private fun RecommendProviderButton(
                     RECOMMENDED_PROVIDERS.fastForEachIndexed { index, provider ->
                         RecommendProviderItem(
                             provider = provider,
+                            added = provider.id in addedIds,
                             shape = cardGroupItemShape(index, RECOMMENDED_PROVIDERS.size),
                             onAdd = {
                                 onAdd(provider)
@@ -316,6 +324,7 @@ private fun RecommendProviderButton(
 @Composable
 private fun RecommendProviderItem(
     provider: ProviderSetting,
+    added: Boolean,
     shape: Shape,
     onAdd: () -> Unit
 ) {
@@ -351,12 +360,16 @@ private fun RecommendProviderItem(
                 }
                 ProvideTextStyle(MaterialTheme.typography.labelSmall) {
                     CompositionLocalProvider(LocalContentColor provides LocalContentColor.current.copy(alpha = 0.7f)) {
-                        provider.description()
+                        provider.shortDescription()
                     }
                 }
             }
-            FilledTonalIconButton(onClick = onAdd) {
-                Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.setting_provider_page_add))
+            FilledTonalIconButton(onClick = onAdd, enabled = !added) {
+                if (added) {
+                    Icon(HugeIcons.Tick02, contentDescription = "已添加")
+                } else {
+                    Icon(HugeIcons.Add01, contentDescription = stringResource(R.string.setting_provider_page_add))
+                }
             }
         }
     }
