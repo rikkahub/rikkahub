@@ -1783,7 +1783,7 @@
   <string name="setting_model_page_memory_model">Модель консолидации памяти</string>
   <string name="setting_model_page_memory_model_desc">Модель, которая организует диалоги в долговременную память в фоновом режиме; если не задана, используется быстрая модель</string>
   <string name="setting_model_page_memory_model_follow_fast">Как у быстрой модели</string>
-  <string name="background_tasks_chip_running">Фоновые задачи: %1$d в работе</string>
+  <string name="background_tasks_running">Фоновые задачи: %1$d в работе</string>
   <string name="background_tasks_title">Фоновые задачи</string>
   <string name="background_tasks_empty">В этом диалоге нет фоновых задач</string>
   <string name="background_tasks_stopping">Остановка…</string>

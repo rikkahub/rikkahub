@@ -1786,7 +1786,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_model_page_memory_model">记忆整理模型</string>
   <string name="setting_model_page_memory_model_desc">用于在后台将对话整理为长期记忆的模型；未设置时使用快速模型</string>
   <string name="setting_model_page_memory_model_follow_fast">跟随快速模型</string>
-  <string name="background_tasks_chip_running">后台任务：%1$d 个运行中</string>
+  <string name="background_tasks_running">后台任务：%1$d 个运行中</string>
   <string name="background_tasks_title">后台任务</string>
   <string name="background_tasks_empty">此对话中没有后台任务</string>
   <string name="background_tasks_stopping">正在停止…</string>

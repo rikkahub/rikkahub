@@ -1783,7 +1783,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_model_page_memory_model">記憶整理モデル</string>
   <string name="setting_model_page_memory_model_desc">バックグラウンドで会話を長期記憶に整理するために使用されるモデル。未設定の場合は高速モデルを使用します</string>
   <string name="setting_model_page_memory_model_follow_fast">高速モデルと同じ</string>
-  <string name="background_tasks_chip_running">バックグラウンドタスク: %1$d件実行中</string>
+  <string name="background_tasks_running">バックグラウンドタスク: %1$d件実行中</string>
   <string name="background_tasks_title">バックグラウンドタスク</string>
   <string name="background_tasks_empty">この会話にはバックグラウンドタスクはありません</string>
   <string name="background_tasks_stopping">停止中…</string>

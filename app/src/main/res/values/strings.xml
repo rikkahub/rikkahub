@@ -1784,7 +1784,7 @@
   <string name="setting_model_page_memory_model">Memory Consolidation Model</string>
   <string name="setting_model_page_memory_model_desc">Model used to organize conversations into long-term memory in the background; uses the fast model when not set</string>
   <string name="setting_model_page_memory_model_follow_fast">Same as fast model</string>
-  <string name="background_tasks_chip_running">Background tasks: %1$d running</string>
+  <string name="background_tasks_running">Background tasks: %1$d running</string>
   <string name="background_tasks_title">Background tasks</string>
   <string name="background_tasks_empty">No background tasks in this conversation</string>
   <string name="background_tasks_stopping">Stopping…</string>

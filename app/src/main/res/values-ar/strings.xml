@@ -1781,7 +1781,7 @@
   <string name="setting_model_page_memory_model">نموذج توطيد الذاكرة</string>
   <string name="setting_model_page_memory_model_desc">النموذج المستخدم لتنظيم المحادثات في الذاكرة طويلة المدى في الخلفية؛ يستخدم النموذج السريع عند عدم تعيينه</string>
   <string name="setting_model_page_memory_model_follow_fast">نفس النموذج السريع</string>
-  <string name="background_tasks_chip_running">المهام في الخلفية: %1$d قيد التشغيل</string>
+  <string name="background_tasks_running">المهام في الخلفية: %1$d قيد التشغيل</string>
   <string name="background_tasks_title">المهام في الخلفية</string>
   <string name="background_tasks_empty">لا توجد مهام خلفية في هذه المحادثة</string>
   <string name="background_tasks_stopping">جارٍ الإيقاف…</string>

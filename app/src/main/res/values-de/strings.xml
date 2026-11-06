@@ -1784,7 +1784,7 @@
   <string name="setting_model_page_memory_model">Erinnerungskonsolidierungsmodell</string>
   <string name="setting_model_page_memory_model_desc">Modell, das Konversationen im Hintergrund in langfristige Erinnerungen organisiert; verwendet das schnelle Modell, wenn nicht festgelegt</string>
   <string name="setting_model_page_memory_model_follow_fast">Wie das schnelle Modell</string>
-  <string name="background_tasks_chip_running">Hintergrundaufgaben: %1$d laufen</string>
+  <string name="background_tasks_running">Hintergrundaufgaben: %1$d laufen</string>
   <string name="background_tasks_title">Hintergrundaufgaben</string>
   <string name="background_tasks_empty">Keine Hintergrundaufgaben in dieser Unterhaltung</string>
   <string name="background_tasks_stopping">Wird beendet…</string>

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
@@ -62,35 +61,6 @@ import java.io.IOException
 private const val TAG = "BackgroundTasksSheet"
 
 private const val LOG_POLL_INTERVAL_MS = 1_000L
-
-/** 输入框上方的入口，有命令在运行时显示 */
-@Composable
-internal fun BackgroundTasksChip(
-    running: Int,
-    onClick: () -> Unit,
-) {
-    if (running <= 0) return
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(12.dp),
-                strokeWidth = 2.dp,
-            )
-            Text(
-                text = stringResource(R.string.background_tasks_chip_running, running),
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
-    }
-}
 
 /** 会话的后台命令：列表里看状态、终止，点进去看日志 */
 @Composable

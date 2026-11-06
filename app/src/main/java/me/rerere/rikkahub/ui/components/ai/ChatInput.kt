@@ -39,6 +39,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
@@ -89,6 +91,7 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.ComputerTerminal01
 import me.rerere.hugeicons.stroke.Fullscreen
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
@@ -229,10 +232,6 @@ fun ChatInput(
                 .padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            BackgroundTasksChip(
-                running = runningBackgroundTasks,
-                onClick = onShowBackgroundTasks,
-            )
             MessageQueuePanel(
                 state = messageQueue,
                 onRemove = onRemoveQueuedMessage,
@@ -288,29 +287,41 @@ fun ChatInput(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Row(
-                            modifier = Modifier
-                                .weight(1f)
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            // Model Picker
-                            ModelSelectorButton(
-                                state = modelListState,
-                                onlyIcon = true,
-                                modifier = Modifier,
-                            )
-
-                            // Reasoning
-                            if (chatModel?.abilities?.contains(ModelAbility.REASONING) == true) {
-                                ReasoningButton(
-                                    reasoningLevel = assistant.reasoningLevel,
-                                    onUpdateReasoningLevel = {
-                                        onUpdateAssistant(assistant.copy(reasoningLevel = it))
-                                    },
+                            Row(
+                                modifier = Modifier
+                                    .weight(1f, fill = false)
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                // Model Picker
+                                ModelSelectorButton(
+                                    state = modelListState,
                                     onlyIcon = true,
+                                    modifier = Modifier,
                                 )
+
+                                // Reasoning
+                                if (chatModel?.abilities?.contains(ModelAbility.REASONING) == true) {
+                                    ReasoningButton(
+                                        reasoningLevel = assistant.reasoningLevel,
+                                        onUpdateReasoningLevel = {
+                                            onUpdateAssistant(assistant.copy(reasoningLevel = it))
+                                        },
+                                        onlyIcon = true,
+                                    )
+                                }
                             }
 
+                            if (runningBackgroundTasks > 0) {
+                                BackgroundTasksButton(
+                                    running = runningBackgroundTasks,
+                                    onClick = onShowBackgroundTasks,
+                                )
+                            }
                         }
 
                         ActionIconButton(
@@ -419,6 +430,29 @@ private fun SendButton(
             tint = contentColor,
             modifier = Modifier.size(18.dp)
         )
+    }
+}
+
+@Composable
+private fun BackgroundTasksButton(
+    running: Int,
+    onClick: () -> Unit,
+) {
+    BadgedBox(
+        modifier = Modifier.padding(horizontal = 5.dp),
+        badge = {
+            Badge(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) { Text(running.toString()) }
+        },
+    ) {
+        ActionIconButton(onClick = onClick) {
+            Icon(
+                imageVector = HugeIcons.ComputerTerminal01,
+                contentDescription = stringResource(R.string.background_tasks_running, running),
+            )
+        }
     }
 }
 
