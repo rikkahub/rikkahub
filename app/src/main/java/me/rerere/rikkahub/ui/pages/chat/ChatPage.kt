@@ -6,6 +6,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
@@ -31,6 +32,7 @@ import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ui.toast.ToastType
+import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
@@ -74,6 +77,7 @@ import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.BackgroundTasksSheet
 import me.rerere.rikkahub.ui.components.ai.ChatAttachmentPickerActions
 import me.rerere.rikkahub.ui.components.ai.ChatInput
+import me.rerere.rikkahub.ui.components.ai.ChatTopBarCapsule
 import me.rerere.rikkahub.ui.components.ai.FilesPicker
 import me.rerere.rikkahub.ui.components.ai.SearchMode
 import me.rerere.rikkahub.ui.components.ai.completion.WorkspaceCompletionProvider
@@ -313,6 +317,11 @@ private fun ChatPageContent(
         }.orEmpty()
     }
 
+    // 消息滚到标题栏下面时才显示胶囊背景，空页面或在顶部时按钮直接浮在背景上
+    val listScrolledUnderTopBar by remember(chatListState) {
+        derivedStateOf { chatListState.canScrollBackward }
+    }
+
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
     Surface(
@@ -330,6 +339,8 @@ private fun ChatPageContent(
                     bigScreen = bigScreen,
                     drawerState = drawerState,
                     previewMode = previewMode,
+                    hazeState = hazeState,
+                    showCapsuleBackground = !previewMode && listScrolledUnderTopBar,
                     onNewChat = {
                         navigateToChatPage(navController)
                     },
@@ -579,6 +590,8 @@ private fun TopBar(
     drawerState: DrawerState,
     bigScreen: Boolean,
     previewMode: Boolean,
+    hazeState: HazeState,
+    showCapsuleBackground: Boolean,
     onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit
@@ -593,12 +606,19 @@ private fun TopBar(
         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
         navigationIcon = {
             if (!bigScreen) {
-                IconButton(
-                    onClick = {
-                        scope.launch { drawerState.open() }
-                    }
+                ChatTopBarCapsule(
+                    hazeState = hazeState,
+                    displaySetting = settings.displaySetting,
+                    showBackground = showCapsuleBackground,
+                    modifier = Modifier.padding(start = 8.dp, end = 4.dp),
                 ) {
-                    Icon(HugeIcons.Menu03, "Messages")
+                    IconButton(
+                        onClick = {
+                            scope.launch { drawerState.open() }
+                        }
+                    ) {
+                        Icon(HugeIcons.Menu03, "Messages")
+                    }
                 }
             }
         },
@@ -637,20 +657,27 @@ private fun TopBar(
             }
         },
         actions = {
-            IconButton(
-                onClick = {
-                    onClickMenu()
-                }
+            ChatTopBarCapsule(
+                hazeState = hazeState,
+                displaySetting = settings.displaySetting,
+                showBackground = showCapsuleBackground,
+                modifier = Modifier.padding(start = 4.dp, end = 8.dp),
             ) {
-                Icon(if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet, "Chat Options")
-            }
+                IconButton(
+                    onClick = {
+                        onClickMenu()
+                    }
+                ) {
+                    Icon(if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet, "Chat Options")
+                }
 
-            IconButton(
-                onClick = {
-                    onNewChat()
+                IconButton(
+                    onClick = {
+                        onNewChat()
+                    }
+                ) {
+                    Icon(HugeIcons.MessageAdd01, "New Message")
                 }
-            ) {
-                Icon(HugeIcons.MessageAdd01, "New Message")
             }
         },
     )
