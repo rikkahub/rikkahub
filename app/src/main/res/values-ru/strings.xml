@@ -1806,4 +1806,10 @@
   <string name="history_page_selected_count">Выбрано: %1$d</string>
   <string name="history_page_exit_selection">Выйти из выбора</string>
   <string name="history_page_delete_selected_text">Выбранные диалоги (%1$d) будут удалены. Это действие нельзя отменить.</string>
+  <string name="chat_page_conversation_map">Карта диалога</string>
+  <string name="chat_page_delete_conversation_confirm">Удалить этот диалог? Это действие нельзя отменить.</string>
+  <string name="chat_page_export_failed">Не удалось экспортировать: %1$s</string>
+  <string name="chat_page_select_all">Выбрать все</string>
+  <string name="chat_page_deselect_all">Снять все</string>
+  <string name="chat_page_clear_selection">Снять выделение</string>
 </resources>

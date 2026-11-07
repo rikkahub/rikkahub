@@ -1809,4 +1809,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="history_page_selected_count">已选择 %1$d 项</string>
   <string name="history_page_exit_selection">退出选择</string>
   <string name="history_page_delete_selected_text">选中的 %1$d 个对话将被删除。此操作无法撤销。</string>
+  <string name="chat_page_conversation_map">对话地图</string>
+  <string name="chat_page_delete_conversation_confirm">删除此对话？此操作无法撤销。</string>
+  <string name="chat_page_export_failed">导出失败：%1$s</string>
+  <string name="chat_page_select_all">全选</string>
+  <string name="chat_page_deselect_all">取消全选</string>
+  <string name="chat_page_clear_selection">清除选择</string>
 </resources>

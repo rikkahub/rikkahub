@@ -1,46 +1,9 @@
 package me.rerere.rikkahub.ui.pages.chat
 
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Tick01
-import me.rerere.hugeicons.stroke.ArrowDown01
-import me.rerere.hugeicons.stroke.ArrowUp01
-import me.rerere.hugeicons.stroke.ArrowDownDouble
-import me.rerere.hugeicons.stroke.ArrowUpDouble
-import me.rerere.hugeicons.stroke.CursorPointer01
-import me.rerere.hugeicons.stroke.Search01
-import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
-import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
-import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.input.pointer.util.addPointerInputChange
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
-import kotlinx.coroutines.CoroutineStart
-import kotlin.math.abs
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -54,25 +17,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ContainedLoadingIndicator
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.HorizontalFloatingToolbar
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -81,36 +34,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.foundation.gestures.scrollBy
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalScrollCaptureInProgress
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.fastCoerceAtLeast
 import androidx.compose.ui.zIndex
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
-import kotlinx.coroutines.CoroutineScope
+import kotlin.math.roundToInt
+import kotlin.uuid.Uuid
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessage
-import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Conversation
@@ -123,9 +69,6 @@ import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
 import me.rerere.rikkahub.ui.theme.ChatFontProvider
 import me.rerere.rikkahub.utils.plus
 import me.rerere.ui.components.ListSelectableItem
-import me.rerere.ui.components.Tooltip
-import kotlin.math.roundToInt
-import kotlin.uuid.Uuid
 
 private const val TAG = "ChatList"
 private const val LoadingIndicatorKey = "LoadingIndicator"
@@ -137,6 +80,7 @@ fun ChatList(
     conversation: Conversation,
     state: LazyListState,
     previewListState: LazyListState,
+    selectionState: ChatSelectionState,
     loading: Boolean,
     processingStatus: String? = null,
     previewMode: Boolean,
@@ -217,6 +161,7 @@ fun ChatList(
                 onToolAnswer = onToolAnswer,
                 onToggleFavorite = onToggleFavorite,
                 onConversationSystemPromptChange = onConversationSystemPromptChange,
+                selectionState = selectionState,
             )
         }
 
@@ -242,101 +187,6 @@ fun ChatList(
             }
         }
     }
-}
-
-private val PreviewSwipeSpec = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 500f)
-
-/**
- * 概览页露出的比例，0 是聊天页，1 是概览页。
- * 外部切换 [previewMode]（如顶栏按钮、点击跳转）时动画过去；手势拖动时由 [previewSwipeGesture] 直接驱动。
- */
-@Composable
-private fun rememberPreviewSwipeProgress(previewMode: Boolean): Animatable<Float, *> {
-    val progress = remember { Animatable(if (previewMode) 1f else 0f) }
-    LaunchedEffect(previewMode) {
-        val target = if (previewMode) 1f else 0f
-        // 松手时手势已经带着速度动画到目标了，这里不要再打断它
-        if (progress.targetValue != target) {
-            progress.animateTo(target, PreviewSwipeSpec)
-        }
-    }
-    return progress
-}
-
-/**
- * 聊天页向左滑进入概览，概览页向右滑返回（RTL 下方向相反）。
- * 只在方向对的时候才接管手势，反方向留给侧边抽屉；横向滚动的子组件（代码块、表格）会先消费掉事件，不受影响。
- */
-private fun Modifier.previewSwipeGesture(
-    progress: Animatable<Float, *>,
-    scope: CoroutineScope,
-    layoutDirection: LayoutDirection,
-    canEnterPreview: () -> Boolean,
-    isPreviewMode: () -> Boolean,
-    onPreviewModeChange: (Boolean) -> Unit,
-): Modifier = pointerInput(layoutDirection) {
-        // 手指往左（LTR）是进入概览的方向
-        val sign = if (layoutDirection == LayoutDirection.Rtl) -1f else 1f
-        val flingThreshold = 400.dp.toPx()
-
-        // 拖动进度自己记，不读 progress.value：snapTo 可能要等上一段动画取消才生效
-        var dragProgress = 0f
-        fun dragBy(dx: Float, width: Float) {
-            dragProgress = (dragProgress - dx * sign / width).coerceIn(0f, 1f)
-            val value = dragProgress
-            scope.launch(start = CoroutineStart.UNDISPATCHED) { progress.snapTo(value) }
-        }
-
-        awaitEachGesture {
-            val down = awaitFirstDown(requireUnconsumed = false)
-            val startInPreview = isPreviewMode()
-            // 空对话没什么可概览的
-            if (!startInPreview && !canEnterPreview()) return@awaitEachGesture
-            var slop = 0f
-            val drag = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
-                val towardsPreview = -over * sign > 0
-                if (towardsPreview != startInPreview) {
-                    change.consume()
-                    slop = over
-                }
-            } ?: return@awaitEachGesture
-
-            val width = size.width.toFloat().coerceAtLeast(1f)
-            val tracker = VelocityTracker()
-            tracker.addPointerInputChange(drag)
-            dragProgress = progress.value
-            dragBy(slop, width)
-
-            // 接管后在 Initial 阶段就消费掉，避免斜着拖时消息列表同时纵向滚动、长按菜单误触
-            var completed = false
-            while (true) {
-                val change = awaitPointerEvent(PointerEventPass.Initial).changes
-                    .firstOrNull { it.id == drag.id } ?: break
-                tracker.addPointerInputChange(change)
-                if (change.changedToUpIgnoreConsumed()) {
-                    completed = true
-                    break
-                }
-                dragBy(change.positionChangeIgnoreConsumed().x, width)
-                change.consume()
-            }
-
-            // 正值表示朝概览方向
-            val velocity = -tracker.calculateVelocity().x * sign
-            val target = when {
-                !completed -> startInPreview
-                abs(velocity) > flingThreshold -> velocity > 0
-                else -> dragProgress > 0.5f
-            }
-            scope.launch(start = CoroutineStart.UNDISPATCHED) {
-                progress.animateTo(
-                    targetValue = if (target) 1f else 0f,
-                    animationSpec = PreviewSwipeSpec,
-                    initialVelocity = velocity / width,
-                )
-            }
-            if (target != isPreviewMode()) onPreviewModeChange(target)
-        }
 }
 
 // 顶部渐隐：消息滚到标题栏下面时逐渐透明，从状态栏一直淡出到标题栏下沿之外，保证标题可读。
@@ -382,6 +232,7 @@ private fun ChatListNormal(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
+    selectionState: ChatSelectionState,
 ) {
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
@@ -419,8 +270,7 @@ private fun ChatListNormal(
     }
 
     // 聊天选择
-    val selectedItems = remember { mutableStateListOf<Uuid>() }
-    var selecting by remember { mutableStateOf(false) }
+    val selectedItems = selectionState.selectedItems
     var showExportSheet by remember { mutableStateOf(false) }
 
     // 自动跟随键盘滚动
@@ -504,7 +354,7 @@ private fun ChatListNormal(
                             }
                         },
                         selectedKeys = selectedItems,
-                        enabled = selecting,
+                        enabled = selectionState.selecting,
                     ) {
                         ChatMessage(
                             node = node,
@@ -525,10 +375,11 @@ private fun ChatListNormal(
                                 onDelete(node.currentMessage)
                             },
                             onShare = {
-                                selecting = true  // 使用 CoroutineScope 延迟状态更新
-                                selectedItems.clear()
-                                selectedItems.addAll(conversation.messageNodes.map { it.id }
-                                    .subList(0, conversation.messageNodes.indexOf(node) + 1))
+                                // 默认选中从第一条到这一条
+                                selectionState.start(
+                                    conversation.messageNodes.map { it.id }
+                                        .subList(0, conversation.messageNodes.indexOf(node) + 1)
+                                )
                             },
                             onUpdate = {
                                 onUpdateMessage(it)
@@ -606,71 +457,19 @@ private fun ChatListNormal(
             )
 
             // 完成选择
-            AnimatedVisibility(
-                visible = selecting,
+            ChatSelectionToolbar(
+                state = selectionState,
+                allIds = conversation.messageNodes.map { it.id },
+                onConfirm = {
+                    selectionState.selecting = false
+                    if (conversation.messageNodes.any { it.id in selectedItems }) {
+                        showExportSheet = true
+                    }
+                },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .offset(y = -(48).dp),
-                enter = slideInVertically(
-                    initialOffsetY = { it * 2 },
-                ),
-                exit = slideOutVertically(
-                    targetOffsetY = { it * 2 },
-                ),
-            ) {
-                HorizontalFloatingToolbar(
-                    expanded = true,
-                ) {
-                    Tooltip(
-                        tooltip = {
-                            Text("Clear selection")
-                        }
-                    ) {
-                        IconButton(
-                            onClick = {
-                                selecting = false
-                                selectedItems.clear()
-                            }
-                        ) {
-                            Icon(HugeIcons.Cancel01, null)
-                        }
-                    }
-                    Tooltip(
-                        tooltip = {
-                            Text("Select all")
-                        }
-                    ) {
-                        IconButton(
-                            onClick = {
-                                if (selectedItems.isNotEmpty()) {
-                                    selectedItems.clear()
-                                } else {
-                                    selectedItems.addAll(conversation.messageNodes.map { it.id })
-                                }
-                            }
-                        ) {
-                            Icon(HugeIcons.CursorPointer01, null)
-                        }
-                    }
-                    Tooltip(
-                        tooltip = {
-                            Text("Confirm")
-                        }
-                    ) {
-                        FilledIconButton(
-                            onClick = {
-                                selecting = false
-                                val messages = conversation.messageNodes.filter { it.id in selectedItems }
-                                if (messages.isNotEmpty()) {
-                                    showExportSheet = true
-                                }
-                            }
-                        ) {
-                            Icon(HugeIcons.Tick01, null)
-                        }
-                    }
-                }
-            }
+            )
 
             // 导出对话框
             ChatExportSheet(
@@ -700,141 +499,6 @@ private fun ChatListNormal(
                     conversation = conversation,
                     onClickSuggestion = onClickSuggestion,
                     modifier = Modifier.align(Alignment.BottomCenter)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChatSuggestionsRow(
-    modifier: Modifier = Modifier,
-    conversation: Conversation,
-    onClickSuggestion: (String) -> Unit
-) {
-    LazyRow(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        items(conversation.chatSuggestions) { suggestion ->
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .clickable {
-                        onClickSuggestion(suggestion)
-                    }
-                    .background(MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp))
-                    .padding(vertical = 4.dp, horizontal = 8.dp),
-            ) {
-                Text(
-                    text = suggestion,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun BoxScope.MessageJumper(
-    show: Boolean,
-    onLeft: Boolean,
-    scope: CoroutineScope,
-    state: LazyListState
-) {
-    AnimatedVisibility(
-        visible = show,
-        modifier = Modifier.align(if (onLeft) Alignment.CenterStart else Alignment.CenterEnd),
-        enter = slideInHorizontally(
-            initialOffsetX = { if (onLeft) -it * 2 else it * 2 },
-        ),
-        exit = slideOutHorizontally(
-            targetOffsetX = { if (onLeft) -it * 2 else it * 2 },
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Surface(
-                onClick = {
-                    scope.launch {
-                        state.scrollToItem(0)
-                    }
-                },
-                shape = CircleShape,
-                tonalElevation = 4.dp,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f)
-            ) {
-                Icon(
-                    imageVector = HugeIcons.ArrowUpDouble,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .padding(4.dp)
-                )
-            }
-            Surface(
-                onClick = {
-                    scope.launch {
-                        state.animateScrollToItem(
-                            (state.firstVisibleItemIndex - 1).fastCoerceAtLeast(
-                                0
-                            )
-                        )
-                    }
-                },
-                shape = CircleShape,
-                tonalElevation = 4.dp,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f)
-            ) {
-                Icon(
-                    imageVector = HugeIcons.ArrowUp01,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .padding(4.dp)
-                )
-            }
-            Surface(
-                onClick = {
-                    scope.launch {
-                        state.animateScrollToItem(state.firstVisibleItemIndex + 1)
-                    }
-                },
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f)
-            ) {
-                Icon(
-                    imageVector = HugeIcons.ArrowDown01,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .padding(4.dp)
-                )
-            }
-            Surface(
-                onClick = {
-                    scope.launch {
-                        state.scrollToItem(state.layoutInfo.totalItemsCount - 1)
-                    }
-                },
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceColorAtElevation(
-                    4.dp
-                ).copy(alpha = 0.65f),
-            ) {
-                Icon(
-                    imageVector = HugeIcons.ArrowDownDouble,
-                    contentDescription = stringResource(R.string.chat_page_scroll_to_bottom),
-                    modifier = Modifier
-                        .padding(4.dp)
                 )
             }
         }

@@ -1804,4 +1804,10 @@
   <string name="history_page_selected_count">已選取 %1$d 項</string>
   <string name="history_page_exit_selection">退出選取</string>
   <string name="history_page_delete_selected_text">已選取的 %1$d 個對話將會被刪除，此操作無法復原。</string>
+  <string name="chat_page_conversation_map">對話地圖</string>
+  <string name="chat_page_delete_conversation_confirm">刪除這段對話？此操作無法復原。</string>
+  <string name="chat_page_export_failed">匯出失敗：%1$s</string>
+  <string name="chat_page_select_all">全選</string>
+  <string name="chat_page_deselect_all">取消全選</string>
+  <string name="chat_page_clear_selection">清除選取</string>
 </resources>

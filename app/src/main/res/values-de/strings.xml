@@ -1807,4 +1807,10 @@
   <string name="history_page_selected_count">%1$d ausgewählt</string>
   <string name="history_page_exit_selection">Auswahl beenden</string>
   <string name="history_page_delete_selected_text">Die %1$d ausgewählten Unterhaltungen werden gelöscht. Dies kann nicht rückgängig gemacht werden.</string>
+  <string name="chat_page_conversation_map">Konversationskarte</string>
+  <string name="chat_page_delete_conversation_confirm">Diese Unterhaltung löschen? Dies kann nicht rückgängig gemacht werden.</string>
+  <string name="chat_page_export_failed">Export fehlgeschlagen: %1$s</string>
+  <string name="chat_page_select_all">Alle auswählen</string>
+  <string name="chat_page_deselect_all">Alle abwählen</string>
+  <string name="chat_page_clear_selection">Auswahl aufheben</string>
 </resources>

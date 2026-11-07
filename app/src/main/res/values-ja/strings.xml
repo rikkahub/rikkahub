@@ -1806,4 +1806,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="history_page_selected_count">%1$d件選択中</string>
   <string name="history_page_exit_selection">選択を終了</string>
   <string name="history_page_delete_selected_text">選択した%1$d件の会話が削除されます。この操作は元に戻せません。</string>
+  <string name="chat_page_conversation_map">会話マップ</string>
+  <string name="chat_page_delete_conversation_confirm">この会話を削除しますか？この操作は元に戻せません。</string>
+  <string name="chat_page_export_failed">エクスポートに失敗しました: %1$s</string>
+  <string name="chat_page_select_all">すべて選択</string>
+  <string name="chat_page_deselect_all">すべて選択解除</string>
+  <string name="chat_page_clear_selection">選択を解除</string>
 </resources>

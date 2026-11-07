@@ -1804,4 +1804,10 @@
   <string name="history_page_selected_count">تم تحديد %1$d</string>
   <string name="history_page_exit_selection">إنهاء التحديد</string>
   <string name="history_page_delete_selected_text">سيتم حذف %1$d من المحادثات المحددة. لا يمكن التراجع عن ذلك.</string>
+  <string name="chat_page_conversation_map">خريطة المحادثة</string>
+  <string name="chat_page_delete_conversation_confirm">هل تريد حذف هذه المحادثة؟ لا يمكن التراجع عن هذا الإجراء.</string>
+  <string name="chat_page_export_failed">فشل التصدير: %1$s</string>
+  <string name="chat_page_select_all">تحديد الكل</string>
+  <string name="chat_page_deselect_all">إلغاء تحديد الكل</string>
+  <string name="chat_page_clear_selection">إلغاء التحديد</string>
 </resources>

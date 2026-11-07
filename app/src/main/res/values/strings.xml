@@ -1807,4 +1807,10 @@
   <string name="history_page_selected_count">%1$d selected</string>
   <string name="history_page_exit_selection">Exit selection</string>
   <string name="history_page_delete_selected_text">The %1$d selected conversations will be deleted. This can\'t be undone.</string>
+  <string name="chat_page_conversation_map">Conversation map</string>
+  <string name="chat_page_delete_conversation_confirm">Delete this conversation? This cannot be undone.</string>
+  <string name="chat_page_export_failed">Export failed: %1$s</string>
+  <string name="chat_page_select_all">Select all</string>
+  <string name="chat_page_deselect_all">Deselect all</string>
+  <string name="chat_page_clear_selection">Clear selection</string>
 </resources>
