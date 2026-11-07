@@ -88,7 +88,7 @@ internal fun Settings.withoutInvalidReferences(): Settings {
         selectedASRProviderId = settings.selectedASRProviderId
             ?.takeIf { id -> asrProviders.any { provider -> provider.id == id } }
             ?: asrProviders.firstOrNull()?.id,
-        favoriteModels = settings.favoriteModels.filter { it in validModelIds },
+        favoriteModels = settings.favoriteModels.filter { it in validModelIds }.distinct(),
         modeInjections = settings.modeInjections.distinctBy { it.id },
         lorebooks = settings.lorebooks.distinctBy { it.id },
         quickMessages = settings.quickMessages.distinctBy { it.id },
