@@ -360,7 +360,6 @@
   <string name="favorite_page_title">Favorites</string>
   <string name="favorite_page_untitled_conversation">Untitled Conversation</string>
   <string name="history_page_cancel">Cancel</string>
-  <string name="history_page_conversation_deleted">Conversation deleted</string>
   <string name="history_page_delete">Delete</string>
   <string name="history_page_delete_all">Delete All</string>
   <string name="history_page_delete_all_confirmation">Are you sure you want to delete all conversations? This action cannot be undone.</string>
@@ -1804,4 +1803,8 @@
   <string name="notification_background_shell_running">Background commands running: %1$d</string>
   <string name="background_shell_notice_exited">Background command exited with code %1$d: %2$s</string>
   <string name="background_shell_notice_stopped">Background command stopped by you: %1$s</string>
+  <string name="history_page_select">Select</string>
+  <string name="history_page_selected_count">%1$d selected</string>
+  <string name="history_page_exit_selection">Exit selection</string>
+  <string name="history_page_delete_selected_text">The %1$d selected conversations will be deleted. This can\'t be undone.</string>
 </resources>

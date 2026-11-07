@@ -359,7 +359,6 @@
   <string name="favorite_page_title">收藏</string>
   <string name="favorite_page_untitled_conversation">未命名对话</string>
   <string name="history_page_cancel">取消</string>
-  <string name="history_page_conversation_deleted">对话已删除</string>
   <string name="history_page_delete">删除</string>
   <string name="history_page_delete_all">删除全部</string>
   <string name="history_page_delete_all_confirmation">确定要删除所有对话吗？此操作无法撤销。</string>
@@ -1806,4 +1805,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="notification_background_shell_running">后台命令运行中：%1$d</string>
   <string name="background_shell_notice_exited">后台命令已退出，退出码为 %1$d：%2$s</string>
   <string name="background_shell_notice_stopped">后台命令已被你停止：%1$s</string>
+  <string name="history_page_select">选择</string>
+  <string name="history_page_selected_count">已选择 %1$d 项</string>
+  <string name="history_page_exit_selection">退出选择</string>
+  <string name="history_page_delete_selected_text">选中的 %1$d 个对话将被删除。此操作无法撤销。</string>
 </resources>

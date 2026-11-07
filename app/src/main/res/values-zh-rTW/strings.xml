@@ -356,7 +356,6 @@
   <string name="favorite_page_title">收藏</string>
   <string name="favorite_page_untitled_conversation">未命名對話</string>
   <string name="history_page_cancel">取消</string>
-  <string name="history_page_conversation_deleted">對話已刪除</string>
   <string name="history_page_delete">刪除</string>
   <string name="history_page_delete_all">刪除全部</string>
   <string name="history_page_delete_all_confirmation">確定要刪除所有對話嗎？此操作無法撤銷。</string>
@@ -1801,4 +1800,8 @@
   <string name="notification_background_shell_running">背景指令執行中：%1$d</string>
   <string name="background_shell_notice_exited">背景指令已結束，結束代碼 %1$d：%2$s</string>
   <string name="background_shell_notice_stopped">背景指令已被你停止：%1$s</string>
+  <string name="history_page_select">選取</string>
+  <string name="history_page_selected_count">已選取 %1$d 項</string>
+  <string name="history_page_exit_selection">退出選取</string>
+  <string name="history_page_delete_selected_text">已選取的 %1$d 個對話將會被刪除，此操作無法復原。</string>
 </resources>

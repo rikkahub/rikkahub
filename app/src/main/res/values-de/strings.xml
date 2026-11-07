@@ -320,7 +320,6 @@
   <string name="extension_selector_tab_skills">Skills</string>
   <string name="extensions_page_agent_skills">Agent-Skills</string>
   <string name="extensions_page_agent_skills_desc">Verwalte Skill-Pakete, die die KI bei Bedarf lädt</string>
-  <string name="history_page_conversation_deleted">Unterhaltung gelöscht</string>
   <string name="history_page_delete">Löschen</string>
   <string name="history_page_delete_all">Alle löschen</string>
   <string name="history_page_delete_all_confirmation">Bist du sicher, dass du alle Unterhaltungen löschen möchtest? Diese Aktion kann nicht rückgängig gemacht werden.</string>
@@ -1804,4 +1803,8 @@
   <string name="notification_background_shell_running">Hintergrundbefehle laufen: %1$d</string>
   <string name="background_shell_notice_exited">Hintergrundbefehl mit Code %1$d beendet: %2$s</string>
   <string name="background_shell_notice_stopped">Hintergrundbefehl von dir gestoppt: %1$s</string>
+  <string name="history_page_select">Auswählen</string>
+  <string name="history_page_selected_count">%1$d ausgewählt</string>
+  <string name="history_page_exit_selection">Auswahl beenden</string>
+  <string name="history_page_delete_selected_text">Die %1$d ausgewählten Unterhaltungen werden gelöscht. Dies kann nicht rückgängig gemacht werden.</string>
 </resources>

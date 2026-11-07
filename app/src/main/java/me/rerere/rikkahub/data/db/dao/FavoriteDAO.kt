@@ -21,8 +21,16 @@ interface FavoriteDAO {
     @Query("SELECT ref_key FROM favorites WHERE type = :type")
     suspend fun getRefKeysByType(type: String): List<String>
 
-    @Query("SELECT substr(ref_key, length('node:' || :conversationId || ':') + 1) FROM favorites WHERE ref_key LIKE 'node:' || :conversationId || ':%'")
+    @Query(
+        "SELECT substr(ref_key, length('node:' || :conversationId || ':') + 1) FROM favorites WHERE ref_key LIKE 'node:' || :conversationId || ':%'"
+    )
     suspend fun getFavoriteNodeIdsOfConversation(conversationId: String): List<String>
+
+    @Query("DELETE FROM favorites WHERE ref_key LIKE 'node:' || :conversationId || ':%'")
+    suspend fun deleteNodeFavoritesOfConversation(conversationId: String): Int
+
+    @Query("DELETE FROM favorites WHERE ref_key IN (:refKeys)")
+    suspend fun deleteByRefKeys(refKeys: List<String>): Int
 
     @Query("SELECT * FROM favorites WHERE ref_key = :refKey LIMIT 1")
     suspend fun getByRefKey(refKey: String): FavoriteEntity?

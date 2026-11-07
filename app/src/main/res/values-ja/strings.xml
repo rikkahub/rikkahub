@@ -356,7 +356,6 @@
   <string name="favorite_page_title">お気に入り</string>
   <string name="favorite_page_untitled_conversation">無題の会話</string>
   <string name="history_page_cancel">キャンセル</string>
-  <string name="history_page_conversation_deleted">会話が削除されました</string>
   <string name="history_page_delete">削除</string>
   <string name="history_page_delete_all">すべて削除</string>
   <string name="history_page_delete_all_confirmation">すべての会話を削除してもよろしいですか？この操作は元に戻せません。</string>
@@ -1803,4 +1802,8 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="notification_background_shell_running">バックグラウンドで実行中のコマンド: %1$d</string>
   <string name="background_shell_notice_exited">バックグラウンドコマンドがコード %1$d で終了しました: %2$s</string>
   <string name="background_shell_notice_stopped">バックグラウンドコマンドを停止しました: %1$s</string>
+  <string name="history_page_select">選択</string>
+  <string name="history_page_selected_count">%1$d件選択中</string>
+  <string name="history_page_exit_selection">選択を終了</string>
+  <string name="history_page_delete_selected_text">選択した%1$d件の会話が削除されます。この操作は元に戻せません。</string>
 </resources>

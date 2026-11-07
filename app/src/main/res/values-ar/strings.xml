@@ -446,7 +446,6 @@
   <string name="favorite_page_title">المفضلة</string>
   <string name="favorite_page_untitled_conversation">محادثة بدون عنوان</string>
   <string name="history_page_cancel">إلغاء</string>
-  <string name="history_page_conversation_deleted">تم حذف المحادثة</string>
   <string name="history_page_delete">حذف</string>
   <string name="history_page_delete_all">حذف الكل</string>
   <string name="history_page_delete_all_confirmation">هل أنت متأكد من رغبتك في حذف جميع المحادثات؟ لا يمكن التراجع عن هذا الإجراء.</string>
@@ -1801,4 +1800,8 @@
   <string name="notification_background_shell_running">أوامر تعمل في الخلفية: %1$d</string>
   <string name="background_shell_notice_exited">انتهى أمر الخلفية برمز %1$d: %2$s</string>
   <string name="background_shell_notice_stopped">تم إيقاف أمر الخلفية بواسطتك: %1$s</string>
+  <string name="history_page_select">تحديد</string>
+  <string name="history_page_selected_count">تم تحديد %1$d</string>
+  <string name="history_page_exit_selection">إنهاء التحديد</string>
+  <string name="history_page_delete_selected_text">سيتم حذف %1$d من المحادثات المحددة. لا يمكن التراجع عن ذلك.</string>
 </resources>

@@ -139,6 +139,9 @@ class ChatService(
             }
             if (previous != null && previous.messageNodes !== current.messageNodes) {
                 withContext(Dispatchers.IO) { deleteUnreferencedFiles(previous, current) }
+                val currentNodeIds = current.messageNodes.mapTo(HashSet()) { it.id }
+                val removedNodeIds = previous.messageNodes.map { it.id }.filterNot { it in currentNodeIds }
+                if (removedNodeIds.isNotEmpty()) conversationRepo.deleteNodeFavorites(current.id, removedNodeIds)
             }
         }
     }
@@ -1181,15 +1184,6 @@ class ChatService(
         sessionManager.removeIfIdle(session)
         // 后台命令随会话一起终止, 撤销删除也不会恢复; 终止要等宽限期, 不阻塞删除
         appScope.launch { backgroundShellManager.killConversation(conversationId) }
-    }
-
-    /** 撤销删除：写回删除前的会话，还停在这个会话上的页面也一并换回 */
-    suspend fun restoreConversation(conversation: Conversation) {
-        val session = sessionManager.getOrCreate(conversation.id)
-        session.replace(conversation, existsInDatabase = true) {
-            conversationStore.write(previous = null, current = conversation)
-        }
-        sessionManager.removeIfIdle(session)
     }
 
     suspend fun deleteConversationsOfAssistant(assistantId: Uuid) {

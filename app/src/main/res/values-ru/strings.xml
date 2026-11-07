@@ -356,7 +356,6 @@
   <string name="favorite_page_title">Избранное</string>
   <string name="favorite_page_untitled_conversation">Безымянный разговор</string>
   <string name="history_page_cancel">Отмена</string>
-  <string name="history_page_conversation_deleted">Беседа удалена</string>
   <string name="history_page_delete">Удалить</string>
   <string name="history_page_delete_all">Удалить все</string>
   <string name="history_page_delete_all_confirmation">Вы уверены, что хотите удалить все диалоги? Это действие нельзя отменить.</string>
@@ -1803,4 +1802,8 @@
   <string name="notification_background_shell_running">Выполняются фоновые команды: %1$d</string>
   <string name="background_shell_notice_exited">Фоновая команда завершилась с кодом %1$d: %2$s</string>
   <string name="background_shell_notice_stopped">Фоновая команда остановлена вами: %1$s</string>
+  <string name="history_page_select">Выбрать</string>
+  <string name="history_page_selected_count">Выбрано: %1$d</string>
+  <string name="history_page_exit_selection">Выйти из выбора</string>
+  <string name="history_page_delete_selected_text">Выбранные диалоги (%1$d) будут удалены. Это действие нельзя отменить.</string>
 </resources>

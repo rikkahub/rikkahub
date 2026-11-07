@@ -356,7 +356,6 @@
   <string name="favorite_page_title">즐겨찾기</string>
   <string name="favorite_page_untitled_conversation">제목 없는 대화</string>
   <string name="history_page_cancel">취소</string>
-  <string name="history_page_conversation_deleted">대화 삭제됨</string>
   <string name="history_page_delete">삭제</string>
   <string name="history_page_delete_all">전체 삭제</string>
   <string name="history_page_delete_all_confirmation">정말 모든 대화를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.</string>
@@ -1803,4 +1802,8 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="notification_background_shell_running">백그라운드 명령 실행 중: %1$d</string>
   <string name="background_shell_notice_exited">백그라운드 명령이 코드 %1$d(으)로 종료되었습니다: %2$s</string>
   <string name="background_shell_notice_stopped">백그라운드 명령을 사용자가 중지했습니다: %1$s</string>
+  <string name="history_page_select">선택</string>
+  <string name="history_page_selected_count">%1$d개 선택됨</string>
+  <string name="history_page_exit_selection">선택 종료</string>
+  <string name="history_page_delete_selected_text">선택한 대화 %1$d개가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</string>
 </resources>

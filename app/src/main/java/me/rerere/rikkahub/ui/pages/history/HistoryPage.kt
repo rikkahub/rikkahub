@@ -1,123 +1,172 @@
-package me.rerere.rikkahub.ui.pages.history;
+package me.rerere.rikkahub.ui.pages.history
 
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Pin
-import me.rerere.hugeicons.stroke.PinOff
-import me.rerere.hugeicons.stroke.GlobalSearch
-import me.rerere.hugeicons.stroke.Delete01
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.launch
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.CheckList
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.GlobalSearch
+import me.rerere.hugeicons.stroke.Pin
+import me.rerere.hugeicons.stroke.PinOff
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.nav.BackButton
-import me.rerere.rikkahub.ui.components.ui.SwipeToDelete
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.utils.toLocalDateTime
+import me.rerere.ui.components.RikkaConfirmDialog
+import me.rerere.ui.components.Tooltip
 import org.koin.androidx.compose.koinViewModel
+import kotlin.uuid.Uuid
 
 @Composable
 fun HistoryPage(vm: HistoryVM = koinViewModel()) {
     val navController = LocalNavController.current
-    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteAllDialog by remember { mutableStateOf(false) }
+    var showDeleteSelectedDialog by remember { mutableStateOf(false) }
+    // null 表示不在多选状态
+    var selectedIds by remember { mutableStateOf<Set<Uuid>?>(null) }
 
     val conversations by vm.conversations.collectAsStateWithLifecycle()
+
+    // 列表变了（删除、切换助手）就去掉已经不在列表里的选中项
+    LaunchedEffect(conversations) {
+        val existing = conversations.mapTo(HashSet()) { it.id }
+        selectedIds = selectedIds?.filterTo(HashSet()) { it in existing }
+    }
+
+    BackHandler(enabled = selectedIds != null) {
+        selectedIds = null
+    }
+
+    fun toggleSelection(id: Uuid) {
+        selectedIds = selectedIds?.let { if (id in it) it - id else it + id }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(stringResource(R.string.history_page_title))
+                    val selected = selectedIds
+                    if (selected != null) {
+                        Text(stringResource(R.string.history_page_selected_count, selected.size))
+                    } else {
+                        Text(stringResource(R.string.history_page_title))
+                    }
                 },
                 navigationIcon = {
                     BackButton()
                 },
                 actions = {
-                    IconButton(
-                        onClick = {
-                            navController.navigate(Screen.MessageSearch)
+                    if (selectedIds == null) {
+                        IconButton(
+                            onClick = {
+                                navController.navigate(Screen.MessageSearch)
+                            }
+                        ) {
+                            Icon(
+                                HugeIcons.GlobalSearch,
+                                contentDescription = stringResource(R.string.history_page_search_messages)
+                            )
                         }
-                    ) {
-                        Icon(
-                            HugeIcons.GlobalSearch,
-                            contentDescription = stringResource(R.string.history_page_search_messages)
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            showDeleteAllDialog = true
+                        if (conversations.isNotEmpty()) {
+                            val selectLabel = stringResource(R.string.history_page_select)
+                            Tooltip(tooltip = { Text(selectLabel) }) {
+                                IconButton(onClick = { selectedIds = emptySet() }) {
+                                    Icon(HugeIcons.CheckList, contentDescription = selectLabel)
+                                }
+                            }
                         }
-                    ) {
-                        Icon(HugeIcons.Delete01, contentDescription = stringResource(R.string.history_page_delete_all))
+                        IconButton(
+                            onClick = {
+                                showDeleteAllDialog = true
+                            }
+                        ) {
+                            Icon(
+                                HugeIcons.Delete01,
+                                contentDescription = stringResource(R.string.history_page_delete_all)
+                            )
+                        }
                     }
                 }
             )
         },
-        snackbarHost = {
-            SnackbarHost(hostState = snackbarHostState)
+        bottomBar = {
+            val selected = selectedIds
+            if (selected != null) {
+                HistorySelectionBar(
+                    selectedCount = selected.size,
+                    onExit = { selectedIds = null },
+                    onDelete = { showDeleteSelectedDialog = true },
+                )
+            }
         }
     ) { contentPadding ->
-        val snackMessageDeleted = stringResource(R.string.history_page_conversation_deleted)
-        val snackMessageUndo = stringResource(R.string.history_page_undo)
         LazyColumn(
             contentPadding = contentPadding + PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(conversations, key = { it.id }) { conversation ->
-                SwipeableConversationItem(
+                val selected = selectedIds
+                ConversationItem(
                     conversation = conversation,
+                    selected = selected?.let { conversation.id in it },
                     onClick = {
-                        navigateToChatPage(navController, conversation.id)
+                        if (selected != null) {
+                            toggleSelection(conversation.id)
+                        } else {
+                            navigateToChatPage(navController, conversation.id)
+                        }
                     },
-                    onDelete = {
-                        scope.launch {
-                            // 先获取完整的对话数据（包含 messageNodes），用于撤销恢复
-                            val fullConversation = vm.getFullConversation(conversation.id) ?: conversation
-                            vm.deleteConversation(conversation)
-                            val result = snackbarHostState.showSnackbar(
-                                message = snackMessageDeleted,
-                                actionLabel = snackMessageUndo,
-                                withDismissAction = true,
-                            )
-                            if (result == SnackbarResult.ActionPerformed) {
-                                vm.restoreConversation(fullConversation)
-                            }
+                    onLongClick = {
+                        if (selected != null) {
+                            toggleSelection(conversation.id)
+                        } else {
+                            selectedIds = setOf(conversation.id)
                         }
                     },
                     onTogglePin = { vm.togglePinStatus(conversation.id) },
@@ -127,6 +176,21 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
                 )
             }
         }
+    }
+
+    RikkaConfirmDialog(
+        show = showDeleteSelectedDialog,
+        title = stringResource(R.string.confirm_delete),
+        confirmText = stringResource(R.string.delete),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            showDeleteSelectedDialog = false
+            selectedIds?.let { vm.deleteConversations(it) }
+            selectedIds = null
+        },
+        onDismiss = { showDeleteSelectedDialog = false },
+    ) {
+        Text(stringResource(R.string.history_page_delete_selected_text, selectedIds?.size ?: 0))
     }
 
     if (showDeleteAllDialog) {
@@ -155,41 +219,80 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
     }
 }
 
+/** 多选时的底部操作栏：退出多选，删除选中的对话。 */
 @Composable
-private fun SwipeableConversationItem(
-    conversation: Conversation,
-    modifier: Modifier = Modifier,
-    onDelete: () -> Unit = {},
-    onTogglePin: () -> Unit = {},
-    onClick: () -> Unit = {},
+private fun HistorySelectionBar(
+    selectedCount: Int,
+    onExit: () -> Unit,
+    onDelete: () -> Unit,
 ) {
-    SwipeToDelete(
-        onDelete = onDelete,
-        modifier = modifier,
-        shape = RoundedCornerShape(25),
+    Surface(
+        modifier = Modifier
+            .navigationBarsPadding()
+            .padding(horizontal = 8.dp)
+            .padding(bottom = 8.dp)
+            .fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.largeIncreased,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
     ) {
-        ConversationItem(
-            conversation = conversation,
-            onTogglePin = onTogglePin,
-            onClick = onClick
-        )
+        Row(
+            modifier = Modifier.padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val exitLabel = stringResource(R.string.history_page_exit_selection)
+            Tooltip(tooltip = { Text(exitLabel) }) {
+                IconButton(onClick = onExit) {
+                    Icon(HugeIcons.Cancel01, contentDescription = exitLabel)
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            Button(
+                onClick = onDelete,
+                enabled = selectedCount > 0,
+                shapes = ButtonDefaults.shapes(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError,
+                ),
+                contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
+            ) {
+                Icon(HugeIcons.Delete01, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                Text(stringResource(R.string.delete))
+            }
+        }
     }
 }
 
+/**
+ * [selected] 为 null 表示不在多选状态，此时右侧是置顶按钮；多选时换成勾选框，点整行切换选中。
+ */
 @Composable
 private fun ConversationItem(
     conversation: Conversation,
+    selected: Boolean?,
     modifier: Modifier = Modifier,
     onTogglePin: () -> Unit = {},
     onClick: () -> Unit = {},
+    onLongClick: () -> Unit = {},
 ) {
+    val shape = RoundedCornerShape(25)
     Surface(
-        onClick = onClick,
         tonalElevation = 2.dp,
-        shape = RoundedCornerShape(25),
+        color = if (selected == true) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface,
+        shape = shape,
         modifier = modifier
+            .clip(shape)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+                onLongClickLabel = stringResource(R.string.history_page_select),
+            )
     ) {
         ListItem(
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
             headlineContent = {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -216,15 +319,21 @@ private fun ConversationItem(
                 Text(conversation.createAt.toLocalDateTime())
             },
             trailingContent = {
-                IconButton(
-                    onClick = onTogglePin
-                ) {
-                    Icon(
-                        if (conversation.isPinned) HugeIcons.PinOff else HugeIcons.Pin,
-                        contentDescription = if (conversation.isPinned) stringResource(R.string.history_page_unpin) else stringResource(
-                            R.string.history_page_pin
+                if (selected != null) {
+                    Checkbox(checked = selected, onCheckedChange = null)
+                } else {
+                    IconButton(
+                        onClick = onTogglePin
+                    ) {
+                        Icon(
+                            if (conversation.isPinned) HugeIcons.PinOff else HugeIcons.Pin,
+                            contentDescription = if (conversation.isPinned) {
+                                stringResource(R.string.history_page_unpin)
+                            } else {
+                                stringResource(R.string.history_page_pin)
+                            }
                         )
-                    )
+                    }
                 }
             }
         )
