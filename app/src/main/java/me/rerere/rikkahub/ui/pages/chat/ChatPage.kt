@@ -60,8 +60,6 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.hugeicons.stroke.LeftToRightListBullet
 import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.rikkahub.R
@@ -317,12 +315,20 @@ private fun ChatPageContent(
         }.orEmpty()
     }
 
-    // 消息滚到标题栏下面时才显示胶囊背景，空页面或在顶部时按钮直接浮在背景上
-    val listScrolledUnderTopBar by remember(chatListState) {
-        derivedStateOf { chatListState.canScrollBackward }
+    // 列表滚到标题栏下面时才显示胶囊背景，空页面或在顶部时按钮直接浮在背景上
+    // 概览页有自己的列表，切过去后跟着它判断
+    val previewListState = rememberLazyListState()
+    val listScrolledUnderTopBar by remember(chatListState, previewListState) {
+        derivedStateOf {
+            if (previewMode) previewListState.canScrollBackward else chatListState.canScrollBackward
+        }
     }
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
+
+    BackHandler(previewMode) {
+        previewMode = false
+    }
 
     Surface(
         color = MaterialTheme.colorScheme.background,
@@ -338,14 +344,10 @@ private fun ChatPageContent(
                     conversation = conversation,
                     bigScreen = bigScreen,
                     drawerState = drawerState,
-                    previewMode = previewMode,
                     hazeState = hazeState,
-                    showCapsuleBackground = !previewMode && listScrolledUnderTopBar,
+                    showCapsuleBackground = listScrolledUnderTopBar,
                     onNewChat = {
                         navigateToChatPage(navController)
-                    },
-                    onClickMenu = {
-                        previewMode = !previewMode
                     },
                     onUpdateTitle = {
                         vm.updateTitle(it)
@@ -431,9 +433,11 @@ private fun ChatPageContent(
                 innerPadding = innerPadding,
                 conversation = conversation,
                 state = chatListState,
+                previewListState = previewListState,
                 loading = loadingJob != null,
                 processingStatus = processingStatus,
                 previewMode = previewMode,
+                onPreviewModeChange = { previewMode = it },
                 settings = setting,
                 hazeState = hazeState,
                 errors = errors,
@@ -589,10 +593,8 @@ private fun TopBar(
     conversation: Conversation,
     drawerState: DrawerState,
     bigScreen: Boolean,
-    previewMode: Boolean,
     hazeState: HazeState,
     showCapsuleBackground: Boolean,
-    onClickMenu: () -> Unit,
     onNewChat: () -> Unit,
     onUpdateTitle: (String) -> Unit
 ) {
@@ -663,14 +665,6 @@ private fun TopBar(
                 showBackground = showCapsuleBackground,
                 modifier = Modifier.padding(start = 4.dp, end = 8.dp),
             ) {
-                IconButton(
-                    onClick = {
-                        onClickMenu()
-                    }
-                ) {
-                    Icon(if (previewMode) HugeIcons.Cancel01 else HugeIcons.LeftToRightListBullet, "Chat Options")
-                }
-
                 IconButton(
                     onClick = {
                         onNewChat()

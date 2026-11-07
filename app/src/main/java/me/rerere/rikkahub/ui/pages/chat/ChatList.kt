@@ -9,9 +9,25 @@ import me.rerere.hugeicons.stroke.ArrowUpDouble
 import me.rerere.hugeicons.stroke.CursorPointer01
 import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Cancel01
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
+import androidx.compose.ui.input.pointer.positionChangeIgnoreConsumed
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import kotlinx.coroutines.CoroutineStart
+import kotlin.math.abs
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -20,7 +36,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -121,9 +136,11 @@ fun ChatList(
     innerPadding: PaddingValues,
     conversation: Conversation,
     state: LazyListState,
+    previewListState: LazyListState,
     loading: Boolean,
     processingStatus: String? = null,
     previewMode: Boolean,
+    onPreviewModeChange: (Boolean) -> Unit,
     settings: Settings,
     hazeState: HazeState,
     errors: List<ChatError> = emptyList(),
@@ -143,23 +160,40 @@ fun ChatList(
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
     onConversationSystemPromptChange: ((String?) -> Unit)? = null,
 ) {
-    AnimatedContent(
-        targetState = previewMode,
-        label = "ChatListMode",
-        transitionSpec = {
-            (fadeIn() + scaleIn(initialScale = 0.8f) togetherWith fadeOut() + scaleOut(targetScale = 0.8f))
-        }
-    ) { target ->
-        if (target) {
-            ChatListPreview(
-                innerPadding = innerPadding,
-                conversation = conversation,
-                settings = settings,
-                hazeState = hazeState,
-                onJumpToMessage = onJumpToMessage,
-                animatedVisibilityScope = this@AnimatedContent,
-            )
-        } else {
+    val previewProgress = rememberPreviewSwipeProgress(previewMode)
+    val scope = rememberCoroutineScope()
+    val currentPreviewMode by rememberUpdatedState(previewMode)
+    val currentOnPreviewModeChange by rememberUpdatedState(onPreviewModeChange)
+    val currentConversation by rememberUpdatedState(conversation)
+    val layoutDirection = LocalLayoutDirection.current
+    val layoutDirectionSign = if (layoutDirection == LayoutDirection.Rtl) -1f else 1f
+    // 概览页只在露出来的时候组合，平时不占资源
+    val showPreview by remember { derivedStateOf { previewProgress.value > 0f } }
+    val showNormal by remember { derivedStateOf { previewProgress.value < 1f } }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clipToBounds()
+            .previewSwipeGesture(
+                progress = previewProgress,
+                scope = scope,
+                layoutDirection = layoutDirection,
+                canEnterPreview = { currentConversation.messageNodes.isNotEmpty() },
+                isPreviewMode = { currentPreviewMode },
+                onPreviewModeChange = { currentOnPreviewModeChange(it) },
+            ),
+    ) {
+        // 两页像翻页一样整体平移：聊天页向左滑出，概览页从右侧跟进
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val p = previewProgress.value
+                    translationX = -p * size.width * layoutDirectionSign
+                    alpha = if (showNormal) 1f - p * 0.4f else 0f
+                },
+        ) {
             ChatListNormal(
                 innerPadding = innerPadding,
                 conversation = conversation,
@@ -179,19 +213,135 @@ fun ChatList(
                 onClickSuggestion = onClickSuggestion,
                 onTranslate = onTranslate,
                 onClearTranslation = onClearTranslation,
-                animatedVisibilityScope = this@AnimatedContent,
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
                 onToggleFavorite = onToggleFavorite,
                 onConversationSystemPromptChange = onConversationSystemPromptChange,
             )
         }
+
+        if (showPreview) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        val p = previewProgress.value
+                        translationX = (1f - p) * size.width * layoutDirectionSign
+                        alpha = 0.4f + p * 0.6f
+                    },
+            ) {
+                ChatListPreview(
+                    innerPadding = innerPadding,
+                    conversation = conversation,
+                    chatListState = state,
+                    listState = previewListState,
+                    settings = settings,
+                    hazeState = hazeState,
+                    onJumpToMessage = onJumpToMessage,
+                )
+            }
+        }
     }
+}
+
+private val PreviewSwipeSpec = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 500f)
+
+/**
+ * 概览页露出的比例，0 是聊天页，1 是概览页。
+ * 外部切换 [previewMode]（如顶栏按钮、点击跳转）时动画过去；手势拖动时由 [previewSwipeGesture] 直接驱动。
+ */
+@Composable
+private fun rememberPreviewSwipeProgress(previewMode: Boolean): Animatable<Float, *> {
+    val progress = remember { Animatable(if (previewMode) 1f else 0f) }
+    LaunchedEffect(previewMode) {
+        val target = if (previewMode) 1f else 0f
+        // 松手时手势已经带着速度动画到目标了，这里不要再打断它
+        if (progress.targetValue != target) {
+            progress.animateTo(target, PreviewSwipeSpec)
+        }
+    }
+    return progress
+}
+
+/**
+ * 聊天页向左滑进入概览，概览页向右滑返回（RTL 下方向相反）。
+ * 只在方向对的时候才接管手势，反方向留给侧边抽屉；横向滚动的子组件（代码块、表格）会先消费掉事件，不受影响。
+ */
+private fun Modifier.previewSwipeGesture(
+    progress: Animatable<Float, *>,
+    scope: CoroutineScope,
+    layoutDirection: LayoutDirection,
+    canEnterPreview: () -> Boolean,
+    isPreviewMode: () -> Boolean,
+    onPreviewModeChange: (Boolean) -> Unit,
+): Modifier = pointerInput(layoutDirection) {
+        // 手指往左（LTR）是进入概览的方向
+        val sign = if (layoutDirection == LayoutDirection.Rtl) -1f else 1f
+        val flingThreshold = 400.dp.toPx()
+
+        // 拖动进度自己记，不读 progress.value：snapTo 可能要等上一段动画取消才生效
+        var dragProgress = 0f
+        fun dragBy(dx: Float, width: Float) {
+            dragProgress = (dragProgress - dx * sign / width).coerceIn(0f, 1f)
+            val value = dragProgress
+            scope.launch(start = CoroutineStart.UNDISPATCHED) { progress.snapTo(value) }
+        }
+
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val startInPreview = isPreviewMode()
+            // 空对话没什么可概览的
+            if (!startInPreview && !canEnterPreview()) return@awaitEachGesture
+            var slop = 0f
+            val drag = awaitHorizontalTouchSlopOrCancellation(down.id) { change, over ->
+                val towardsPreview = -over * sign > 0
+                if (towardsPreview != startInPreview) {
+                    change.consume()
+                    slop = over
+                }
+            } ?: return@awaitEachGesture
+
+            val width = size.width.toFloat().coerceAtLeast(1f)
+            val tracker = VelocityTracker()
+            tracker.addPointerInputChange(drag)
+            dragProgress = progress.value
+            dragBy(slop, width)
+
+            // 接管后在 Initial 阶段就消费掉，避免斜着拖时消息列表同时纵向滚动、长按菜单误触
+            var completed = false
+            while (true) {
+                val change = awaitPointerEvent(PointerEventPass.Initial).changes
+                    .firstOrNull { it.id == drag.id } ?: break
+                tracker.addPointerInputChange(change)
+                if (change.changedToUpIgnoreConsumed()) {
+                    completed = true
+                    break
+                }
+                dragBy(change.positionChangeIgnoreConsumed().x, width)
+                change.consume()
+            }
+
+            // 正值表示朝概览方向
+            val velocity = -tracker.calculateVelocity().x * sign
+            val target = when {
+                !completed -> startInPreview
+                abs(velocity) > flingThreshold -> velocity > 0
+                else -> dragProgress > 0.5f
+            }
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                progress.animateTo(
+                    targetValue = if (target) 1f else 0f,
+                    animationSpec = PreviewSwipeSpec,
+                    initialVelocity = velocity / width,
+                )
+            }
+            if (target != isPreviewMode()) onPreviewModeChange(target)
+        }
 }
 
 // 顶部渐隐：消息滚到标题栏下面时逐渐透明，从状态栏一直淡出到标题栏下沿之外，保证标题可读。
 // 让内容自己变透明而不是盖一层背景色，背景图和动态渐变背景才不会被盖住。
-private fun Modifier.topFadingEdge(height: Dp): Modifier = this
+internal fun Modifier.topFadingEdge(height: Dp): Modifier = this
     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     .drawWithCache {
         val fadeHeight = height.toPx()
@@ -228,7 +378,6 @@ private fun ChatListNormal(
     onClickSuggestion: (String) -> Unit,
     onTranslate: ((UIMessage, java.util.Locale) -> Unit)?,
     onClearTranslation: (UIMessage) -> Unit,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
@@ -552,191 +701,6 @@ private fun ChatListNormal(
                     onClickSuggestion = onClickSuggestion,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 )
-            }
-        }
-    }
-}
-
-/**
- * 提取包含搜索词的文本片段，确保匹配词在开头可见
- */
-private fun extractMatchingSnippet(
-    text: String,
-    query: String
-): String {
-    if (query.isBlank()) {
-        return text
-    }
-
-    val matchIndex = text.indexOf(query, ignoreCase = true)
-    if (matchIndex == -1) {
-        return text
-    }
-
-    // 直接从匹配词开始显示，确保匹配词在最前面
-    val snippet = text.substring(matchIndex)
-
-    // 只在前面有内容时添加省略号
-    return if (matchIndex > 0) {
-        "...$snippet"
-    } else {
-        snippet
-    }
-}
-
-private fun buildHighlightedText(
-    text: String,
-    query: String,
-    highlightColor: Color
-): AnnotatedString {
-    if (query.isBlank()) {
-        return AnnotatedString(text)
-    }
-
-    return buildAnnotatedString {
-        var startIndex = 0
-        var index = text.indexOf(query, startIndex, ignoreCase = true)
-
-        while (index >= 0) {
-            // 添加高亮前的文本
-            append(text.substring(startIndex, index))
-
-            // 添加高亮文本
-            withStyle(
-                style = SpanStyle(
-                    background = highlightColor,
-                    color = Color.Black
-                )
-            ) {
-                append(text.substring(index, index + query.length))
-            }
-
-            startIndex = index + query.length
-            index = text.indexOf(query, startIndex, ignoreCase = true)
-        }
-
-        // 添加剩余文本
-        if (startIndex < text.length) {
-            append(text.substring(startIndex))
-        }
-    }
-}
-
-@Composable
-private fun ChatListPreview(
-    innerPadding: PaddingValues,
-    conversation: Conversation,
-    settings: Settings,
-    hazeState: HazeState,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    onJumpToMessage: (Int) -> Unit
-) {
-    var searchQuery by remember { mutableStateOf("") }
-
-    // 过滤消息，同时保留原始 index 避免后续 O(n) indexOf 查找
-    val filteredMessages = remember(conversation.messageNodes, searchQuery) {
-        if (searchQuery.isBlank()) {
-            conversation.messageNodes.mapIndexed { index, node -> index to node }
-        } else {
-            conversation.messageNodes.mapIndexed { index, node -> index to node }
-                .filter { (_, node) -> node.currentMessage.toText().contains(searchQuery, ignoreCase = true) }
-        }
-    }
-
-    Column(
-        modifier = Modifier
-            .padding(top = innerPadding.calculateTopPadding())
-            .fillMaxSize()
-            .hazeSource(state = hazeState),
-    ) {
-        // 搜索框
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            placeholder = { Text(stringResource(R.string.history_page_search)) },
-            leadingIcon = {
-                Icon(
-                    imageVector = HugeIcons.Search01,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-            },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { searchQuery = "" }) {
-                        Icon(
-                            imageVector = HugeIcons.Cancel01,
-                            contentDescription = "Clear",
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            },
-            singleLine = true,
-            shape = CircleShape,
-            maxLines = 1,
-        )
-
-        // 消息预览
-        LazyColumn(
-            contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-        ) {
-            itemsIndexed(
-                items = filteredMessages,
-                key = { index, item -> item.second.id },
-            ) { _, (originalIndex, node) ->
-                val message = node.currentMessage
-                val isUser = message.role == me.rerere.ai.core.MessageRole.USER
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(
-                            if (!isUser) Modifier.padding(end = 24.dp) else Modifier
-                        ),
-                    horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
-                ) {
-                    Surface(
-                        shape = MaterialTheme.shapes.medium,
-                        color = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .clickable {
-                                    onJumpToMessage(originalIndex)
-                                }
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            val highlightColor = MaterialTheme.colorScheme.tertiaryContainer
-                            val highlightedText = remember(searchQuery, message) {
-                                val fullText = message.toText().trim().ifBlank { "[...]" }
-                                val messageText = extractMatchingSnippet(
-                                    text = fullText,
-                                    query = searchQuery
-                                )
-                                buildHighlightedText(
-                                    text = messageText,
-                                    query = searchQuery,
-                                    highlightColor = highlightColor
-                                )
-                            }
-                            Text(
-                                text = highlightedText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                }
             }
         }
     }
