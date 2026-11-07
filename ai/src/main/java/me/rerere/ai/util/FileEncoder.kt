@@ -1,9 +1,9 @@
 package me.rerere.ai.util
 
-import android.media.ExifInterface
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.media.ExifInterface
 import android.util.Base64
 import android.util.Base64OutputStream
 import androidx.core.net.toUri
@@ -125,6 +125,19 @@ private fun File.compressAndEncode(
         return Pair(encodeToBase64Streaming(), mimeType)
     }
 
+    // 历史图片每轮请求都会重新编码，命中缓存时跳过解码和 JPEG 重编码
+    val cacheKey = "$absolutePath|${lastModified()}|${length()}|$maxDimension|$maxPixels|$quality"
+    // 缓存文件可能在命中后、读取前被系统清理，读取失败按未命中处理，继续从原图编码
+    ImageEncodeCache.get(cacheKey)
+        ?.let { cached -> runCatching { cached.encodeToBase64Streaming() }.getOrNull() }
+        ?.let { encoded -> return Pair(encoded, "image/jpeg") }
+
+    val jpegBytes = compressToJpeg(maxDimension = maxDimension, maxPixels = maxPixels, quality = quality)
+    ImageEncodeCache.put(cacheKey, jpegBytes)
+    return Pair(Base64.encodeToString(jpegBytes, Base64.NO_WRAP), "image/jpeg")
+}
+
+private fun File.compressToJpeg(maxDimension: Int, maxPixels: Long, quality: Int): ByteArray {
     // 读取图片尺寸
     val options = BitmapFactory.Options().apply {
         inJustDecodeBounds = true
@@ -144,12 +157,12 @@ private fun File.compressAndEncode(
     val normalizedBitmap = normalizeByExif(bitmap)
 
     return try {
-        val byteArrayOutputStream = ByteArrayOutputStream()
+        val outputStream = ByteArrayOutputStream()
         // 强制使用 JPEG 格式，因为很多提供商不支持 webp
-        Base64OutputStream(byteArrayOutputStream, Base64.NO_WRAP).use { base64Stream ->
-            normalizedBitmap.compress(Bitmap.CompressFormat.JPEG, quality, base64Stream)
+        check(normalizedBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)) {
+            "Failed to compress image: $absolutePath"
         }
-        Pair(byteArrayOutputStream.toString(Charsets.ISO_8859_1.name()), "image/jpeg")
+        outputStream.toByteArray()
     } finally {
         if (normalizedBitmap !== bitmap) {
             normalizedBitmap.recycle()
@@ -237,7 +250,7 @@ private fun File.guessMimeType(): Result<String> = runCatching {
                 "heic", "heix", "heim", "heis",
                 "hevc", "hevx", "hevm", "hevs",
                 "mif1", "msf1", "heif",
-                    -> return@runCatching "image/heic"
+                -> return@runCatching "image/heic"
 
                 "avif", "avis" -> return@runCatching "image/avif"
             }
