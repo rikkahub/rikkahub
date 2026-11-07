@@ -100,6 +100,7 @@ import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.FolderOpen
 import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Refresh01
+import me.rerere.hugeicons.stroke.Route01
 import me.rerere.hugeicons.stroke.Settings03
 import me.rerere.hugeicons.stroke.Share08
 import me.rerere.hugeicons.stroke.Tag01
@@ -520,6 +521,13 @@ private fun SshConnectionCard(
                 Text(settings?.let { "${it.username}@${it.host}:${it.port}" } ?: stringResource(R.string.workspace_detail_ssh_config_missing))
             },
         )
+        settings?.jumpHost?.let { jump ->
+            item(
+                leadingContent = { CardGroupIcon(HugeIcons.Route01) },
+                headlineContent = { Text(stringResource(R.string.workspace_ssh_editor_jump_host)) },
+                supportingContent = { Text("${jump.username}@${jump.host}:${jump.port}") },
+            )
+        }
         item(
             leadingContent = { CardGroupIcon(HugeIcons.Folder01) },
             headlineContent = { Text(stringResource(R.string.workspace_detail_ssh_remote_dir)) },

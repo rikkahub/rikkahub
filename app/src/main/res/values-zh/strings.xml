@@ -1733,6 +1733,14 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_ssh_editor_missing_fields">请填写主机、端口和用户名</string>
   <string name="workspace_ssh_editor_missing_remote_dir">请填写远程工作目录</string>
   <string name="workspace_ssh_editor_save_failed">保存失败</string>
+  <string name="workspace_ssh_editor_jump_host">跳板机</string>
+  <string name="workspace_ssh_editor_jump_host_enable">通过跳板机连接</string>
+  <string name="workspace_ssh_editor_jump_host_enable_desc">先连接跳板机，再经它访问服务器，相当于 OpenSSH 的 ProxyJump。上方的主机地址由跳板机解析</string>
+  <string name="workspace_ssh_editor_jump_host_key">跳板机主机密钥</string>
+  <string name="workspace_ssh_editor_target_host_key">服务器主机密钥</string>
+  <string name="workspace_ssh_editor_jump_host_key_confirm">确认跳板机主机密钥</string>
+  <string name="workspace_ssh_editor_jump_host_key_changed">跳板机主机密钥已变更</string>
+  <string name="workspace_ssh_editor_missing_jump_fields">请填写跳板机的主机、端口和用户名</string>
   <string name="skills_page_invalid_dirs_title">无法识别的文件夹</string>
   <string name="skills_page_invalid_reason_missing_skill_md">缺少 SKILL.md</string>
   <string name="skills_page_invalid_reason_missing_name">SKILL.md 缺少 name 字段</string>

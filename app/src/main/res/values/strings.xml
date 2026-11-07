@@ -1731,6 +1731,14 @@
   <string name="workspace_ssh_editor_missing_fields">Enter the host, port and username</string>
   <string name="workspace_ssh_editor_missing_remote_dir">Enter the remote working directory</string>
   <string name="workspace_ssh_editor_save_failed">Failed to save</string>
+  <string name="workspace_ssh_editor_jump_host">Jump host</string>
+  <string name="workspace_ssh_editor_jump_host_enable">Connect through a jump host</string>
+  <string name="workspace_ssh_editor_jump_host_enable_desc">Connect to a jump host first and reach the server through it, like ProxyJump in OpenSSH. The host above is resolved from the jump host</string>
+  <string name="workspace_ssh_editor_jump_host_key">Jump host key</string>
+  <string name="workspace_ssh_editor_target_host_key">Server host key</string>
+  <string name="workspace_ssh_editor_jump_host_key_confirm">Confirm jump host key</string>
+  <string name="workspace_ssh_editor_jump_host_key_changed">Jump host key changed</string>
+  <string name="workspace_ssh_editor_missing_jump_fields">Enter the host, port and username of the jump host</string>
   <string name="skills_page_invalid_dirs_title">Unrecognized folders</string>
   <string name="skills_page_invalid_reason_missing_skill_md">Missing SKILL.md</string>
   <string name="skills_page_invalid_reason_missing_name">SKILL.md is missing the name field</string>

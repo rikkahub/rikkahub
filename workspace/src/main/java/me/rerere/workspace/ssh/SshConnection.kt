@@ -1,13 +1,16 @@
 package me.rerere.workspace.ssh
 
+import com.jcraft.jsch.Channel
 import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.ChannelSftp
 import com.jcraft.jsch.HostKey
 import com.jcraft.jsch.HostKeyRepository
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.JSchException
+import com.jcraft.jsch.Proxy
 import com.jcraft.jsch.Session
 import com.jcraft.jsch.SftpException
+import com.jcraft.jsch.SocketFactory
 import com.jcraft.jsch.UIKeyboardInteractive
 import com.jcraft.jsch.UserInfo
 import me.rerere.workspace.StreamCollector
@@ -15,7 +18,10 @@ import me.rerere.workspace.StreamWriter
 import me.rerere.workspace.WorkspaceCommandResult
 import java.io.Closeable
 import java.io.IOException
+import java.io.InputStream
 import java.io.InterruptedIOException
+import java.io.OutputStream
+import java.net.Socket
 import java.net.SocketTimeoutException
 import java.util.Base64
 import java.util.concurrent.CompletableFuture
@@ -23,6 +29,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 
 /**
@@ -219,55 +227,102 @@ internal class SshConnection private constructor(
         private val CHANNEL_OPEN_FAILURE_MESSAGES = setOf("session is down", "channel is not opened.")
 
         fun open(config: SshConnectionConfig, channelTimeoutMillis: Int = DEFAULT_CHANNEL_TIMEOUT_MS): SshConnection {
+            val target = SshEndpoint(
+                host = config.host,
+                port = config.port,
+                username = config.username,
+                authType = config.authType,
+                password = config.password,
+                privateKey = config.privateKey,
+                passphrase = config.passphrase,
+                hostKey = config.hostKey,
+                jumpHost = false,
+            )
+            val jump = config.jumpHost?.let {
+                SshEndpoint(
+                    host = it.host,
+                    port = it.port,
+                    username = it.username,
+                    authType = it.authType,
+                    password = it.password,
+                    privateKey = it.privateKey,
+                    passphrase = it.passphrase,
+                    hostKey = it.hostKey,
+                    jumpHost = true,
+                )
+            }
+            // 两边的凭据都先检查, 配置有误时不必先连上跳板机
+            val targetJsch = target.newJSch()
+            val jumpJsch = jump?.let { it to it.newJSch() }
+            // 隧道的读超时同时充当握手超时 (直连时是 CONNECT_TIMEOUT_MS) 和 keepalive 间隔, 两者一致
+            val proxy = jumpJsch?.let { (endpoint, jsch) ->
+                JumpHostProxy(connectSession(endpoint, jsch, proxy = null).session, KEEPALIVE_INTERVAL_MS.toLong())
+            }
+            val connected = try {
+                connectSession(target, targetJsch, proxy)
+            } catch (e: Exception) {
+                // 目标主机连接失败时 JSch 会关掉 proxy, 这里兜底, 保证跳板机的连接不会遗留
+                proxy?.close()
+                throw e
+            }
+            return SshConnection(config, connected.session, connected.hostKey, channelTimeoutMillis)
+        }
+
+        private fun SshEndpoint.newJSch(): JSch {
             val jsch = JSch()
-            when (config.authType) {
+            when (authType) {
                 SshAuthType.PASSWORD -> {
-                    if (config.password.isNullOrEmpty()) throw IOException("SSH password is required")
+                    if (password.isNullOrEmpty()) throw IOException("SSH password is required for $label")
                 }
 
                 SshAuthType.PRIVATE_KEY -> {
-                    val privateKey = config.privateKey?.trim()?.takeIf { it.isNotEmpty() }
-                        ?: throw IOException("SSH private key is required")
+                    val privateKey = privateKey?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: throw IOException("SSH private key is required for $label")
                     try {
                         jsch.addIdentity(
                             "rikkahub",
                             "$privateKey\n".toByteArray(),
                             null,
-                            config.passphrase?.takeIf { it.isNotEmpty() }?.toByteArray(),
+                            passphrase?.takeIf { it.isNotEmpty() }?.toByteArray(),
                         )
                     } catch (e: JSchException) {
-                        throw IOException("Invalid SSH private key or passphrase: ${e.message}", e)
+                        throw IOException("Invalid SSH private key or passphrase for $label: ${e.message}", e)
                     }
                 }
             }
+            return jsch
+        }
 
-            val hostKeys = TrustedHostKeyRepository(config.hostKey)
-            val session = jsch.getSession(config.username, config.host, config.port).apply {
+        /** 建立 SSH 会话并完成主机密钥校验和认证; [proxy] 不为空时经它连接 */
+        private fun connectSession(endpoint: SshEndpoint, jsch: JSch, proxy: Proxy?): ConnectedSession {
+            val hostKeys = TrustedHostKeyRepository(endpoint.hostKey, endpoint.jumpHost)
+            val session = jsch.getSession(endpoint.username, endpoint.host, endpoint.port).apply {
                 setHostKeyRepository(hostKeys)
                 setConfig("StrictHostKeyChecking", "yes")
-                when (config.authType) {
+                when (endpoint.authType) {
                     SshAuthType.PASSWORD -> {
                         setConfig("PreferredAuthentications", "password,keyboard-interactive")
-                        setPassword(config.password)
-                        userInfo = PasswordUserInfo(config.password!!)
+                        setPassword(endpoint.password)
+                        userInfo = PasswordUserInfo(endpoint.password!!)
                     }
 
                     SshAuthType.PRIVATE_KEY -> setConfig("PreferredAuthentications", "publickey")
                 }
                 setServerAliveInterval(KEEPALIVE_INTERVAL_MS)
                 serverAliveCountMax = KEEPALIVE_COUNT_MAX
+                if (proxy != null) setProxy(proxy)
             }
             try {
                 session.connect(CONNECT_TIMEOUT_MS)
             } catch (e: JSchException) {
                 hostKeys.rejection?.let { throw it }
-                throw IOException("SSH connection to ${config.address} failed: ${e.message}", e)
+                throw IOException("SSH connection to ${endpoint.label} failed: ${e.message}", e)
             }
             val hostKey = hostKeys.presented ?: run {
                 session.disconnect()
-                throw IOException("SSH server did not present a host key")
+                throw IOException("SSH server ${endpoint.label} did not present a host key")
             }
-            return SshConnection(config, session, hostKey, channelTimeoutMillis)
+            return ConnectedSession(session, hostKey)
         }
 
         /** 用一条临时连接验证配置, 并取回远程环境的基本信息 */
@@ -286,6 +341,149 @@ internal class SshConnection private constructor(
                 )
             }
         }
+    }
+}
+
+/** 一台要连接的 SSH 服务器: 目标主机或跳板机 */
+private class SshEndpoint(
+    val host: String,
+    val port: Int,
+    val username: String,
+    val authType: SshAuthType,
+    val password: String?,
+    val privateKey: String?,
+    val passphrase: String?,
+    val hostKey: SshHostKey?,
+    val jumpHost: Boolean,
+) {
+    val label: String
+        get() = if (jumpHost) "jump host $username@$host:$port" else "$username@$host:$port"
+}
+
+private class ConnectedSession(val session: Session, val hostKey: SshHostKey)
+
+/**
+ * 经跳板机的 direct-tcpip channel 连接目标主机, 目标会话断开时连同跳板机的会话一起断开;
+ * 跳板机断开时 channel 随之关闭, 目标会话读到 EOF 也会断开。
+ *
+ * 隧道没有 socket, JSch 设不了读超时: 握手时目标主机不回应会一直等下去, 连上之后也没有触发 keepalive 的超时,
+ * 跳板机还在而目标主机失联时发现不了。所以接收数据的管道自带 [readTimeoutMillis] 读超时,
+ * 抛出的 [SocketTimeoutException] 在 JSch 看来和 socket 读超时一样: 握手时连接失败, 连上之后发送 keepalive。
+ */
+private class JumpHostProxy(private val jumpSession: Session, readTimeoutMillis: Long) : Proxy {
+    private val input = TunnelInputStream(readTimeoutMillis)
+
+    @Volatile
+    private var channel: Channel? = null
+
+    @Volatile
+    private var output: OutputStream? = null
+
+    override fun connect(socketFactory: SocketFactory?, host: String, port: Int, timeout: Int) {
+        val channel = jumpSession.getStreamForwarder(host, port)
+        this.channel = channel
+        // 收到的数据写进管道; 必须在 connect 之前设置, 否则开头的数据会丢
+        channel.setOutputStream(input.sink)
+        try {
+            channel.connect(timeout)
+        } catch (e: JSchException) {
+            // 常见原因: 跳板机连不到目标主机, 或者 sshd 设置了 AllowTcpForwarding no
+            throw JSchException("jump host could not open a tunnel to $host:$port (${e.message})", e)
+        }
+        output = channel.outputStream
+    }
+
+    override fun getInputStream(): InputStream = input
+
+    override fun getOutputStream(): OutputStream = output ?: throw IOException("Tunnel is not connected")
+
+    override fun getSocket(): Socket? = null
+
+    override fun close() {
+        channel?.disconnect()
+        jumpSession.disconnect()
+        input.close()
+    }
+}
+
+/**
+ * 隧道收到的数据: 跳板机会话的读线程写入 [sink], 目标会话从这里读取。
+ *
+ * 不限容量: 写入方阻塞会卡住跳板机会话的读线程, 窗口调整也收不到, 和目标会话互相等待;
+ * 堆积的数据受目标会话各 channel 的窗口限制, 不会无限增长。
+ * 和 socket 一样不响应线程中断, 断开时靠 [close] 唤醒读取方。
+ */
+private class TunnelInputStream(private val readTimeoutMillis: Long) : InputStream() {
+    private val chunks = LinkedBlockingQueue<ByteArray>()
+    private var current: ByteArray = EMPTY
+    private var position = 0
+
+    @Volatile
+    private var closed = false
+
+    val sink: OutputStream = object : OutputStream() {
+        override fun write(b: Int) = write(byteArrayOf(b.toByte()), 0, 1)
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            if (closed) throw IOException("Tunnel closed")
+            if (len > 0) chunks.put(b.copyOfRange(off, off + len))
+        }
+
+        override fun close() = this@TunnelInputStream.close()
+    }
+
+    override fun read(): Int {
+        val one = ByteArray(1)
+        return if (read(one, 0, 1) < 0) -1 else one[0].toInt() and 0xff
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        if (len == 0) return 0
+        if (position == current.size) {
+            current = nextChunk() ?: return -1
+            position = 0
+        }
+        val count = minOf(len, current.size - position)
+        System.arraycopy(current, position, b, off, count)
+        position += count
+        return count
+    }
+
+    override fun available(): Int = current.size - position
+
+    override fun close() {
+        closed = true
+        chunks.offer(END)
+    }
+
+    private fun nextChunk(): ByteArray? {
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(readTimeoutMillis)
+        var interrupted = false
+        try {
+            while (true) {
+                val remaining = deadline - System.nanoTime()
+                if (remaining <= 0) throw SocketTimeoutException("Read timed out")
+                val chunk = try {
+                    chunks.poll(remaining, TimeUnit.NANOSECONDS)
+                } catch (e: InterruptedException) {
+                    interrupted = true
+                    continue
+                } ?: continue
+                if (chunk === END) {
+                    // 之后的读取同样返回 EOF
+                    chunks.offer(END)
+                    return null
+                }
+                return chunk
+            }
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt()
+        }
+    }
+
+    private companion object {
+        val EMPTY = ByteArray(0)
+        val END = ByteArray(0)
     }
 }
 
@@ -355,7 +553,10 @@ internal fun String.sftpQuote(): String =
  * 只认用户确认过的那一把主机公钥。校验发生在认证之前,
  * 未知或不一致时连接直接失败, 密码不会发给未经确认的服务器。
  */
-private class TrustedHostKeyRepository(private val trusted: SshHostKey?) : HostKeyRepository {
+private class TrustedHostKeyRepository(
+    private val trusted: SshHostKey?,
+    private val jumpHost: Boolean,
+) : HostKeyRepository {
     @Volatile
     var presented: SshHostKey? = null
 
@@ -368,7 +569,7 @@ private class TrustedHostKeyRepository(private val trusted: SshHostKey?) : HostK
         presented = actual
         return when {
             trusted == null -> {
-                rejection = SshUnknownHostKeyException(actual)
+                rejection = SshUnknownHostKeyException(actual, jumpHost)
                 HostKeyRepository.NOT_INCLUDED
             }
 
@@ -378,7 +579,7 @@ private class TrustedHostKeyRepository(private val trusted: SshHostKey?) : HostK
             }
 
             else -> {
-                rejection = SshHostKeyChangedException(trusted, actual)
+                rejection = SshHostKeyChangedException(trusted, actual, jumpHost)
                 HostKeyRepository.CHANGED
             }
         }
