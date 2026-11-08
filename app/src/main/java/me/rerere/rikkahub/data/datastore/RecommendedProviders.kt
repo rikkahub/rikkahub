@@ -27,12 +27,12 @@ val RECOMMENDED_PROVIDERS: List<ProviderSetting> = listOf(
         enabled = true,
         description = {
             FullDescription(
-                text = "主营 RP 的站",
+                text = "主要为 RP 玩家服务的站点",
                 DescriptionLink(prefix = "官网：", text = "https://sta1n.ai", url = "https://sta1n.ai"),
             )
         },
         shortDescription = {
-            ShortDescription("主营 RP 的站")
+            ShortDescription("主要为 RP 玩家服务的站点")
         },
     ),
     ProviderSetting.OpenAI(
