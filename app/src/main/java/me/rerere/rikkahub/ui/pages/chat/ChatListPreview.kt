@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -42,6 +43,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
+import kotlinx.coroutines.flow.drop
 import kotlinx.datetime.toJavaLocalDateTime
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
@@ -146,75 +148,80 @@ internal fun ChatListPreview(
     val currentRound = remember(rounds) {
         rounds.indexOfFirst { currentIndex in it.firstIndex..it.lastIndex }
     }
-    // listState 由外部持有（顶栏胶囊要读它），每次打开都重新定位：
-    // 第 0 项是搜索框，第 r 轮在第 r + 1 项，停在它前一项让上面露出一点上下文
+    // listState 由外部持有（顶栏胶囊要读它），每次打开都重新定位：停在当前轮的前一轮，让上面露出一点上下文
     LaunchedEffect(Unit) {
-        listState.scrollToItem(currentRound.coerceAtLeast(0))
+        listState.scrollToItem((currentRound - 1).coerceAtLeast(0))
+    }
+    // 搜索框固定在列表外，滚到中间时改搜索词，结果要从头看
+    LaunchedEffect(listState) {
+        snapshotFlow { searchQuery.trim() }.drop(1).collect { listState.scrollToItem(0) }
     }
 
-    // 和聊天列表一样：顶部留白放进 contentPadding，内容能滚到透明标题栏下面并渐隐
-    LazyColumn(
-        state = listState,
-        contentPadding = PaddingValues(horizontal = 16.dp) + PaddingValues(
-            top = innerPadding.calculateTopPadding() + 8.dp,
-            bottom = 32.dp + innerPadding.calculateBottomPadding(),
-        ),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .fillMaxSize()
-            .topFadingEdge(innerPadding.calculateTopPadding() + 24.dp)
-            .hazeSource(state = hazeState),
-    ) {
-        item(key = PreviewSearchBarKey) {
-            PreviewSearchBar(
-                query = searchQuery,
-                onQueryChange = { searchQuery = it },
-                resultCount = filtered.size,
-                totalCount = rounds.size,
-                modifier = Modifier.padding(bottom = 4.dp),
-            )
-        }
-
-        if (filtered.isEmpty()) {
-            item(key = PreviewEmptyKey) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 96.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.SearchRemove,
-                        contentDescription = null,
-                        modifier = Modifier.size(40.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = stringResource(R.string.search_page_no_results),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+    // 搜索框浮在列表上方固定不动；列表顶部留白放进 contentPadding，内容能滚到搜索框和透明标题栏下面并渐隐
+    val searchBarTop = innerPadding.calculateTopPadding() + 8.dp
+    val listTop = searchBarTop + PreviewSearchBarHeight + 12.dp
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = listState,
+            contentPadding = PaddingValues(horizontal = 16.dp) + PaddingValues(
+                top = listTop,
+                bottom = 32.dp + innerPadding.calculateBottomPadding(),
+            ),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .topFadingEdge(listTop)
+                .hazeSource(state = hazeState),
+        ) {
+            if (filtered.isEmpty()) {
+                item(key = PreviewEmptyKey) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 96.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.SearchRemove,
+                            contentDescription = null,
+                            modifier = Modifier.size(40.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = stringResource(R.string.search_page_no_results),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
+            }
+
+            items(items = filtered, key = { conversation.messageNodes[it.firstIndex].id }) { round ->
+                val reply = round.reply
+                PreviewRoundCard(
+                    round = round,
+                    query = query,
+                    assistant = assistant,
+                    model = reply?.let { it.modelId?.let(modelById::get) ?: it.snapshotModel() },
+                    isCurrent = currentIndex in round.firstIndex..round.lastIndex,
+                    onClick = { onJumpToMessage(round.firstIndex) },
+                    modifier = Modifier.animateItem(),
+                )
             }
         }
 
-        items(items = filtered, key = { conversation.messageNodes[it.firstIndex].id }) { round ->
-            val reply = round.reply
-            PreviewRoundCard(
-                round = round,
-                query = query,
-                assistant = assistant,
-                model = reply?.let { it.modelId?.let(modelById::get) ?: it.snapshotModel() },
-                isCurrent = currentIndex in round.firstIndex..round.lastIndex,
-                onClick = { onJumpToMessage(round.firstIndex) },
-                modifier = Modifier.animateItem(),
-            )
-        }
+        PreviewSearchBar(
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            resultCount = filtered.size,
+            totalCount = rounds.size,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = searchBarTop),
+        )
     }
 }
 
-private const val PreviewSearchBarKey = "PreviewSearchBar"
+private val PreviewSearchBarHeight = 52.dp
 private const val PreviewEmptyKey = "PreviewEmpty"
 
 @Composable
@@ -228,7 +235,7 @@ private fun PreviewSearchBar(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .height(52.dp),
+            .height(PreviewSearchBarHeight),
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
