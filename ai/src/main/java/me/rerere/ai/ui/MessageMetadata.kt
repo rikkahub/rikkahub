@@ -23,10 +23,14 @@ sealed interface PartMetadata
 
 /**
  * Claude thinking block 的元数据, 回传时需要携带 signature
+ *
+ * [redactedData] 不为空时这一块是 redacted_thinking, 没有可见文本, 回传时原样带上加密数据
  */
 @Serializable
 data class ClaudeReasoningMetadata(
     val signature: String? = null,
+    @SerialName("claude_redacted_data")
+    val redactedData: String? = null,
 ) : PartMetadata
 
 /**

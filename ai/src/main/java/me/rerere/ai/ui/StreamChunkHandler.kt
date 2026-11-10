@@ -387,24 +387,9 @@ private fun UIMessage.appendMessage(delta: UIMessage): UIMessage {
             is UIMessagePart.Image -> acc + deltaPart
 
             is UIMessagePart.Reasoning -> {
-                if (deltaPart.reasoning.isEmpty() && deltaPart.metadata == null) {
-                    acc
-                } else {
-                    val lastPart = acc.lastOrNull()
-                    if (lastPart is UIMessagePart.Reasoning &&
-                        lastPart.reasoningType == deltaPart.reasoningType
-                    ) {
-                        acc.dropLast(1) + UIMessagePart.Reasoning(
-                            reasoning = lastPart.reasoning + deltaPart.reasoning,
-                            createdAt = lastPart.createdAt,
-                            finishedAt = null,
-                            metadata = deltaPart.metadata ?: lastPart.metadata,
-                            reasoningType = lastPart.reasoningType,
-                        )
-                    } else {
-                        acc + deltaPart
-                    }
-                }
+                // 非流式结果里每个推理块都是完整的，签名等 metadata 只对自己那一块有效，
+                // 拼到相邻的块上回传时会校验失败。
+                if (deltaPart.reasoning.isEmpty() && deltaPart.metadata == null) acc else acc + deltaPart
             }
 
             is UIMessagePart.Tool -> {
