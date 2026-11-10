@@ -17,6 +17,7 @@ import {
   Package,
   Pencil,
   RefreshCw,
+  Repeat,
   Trash2,
   Zap,
 } from "lucide-react";
@@ -133,27 +134,39 @@ function getDurationMs(createdAt: string, finishedAt?: string | null): number | 
   return end - start;
 }
 
-function getNerdStats(
-  usage: TokenUsage,
-  createdAt: string,
-  finishedAt: string | null | undefined,
-  generationTimeMs: number | null | undefined,
-  t: TFunction,
-) {
-  const stats: Array<{ key: string; icon: React.ReactNode; label: string }> = [];
+// 多轮工具调用时 usage 是各步累计值：输入只显示最后一次请求的（即上下文占用），
+// 累计输入放在悬停提示里；输出和速度仍按累计值算
+function getNerdStats(message: MessageDto, usage: TokenUsage, t: TFunction) {
+  const { createdAt, finishedAt, generationTimeMs } = message;
+  // 没有 lastUsage 的旧消息退回用累计值
+  const lastUsage = message.lastUsage ?? usage;
+  const steps = message.stepCount ?? 1;
+  const stats: Array<{ key: string; icon: React.ReactNode; label: string; title?: string }> = [];
+
+  if (steps > 1) {
+    stats.push({
+      key: "steps",
+      icon: <Repeat className="size-3" />,
+      label: t("chat_message.step_count", { count: steps }),
+    });
+  }
 
   stats.push({
     key: "prompt",
     icon: <ArrowUp className="size-3" />,
     label:
-      usage.cachedTokens > 0
+      lastUsage.cachedTokens > 0
         ? t("chat_message.prompt_tokens_with_cache", {
-            promptTokens: formatNumber(usage.promptTokens),
-            cachedTokens: formatNumber(usage.cachedTokens),
+            promptTokens: formatNumber(lastUsage.promptTokens),
+            cachedTokens: formatNumber(lastUsage.cachedTokens),
           })
         : t("chat_message.prompt_tokens", {
-            promptTokens: formatNumber(usage.promptTokens),
+            promptTokens: formatNumber(lastUsage.promptTokens),
           }),
+    title:
+      steps > 1
+        ? t("chat_message.total_prompt_tokens", { value: formatNumber(usage.promptTokens) })
+        : undefined,
   });
 
   stats.push({
@@ -500,13 +513,7 @@ const ChatMessageNerdLineRow = React.memo(({
     return null;
   }
 
-  const stats = getNerdStats(
-    message.usage,
-    message.createdAt,
-    message.finishedAt,
-    message.generationTimeMs,
-    t,
-  );
+  const stats = getNerdStats(message, message.usage, t);
   if (stats.length === 0) return null;
 
   return (
@@ -517,7 +524,7 @@ const ChatMessageNerdLineRow = React.memo(({
       )}
     >
       {stats.map((item) => (
-        <div key={item.key} className="inline-flex items-center gap-1">
+        <div key={item.key} className="inline-flex items-center gap-1" title={item.title}>
           {item.icon}
           <span>{item.label}</span>
         </div>
