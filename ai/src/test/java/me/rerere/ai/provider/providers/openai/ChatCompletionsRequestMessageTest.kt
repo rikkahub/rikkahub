@@ -11,9 +11,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Modality
+import me.rerere.ai.ui.OpenRouterReasoningMetadata
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.OpenRouterReasoningMetadata
 import me.rerere.ai.ui.metadataAs
 import me.rerere.ai.ui.toMetadata
 import me.rerere.ai.util.KeyRoulette
@@ -42,13 +42,13 @@ class ChatCompletionsRequestMessageTest {
     private fun invokeBuildMessages(
         messages: List<UIMessage>,
         includeHistoryReasoning: Boolean = true,
-        includeOpenRouterReasoningDetails: Boolean = false,
+        reasoningReplayFormat: ReasoningReplayFormat = ReasoningReplayFormat.REASONING_CONTENT,
     ): JsonArray {
         val method = ChatCompletionsAPI::class.java.getDeclaredMethod(
             "buildMessages",
             List::class.java,
             Boolean::class.javaPrimitiveType,
-            Boolean::class.javaPrimitiveType,
+            ReasoningReplayFormat::class.java,
             List::class.java
         )
         method.isAccessible = true
@@ -56,7 +56,7 @@ class ChatCompletionsRequestMessageTest {
             api,
             messages,
             includeHistoryReasoning,
-            includeOpenRouterReasoningDetails,
+            reasoningReplayFormat,
             listOf(Modality.TEXT, Modality.IMAGE)
         ) as JsonArray
     }
@@ -114,7 +114,10 @@ class ChatCompletionsRequestMessageTest {
         assertTrue("First assistant message should have tool_calls", assistant1.containsKey("tool_calls"))
         val toolCalls1 = assistant1["tool_calls"]?.jsonArray
         assertEquals(1, toolCalls1?.size)
-        assertEquals("search", toolCalls1?.get(0)?.jsonObject?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content)
+        assertEquals(
+            "search",
+            toolCalls1?.get(0)?.jsonObject?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content
+        )
 
         // Verify first tool result
         val toolResult1 = result[2].jsonObject
@@ -127,7 +130,10 @@ class ChatCompletionsRequestMessageTest {
         assertTrue("Second assistant message should have tool_calls", assistant2.containsKey("tool_calls"))
         val toolCalls2 = assistant2["tool_calls"]?.jsonArray
         assertEquals(1, toolCalls2?.size)
-        assertEquals("calculate", toolCalls2?.get(0)?.jsonObject?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content)
+        assertEquals(
+            "calculate",
+            toolCalls2?.get(0)?.jsonObject?.get("function")?.jsonObject?.get("name")?.jsonPrimitive?.content
+        )
 
         // Verify second tool result
         val toolResult2 = result[4].jsonObject
@@ -138,9 +144,11 @@ class ChatCompletionsRequestMessageTest {
         val assistant3 = result[5].jsonObject
         assertEquals("assistant", assistant3["role"]?.jsonPrimitive?.content)
         val content = assistant3["content"]
-        assertTrue("Final assistant content should contain 'final answer'",
+        assertTrue(
+            "Final assistant content should contain 'final answer'",
             content?.jsonPrimitive?.content?.contains("final answer") == true ||
-            (content is JsonArray && content.any { it.jsonObject["text"]?.jsonPrimitive?.content?.contains("final answer") == true })
+                (content is JsonArray &&
+                    content.any { it.jsonObject["text"]?.jsonPrimitive?.content?.contains("final answer") == true })
         )
     }
 
@@ -204,10 +212,14 @@ class ChatCompletionsRequestMessageTest {
         }
 
         assertEquals(2, assistantMessages.size)
-        assertEquals("Initial thinking",
-            assistantMessages[0].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
-        assertEquals("Final thinking",
-            assistantMessages[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content)
+        assertEquals(
+            "Initial thinking",
+            assistantMessages[0].jsonObject["reasoning_content"]?.jsonPrimitive?.content
+        )
+        assertEquals(
+            "Final thinking",
+            assistantMessages[1].jsonObject["reasoning_content"]?.jsonPrimitive?.content
+        )
     }
 
     @Test
@@ -222,8 +234,10 @@ class ChatCompletionsRequestMessageTest {
 
         assertEquals(2, assistantMessages.size)
         assistantMessages.forEach { msg ->
-            assertFalse("Assistant should not have reasoning_content",
-                msg.jsonObject.containsKey("reasoning_content"))
+            assertFalse(
+                "Assistant should not have reasoning_content",
+                msg.jsonObject.containsKey("reasoning_content")
+            )
         }
     }
 
@@ -332,8 +346,11 @@ class ChatCompletionsRequestMessageTest {
             if (msg["role"]?.jsonPrimitive?.content == "assistant" && msg.containsKey("tool_calls")) {
                 assertTrue("Index should not be last", i < result.size - 1)
                 val nextMsg = result[i + 1].jsonObject
-                assertEquals("Tool result should follow tool_calls",
-                    "tool", nextMsg["role"]?.jsonPrimitive?.content)
+                assertEquals(
+                    "Tool result should follow tool_calls",
+                    "tool",
+                    nextMsg["role"]?.jsonPrimitive?.content
+                )
             }
         }
     }
@@ -427,7 +444,7 @@ class ChatCompletionsRequestMessageTest {
 
         val assistant = invokeBuildMessages(
             messages,
-            includeOpenRouterReasoningDetails = true,
+            reasoningReplayFormat = ReasoningReplayFormat.OPENROUTER_DETAILS,
         )[1].jsonObject
 
         assertEquals(reasoningDetails, assistant["reasoning_details"])
@@ -477,7 +494,7 @@ class ChatCompletionsRequestMessageTest {
         })
         val assistant = invokeBuildMessages(
             messages = listOf(UIMessage.user("Question"), executed),
-            includeOpenRouterReasoningDetails = true,
+            reasoningReplayFormat = ReasoningReplayFormat.OPENROUTER_DETAILS,
         )[1].jsonObject
 
         assertEquals(reasoningDetails, assistant["reasoning_details"])
@@ -508,6 +525,79 @@ class ChatCompletionsRequestMessageTest {
 
         assertFalse(assistant.containsKey("reasoning_details"))
         assertEquals("thinking", assistant["reasoning_content"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `Mistral should replay reasoning as thinking chunk instead of reasoning_content`() {
+        val messages = listOf(
+            UIMessage.user("Question"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "thinking"),
+                    UIMessagePart.Text("Answer"),
+                ),
+            ),
+            UIMessage.user("Follow up"),
+        )
+
+        val assistant = invokeBuildMessages(
+            messages,
+            reasoningReplayFormat = ReasoningReplayFormat.MISTRAL_THINKING_CHUNK,
+        )[1].jsonObject
+
+        assertFalse(assistant.containsKey("reasoning_content"))
+        val content = assistant["content"]!!.jsonArray
+        assertEquals(2, content.size)
+        val thinking = content[0].jsonObject
+        assertEquals("thinking", thinking["type"]?.jsonPrimitive?.content)
+        val thinkingText = thinking["thinking"]!!.jsonArray.single().jsonObject
+        assertEquals("text", thinkingText["type"]?.jsonPrimitive?.content)
+        assertEquals("thinking", thinkingText["text"]?.jsonPrimitive?.content)
+        assertEquals("text", content[1].jsonObject["type"]?.jsonPrimitive?.content)
+        assertEquals("Answer", content[1].jsonObject["text"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `Mistral tool continuation should replay reasoning as thinking chunk`() {
+        val messages = listOf(
+            UIMessage.user("Question"),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Reasoning(reasoning = "need search"),
+                    createExecutedTool("call_1", "search", "{}", "result"),
+                ),
+            ),
+        )
+
+        val result = invokeBuildMessages(
+            messages,
+            reasoningReplayFormat = ReasoningReplayFormat.MISTRAL_THINKING_CHUNK,
+        )
+
+        val assistant = result[1].jsonObject
+        assertFalse(assistant.containsKey("reasoning_content"))
+        assertTrue(assistant.containsKey("tool_calls"))
+        val content = assistant["content"]!!.jsonArray
+        assertEquals(1, content.size)
+        assertEquals("thinking", content[0].jsonObject["type"]?.jsonPrimitive?.content)
+        assertEquals("tool", result[2].jsonObject["role"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `Mistral without reasoning should keep plain string content`() {
+        val messages = listOf(
+            UIMessage.user("Question"),
+            UIMessage.assistant("Answer"),
+        )
+
+        val assistant = invokeBuildMessages(
+            messages,
+            reasoningReplayFormat = ReasoningReplayFormat.MISTRAL_THINKING_CHUNK,
+        )[1].jsonObject
+
+        assertEquals("Answer", assistant["content"]?.jsonPrimitive?.content)
     }
 
     // ==================== Helper Functions ====================

@@ -3,18 +3,18 @@ package me.rerere.ai.provider.providers.openai
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.stream.DecodeResult
 import me.rerere.ai.provider.stream.SseEvent
 import me.rerere.ai.provider.stream.StreamChunkDecoder
-import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.OpenRouterReasoningMetadata
+import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
@@ -94,14 +94,11 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
     private fun parseMessage(payload: JsonObject): UIMessage {
         val role = MessageRole.fromValueOrNull(payload["role"]?.jsonPrimitiveOrNull?.contentOrNull)
             ?: MessageRole.ASSISTANT
-        val content = payload["content"]?.jsonPrimitiveOrNull?.contentOrNull ?: ""
+        val parsedContent = parseChatCompletionsContent(payload["content"])
+        val content = parsedContent.text
         val reasoning = payload["reasoning_content"]?.jsonPrimitiveOrNull?.contentOrNull
             ?: payload["reasoning"]?.jsonPrimitiveOrNull?.contentOrNull
-            ?: payload["content"]?.takeIf { it is JsonArray }?.let { array ->
-                array.jsonArrayOrNull?.getOrNull(0)?.jsonObjectOrNull
-                    ?.get("thinking")?.jsonArrayOrNull?.getOrNull(0)?.jsonObjectOrNull
-                    ?.get("text")?.jsonPrimitiveOrNull?.contentOrNull
-            }
+            ?: parsedContent.reasoning
         val reasoningMetadata = accumulateReasoningDetails(payload["reasoning_details"]?.jsonArrayOrNull)
         val images = payload["images"] as? JsonArray ?: JsonArray(emptyList())
 
@@ -195,21 +192,29 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
             message.parts.forEach { part ->
                 when (part) {
                     is UIMessagePart.Text -> if (part.text.isNotEmpty()) {
-                        addAll(closeReasoning()); addAll(closeImage()); addAll(closeTools())
+                        addAll(closeReasoning())
+                        addAll(closeImage())
+                        addAll(closeTools())
                         val id = textId ?: nextId(sourceId, "text").also {
-                            textId = it; add(StreamChunk.TextStart(it))
+                            textId = it
+                            add(StreamChunk.TextStart(it))
                         }
                         add(StreamChunk.TextDelta(id, part.text))
                     }
                     is UIMessagePart.Reasoning -> if (part.reasoning.isNotEmpty() || part.metadata != null) {
-                        addAll(closeText()); addAll(closeImage()); addAll(closeTools())
+                        addAll(closeText())
+                        addAll(closeImage())
+                        addAll(closeTools())
                         val id = reasoningId ?: nextId(sourceId, "reasoning").also {
-                            reasoningId = it; add(StreamChunk.ReasoningStart(it, part.metadata))
+                            reasoningId = it
+                            add(StreamChunk.ReasoningStart(it, part.metadata))
                         }
                         add(StreamChunk.ReasoningDelta(id, part.reasoning, part.metadata))
                     }
                     is UIMessagePart.Tool -> {
-                        addAll(closeText()); addAll(closeReasoning()); addAll(closeImage())
+                        addAll(closeText())
+                        addAll(closeReasoning())
+                        addAll(closeImage())
                         val id = part.toolCallId.ifBlank { lastToolId ?: nextId(sourceId, "tool") }
                         var nameDelta = part.toolName
                         if (openToolIds.add(id)) {
@@ -222,9 +227,12 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
                         }
                     }
                     is UIMessagePart.Image -> {
-                        addAll(closeText()); addAll(closeReasoning()); addAll(closeTools())
+                        addAll(closeText())
+                        addAll(closeReasoning())
+                        addAll(closeTools())
                         val id = imageId ?: nextId(sourceId, "image").also {
-                            imageId = it; add(StreamChunk.ImageStart(it, metadata = part.metadata))
+                            imageId = it
+                            add(StreamChunk.ImageStart(it, metadata = part.metadata))
                         }
                         add(StreamChunk.ImageDelta(id, part.url.substringAfter(";base64,", part.url), part.metadata))
                     }
@@ -235,17 +243,28 @@ internal class ChatCompletionsStreamDecoder : StreamChunkDecoder {
         }
 
         fun finish(reason: String?, responseId: String?, model: String?): List<StreamChunk> = buildList {
-            addAll(closeText()); addAll(closeReasoning()); addAll(closeImage()); addAll(closeTools())
+            addAll(closeText())
+            addAll(closeReasoning())
+            addAll(closeImage())
+            addAll(closeTools())
             add(StreamChunk.Finish(reason, responseId, model))
         }
 
-        private fun closeText() = textId?.let { textId = null; listOf(StreamChunk.TextEnd(it)) }.orEmpty()
-        private fun closeReasoning() = reasoningId?.let {
-            reasoningId = null; listOf(StreamChunk.ReasoningEnd(it))
+        private fun closeText() = textId?.let {
+            textId = null
+            listOf(StreamChunk.TextEnd(it))
         }.orEmpty()
-        private fun closeImage() = imageId?.let { imageId = null; listOf(StreamChunk.ImageEnd(it)) }.orEmpty()
+        private fun closeReasoning() = reasoningId?.let {
+            reasoningId = null
+            listOf(StreamChunk.ReasoningEnd(it))
+        }.orEmpty()
+        private fun closeImage() = imageId?.let {
+            imageId = null
+            listOf(StreamChunk.ImageEnd(it))
+        }.orEmpty()
         private fun closeTools() = openToolIds.toList().map { StreamChunk.ToolCallEnd(it) }.also {
-            openToolIds.clear(); lastToolId = null
+            openToolIds.clear()
+            lastToolId = null
         }
         private fun nextId(sourceId: String?, kind: String): String =
             "${sourceId?.takeIf(String::isNotBlank)?.let { "$it:" }.orEmpty()}$kind-${++sequence}"
