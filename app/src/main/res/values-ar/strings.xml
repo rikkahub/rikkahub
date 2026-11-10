@@ -1833,4 +1833,27 @@
   <string name="setting_display_page_auto_compress_threshold_title">نسبة التفعيل</string>
   <string name="setting_display_page_auto_compress_threshold_desc">بالنسبة إلى نافذة سياق نموذج الدردشة</string>
   <string name="error_title_auto_compress">فشل الضغط التلقائي</string>
+  <string name="chat_message_tool_phone_use_observe">قراءة الشاشة</string>
+  <string name="chat_message_tool_phone_use_screenshot">التقاط لقطة شاشة</string>
+  <string name="chat_message_tool_phone_use_tap">اضغط</string>
+  <string name="chat_message_tool_phone_use_tap_target">اضغط على %1$s</string>
+  <string name="chat_message_tool_phone_use_long_press">اضغط مطولًا</string>
+  <string name="chat_message_tool_phone_use_long_press_target">اضغط مطولاً على %1$s</string>
+  <string name="chat_message_tool_phone_use_swipe">اسحب</string>
+  <string name="chat_message_tool_phone_use_swipe_path">اسحب %1$s → %2$s</string>
+  <string name="chat_message_tool_phone_use_scroll_up">تمرير لأعلى</string>
+  <string name="chat_message_tool_phone_use_scroll_down">مرر لأسفل</string>
+  <string name="chat_message_tool_phone_use_scroll_left">تمرير لليسار</string>
+  <string name="chat_message_tool_phone_use_scroll_right">مرّر إلى اليمين</string>
+  <string name="chat_message_tool_phone_use_type">اكتب نصًا</string>
+  <string name="chat_message_tool_phone_use_type_text">أدخل النص: %1$s</string>
+  <string name="chat_message_tool_phone_use_press_back">اضغط على زر الرجوع</string>
+  <string name="chat_message_tool_phone_use_press_home">الانتقال إلى الشاشة الرئيسية</string>
+  <string name="chat_message_tool_phone_use_press_recents">فتح التطبيقات الحديثة</string>
+  <string name="chat_message_tool_phone_use_press_notifications">فتح الإشعارات</string>
+  <string name="chat_message_tool_phone_use_press_enter">اضغط على Enter</string>
+  <string name="chat_message_tool_phone_use_open_app">فتح التطبيق</string>
+  <string name="chat_message_tool_phone_use_open_app_name">فتح التطبيق: %1$s</string>
+  <string name="chat_message_tool_phone_use_list_apps">عرض التطبيقات</string>
+  <string name="chat_message_tool_phone_use_wait">انتظر %1$s ثانية</string>
 </resources>

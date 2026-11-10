@@ -1835,4 +1835,27 @@
   <string name="setting_display_page_auto_compress_threshold_title">Коэффициент срабатывания</string>
   <string name="setting_display_page_auto_compress_threshold_desc">Относительно контекстного окна модели чата</string>
   <string name="error_title_auto_compress">Не удалось выполнить автосжатие</string>
+  <string name="chat_message_tool_phone_use_observe">Прочитать экран</string>
+  <string name="chat_message_tool_phone_use_screenshot">Сделать скриншот</string>
+  <string name="chat_message_tool_phone_use_tap">Нажать</string>
+  <string name="chat_message_tool_phone_use_tap_target">Нажать %1$s</string>
+  <string name="chat_message_tool_phone_use_long_press">Долгое нажатие</string>
+  <string name="chat_message_tool_phone_use_long_press_target">Долгое нажатие на %1$s</string>
+  <string name="chat_message_tool_phone_use_swipe">Смахнуть</string>
+  <string name="chat_message_tool_phone_use_swipe_path">Смахнуть: %1$s → %2$s</string>
+  <string name="chat_message_tool_phone_use_scroll_up">Прокрутить вверх</string>
+  <string name="chat_message_tool_phone_use_scroll_down">Прокрутить вниз</string>
+  <string name="chat_message_tool_phone_use_scroll_left">Прокрутить влево</string>
+  <string name="chat_message_tool_phone_use_scroll_right">Прокрутить вправо</string>
+  <string name="chat_message_tool_phone_use_type">Ввести текст</string>
+  <string name="chat_message_tool_phone_use_type_text">Ввести текст: %1$s</string>
+  <string name="chat_message_tool_phone_use_press_back">Нажать «Назад»</string>
+  <string name="chat_message_tool_phone_use_press_home">Перейти на главный экран</string>
+  <string name="chat_message_tool_phone_use_press_recents">Открыть недавние приложения</string>
+  <string name="chat_message_tool_phone_use_press_notifications">Открыть уведомления</string>
+  <string name="chat_message_tool_phone_use_press_enter">Нажать Enter</string>
+  <string name="chat_message_tool_phone_use_open_app">Открыть приложение</string>
+  <string name="chat_message_tool_phone_use_open_app_name">Открыть приложение: %1$s</string>
+  <string name="chat_message_tool_phone_use_list_apps">Список приложений</string>
+  <string name="chat_message_tool_phone_use_wait">Ожидание %1$s сек.</string>
 </resources>

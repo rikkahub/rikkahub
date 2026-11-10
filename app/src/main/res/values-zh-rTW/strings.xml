@@ -1833,4 +1833,27 @@
   <string name="setting_display_page_auto_compress_threshold_title">觸發比例</string>
   <string name="setting_display_page_auto_compress_threshold_desc">相對於聊天模型的上下文視窗</string>
   <string name="error_title_auto_compress">自動壓縮失敗</string>
+  <string name="chat_message_tool_phone_use_observe">讀取螢幕</string>
+  <string name="chat_message_tool_phone_use_screenshot">螢幕截圖</string>
+  <string name="chat_message_tool_phone_use_tap">輕觸</string>
+  <string name="chat_message_tool_phone_use_tap_target">輕觸 %1$s</string>
+  <string name="chat_message_tool_phone_use_long_press">長按</string>
+  <string name="chat_message_tool_phone_use_long_press_target">長按 %1$s</string>
+  <string name="chat_message_tool_phone_use_swipe">滑動</string>
+  <string name="chat_message_tool_phone_use_swipe_path">滑動 %1$s → %2$s</string>
+  <string name="chat_message_tool_phone_use_scroll_up">向上捲動</string>
+  <string name="chat_message_tool_phone_use_scroll_down">向下捲動</string>
+  <string name="chat_message_tool_phone_use_scroll_left">向左捲動</string>
+  <string name="chat_message_tool_phone_use_scroll_right">向右捲動</string>
+  <string name="chat_message_tool_phone_use_type">輸入文字</string>
+  <string name="chat_message_tool_phone_use_type_text">輸入文字：%1$s</string>
+  <string name="chat_message_tool_phone_use_press_back">按返回鍵</string>
+  <string name="chat_message_tool_phone_use_press_home">回到主畫面</string>
+  <string name="chat_message_tool_phone_use_press_recents">開啟最近的應用程式</string>
+  <string name="chat_message_tool_phone_use_press_notifications">開啟通知</string>
+  <string name="chat_message_tool_phone_use_press_enter">按 Enter 鍵</string>
+  <string name="chat_message_tool_phone_use_open_app">開啟應用程式</string>
+  <string name="chat_message_tool_phone_use_open_app_name">開啟應用程式：%1$s</string>
+  <string name="chat_message_tool_phone_use_list_apps">列出應用程式</string>
+  <string name="chat_message_tool_phone_use_wait">等待 %1$s 秒</string>
 </resources>

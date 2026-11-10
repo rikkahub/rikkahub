@@ -1833,4 +1833,27 @@
   <string name="setting_display_page_auto_compress_threshold_title">Trigger Ratio</string>
   <string name="setting_display_page_auto_compress_threshold_desc">Relative to the chat model\'s context window</string>
   <string name="error_title_auto_compress">Auto-compression failed</string>
+  <string name="chat_message_tool_phone_use_observe">Read screen</string>
+  <string name="chat_message_tool_phone_use_screenshot">Take screenshot</string>
+  <string name="chat_message_tool_phone_use_tap">Tap</string>
+  <string name="chat_message_tool_phone_use_tap_target">Tap %1$s</string>
+  <string name="chat_message_tool_phone_use_long_press">Long press</string>
+  <string name="chat_message_tool_phone_use_long_press_target">Long press %1$s</string>
+  <string name="chat_message_tool_phone_use_swipe">Swipe</string>
+  <string name="chat_message_tool_phone_use_swipe_path">Swipe %1$s → %2$s</string>
+  <string name="chat_message_tool_phone_use_scroll_up">Scroll up</string>
+  <string name="chat_message_tool_phone_use_scroll_down">Scroll down</string>
+  <string name="chat_message_tool_phone_use_scroll_left">Scroll left</string>
+  <string name="chat_message_tool_phone_use_scroll_right">Scroll right</string>
+  <string name="chat_message_tool_phone_use_type">Type text</string>
+  <string name="chat_message_tool_phone_use_type_text">Enter text: %1$s</string>
+  <string name="chat_message_tool_phone_use_press_back">Press Back</string>
+  <string name="chat_message_tool_phone_use_press_home">Go to home screen</string>
+  <string name="chat_message_tool_phone_use_press_recents">Open recent apps</string>
+  <string name="chat_message_tool_phone_use_press_notifications">Open notifications</string>
+  <string name="chat_message_tool_phone_use_press_enter">Press Enter</string>
+  <string name="chat_message_tool_phone_use_open_app">Open app</string>
+  <string name="chat_message_tool_phone_use_open_app_name">Open app: %1$s</string>
+  <string name="chat_message_tool_phone_use_list_apps">List apps</string>
+  <string name="chat_message_tool_phone_use_wait">Wait %1$s seconds</string>
 </resources>

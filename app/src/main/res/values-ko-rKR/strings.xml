@@ -1835,4 +1835,27 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="setting_display_page_auto_compress_threshold_title">발동 비율</string>
   <string name="setting_display_page_auto_compress_threshold_desc">채팅 모델의 컨텍스트 윈도우 기준</string>
   <string name="error_title_auto_compress">자동 압축 실패</string>
+  <string name="chat_message_tool_phone_use_observe">화면 읽기</string>
+  <string name="chat_message_tool_phone_use_screenshot">스크린샷 찍기</string>
+  <string name="chat_message_tool_phone_use_tap">탭</string>
+  <string name="chat_message_tool_phone_use_tap_target">%1$s 탭</string>
+  <string name="chat_message_tool_phone_use_long_press">길게 누르기</string>
+  <string name="chat_message_tool_phone_use_long_press_target">%1$s 길게 누르기</string>
+  <string name="chat_message_tool_phone_use_swipe">스와이프</string>
+  <string name="chat_message_tool_phone_use_swipe_path">%1$s → %2$s 스와이프</string>
+  <string name="chat_message_tool_phone_use_scroll_up">위로 스크롤</string>
+  <string name="chat_message_tool_phone_use_scroll_down">아래로 스크롤</string>
+  <string name="chat_message_tool_phone_use_scroll_left">왼쪽으로 스크롤</string>
+  <string name="chat_message_tool_phone_use_scroll_right">오른쪽으로 스크롤</string>
+  <string name="chat_message_tool_phone_use_type">텍스트 입력</string>
+  <string name="chat_message_tool_phone_use_type_text">텍스트 입력: %1$s</string>
+  <string name="chat_message_tool_phone_use_press_back">뒤로 가기 누르기</string>
+  <string name="chat_message_tool_phone_use_press_home">홈 화면으로 이동</string>
+  <string name="chat_message_tool_phone_use_press_recents">최근 앱 열기</string>
+  <string name="chat_message_tool_phone_use_press_notifications">알림 열기</string>
+  <string name="chat_message_tool_phone_use_press_enter">Enter 키 누르기</string>
+  <string name="chat_message_tool_phone_use_open_app">앱 열기</string>
+  <string name="chat_message_tool_phone_use_open_app_name">앱 열기: %1$s</string>
+  <string name="chat_message_tool_phone_use_list_apps">앱 목록</string>
+  <string name="chat_message_tool_phone_use_wait">%1$s초 대기</string>
 </resources>

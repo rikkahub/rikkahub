@@ -1835,4 +1835,27 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_display_page_auto_compress_threshold_title">触发比例</string>
   <string name="setting_display_page_auto_compress_threshold_desc">相对于聊天模型的上下文窗口</string>
   <string name="error_title_auto_compress">自动压缩失败</string>
+  <string name="chat_message_tool_phone_use_observe">读取屏幕</string>
+  <string name="chat_message_tool_phone_use_screenshot">截图</string>
+  <string name="chat_message_tool_phone_use_tap">点击</string>
+  <string name="chat_message_tool_phone_use_tap_target">点击 %1$s</string>
+  <string name="chat_message_tool_phone_use_long_press">长按</string>
+  <string name="chat_message_tool_phone_use_long_press_target">长按 %1$s</string>
+  <string name="chat_message_tool_phone_use_swipe">滑动</string>
+  <string name="chat_message_tool_phone_use_swipe_path">滑动 %1$s → %2$s</string>
+  <string name="chat_message_tool_phone_use_scroll_up">向上滚动</string>
+  <string name="chat_message_tool_phone_use_scroll_down">向下滚动</string>
+  <string name="chat_message_tool_phone_use_scroll_left">向左滚动</string>
+  <string name="chat_message_tool_phone_use_scroll_right">向右滚动</string>
+  <string name="chat_message_tool_phone_use_type">输入文本</string>
+  <string name="chat_message_tool_phone_use_type_text">输入文本：%1$s</string>
+  <string name="chat_message_tool_phone_use_press_back">按返回键</string>
+  <string name="chat_message_tool_phone_use_press_home">前往主屏幕</string>
+  <string name="chat_message_tool_phone_use_press_recents">打开最近使用的应用</string>
+  <string name="chat_message_tool_phone_use_press_notifications">打开通知</string>
+  <string name="chat_message_tool_phone_use_press_enter">按 Enter 键</string>
+  <string name="chat_message_tool_phone_use_open_app">打开应用</string>
+  <string name="chat_message_tool_phone_use_open_app_name">打开应用：%1$s</string>
+  <string name="chat_message_tool_phone_use_list_apps">列出应用</string>
+  <string name="chat_message_tool_phone_use_wait">等待 %1$s 秒</string>
 </resources>

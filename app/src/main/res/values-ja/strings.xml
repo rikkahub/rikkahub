@@ -1835,4 +1835,27 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_display_page_auto_compress_threshold_title">発動比率</string>
   <string name="setting_display_page_auto_compress_threshold_desc">チャットモデルのコンテキストウィンドウを基準とした相対値</string>
   <string name="error_title_auto_compress">自動圧縮に失敗しました</string>
+  <string name="chat_message_tool_phone_use_observe">画面を読み取る</string>
+  <string name="chat_message_tool_phone_use_screenshot">スクリーンショットを撮影</string>
+  <string name="chat_message_tool_phone_use_tap">タップ</string>
+  <string name="chat_message_tool_phone_use_tap_target">%1$sをタップ</string>
+  <string name="chat_message_tool_phone_use_long_press">長押し</string>
+  <string name="chat_message_tool_phone_use_long_press_target">%1$sを長押し</string>
+  <string name="chat_message_tool_phone_use_swipe">スワイプ</string>
+  <string name="chat_message_tool_phone_use_swipe_path">%1$s → %2$s にスワイプ</string>
+  <string name="chat_message_tool_phone_use_scroll_up">上にスクロール</string>
+  <string name="chat_message_tool_phone_use_scroll_down">下にスクロール</string>
+  <string name="chat_message_tool_phone_use_scroll_left">左にスクロール</string>
+  <string name="chat_message_tool_phone_use_scroll_right">右にスクロール</string>
+  <string name="chat_message_tool_phone_use_type">テキストを入力</string>
+  <string name="chat_message_tool_phone_use_type_text">テキストを入力: %1$s</string>
+  <string name="chat_message_tool_phone_use_press_back">戻るボタンを押す</string>
+  <string name="chat_message_tool_phone_use_press_home">ホーム画面に移動</string>
+  <string name="chat_message_tool_phone_use_press_recents">最近使ったアプリを開く</string>
+  <string name="chat_message_tool_phone_use_press_notifications">通知を開く</string>
+  <string name="chat_message_tool_phone_use_press_enter">Enterキーを押す</string>
+  <string name="chat_message_tool_phone_use_open_app">アプリを開く</string>
+  <string name="chat_message_tool_phone_use_open_app_name">アプリを開く: %1$s</string>
+  <string name="chat_message_tool_phone_use_list_apps">アプリを一覧表示</string>
+  <string name="chat_message_tool_phone_use_wait">%1$s秒待機</string>
 </resources>

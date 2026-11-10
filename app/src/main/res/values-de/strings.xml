@@ -1833,4 +1833,27 @@
   <string name="setting_display_page_auto_compress_threshold_title">Auslöseverhältnis</string>
   <string name="setting_display_page_auto_compress_threshold_desc">Relativ zum Kontextfenster des Chatmodells</string>
   <string name="error_title_auto_compress">Automatische Komprimierung fehlgeschlagen</string>
+  <string name="chat_message_tool_phone_use_observe">Bildschirm lesen</string>
+  <string name="chat_message_tool_phone_use_screenshot">Screenshot aufnehmen</string>
+  <string name="chat_message_tool_phone_use_tap">Tippen</string>
+  <string name="chat_message_tool_phone_use_tap_target">Auf %1$s tippen</string>
+  <string name="chat_message_tool_phone_use_long_press">Lange drücken</string>
+  <string name="chat_message_tool_phone_use_long_press_target">%1$s lange drücken</string>
+  <string name="chat_message_tool_phone_use_swipe">Wischen</string>
+  <string name="chat_message_tool_phone_use_swipe_path">Wischen: %1$s → %2$s</string>
+  <string name="chat_message_tool_phone_use_scroll_up">Nach oben scrollen</string>
+  <string name="chat_message_tool_phone_use_scroll_down">Nach unten scrollen</string>
+  <string name="chat_message_tool_phone_use_scroll_left">Nach links scrollen</string>
+  <string name="chat_message_tool_phone_use_scroll_right">Nach rechts scrollen</string>
+  <string name="chat_message_tool_phone_use_type">Text eingeben</string>
+  <string name="chat_message_tool_phone_use_type_text">Text eingeben: %1$s</string>
+  <string name="chat_message_tool_phone_use_press_back">Zurück drücken</string>
+  <string name="chat_message_tool_phone_use_press_home">Zum Startbildschirm wechseln</string>
+  <string name="chat_message_tool_phone_use_press_recents">Zuletzt verwendete Apps öffnen</string>
+  <string name="chat_message_tool_phone_use_press_notifications">Benachrichtigungen öffnen</string>
+  <string name="chat_message_tool_phone_use_press_enter">Enter drücken</string>
+  <string name="chat_message_tool_phone_use_open_app">App öffnen</string>
+  <string name="chat_message_tool_phone_use_open_app_name">App öffnen: %1$s</string>
+  <string name="chat_message_tool_phone_use_list_apps">Apps auflisten</string>
+  <string name="chat_message_tool_phone_use_wait">%1$s Sekunden warten</string>
 </resources>
