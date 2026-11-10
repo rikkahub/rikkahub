@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- 系统无障碍设置里显示的服务名，界面提示里按这个名字指给用户，不翻译。说明文字在 main 的 strings.xml 里 -->
+  <string name="phone_use_accessibility_label" translatable="false">RikkaHub Phone Use</string>
+</resources>

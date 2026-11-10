@@ -1810,4 +1810,10 @@
   <string name="chat_page_select_all">全選</string>
   <string name="chat_page_deselect_all">取消全選</string>
   <string name="chat_page_clear_selection">清除選取</string>
+  <string name="assistant_page_local_tools_phone_use_title">Phone Use</string>
+  <string name="assistant_page_local_tools_phone_use_desc">讓 AI 讀取螢幕並操作此手機上的其他應用程式</string>
+  <string name="assistant_page_local_tools_phone_use_service_off">無障礙服務已關閉。將此開關關閉再開啟，即可開啟設定。若系統將該選項反灰，請先在「應用程式資訊」中允許此應用程式的受限設定。</string>
+  <string name="assistant_page_local_tools_phone_use_enable_service">在無障礙設定中開啟 \"RikkaHub Phone Use\"</string>
+  <string name="assistant_page_local_tools_phone_use_floating_window_required">請先開啟背景懸浮視窗</string>
+  <string name="phone_use_accessibility_description">啟用「Phone Use」工具後，AI 助理即可讀取螢幕內容，並代替你執行點按、滑動和文字輸入。除非助理正在執行你指派的任務，否則不會進行任何操作。</string>
 </resources>

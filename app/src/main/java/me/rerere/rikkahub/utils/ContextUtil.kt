@@ -112,6 +112,14 @@ fun Context.openUsageAccessSettings() {
     }
 }
 
+fun Context.openAccessibilitySettings() {
+    runCatching {
+        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }.onFailure {
+        Log.e(TAG, "openAccessibilitySettings failed", it)
+    }
+}
+
 /**
  * Open a url
  */

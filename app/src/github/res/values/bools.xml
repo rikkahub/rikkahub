@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Phone Use 只支持 Android 11 及以上，values-v30 里是 true；和 PhoneUseManager.isSupported 保持一致 -->
+  <bool name="phone_use_supported">false</bool>
+</resources>

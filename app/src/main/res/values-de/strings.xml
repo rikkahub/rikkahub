@@ -1813,4 +1813,10 @@
   <string name="chat_page_select_all">Alle auswählen</string>
   <string name="chat_page_deselect_all">Alle abwählen</string>
   <string name="chat_page_clear_selection">Auswahl aufheben</string>
+  <string name="assistant_page_local_tools_phone_use_title">Telefonnutzung</string>
+  <string name="assistant_page_local_tools_phone_use_desc">Lass die KI den Bildschirm lesen und andere Apps auf diesem Telefon bedienen</string>
+  <string name="assistant_page_local_tools_phone_use_service_off">Der Bedienungshilfe-Dienst ist deaktiviert. Schalte diesen Schalter aus und wieder ein, um die Einstellungen zu öffnen. Wenn das System die Option ausgraut, erlaube zuerst eingeschränkte Einstellungen für diese App in den App-Infos.</string>
+  <string name="assistant_page_local_tools_phone_use_enable_service">Aktiviere \"RikkaHub Phone Use\" in den Bedienungshilfen-Einstellungen</string>
+  <string name="assistant_page_local_tools_phone_use_floating_window_required">Aktiviere zuerst das schwebende Hintergrundfenster</string>
+  <string name="phone_use_accessibility_description">Ermöglicht dem KI-Assistenten, den Bildschirm zu lesen und Tippen, Wischen und Texteingaben für dich auszuführen, wenn du das Phone-Use-Tool aktivierst. Es wird nichts ausgeführt, solange der Assistent keine von dir angeforderte Aufgabe ausführt.</string>
 </resources>

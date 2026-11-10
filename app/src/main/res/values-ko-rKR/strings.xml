@@ -1812,4 +1812,10 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_page_select_all">전체 선택</string>
   <string name="chat_page_deselect_all">모두 선택 해제</string>
   <string name="chat_page_clear_selection">선택 해제</string>
+  <string name="assistant_page_local_tools_phone_use_title">휴대폰 사용</string>
+  <string name="assistant_page_local_tools_phone_use_desc">AI가 화면을 읽고 이 휴대전화의 다른 앱을 조작하도록 허용</string>
+  <string name="assistant_page_local_tools_phone_use_service_off">접근성 서비스가 꺼져 있습니다. 설정을 열려면 이 스위치를 껐다가 다시 켜세요. 시스템에서 해당 옵션이 회색으로 비활성화되어 있으면 먼저 앱 정보에서 이 앱의 제한된 설정을 허용하세요.</string>
+  <string name="assistant_page_local_tools_phone_use_enable_service">접근성 설정에서 \"RikkaHub Phone Use\"를 켜세요</string>
+  <string name="assistant_page_local_tools_phone_use_floating_window_required">먼저 백그라운드 플로팅 창을 켜세요</string>
+  <string name="phone_use_accessibility_description">Phone Use 도구를 활성화하면 AI 어시스턴트가 화면을 읽고 사용자를 대신해 탭, 스와이프, 텍스트 입력을 수행할 수 있습니다. 어시스턴트가 요청한 작업을 실행 중인 경우가 아니면 아무 작업도 수행되지 않습니다.</string>
 </resources>

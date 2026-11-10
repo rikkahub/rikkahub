@@ -1812,4 +1812,10 @@
   <string name="chat_page_select_all">Выбрать все</string>
   <string name="chat_page_deselect_all">Снять все</string>
   <string name="chat_page_clear_selection">Снять выделение</string>
+  <string name="assistant_page_local_tools_phone_use_title">Использование телефона</string>
+  <string name="assistant_page_local_tools_phone_use_desc">Разрешить ИИ читать экран и управлять другими приложениями на этом телефоне</string>
+  <string name="assistant_page_local_tools_phone_use_service_off">Служба доступности выключена. Выключите и снова включите этот переключатель, чтобы открыть настройки. Если система сделает этот пункт серым, сначала разрешите ограниченные настройки для этого приложения в разделе «Информация о приложении».</string>
+  <string name="assistant_page_local_tools_phone_use_enable_service">Включите \"RikkaHub Phone Use\" в настройках специальных возможностей</string>
+  <string name="assistant_page_local_tools_phone_use_floating_window_required">Сначала включите фоновое плавающее окно</string>
+  <string name="phone_use_accessibility_description">Позволяет ИИ-ассистенту читать экран и выполнять за вас нажатия, свайпы и ввод текста, когда вы включаете инструмент Phone Use. Ничего не выполняется, если ассистент не выполняет задачу, которую вы запросили.</string>
 </resources>

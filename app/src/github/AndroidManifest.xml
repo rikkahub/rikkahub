@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <application>
+    <!-- Phone Use：只在 github 渠道声明，Play 不允许用无障碍服务做自动化。
+         Android 11 以下不启用，系统的无障碍设置里不会出现这一项 -->
+    <service
+      android:name=".phoneuse.PhoneUseAccessibilityService"
+      android:enabled="@bool/phone_use_supported"
+      android:exported="true"
+      android:label="@string/phone_use_accessibility_label"
+      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService" />
+      </intent-filter>
+      <meta-data
+        android:name="android.accessibilityservice"
+        android:resource="@xml/phone_use_accessibility" />
+    </service>
+  </application>
+
+</manifest>

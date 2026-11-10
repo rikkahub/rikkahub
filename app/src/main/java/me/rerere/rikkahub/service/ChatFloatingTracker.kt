@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.scan
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.data.ai.tools.local.PHONE_USE_TOOL_NAME
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import kotlin.uuid.Uuid
 
@@ -31,6 +32,7 @@ data class FloatingChatWindow(val conversationId: Uuid, val expanded: Boolean)
  *
  * 只在开关打开、应用在后台时工作：切到后台时正在生成的会话，以及之后开始生成的会话成为目标；
  * 生成结束后继续显示，方便直接回复推进，用户关掉后等下一个开始生成的会话。
+ * 用了 Phone Use 的一轮结束时自动展开成面板。
  * 回到前台时全部重置，在应用里看着生成完的会话，切到后台不会再弹出来。
  */
 class ChatFloatingTracker(
@@ -95,8 +97,18 @@ class ChatFloatingTracker(
     // 每次切到后台从头开始，这时已经在生成的会话也算刚开始
     private fun trackInBackground(): Flow<FloatingChatWindow?> =
         merge(chatService.getConversationJobs().map { Action.JobsChanged(it.keys) }, actions)
-            .scan(TrackingState()) { state, action -> state.reduce(action) }
+            .scan(TrackingState()) { state, action -> state.reduce(action, ::usedPhoneUse) }
             .map { it.window }
+
+    // 生成结束时本轮的回复还留着，下一轮开始才清掉
+    private fun usedPhoneUse(conversationId: Uuid): Boolean {
+        val replyId = chatService.getReplyMessageIdFlow(conversationId).value ?: return false
+        return chatService.getConversationFlow(conversationId).value.messageNodes.any { node ->
+            node.messages.any { message ->
+                message.id == replyId && message.getTools().any { it.toolName == PHONE_USE_TOOL_NAME }
+            }
+        }
+    }
 
     internal sealed interface Action {
         data class JobsChanged(val running: Set<Uuid>) : Action
@@ -113,12 +125,22 @@ class ChatFloatingTracker(
     ) {
         val window: FloatingChatWindow? get() = target?.let { FloatingChatWindow(it, expanded) }
 
-        fun reduce(action: Action): TrackingState = when (action) {
-            // 同时开始的会话任取一个
-            is Action.JobsChanged -> copy(
-                running = action.running,
-                target = (action.running - running).lastOrNull() ?: target,
-            )
+        /**
+         * [expandWhenFinished] 决定目标会话这一轮结束时要不要自动展开面板。
+         * Phone Use 的轮次停下来（做完、出错、等审批或等回答）时用户正看着别的应用，结果或要处理的事直接展开给他看；
+         * 普通聊天不展开，切出去做别的事时不被打断。
+         */
+        fun reduce(action: Action, expandWhenFinished: (Uuid) -> Boolean = { false }): TrackingState = when (action) {
+            is Action.JobsChanged -> {
+                // 同时开始的会话任取一个
+                val started = (action.running - running).lastOrNull()
+                val finished = target?.takeIf { started == null && it in running && it !in action.running }
+                copy(
+                    running = action.running,
+                    target = started ?: target,
+                    expanded = expanded || (finished != null && expandWhenFinished(finished)),
+                )
+            }
 
             Action.Expand -> copy(expanded = target != null)
             Action.Collapse -> copy(expanded = false)

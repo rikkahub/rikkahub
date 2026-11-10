@@ -20,6 +20,10 @@ source_patterns:
   - "*/src/main/**/*.java"
   - "*/src/main/AndroidManifest.xml"
   - "*/src/main/res/xml/*.xml"
+  # github 渠道独有的代码和资源（Phone Use 的无障碍服务）也引用 main 里的字符串
+  - "*/src/github/**/*.kt"
+  - "*/src/github/AndroidManifest.xml"
+  - "*/src/github/res/xml/*.xml"
 
 # 支持的语言列表
 languages:

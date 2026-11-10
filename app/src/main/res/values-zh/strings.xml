@@ -1823,4 +1823,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_select_all">全选</string>
   <string name="chat_page_deselect_all">取消全选</string>
   <string name="chat_page_clear_selection">清除选择</string>
+  <string name="assistant_page_local_tools_phone_use_title">Phone Use</string>
+  <string name="assistant_page_local_tools_phone_use_desc">允许 AI 读取屏幕并操作此手机上的其他应用</string>
+  <string name="assistant_page_local_tools_phone_use_service_off">无障碍服务已关闭。请将此开关关闭再打开，以进入设置。若该选项在系统中呈灰色不可用，请先在\"应用信息\"中为此应用允许受限设置。</string>
+  <string name="assistant_page_local_tools_phone_use_enable_service">在无障碍设置中开启 \"RikkaHub Phone Use\"</string>
+  <string name="assistant_page_local_tools_phone_use_floating_window_required">请先开启后台悬浮窗</string>
+  <string name="phone_use_accessibility_description">启用 Phone Use 工具后，允许 AI 助手读取屏幕并为您执行点按、滑动和文本输入。除非助手正在运行您请求的任务，否则不会执行任何操作。</string>
 </resources>

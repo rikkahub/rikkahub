@@ -57,4 +57,27 @@ class ChatFloatingTrackerTest {
             .reduce(Action.JobsChanged(setOf(a)))
         assertEquals(false, restarted.window?.expanded)
     }
+
+    @Test
+    fun `panel expands when a phone use turn of the target finishes`() {
+        val running = reduce(Action.JobsChanged(setOf(a)))
+        assertEquals(true, running.reduce(Action.JobsChanged(emptySet())) { it == a }.window?.expanded)
+        // 普通聊天结束不打扰
+        assertEquals(false, running.reduce(Action.JobsChanged(emptySet())) { false }.window?.expanded)
+    }
+
+    @Test
+    fun `finishing a conversation that is not the target does not expand`() {
+        // b 后开始，是目标；a 结束与悬浮窗无关
+        val state = reduce(Action.JobsChanged(setOf(a)), Action.JobsChanged(setOf(a, b)))
+            .reduce(Action.JobsChanged(setOf(b))) { true }
+        assertEquals(FloatingChatWindow(b, expanded = false), state.window)
+    }
+
+    @Test
+    fun `dismissed target does not expand when its turn finishes`() {
+        val state = reduce(Action.JobsChanged(setOf(a)), Action.Dismiss)
+            .reduce(Action.JobsChanged(emptySet())) { true }
+        assertNull(state.window)
+    }
 }

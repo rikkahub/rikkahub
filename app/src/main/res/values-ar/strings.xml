@@ -1810,4 +1810,10 @@
   <string name="chat_page_select_all">تحديد الكل</string>
   <string name="chat_page_deselect_all">إلغاء تحديد الكل</string>
   <string name="chat_page_clear_selection">إلغاء التحديد</string>
+  <string name="assistant_page_local_tools_phone_use_title">استخدام الهاتف</string>
+  <string name="assistant_page_local_tools_phone_use_desc">اسمح للذكاء الاصطناعي بقراءة الشاشة والتحكم في التطبيقات الأخرى على هذا الهاتف</string>
+  <string name="assistant_page_local_tools_phone_use_service_off">خدمة إمكانية الوصول متوقفة. أطفئ هذا المفتاح ثم أعد تشغيله لفتح الإعدادات. إذا جعل النظام هذا الخيار باهتًا، فاسمح بالإعدادات المقيّدة لهذا التطبيق من معلومات التطبيق أولًا.</string>
+  <string name="assistant_page_local_tools_phone_use_enable_service">فعّل \"RikkaHub Phone Use\" في إعدادات إمكانية الوصول</string>
+  <string name="assistant_page_local_tools_phone_use_floating_window_required">فعّل النافذة العائمة في الخلفية أولًا</string>
+  <string name="phone_use_accessibility_description">يتيح مساعد الذكاء الاصطناعي قراءة الشاشة وتنفيذ النقرات والسحب وإدخال النص نيابةً عنك عند تمكين أداة استخدام الهاتف. لن يُنفَّذ أي شيء ما لم يكن المساعد ينفّذ مهمة طلبتها.</string>
 </resources>

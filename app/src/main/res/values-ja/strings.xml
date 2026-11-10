@@ -1812,4 +1812,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_select_all">すべて選択</string>
   <string name="chat_page_deselect_all">すべて選択解除</string>
   <string name="chat_page_clear_selection">選択を解除</string>
+  <string name="assistant_page_local_tools_phone_use_title">スマホ操作</string>
+  <string name="assistant_page_local_tools_phone_use_desc">AI が画面を読み取り、この端末上の他のアプリを操作できるようにします</string>
+  <string name="assistant_page_local_tools_phone_use_service_off">ユーザー補助サービスがオフです。このスイッチをオフにしてから再度オンにすると設定が開きます。システムでこのオプションがグレー表示される場合は、先にアプリ情報でこのアプリの制限付き設定を許可してください。</string>
+  <string name="assistant_page_local_tools_phone_use_enable_service">ユーザー補助設定で\"RikkaHub Phone Use\"をオンにしてください</string>
+  <string name="assistant_page_local_tools_phone_use_floating_window_required">先にバックグラウンドのフローティングウィンドウを有効にしてください</string>
+  <string name="phone_use_accessibility_description">Phone Useツールを有効にすると、AIアシスタントが画面を読み取り、タップ、スワイプ、テキスト入力を代行できるようになります。アシスタントがあなたの依頼したタスクを実行している場合にのみ動作し、それ以外は何も行われません。</string>
 </resources>

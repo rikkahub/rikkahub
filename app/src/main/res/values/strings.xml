@@ -1821,4 +1821,10 @@
   <string name="chat_page_select_all">Select all</string>
   <string name="chat_page_deselect_all">Deselect all</string>
   <string name="chat_page_clear_selection">Clear selection</string>
+  <string name="assistant_page_local_tools_phone_use_title">Phone Use</string>
+  <string name="assistant_page_local_tools_phone_use_desc">Let the AI read the screen and operate other apps on this phone</string>
+  <string name="assistant_page_local_tools_phone_use_service_off">The accessibility service is off. Turn this switch off and on again to open the settings. If the system greys the option out, allow restricted settings for this app in App info first.</string>
+  <string name="assistant_page_local_tools_phone_use_enable_service">Turn on \"RikkaHub Phone Use\" in the accessibility settings</string>
+  <string name="assistant_page_local_tools_phone_use_floating_window_required">Turn on the background floating window first</string>
+  <string name="phone_use_accessibility_description">Lets the AI assistant read the screen and perform taps, swipes and text input for you when you enable the Phone Use tool. Nothing is done unless the assistant is running a task you asked for.</string>
 </resources>
