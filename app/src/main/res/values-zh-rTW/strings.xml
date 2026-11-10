@@ -1828,4 +1828,9 @@
   <string name="workspace_ssh_editor_target_host_key">伺服器主機金鑰</string>
   <string name="workspace_ssh_editor_jump_host_key_confirm">確認跳板主機金鑰</string>
   <string name="workspace_ssh_editor_jump_host_key_changed">跳板主機金鑰已變更</string>
+  <string name="setting_display_page_auto_compress_title">自動壓縮上下文</string>
+  <string name="setting_display_page_auto_compress_desc">回覆後，當上下文使用量超過設定比例時，自動將歷史記錄壓縮為摘要</string>
+  <string name="setting_display_page_auto_compress_threshold_title">觸發比例</string>
+  <string name="setting_display_page_auto_compress_threshold_desc">相對於聊天模型的上下文視窗</string>
+  <string name="error_title_auto_compress">自動壓縮失敗</string>
 </resources>

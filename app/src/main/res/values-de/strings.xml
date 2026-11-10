@@ -1828,4 +1828,9 @@
   <string name="workspace_ssh_editor_jump_host_key_confirm">Jump-Host-Schlüssel bestätigen</string>
   <string name="workspace_ssh_editor_jump_host_key_changed">Jump-Host-Schlüssel geändert</string>
   <string name="workspace_ssh_editor_missing_jump_fields">Gib Host, Port und Benutzername des Jump-Hosts ein</string>
+  <string name="setting_display_page_auto_compress_title">Kontext automatisch komprimieren</string>
+  <string name="setting_display_page_auto_compress_desc">Komprimiert nach einer Antwort den Verlauf automatisch zu einer Zusammenfassung, wenn die Kontextauslastung den festgelegten Anteil überschreitet</string>
+  <string name="setting_display_page_auto_compress_threshold_title">Auslöseverhältnis</string>
+  <string name="setting_display_page_auto_compress_threshold_desc">Relativ zum Kontextfenster des Chatmodells</string>
+  <string name="error_title_auto_compress">Automatische Komprimierung fehlgeschlagen</string>
 </resources>

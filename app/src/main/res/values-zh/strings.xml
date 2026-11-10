@@ -1830,4 +1830,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_phone_use_enable_service">在无障碍设置中开启 \"RikkaHub Phone Use\"</string>
   <string name="assistant_page_local_tools_phone_use_floating_window_required">请先开启后台悬浮窗</string>
   <string name="phone_use_accessibility_description">启用 Phone Use 工具后，允许 AI 助手读取屏幕并为您执行点按、滑动和文本输入。除非助手正在运行您请求的任务，否则不会执行任何操作。</string>
+  <string name="setting_display_page_auto_compress_title">自动压缩上下文</string>
+  <string name="setting_display_page_auto_compress_desc">回复后，当上下文使用率超过设定比例时，自动将历史记录压缩为摘要</string>
+  <string name="setting_display_page_auto_compress_threshold_title">触发比例</string>
+  <string name="setting_display_page_auto_compress_threshold_desc">相对于聊天模型的上下文窗口</string>
+  <string name="error_title_auto_compress">自动压缩失败</string>
 </resources>

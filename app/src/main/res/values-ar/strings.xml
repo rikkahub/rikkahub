@@ -1828,4 +1828,9 @@
   <string name="workspace_ssh_editor_target_host_key">مفتاح مضيف الخادم</string>
   <string name="workspace_ssh_editor_jump_host_key_confirm">تأكيد مفتاح مضيف العبور</string>
   <string name="workspace_ssh_editor_jump_host_key_changed">تغيّر مفتاح مضيف العبور</string>
+  <string name="setting_display_page_auto_compress_title">ضغط السياق تلقائيًا</string>
+  <string name="setting_display_page_auto_compress_desc">بعد الرد، يتم ضغط السجل تلقائيًا إلى ملخص عندما يتجاوز استخدام السياق النسبة المحددة</string>
+  <string name="setting_display_page_auto_compress_threshold_title">نسبة التفعيل</string>
+  <string name="setting_display_page_auto_compress_threshold_desc">بالنسبة إلى نافذة سياق نموذج الدردشة</string>
+  <string name="error_title_auto_compress">فشل الضغط التلقائي</string>
 </resources>

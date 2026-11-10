@@ -1830,4 +1830,9 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_ssh_editor_target_host_key">サーバーのホスト鍵</string>
   <string name="workspace_ssh_editor_jump_host_key_confirm">ジャンプホストのホスト鍵を確認</string>
   <string name="workspace_ssh_editor_jump_host_key_changed">ジャンプホストのホスト鍵が変更されました</string>
+  <string name="setting_display_page_auto_compress_title">コンテキストの自動圧縮</string>
+  <string name="setting_display_page_auto_compress_desc">返信後、コンテキスト使用率が設定した割合を超えた場合、履歴を自動的に要約に圧縮します</string>
+  <string name="setting_display_page_auto_compress_threshold_title">発動比率</string>
+  <string name="setting_display_page_auto_compress_threshold_desc">チャットモデルのコンテキストウィンドウを基準とした相対値</string>
+  <string name="error_title_auto_compress">自動圧縮に失敗しました</string>
 </resources>

@@ -82,6 +82,7 @@ fun ChatList(
     previewListState: LazyListState,
     selectionState: ChatSelectionState,
     loading: Boolean,
+    compressing: Boolean = false,
     processingStatus: String? = null,
     previewMode: Boolean,
     onPreviewModeChange: (Boolean) -> Unit,
@@ -143,6 +144,7 @@ fun ChatList(
                 conversation = conversation,
                 state = state,
                 loading = loading,
+                compressing = compressing,
                 processingStatus = processingStatus,
                 settings = settings,
                 hazeState = hazeState,
@@ -214,6 +216,7 @@ private fun ChatListNormal(
     conversation: Conversation,
     state: LazyListState,
     loading: Boolean,
+    compressing: Boolean,
     processingStatus: String? = null,
     settings: Settings,
     hazeState: HazeState,
@@ -361,7 +364,7 @@ private fun ChatListNormal(
                             model = node.currentMessage.modelId?.let(modelById::get)
                                 ?: node.currentMessage.snapshotModel(),
                             assistant = assistant,
-                            loading = loading && index == lastMessageIndex,
+                            loading = loading && !compressing && index == lastMessageIndex,
                             onRegenerate = {
                                 onRegenerate(node.currentMessage)
                             },
@@ -407,6 +410,7 @@ private fun ChatListNormal(
                 }
             }
 
+            // 压缩时也用这一行，processingStatus 显示的是压缩中
             if (loading) {
                 item(LoadingIndicatorKey) {
                     Row(

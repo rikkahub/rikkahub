@@ -1828,4 +1828,9 @@
   <string name="assistant_page_local_tools_phone_use_enable_service">Turn on \"RikkaHub Phone Use\" in the accessibility settings</string>
   <string name="assistant_page_local_tools_phone_use_floating_window_required">Turn on the background floating window first</string>
   <string name="phone_use_accessibility_description">Lets the AI assistant read the screen and perform taps, swipes and text input for you when you enable the Phone Use tool. Nothing is done unless the assistant is running a task you asked for.</string>
+  <string name="setting_display_page_auto_compress_title">Auto-compress Context</string>
+  <string name="setting_display_page_auto_compress_desc">After a reply, automatically compress the history into a summary when context usage exceeds the set ratio</string>
+  <string name="setting_display_page_auto_compress_threshold_title">Trigger Ratio</string>
+  <string name="setting_display_page_auto_compress_threshold_desc">Relative to the chat model\'s context window</string>
+  <string name="error_title_auto_compress">Auto-compression failed</string>
 </resources>

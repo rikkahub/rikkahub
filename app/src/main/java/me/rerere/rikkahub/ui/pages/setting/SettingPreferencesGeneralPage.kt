@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.AUTO_COMPRESS_THRESHOLD_RANGE
 import me.rerere.rikkahub.data.datastore.BackgroundEffectType
 import me.rerere.rikkahub.data.datastore.DisplaySetting
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -90,6 +91,40 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                         supportingContent = { Text(stringResource(R.string.setting_display_page_send_on_enter_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_display_page_send_on_enter_title)) },
                     )
+                }
+            }
+
+            item {
+                CardGroup {
+                    switchItem(
+                        checked = settings.enableAutoCompress,
+                        onCheckedChange = {
+                            vm.updateSettings { latest -> latest.copy(enableAutoCompress = it) }
+                        },
+                        supportingContent = { Text(stringResource(R.string.setting_display_page_auto_compress_desc)) },
+                        headlineContent = { Text(stringResource(R.string.setting_display_page_auto_compress_title)) },
+                    )
+                    if (settings.enableAutoCompress) {
+                        formItem(
+                            headlineContent = { Text(stringResource(R.string.setting_display_page_auto_compress_threshold_title)) },
+                            supportingContent = { Text(stringResource(R.string.setting_display_page_auto_compress_threshold_desc)) },
+                            trailingContent = {
+                                CardGroupValue("${(settings.autoCompressThreshold * 100).roundToInt()}%")
+                            },
+                        ) {
+                            Slider(
+                                value = settings.autoCompressThreshold,
+                                onValueChange = {
+                                    // 按 5% 取整，避免浮点误差存成 0.79999995 之类的值
+                                    val value = (it * 20).roundToInt() / 20f
+                                    vm.updateSettings { latest -> latest.copy(autoCompressThreshold = value) }
+                                },
+                                valueRange = AUTO_COMPRESS_THRESHOLD_RANGE,
+                                steps = 8,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
                 }
             }
 

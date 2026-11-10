@@ -111,6 +111,11 @@ class ConversationSessionManager(
             session?.generationJob ?: flowOf(null)
         }
 
+    fun getActivityFlow(conversationId: Uuid): Flow<SessionActivity?> =
+        sessions.map { it[conversationId] }.distinctUntilChanged().flatMapLatest { session ->
+            session?.activity ?: flowOf(null)
+        }
+
     fun getConversationJobs(): Flow<Map<Uuid, Job?>> = sessions.flatMapLatest { current ->
         if (current.isEmpty()) {
             flowOf(emptyMap())

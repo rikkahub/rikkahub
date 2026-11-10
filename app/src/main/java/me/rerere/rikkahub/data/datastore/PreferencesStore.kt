@@ -127,6 +127,10 @@ class SettingsStore internal constructor(
         val OCR_MODEL = stringPreferencesKey("ocr_model")
         val OCR_PROMPT = stringPreferencesKey("ocr_prompt")
 
+        // 自动压缩
+        val ENABLE_AUTO_COMPRESS = booleanPreferencesKey("enable_auto_compress")
+        val AUTO_COMPRESS_THRESHOLD = floatPreferencesKey("auto_compress_threshold")
+
         // 提供商
         val PROVIDERS = stringPreferencesKey("providers")
 

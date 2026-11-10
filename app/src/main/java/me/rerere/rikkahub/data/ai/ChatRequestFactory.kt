@@ -2,6 +2,9 @@ package me.rerere.rikkahub.data.ai
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import me.rerere.ai.agent.AgentHooks
 import me.rerere.ai.agent.AgentRequest
@@ -174,6 +177,22 @@ class ChatRequestFactory(
      * 工具定义必须保留：它属于请求前缀，去掉或改动 tool_choice 都会让缓存失效。
      */
     suspend fun generateCompressionSummary(
+        turn: ChatTurnContext,
+        messages: List<UIMessage>,
+        compressPrompt: String,
+    ): String {
+        // 组装请求要把全部历史过一遍输入转换器，长对话要算好几秒：不能放在调用方的主线程上，
+        // 这段纯计算里也检查不到取消。放进独立的协程，调用方取消时 await 立刻返回、不用等它算完；
+        // 没算完的那份同时被取消，在下一个挂起点停下，最迟在发出请求之前
+        val work = CoroutineScope(Dispatchers.IO).async { requestCompressionSummary(turn, messages, compressPrompt) }
+        return try {
+            work.await()
+        } finally {
+            work.cancel()
+        }
+    }
+
+    private suspend fun requestCompressionSummary(
         turn: ChatTurnContext,
         messages: List<UIMessage>,
         compressPrompt: String,

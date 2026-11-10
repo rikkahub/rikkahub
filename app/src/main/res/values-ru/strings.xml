@@ -1830,4 +1830,9 @@
   <string name="workspace_ssh_editor_target_host_key">Ключ хоста сервера</string>
   <string name="workspace_ssh_editor_jump_host_key_confirm">Подтвердите ключ промежуточного хоста</string>
   <string name="workspace_ssh_editor_jump_host_key_changed">Ключ промежуточного хоста изменился</string>
+  <string name="setting_display_page_auto_compress_title">Автосжатие контекста</string>
+  <string name="setting_display_page_auto_compress_desc">После ответа автоматически сжимать историю в сводку, когда использование контекста превышает заданную долю</string>
+  <string name="setting_display_page_auto_compress_threshold_title">Коэффициент срабатывания</string>
+  <string name="setting_display_page_auto_compress_threshold_desc">Относительно контекстного окна модели чата</string>
+  <string name="error_title_auto_compress">Не удалось выполнить автосжатие</string>
 </resources>

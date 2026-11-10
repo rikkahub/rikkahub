@@ -1830,4 +1830,9 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="workspace_ssh_editor_target_host_key">서버 호스트 키</string>
   <string name="workspace_ssh_editor_jump_host_key_confirm">점프 호스트 키 확인</string>
   <string name="workspace_ssh_editor_jump_host_key_changed">점프 호스트 키가 변경됨</string>
+  <string name="setting_display_page_auto_compress_title">컨텍스트 자동 압축</string>
+  <string name="setting_display_page_auto_compress_desc">답변이 완료된 후 컨텍스트 사용량이 설정된 비율을 초과하면 대화 기록을 자동으로 요약으로 압축합니다</string>
+  <string name="setting_display_page_auto_compress_threshold_title">발동 비율</string>
+  <string name="setting_display_page_auto_compress_threshold_desc">채팅 모델의 컨텍스트 윈도우 기준</string>
+  <string name="error_title_auto_compress">자동 압축 실패</string>
 </resources>
