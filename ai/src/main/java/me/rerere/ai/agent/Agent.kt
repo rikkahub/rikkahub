@@ -56,6 +56,13 @@ interface AgentHooks {
      * 否则追加的内容会变成新的一轮。返回的 part 会立即写回消息，调用方取出后应当不再重复返回。
      */
     suspend fun pendingParts(): List<UIMessagePart> = emptyList()
+
+    /**
+     * 一批工具执行完、再次请求模型之前调用，返回 true 时以 [AgentFinishReason.Paused] 结束这次运行。
+     *
+     * 这时 [message] 上的工具调用都已经有结果，调用方可以在这里改写历史（比如压缩上下文）再开始下一次运行。
+     */
+    suspend fun shouldPause(message: UIMessage): Boolean = false
 }
 
 data class StepRequest(
@@ -81,12 +88,15 @@ sealed interface AgentFinishReason {
     /** 有工具在等待用户审批；写入审批结果后，用这条消息再运行一次即可继续 */
     data class AwaitingApproval(val toolCallIds: Set<String>) : AgentFinishReason
 
+    /** [AgentHooks.shouldPause] 要求停下：工具都已经执行，模型还没有回复；再运行一次即可继续 */
+    data object Paused : AgentFinishReason
+
     /** 达到 [AgentRequest.maxSteps]，最后一步调用的工具已经执行，但模型还没有回复 */
     data object StepLimitReached : AgentFinishReason
 }
 
 /**
- * 运行 agent 循环：请求模型 → 执行工具 → 再请求模型，直到模型不再调用工具、有工具需要审批或达到步数上限。
+ * 运行 agent 循环：请求模型 → 执行工具 → 再请求模型，直到模型不再调用工具、有工具需要审批、调用方要求暂停或达到步数上限。
  *
  * 工具按调用顺序逐个执行，有任意一个需要审批时，同一批的工具都等审批后再一起执行。
  * 返回的 Flow 不切换调度器，Provider 请求和工具执行都在收集方的上下文里运行，需要时由调用方 flowOn。

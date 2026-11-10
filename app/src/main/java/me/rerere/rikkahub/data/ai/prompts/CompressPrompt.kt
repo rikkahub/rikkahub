@@ -3,10 +3,13 @@ package me.rerere.rikkahub.data.ai.prompts
 /**
  * 压缩指令，作为一条 user 消息追加在对话末尾，模型直接总结上方的对话历史。
  * 摘要会替代之前的全部历史，按固定的结构输出，避免遗漏继续对话需要的信息。
+ *
+ * [midTurn] 表示压缩发生在一轮回复的中途：压缩完模型只凭摘要接着干活，摘要得写清楚做到哪了。
  */
 internal fun buildCompressPrompt(
     additionalPrompt: String,
     locale: String,
+    midTurn: Boolean = false,
 ): String = buildString {
     appendLine(
         """
@@ -43,6 +46,14 @@ internal fun buildCompressPrompt(
         - Do not add any explanation or commentary outside the summary
         """.trimIndent()
     )
+    if (midTurn) {
+        appendLine()
+        appendLine(
+            """
+            This summary is being written in the middle of your work on the user's latest request, because the context is almost full. Right after it you will continue that work with only the summary as context, and the user will not see or answer anything in between. In "Current State", state exactly which steps are already done, which remain, and the very next action to take, so the work resumes without repeating finished steps.
+            """.trimIndent()
+        )
+    }
     if (additionalPrompt.isNotBlank()) {
         appendLine()
         appendLine("Additional instructions from user: $additionalPrompt")

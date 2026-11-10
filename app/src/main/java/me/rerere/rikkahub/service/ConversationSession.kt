@@ -292,6 +292,12 @@ class ConversationSession(
 
     fun getJob(): Job? = _generationJob.value
 
+    /** 占着任务槽的任务中途换了在做的事（生成回复的中途压缩上下文）；槽空着时不改 */
+    @Synchronized
+    fun setActivity(activity: SessionActivity) {
+        if (_generationJob.value != null) _activity.value = activity
+    }
+
     @Synchronized
     fun cancelJobs(): List<Job> = activeJobs.toList().also { jobs ->
         // Cancel waiters first so a predecessor finishing cannot start the next approval.

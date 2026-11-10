@@ -332,6 +332,43 @@ class AgentLoopTest {
     }
 
     @Test
+    fun `pausing after tools ends the run before the next request and a rerun continues`() = runTest {
+        val pausing = object : AgentHooks by hooks {
+            val asked = mutableListOf<UIMessage>()
+
+            override suspend fun shouldPause(message: UIMessage): Boolean {
+                asked += message
+                return true
+            }
+        }
+        provider.stream {
+            toolCall("call-1", "search")
+            finish()
+        }
+
+        val paused = runToEnd(request(tools = listOf(tool("search"))), pausing).finished()
+
+        assertEquals(AgentFinishReason.Paused, paused.reason)
+        assertTrue(paused.message.tool("call-1").isExecuted)
+        assertEquals(1, provider.requests.size)
+        assertTrue(pausing.asked.single().tool("call-1").isExecuted)
+
+        // 接着这条消息再运行：工具已经执行完，不会还没请求模型就再次暂停
+        provider.stream {
+            text("done")
+            finish()
+        }
+        val finished = runToEnd(
+            request(messages = listOf(UIMessage.user("hi"), paused.message), tools = listOf(tool("search"))),
+            pausing,
+        ).finished()
+
+        assertEquals(AgentFinishReason.Completed, finished.reason)
+        assertEquals(listOf("done"), finished.message.texts())
+        assertEquals(1, pausing.asked.size)
+    }
+
+    @Test
     fun `step limit ends the run after the last request's tools are executed`() = runTest {
         provider.stream {
             toolCall("call-1", "search")

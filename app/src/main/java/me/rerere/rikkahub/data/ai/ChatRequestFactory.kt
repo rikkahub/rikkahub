@@ -12,6 +12,7 @@ import me.rerere.ai.agent.RetryPolicy
 import me.rerere.ai.agent.StepRequest
 import me.rerere.ai.agent.expandNotices
 import me.rerere.ai.agent.withRetry
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
@@ -128,12 +129,14 @@ class ChatRequestFactory(
     /**
      * 本轮交给 runAgent 的请求和钩子。[messages] 的最后一条是助手消息时从它继续，否则新建一条助手消息。
      * [processingStatus] 用来显示 OCR 这类输入转换的进度；[takePendingParts] 取出要在请求模型前写进助手消息的通知。
+     * [pauseAfterTools] 在一批工具执行完之后调用，返回 true 时这次运行以 Paused 结束。
      */
     fun createAgent(
         turn: ChatTurnContext,
         messages: List<UIMessage>,
         processingStatus: MutableStateFlow<String?>,
         takePendingParts: suspend () -> List<UIMessagePart> = { emptyList() },
+        pauseAfterTools: (UIMessage) -> Boolean = { false },
     ): Pair<AgentRequest, AgentHooks> {
         val request = AgentRequest(
             provider = usageRecorder.wrap(
@@ -165,6 +168,8 @@ class ChatRequestFactory(
                 }
 
             override suspend fun pendingParts() = takePendingParts()
+
+            override suspend fun shouldPause(message: UIMessage) = pauseAfterTools(message)
         }
         return request to hooks
     }
@@ -251,7 +256,7 @@ class ChatRequestFactory(
             if (system.isNotBlank()) {
                 add(UIMessage.system(prompt = system).copy(isSynthetic = true))
             }
-            addAll(messages.limitContext(assistant.contextMessageLimit))
+            addAll(messages.limitContext(assistant.contextMessageLimit).withContinuationHint())
         }.transforms(
             transformers = inputTransformers,
             context = context,
@@ -279,6 +284,26 @@ class ChatRequestFactory(
             sessionId = turn.conversationId.toString(),
         )
         return StepRequest(requestMessages, params)
+    }
+}
+
+private const val CONTINUATION_HINT =
+    "The conversation history before this point was replaced by the summary above. " +
+        "If a task was in progress, continue it from where it left off: do not reply to the summary itself, " +
+        "and do not ask the user to repeat anything."
+
+/**
+ * 检查点后面不是用户消息时（一轮中途压缩，后面直接是助手的回复或什么都没有），告诉模型接着干活，
+ * 否则它会把摘要当成用户发来的内容去回应。
+ *
+ * 按"后面不是用户消息"而不是"在末尾"判断：这一轮之后的请求里检查点仍然带着这段话，前缀不变，不影响提示词缓存。
+ */
+internal fun List<UIMessage>.withContinuationHint(): List<UIMessage> {
+    val index = indexOfLast { it.isContextCheckpoint }
+    if (index < 0 || getOrNull(index + 1)?.role == MessageRole.USER) return this
+    val checkpoint = this[index]
+    return toMutableList().also {
+        it[index] = checkpoint.copy(parts = checkpoint.parts + UIMessagePart.Text(CONTINUATION_HINT))
     }
 }
 
