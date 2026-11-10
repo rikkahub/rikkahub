@@ -228,6 +228,15 @@ private fun MainPage(vm: DebugVM) {
             Text("创建 1024 个消息的聊天")
         }
 
+        Button(
+            onClick = {
+                vm.createConversationWithTokens(500_000)
+                toaster.show("正在创建约 500k token 的对话...")
+            }
+        ) {
+            Text("创建 500k token 对话")
+        }
+
         HorizontalDivider()
 
         Text("Launch Stats", style = MaterialTheme.typography.labelMedium)

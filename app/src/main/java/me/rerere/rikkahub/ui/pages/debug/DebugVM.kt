@@ -2,13 +2,17 @@ package me.rerere.rikkahub.ui.pages.debug
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANT_ID
@@ -18,10 +22,8 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Clock
 import kotlin.random.Random
+import kotlin.time.Clock
 import kotlin.uuid.Uuid
 
 class DebugVM(
@@ -170,6 +172,64 @@ class DebugVM(
         }
     }
 
+    /**
+     * 创建一个上下文约 [targetTokens] token 的对话，用来测试上下文压缩。
+     *
+     * 正文用常见英文短词拼句子，这些词基本一个词一个 token，按词数估算；实际用量以模型返回为准。
+     * 最后一条助手消息带上估算的用量，打开对话就能在上下文占用环上看到。
+     */
+    fun createConversationWithTokens(targetTokens: Int = 500_000) {
+        viewModelScope.launch(Dispatchers.Default) {
+            val tokensPerMessage = 10_000
+            val messageCount = (targetTokens / tokensPerMessage).coerceAtLeast(2).let { it + it % 2 }
+            val timeZone = TimeZone.currentSystemDefault()
+            val random = Random(targetTokens)
+            val messageNodes = List(messageCount) { index ->
+                val role = if (index % 2 == 0) MessageRole.USER else MessageRole.ASSISTANT
+                val text = buildString {
+                    // 每段带编号，压缩出来的摘要能看出有没有覆盖到全部内容
+                    append("Section ${index + 1} (${role.name.lowercase()}):\n")
+                    var tokens = 0
+                    while (tokens < tokensPerMessage) {
+                        val words = random.nextInt(8, 17)
+                        repeat(words) { i ->
+                            if (i > 0) append(' ')
+                            append(TOKEN_WORDS[random.nextInt(TOKEN_WORDS.size)])
+                        }
+                        append(". ")
+                        tokens += words + 1
+                    }
+                }
+                val isLast = index == messageCount - 1
+                val message = UIMessage(
+                    id = Uuid.random(),
+                    role = role,
+                    parts = listOf(UIMessagePart.Text(text)),
+                    createdAt = Clock.System.now().toLocalDateTime(timeZone),
+                    lastUsage = if (isLast) {
+                        TokenUsage(
+                            promptTokens = messageCount * tokensPerMessage - tokensPerMessage,
+                            completionTokens = tokensPerMessage,
+                            totalTokens = messageCount * tokensPerMessage,
+                        )
+                    } else {
+                        null
+                    },
+                )
+                MessageNode.of(message)
+            }
+
+            val conversation = Conversation(
+                id = Uuid.random(),
+                assistantId = DEFAULT_ASSISTANT_ID,
+                title = "约 ${targetTokens / 1000}k token 对话测试",
+                messageNodes = messageNodes,
+            )
+
+            conversationRepository.insertConversation(conversation)
+        }
+    }
+
     private fun randomMessageText(index: Int, role: MessageRole): String {
         val fragments = listOf(
             "快速", "随机", "消息", "样例", "用于", "测试", "列表", "渲染", "滚动", "性能",
@@ -181,3 +241,15 @@ class DebugVM(
         return "$prefix#${index + 1}: $body"
     }
 }
+
+// 常见英文短词，主流分词器里基本都是一个 token
+private val TOKEN_WORDS = listOf(
+    "the", "a", "of", "to", "and", "in", "is", "it", "that", "for", "on", "with", "as", "was", "at",
+    "by", "be", "this", "from", "or", "but", "not", "are", "we", "you", "they", "he", "she", "can",
+    "will", "one", "all", "new", "time", "day", "way", "people", "year", "work", "life", "world",
+    "city", "river", "house", "road", "light", "water", "story", "music", "game", "plan", "team",
+    "book", "data", "code", "note", "test", "model", "chat", "file", "user", "event", "result",
+    "small", "large", "good", "great", "old", "long", "early", "late", "high", "low", "open", "red",
+    "blue", "green", "fast", "slow", "make", "take", "find", "keep", "give", "move", "show", "read",
+    "write", "run", "build", "start", "stop", "change", "check", "send", "call", "help", "learn",
+)
