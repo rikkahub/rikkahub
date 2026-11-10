@@ -444,6 +444,7 @@
   <string name="permission_microphone_desc">Microphone permission is required for speech recognition</string>
   <string name="permission_notification">Notification</string>
   <string name="permission_notification_desc">Send notifications</string>
+  <string name="permission_notification_card_desc">Allow notifications to see the progress of background tasks such as AI generation and the web server</string>
   <string name="permission_calendar_read">Read Calendar</string>
   <string name="permission_calendar_read_desc">Read calendar events to answer your schedule-related questions</string>
   <string name="permission_calendar_write">Write Calendar</string>

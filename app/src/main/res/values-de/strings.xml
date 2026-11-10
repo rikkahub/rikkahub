@@ -1819,4 +1819,5 @@
   <string name="assistant_page_local_tools_phone_use_enable_service">Aktiviere \"RikkaHub Phone Use\" in den Bedienungshilfen-Einstellungen</string>
   <string name="assistant_page_local_tools_phone_use_floating_window_required">Aktiviere zuerst das schwebende Hintergrundfenster</string>
   <string name="phone_use_accessibility_description">Ermöglicht dem KI-Assistenten, den Bildschirm zu lesen und Tippen, Wischen und Texteingaben für dich auszuführen, wenn du das Phone-Use-Tool aktivierst. Es wird nichts ausgeführt, solange der Assistent keine von dir angeforderte Aufgabe ausführt.</string>
+  <string name="permission_notification_card_desc">Erlaube Benachrichtigungen, um den Fortschritt von Hintergrundaufgaben wie KI-Generierung und Webserver zu sehen</string>
 </resources>

@@ -1818,4 +1818,5 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_local_tools_phone_use_enable_service">ユーザー補助設定で\"RikkaHub Phone Use\"をオンにしてください</string>
   <string name="assistant_page_local_tools_phone_use_floating_window_required">先にバックグラウンドのフローティングウィンドウを有効にしてください</string>
   <string name="phone_use_accessibility_description">Phone Useツールを有効にすると、AIアシスタントが画面を読み取り、タップ、スワイプ、テキスト入力を代行できるようになります。アシスタントがあなたの依頼したタスクを実行している場合にのみ動作し、それ以外は何も行われません。</string>
+  <string name="permission_notification_card_desc">AI生成やWebサーバーなどのバックグラウンドタスクの進捗を確認するには、通知を許可してください</string>
 </resources>

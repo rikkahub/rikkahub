@@ -1818,4 +1818,5 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_local_tools_phone_use_enable_service">접근성 설정에서 \"RikkaHub Phone Use\"를 켜세요</string>
   <string name="assistant_page_local_tools_phone_use_floating_window_required">먼저 백그라운드 플로팅 창을 켜세요</string>
   <string name="phone_use_accessibility_description">Phone Use 도구를 활성화하면 AI 어시스턴트가 화면을 읽고 사용자를 대신해 탭, 스와이프, 텍스트 입력을 수행할 수 있습니다. 어시스턴트가 요청한 작업을 실행 중인 경우가 아니면 아무 작업도 수행되지 않습니다.</string>
+  <string name="permission_notification_card_desc">AI 생성 및 웹 서버와 같은 백그라운드 작업의 진행 상황을 확인하려면 알림을 허용하세요</string>
 </resources>
