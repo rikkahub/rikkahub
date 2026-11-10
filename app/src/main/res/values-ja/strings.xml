@@ -1819,4 +1819,15 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_local_tools_phone_use_floating_window_required">先にバックグラウンドのフローティングウィンドウを有効にしてください</string>
   <string name="phone_use_accessibility_description">Phone Useツールを有効にすると、AIアシスタントが画面を読み取り、タップ、スワイプ、テキスト入力を代行できるようになります。アシスタントがあなたの依頼したタスクを実行している場合にのみ動作し、それ以外は何も行われません。</string>
   <string name="permission_notification_card_desc">AI生成やWebサーバーなどのバックグラウンドタスクの進捗を確認するには、通知を許可してください</string>
+  <string name="workspace_ssh_editor_missing_jump_fields">ジャンプホストのホスト、ポート、ユーザー名を入力してください</string>
+  <string name="chat_page_compress_keep_recent">最近のメッセージを保持</string>
+  <string name="chat_page_compress_keep_recent_desc">これらのメッセージは圧縮されず、要約の後に残ります。0 にするとすべてを圧縮し、プロンプトキャッシュを最も有効に再利用します。会話が長すぎて圧縮できない場合は、保持するメッセージを増やしてください。</string>
+  <string name="chat_page_compress_not_enough_messages">圧縮するのに十分なメッセージがありません。保持するメッセージ数を減らしてください。</string>
+  <string name="workspace_ssh_editor_jump_host">ジャンプホスト</string>
+  <string name="workspace_ssh_editor_jump_host_enable">ジャンプホスト経由で接続</string>
+  <string name="workspace_ssh_editor_jump_host_enable_desc">最初にジャンプホストへ接続し、それを経由してサーバーに到達します（OpenSSH の ProxyJump と同様）。上記のホストはジャンプホストから名前解決されます</string>
+  <string name="workspace_ssh_editor_jump_host_key">ジャンプホストのホスト鍵</string>
+  <string name="workspace_ssh_editor_target_host_key">サーバーのホスト鍵</string>
+  <string name="workspace_ssh_editor_jump_host_key_confirm">ジャンプホストのホスト鍵を確認</string>
+  <string name="workspace_ssh_editor_jump_host_key_changed">ジャンプホストのホスト鍵が変更されました</string>
 </resources>

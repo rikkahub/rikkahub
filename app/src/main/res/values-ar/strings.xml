@@ -1817,4 +1817,15 @@
   <string name="assistant_page_local_tools_phone_use_floating_window_required">فعّل النافذة العائمة في الخلفية أولًا</string>
   <string name="phone_use_accessibility_description">يتيح مساعد الذكاء الاصطناعي قراءة الشاشة وتنفيذ النقرات والسحب وإدخال النص نيابةً عنك عند تمكين أداة استخدام الهاتف. لن يُنفَّذ أي شيء ما لم يكن المساعد ينفّذ مهمة طلبتها.</string>
   <string name="permission_notification_card_desc">اسمح بالإشعارات لرؤية تقدم المهام في الخلفية مثل توليد الذكاء الاصطناعي وخادم الويب</string>
+  <string name="workspace_ssh_editor_missing_jump_fields">أدخل المضيف والمنفذ واسم المستخدم لمضيف العبور</string>
+  <string name="chat_page_compress_keep_recent">الاحتفاظ بالرسائل الأخيرة</string>
+  <string name="chat_page_compress_keep_recent_desc">لا يتم ضغط هذه الرسائل وتبقى بعد الملخص. القيمة 0 تضغط كل شيء وتحقق أفضل إعادة استخدام لذاكرة التخزين المؤقت للمطالبات؛ إذا كانت المحادثة طويلة جدًا بحيث يتعذر ضغطها، فاحتفظ بمزيد من الرسائل.</string>
+  <string name="chat_page_compress_not_enough_messages">لا توجد رسائل كافية للضغط. قلّل عدد الرسائل المراد الاحتفاظ بها.</string>
+  <string name="workspace_ssh_editor_jump_host">مضيف العبور</string>
+  <string name="workspace_ssh_editor_jump_host_enable">الاتصال عبر مضيف عبور</string>
+  <string name="workspace_ssh_editor_jump_host_enable_desc">اتصل بمضيف عبور أولًا ثم اصل إلى الخادم عبره، مثل ProxyJump في OpenSSH. يُحل اسم المضيف أعلاه من مضيف العبور</string>
+  <string name="workspace_ssh_editor_jump_host_key">مفتاح مضيف العبور</string>
+  <string name="workspace_ssh_editor_target_host_key">مفتاح مضيف الخادم</string>
+  <string name="workspace_ssh_editor_jump_host_key_confirm">تأكيد مفتاح مضيف العبور</string>
+  <string name="workspace_ssh_editor_jump_host_key_changed">تغيّر مفتاح مضيف العبور</string>
 </resources>

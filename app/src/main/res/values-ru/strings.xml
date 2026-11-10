@@ -1819,4 +1819,15 @@
   <string name="assistant_page_local_tools_phone_use_floating_window_required">Сначала включите фоновое плавающее окно</string>
   <string name="phone_use_accessibility_description">Позволяет ИИ-ассистенту читать экран и выполнять за вас нажатия, свайпы и ввод текста, когда вы включаете инструмент Phone Use. Ничего не выполняется, если ассистент не выполняет задачу, которую вы запросили.</string>
   <string name="permission_notification_card_desc">Разрешите уведомления, чтобы отслеживать выполнение фоновых задач, таких как генерация ИИ и работа веб-сервера</string>
+  <string name="workspace_ssh_editor_missing_jump_fields">Введите хост, порт и имя пользователя промежуточного хоста</string>
+  <string name="chat_page_compress_keep_recent">Оставлять последние сообщения</string>
+  <string name="chat_page_compress_keep_recent_desc">Эти сообщения не сжимаются и остаются после сводки. 0 сжимает всё и лучше всего переиспользует кэш промптов; если разговор слишком длинный для сжатия, оставьте больше сообщений.</string>
+  <string name="chat_page_compress_not_enough_messages">Недостаточно сообщений для сжатия. Уменьшите количество сообщений, которые нужно оставить.</string>
+  <string name="workspace_ssh_editor_jump_host">Промежуточный хост</string>
+  <string name="workspace_ssh_editor_jump_host_enable">Подключаться через промежуточный хост</string>
+  <string name="workspace_ssh_editor_jump_host_enable_desc">Сначала подключитесь к промежуточному хосту и через него подключитесь к серверу, как ProxyJump в OpenSSH. Хост выше разрешается с промежуточного хоста</string>
+  <string name="workspace_ssh_editor_jump_host_key">Ключ промежуточного хоста</string>
+  <string name="workspace_ssh_editor_target_host_key">Ключ хоста сервера</string>
+  <string name="workspace_ssh_editor_jump_host_key_confirm">Подтвердите ключ промежуточного хоста</string>
+  <string name="workspace_ssh_editor_jump_host_key_changed">Ключ промежуточного хоста изменился</string>
 </resources>

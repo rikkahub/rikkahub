@@ -1820,4 +1820,12 @@
   <string name="assistant_page_local_tools_phone_use_floating_window_required">Aktiviere zuerst das schwebende Hintergrundfenster</string>
   <string name="phone_use_accessibility_description">Ermöglicht dem KI-Assistenten, den Bildschirm zu lesen und Tippen, Wischen und Texteingaben für dich auszuführen, wenn du das Phone-Use-Tool aktivierst. Es wird nichts ausgeführt, solange der Assistent keine von dir angeforderte Aufgabe ausführt.</string>
   <string name="permission_notification_card_desc">Erlaube Benachrichtigungen, um den Fortschritt von Hintergrundaufgaben wie KI-Generierung und Webserver zu sehen</string>
+  <string name="workspace_ssh_editor_jump_host">Jump-Host</string>
+  <string name="workspace_ssh_editor_jump_host_enable">Über einen Jump-Host verbinden</string>
+  <string name="workspace_ssh_editor_jump_host_enable_desc">Zuerst mit einem Jump-Host verbinden und den Server darüber erreichen, wie ProxyJump in OpenSSH. Der oben angegebene Host wird vom Jump-Host aus aufgelöst</string>
+  <string name="workspace_ssh_editor_jump_host_key">Jump-Host-Schlüssel</string>
+  <string name="workspace_ssh_editor_target_host_key">Server-Hostschlüssel</string>
+  <string name="workspace_ssh_editor_jump_host_key_confirm">Jump-Host-Schlüssel bestätigen</string>
+  <string name="workspace_ssh_editor_jump_host_key_changed">Jump-Host-Schlüssel geändert</string>
+  <string name="workspace_ssh_editor_missing_jump_fields">Gib Host, Port und Benutzername des Jump-Hosts ein</string>
 </resources>

@@ -1819,4 +1819,15 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="assistant_page_local_tools_phone_use_floating_window_required">먼저 백그라운드 플로팅 창을 켜세요</string>
   <string name="phone_use_accessibility_description">Phone Use 도구를 활성화하면 AI 어시스턴트가 화면을 읽고 사용자를 대신해 탭, 스와이프, 텍스트 입력을 수행할 수 있습니다. 어시스턴트가 요청한 작업을 실행 중인 경우가 아니면 아무 작업도 수행되지 않습니다.</string>
   <string name="permission_notification_card_desc">AI 생성 및 웹 서버와 같은 백그라운드 작업의 진행 상황을 확인하려면 알림을 허용하세요</string>
+  <string name="workspace_ssh_editor_missing_jump_fields">점프 호스트의 호스트, 포트, 사용자 이름을 입력하세요.</string>
+  <string name="chat_page_compress_keep_recent">최근 메시지 유지</string>
+  <string name="chat_page_compress_keep_recent_desc">이 메시지는 압축되지 않고 요약 뒤에 남습니다. 0은 모든 메시지를 압축하며 프롬프트 캐시를 가장 잘 재사용합니다. 대화가 너무 길어 압축하기 어렵다면 메시지를 더 많이 유지하세요.</string>
+  <string name="chat_page_compress_not_enough_messages">압축할 메시지가 충분하지 않습니다. 유지할 메시지 수를 줄이세요.</string>
+  <string name="workspace_ssh_editor_jump_host">점프 호스트</string>
+  <string name="workspace_ssh_editor_jump_host_enable">점프 호스트를 통해 연결</string>
+  <string name="workspace_ssh_editor_jump_host_enable_desc">먼저 점프 호스트에 연결한 뒤 이를 통해 서버에 접속합니다(OpenSSH의 ProxyJump와 유사). 위의 호스트는 점프 호스트에서 확인됩니다</string>
+  <string name="workspace_ssh_editor_jump_host_key">점프 호스트 키</string>
+  <string name="workspace_ssh_editor_target_host_key">서버 호스트 키</string>
+  <string name="workspace_ssh_editor_jump_host_key_confirm">점프 호스트 키 확인</string>
+  <string name="workspace_ssh_editor_jump_host_key_changed">점프 호스트 키가 변경됨</string>
 </resources>
