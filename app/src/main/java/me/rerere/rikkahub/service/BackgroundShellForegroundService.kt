@@ -84,7 +84,7 @@ class BackgroundShellForegroundService : Service() {
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
-        // 命令不依赖前台服务才能运行：进程还在就继续跑，只是之后可能被系统回收
+        // specialUse 没有时长限制，这里只是兜底。命令不依赖前台服务才能运行：进程还在就继续跑，只是之后可能被系统回收
         Log.w(TAG, "Foreground service timed out (type=$fgsType)")
         activeTasks.clear()
         if (isForeground) {
@@ -119,7 +119,7 @@ class BackgroundShellForegroundService : Service() {
                     this,
                     NOTIFICATION_ID,
                     notification,
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
                 )
             } else {
                 startForeground(NOTIFICATION_ID, notification)

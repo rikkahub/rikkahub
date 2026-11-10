@@ -126,7 +126,11 @@
     <service
       android:name=".service.BackgroundShellForegroundService"
       android:exported="false"
-      android:foregroundServiceType="dataSync" />
+      android:foregroundServiceType="specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="user-initiated shell commands running in a local sandbox" />
+    </service>
     <service
       android:name=".service.MediaCreationForegroundService"
       android:exported="false"
