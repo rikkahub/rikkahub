@@ -35,13 +35,13 @@
 
 ## ✨ 功能特色
 
-- 🎨 現代化安卓APP設計（Material 3 Expressive / 預測性返回）和 🌙 暗色模式
+- 🎨 現代化安卓APP設計（Material 3 Expressive / 預測性返回）
 - 📦 工作區：基於 proot 的 Linux 智能體環境
+- 📱 Phone Use：讓 AI 操控手機
 - 🎬 媒體生成（圖片、影片）
+- 🔄 多種類型的供應商支持，自定義 API / URL / 模型（目前支持 OpenAI、Google、Anthropic）
 - 🖥️ Web多端訪問支持
 - 🛠️ MCP 與 Skills 支持
-- 🔄 多種類型的供應商支持，自定義 API / URL / 模型（目前支持 OpenAI、Google、Anthropic）
-- 🖼️ 多模態輸入支持
 - 📝 Markdown 渲染（支持代碼高亮、數學公式、表格、Mermaid）
 - 🔍 搜尋功能（Exa、Tavily、Zhipu、LinkUp、Brave、Perplexity、..）
 - 🧩 Prompt 變量（模型名稱、時間等）
@@ -50,6 +50,7 @@
 - 🧠 基於檔案的記憶
 - 📝 AI翻譯
 - 🌐 自定義HTTP請求頭和請求體
+- 💌 SillyTavern 角色卡匯入
 
 ## ✨ 開發
 
