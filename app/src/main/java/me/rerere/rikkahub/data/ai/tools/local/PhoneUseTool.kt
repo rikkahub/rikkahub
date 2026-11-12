@@ -49,6 +49,7 @@ private const val SCREENSHOT_MAX_SIDE = 1568
 internal val PHONE_USE_BLOCKED_APPS = setOf(
     "com.eg.android.AlipayGphone", // 支付宝
     "com.unionpay", // 云闪付
+    "com.tencent.mm", // 微信
     "com.paypal.android.p2pmobile", // PayPal
     "com.google.android.apps.walletnfcrel", // Google Wallet
     "com.google.android.apps.nbu.paisa.user", // Google Pay
