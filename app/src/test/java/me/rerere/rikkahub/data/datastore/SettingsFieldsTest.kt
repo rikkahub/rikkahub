@@ -136,7 +136,7 @@ private val SAMPLE = Settings(
     suggestionPrompt = "suggestion",
     ocrModelId = id(5),
     ocrPrompt = "ocr",
-    enableAutoCompress = true,
+    enableAutoCompress = false,
     autoCompressThreshold = 0.9f,
     assistantId = id(20),
     providers = listOf(ProviderSetting.OpenAI(id = id(31), name = "Provider")),
