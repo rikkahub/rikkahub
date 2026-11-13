@@ -8,6 +8,11 @@ plugins {
 android {
     namespace = "me.rerere.ai"
 
+    buildFeatures {
+        // 请求体日志只在调试构建里打印，靠 BuildConfig.DEBUG 判断
+        buildConfig = true
+    }
+
     defaultConfig {
 //        externalNativeBuild {
 //            cmake {
