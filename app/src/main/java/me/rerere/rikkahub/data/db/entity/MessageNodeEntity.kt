@@ -16,7 +16,8 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("conversation_id")]
+    // 按会话取节点都要按 node_index 排序，索引带上它才不用每次把整个会话取出来排
+    indices = [Index("conversation_id", "node_index")]
 )
 data class MessageNodeEntity(
     @PrimaryKey
@@ -26,7 +27,7 @@ data class MessageNodeEntity(
     @ColumnInfo("node_index")
     val nodeIndex: Int,
     @ColumnInfo("messages")
-    val messages: String,  // JSON serialized List<UIMessage>
+    val messages: String, // JSON serialized List<UIMessage>
     @ColumnInfo("select_index")
     val selectIndex: Int
 )
