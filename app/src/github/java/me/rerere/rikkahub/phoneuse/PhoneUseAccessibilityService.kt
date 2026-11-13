@@ -205,15 +205,24 @@ class PhoneUseAccessibilityService : AccessibilityService(), PhoneController {
             delay(SCREENSHOT_RETRY_DELAY_MS)
             takeScreenshot()
         }
-        return withContext(Dispatchers.Default) {
-            val ratio = maxSide.toFloat() / maxOf(bitmap.width, bitmap.height)
-            val scaled = if (ratio < 1f) {
-                bitmap.scale((bitmap.width * ratio).toInt(), (bitmap.height * ratio).toInt())
-            } else {
-                bitmap
+        // 一张全屏位图十几 MB，连续截图时等 GC 回收来不及，用完立刻释放
+        return try {
+            withContext(Dispatchers.Default) {
+                val ratio = maxSide.toFloat() / maxOf(bitmap.width, bitmap.height)
+                val scaled = if (ratio < 1f) {
+                    bitmap.scale((bitmap.width * ratio).toInt(), (bitmap.height * ratio).toInt())
+                } else {
+                    bitmap
+                }
+                try {
+                    ByteArrayOutputStream().also { scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }
+                        .toByteArray()
+                } finally {
+                    if (scaled !== bitmap) scaled.recycle()
+                }
             }
-            ByteArrayOutputStream().also { scaled.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }
-                .toByteArray()
+        } finally {
+            bitmap.recycle()
         }
     }
 
@@ -226,10 +235,14 @@ class PhoneUseAccessibilityService : AccessibilityService(), PhoneController {
             mainExecutor,
             object : TakeScreenshotCallback {
                 override fun onSuccess(screenshot: ScreenshotResult) {
-                    // 硬件位图不能缩放和压缩，转成普通位图
+                    // 硬件位图不能缩放和压缩，转成普通位图；硬件位图自己还引用着屏幕缓冲区，拷完就释放
                     val bitmap = screenshot.hardwareBuffer.use { buffer ->
-                        Bitmap.wrapHardwareBuffer(buffer, screenshot.colorSpace)
-                            ?.copy(Bitmap.Config.ARGB_8888, false)
+                        val hardware = Bitmap.wrapHardwareBuffer(buffer, screenshot.colorSpace)
+                        try {
+                            hardware?.copy(Bitmap.Config.ARGB_8888, false)
+                        } finally {
+                            hardware?.recycle()
+                        }
                     }
                     if (bitmap != null) {
                         continuation.resume(bitmap)
