@@ -618,11 +618,15 @@ private fun ProviderConfigureGoogle(
                 onCheckedChange = { onEdit(provider.copy(useServiceAccount = it)) },
                 headlineContent = { Text(stringResource(R.string.setting_provider_page_use_service_account)) },
             )
-        } else {
+        }
+        if (!provider.vertexAI || useServiceAccount) {
             switchItem(
                 checked = provider.useInteractionsApi,
                 onCheckedChange = { onEdit(provider.copy(useInteractionsApi = it)) },
                 headlineContent = { Text("Interactions API (Beta)") },
+                supportingContent = if (useServiceAccount) {
+                    { Text("Vertex AI only supports the global, us and eu locations; other locations use generateContent") }
+                } else null,
             )
         }
     }
