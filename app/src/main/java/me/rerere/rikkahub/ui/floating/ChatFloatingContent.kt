@@ -110,6 +110,8 @@ data class FloatingChatUiState(
     val preview: String,
     val previewIsReasoning: Boolean,
     val pendingTools: List<UIMessagePart.Tool>,
+    /** 本轮回复调用过 Phone Use */
+    val usedPhoneUse: Boolean,
     val queuedCount: Int,
     val queuePaused: Boolean,
     /** 这一轮出现的错误 */

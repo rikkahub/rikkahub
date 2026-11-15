@@ -4,6 +4,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.tools.local.PHONE_USE_TOOL_NAME
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.GenerationPhase
 import me.rerere.rikkahub.data.model.MessageNode
@@ -11,6 +12,7 @@ import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.service.InboxState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.uuid.Uuid
 
@@ -80,5 +82,19 @@ class FloatingChatUiStateTest {
         val state = state(regenerated(UIMessage.assistant("new answer")), replyMessageId = null, generating = true)
         assertFalse(state.hasReply)
         assertEquals("", state.preview)
+    }
+
+    // 悬浮窗按这个决定 Phone Use 这一轮要不要保持亮屏，只看本轮的回复
+    @Test
+    fun `phone use is reported only when this reply called it`() {
+        val reply = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(UIMessagePart.Tool(toolCallId = "1", toolName = PHONE_USE_TOOL_NAME, input = "{}")),
+        )
+        val conversation = regenerated(reply)
+        assertTrue(state(conversation, reply.id, generating = true).usedPhoneUse)
+        val otherTool = pendingToolReply()
+        assertFalse(state(regenerated(otherTool), otherTool.id, generating = true).usedPhoneUse)
+        assertFalse(state(conversation, replyMessageId = null, generating = true).usedPhoneUse)
     }
 }

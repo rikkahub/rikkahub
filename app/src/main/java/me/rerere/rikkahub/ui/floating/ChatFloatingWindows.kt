@@ -47,6 +47,7 @@ import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.conversationIntent
+import me.rerere.rikkahub.data.ai.tools.local.PHONE_USE_TOOL_NAME
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.GenerationPhase
 import me.rerere.rikkahub.data.model.generationPhase
@@ -87,6 +88,17 @@ class ChatFloatingWindows(
         .flatMapLatest { id -> if (id == null) flowOf(null) else chatState(id) }
         .stateIn(appScope, SharingStarted.Eagerly, null)
 
+    /**
+     * 用了 Phone Use 的一轮还没结束，包括模型思考、等网络和两次操作之间的间隙，这期间不让屏幕自动熄灭。
+     * Phone Use 操作别的应用时本应用在后台，Activity 上的 FLAG_KEEP_SCREEN_ON 不再起作用，
+     * 只有一直盖在上面的悬浮窗能挡住自动息屏，所以标志加在悬浮窗上。
+     * 这一轮结束（做完、出错、被停止、停下来等审批）或悬浮窗关掉后恢复系统的息屏；按电源键锁屏不受影响。
+     */
+    private val keepScreenOn: StateFlow<Boolean> = uiState
+        .map { it != null && it.generating && it.usedPhoneUse }
+        .distinctUntilChanged()
+        .stateIn(appScope, SharingStarted.Eagerly, false)
+
     // 悬浮窗的 Context 不是 Activity，默认的 UriHandler 打开链接时缺少 NEW_TASK 会崩溃
     private val uriHandler = object : UriHandler {
         override fun openUri(uri: String) {
@@ -106,6 +118,9 @@ class ChatFloatingWindows(
         appScope.launch {
             phoneUseManager.acting.collect(::yieldScreen)
         }
+        appScope.launch {
+            keepScreenOn.collect(::applyKeepScreenOn)
+        }
     }
 
     /**
@@ -117,15 +132,37 @@ class ChatFloatingWindows(
     private fun yieldScreen(yielding: Boolean) {
         // 展开的面板盖住屏幕上半部分还占着输入焦点，模型操作时直接收起
         if (yielding) tracker.collapse()
-        listOfNotNull(bubble, panel).forEach { control ->
-            val window = generateSequence(control.contentView?.parent) { it.parent }
-                .filterIsInstance<FxWindowContainer>()
-                .firstOrNull() ?: return@forEach
+        windows().forEach { window ->
             window.windowParams.alpha = if (yielding) 0f else 1f
             window.setWindowTouchable(!yielding)
             // setWindowTouchable 在标志没变时不会提交，透明度单独提交一次
             if (window.isAttachedToWm) windowManager.updateViewLayout(window, window.windowParams)
         }
+    }
+
+    /**
+     * 气泡和面板都带上标志，哪个显示着都能挡住息屏；隐藏的窗口是 GONE，系统不会因为它亮屏。
+     * 截图时窗口只是变透明，仍然算在屏幕上，保护不会断开。两个窗口切换的间隙很短，
+     * 系统释放亮屏时会按刚有过用户操作重新计时，不会立刻熄屏。
+     * 之后才创建的窗口在 [keepScreenOnParams] 里按当时的状态设置。
+     */
+    private fun applyKeepScreenOn(on: Boolean) {
+        windows().forEach { window ->
+            val flags = window.windowParams.flags
+            keepScreenOnParams(window.windowParams, on)
+            if (window.windowParams.flags != flags && window.isAttachedToWm) {
+                windowManager.updateViewLayout(window, window.windowParams)
+            }
+        }
+    }
+
+    private fun keepScreenOnParams(params: WindowManager.LayoutParams, on: Boolean) {
+        val flag = WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        params.flags = if (on) params.flags or flag else params.flags and flag.inv()
+    }
+
+    private fun windows(): List<FxWindowContainer> = listOfNotNull(bubble, panel).mapNotNull { control ->
+        generateSequence(control.contentView?.parent) { it.parent }.filterIsInstance<FxWindowContainer>().firstOrNull()
     }
 
     private fun chatState(id: Uuid): Flow<FloatingChatUiState> {
@@ -173,7 +210,10 @@ class ChatFloatingWindows(
         adsorb(FxAdsorb.horizontal())
         persist(FxSpStorage(context))
         animation(FxAnimations.scale())
-        systemHost(context) { permission(FxPermissionStrategy.skip()) }
+        systemHost(context) {
+            permission(FxPermissionStrategy.skip())
+            layoutParams { keepScreenOnParams(it, keepScreenOn.value) }
+        }
     }
 
     private fun installPanel(): FxControl = FloatingX.install(PANEL_TAG) {
@@ -205,6 +245,7 @@ class ChatFloatingWindows(
                 it.flags = it.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
                 // wrap_content 的窗口会先按对话框宽度（约 320dp）测量，面板会被压窄
                 it.width = WindowManager.LayoutParams.MATCH_PARENT
+                keepScreenOnParams(it, keepScreenOn.value)
             }
             onBackPressed {
                 tracker.collapse()
@@ -280,6 +321,7 @@ internal fun buildFloatingChatUiState(
         previewIsReasoning = text.isEmpty(),
         // 和 ChatService 判断是否在等审批用同一个条件，否则快速回复会被审批挡住却看不到原因
         pendingTools = conversation.pendingToolCalls,
+        usedPhoneUse = reply?.getTools()?.any { it.toolName == PHONE_USE_TOOL_NAME } == true,
         queuedCount = queue.items.size,
         queuePaused = queue.paused,
         error = error,
