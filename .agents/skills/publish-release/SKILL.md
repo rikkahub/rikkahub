@@ -38,7 +38,7 @@ Updates:
 使用github cli创建release, 并上传 GitHub 渠道的 release apk（`./gradlew assembleGithubRelease` 输出在 app/build/outputs/apk/github/release/）
 
 - 仅上传arm64版本, 上传前重命名apk，添加版本号到文件名内
-- 同时上传 R8 混淆映射 `app/build/outputs/mapping/githubRelease/mapping.txt`，重命名为 `mapping-<版本号>.txt`，用于还原用户反馈的崩溃堆栈（`retrace mapping-<版本号>.txt stacktrace.txt`）
+- 同时上传 R8 混淆映射 `app/build/outputs/mapping/githubRelease/mapping.txt`，用于还原用户反馈的崩溃堆栈。不要直接上传原始 txt，先复制到临时目录并重命名为 `mapping-<版本号>.txt`，再压缩成 `mapping-<版本号>.zip` 上传（如 `zip -j mapping-<版本号>.zip mapping-<版本号>.txt`）；使用时解压后执行 `retrace mapping-<版本号>.txt stacktrace.txt`
 - release标题使用版本号, 描述使用更新日志
 - tag名字使用版本号，不带v
 
