@@ -1856,4 +1856,6 @@
   <string name="chat_message_tool_phone_use_open_app_name">App öffnen: %1$s</string>
   <string name="chat_message_tool_phone_use_list_apps">Apps auflisten</string>
   <string name="chat_message_tool_phone_use_wait">%1$s Sekunden warten</string>
+  <string name="setting_display_page_split_assistant_bubble_title">Blasen nach Absatz aufteilen</string>
+  <string name="setting_display_page_split_assistant_bubble_desc">Jeden Absatz einer Assistentenantwort in einer eigenen Blase anzeigen</string>
 </resources>

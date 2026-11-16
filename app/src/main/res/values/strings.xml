@@ -1856,4 +1856,6 @@
   <string name="chat_message_tool_phone_use_open_app_name">Open app: %1$s</string>
   <string name="chat_message_tool_phone_use_list_apps">List apps</string>
   <string name="chat_message_tool_phone_use_wait">Wait %1$s seconds</string>
+  <string name="setting_display_page_split_assistant_bubble_title">Split Bubbles by Paragraph</string>
+  <string name="setting_display_page_split_assistant_bubble_desc">Show each paragraph of an assistant reply in its own bubble</string>
 </resources>

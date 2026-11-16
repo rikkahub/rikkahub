@@ -1858,4 +1858,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_message_tool_phone_use_open_app_name">アプリを開く: %1$s</string>
   <string name="chat_message_tool_phone_use_list_apps">アプリを一覧表示</string>
   <string name="chat_message_tool_phone_use_wait">%1$s秒待機</string>
+  <string name="setting_display_page_split_assistant_bubble_title">バブルを段落ごとに分割</string>
+  <string name="setting_display_page_split_assistant_bubble_desc">アシスタントの返信の各段落を個別のバブルに表示します</string>
 </resources>

@@ -1858,4 +1858,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="chat_message_tool_phone_use_open_app_name">앱 열기: %1$s</string>
   <string name="chat_message_tool_phone_use_list_apps">앱 목록</string>
   <string name="chat_message_tool_phone_use_wait">%1$s초 대기</string>
+  <string name="setting_display_page_split_assistant_bubble_title">문단별 말풍선 분할</string>
+  <string name="setting_display_page_split_assistant_bubble_desc">어시스턴트 답변의 각 문단을 별도의 말풍선으로 표시</string>
 </resources>

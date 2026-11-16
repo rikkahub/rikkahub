@@ -1858,4 +1858,6 @@
   <string name="chat_message_tool_phone_use_open_app_name">Открыть приложение: %1$s</string>
   <string name="chat_message_tool_phone_use_list_apps">Список приложений</string>
   <string name="chat_message_tool_phone_use_wait">Ожидание %1$s сек.</string>
+  <string name="setting_display_page_split_assistant_bubble_title">Разделять пузыри по абзацам</string>
+  <string name="setting_display_page_split_assistant_bubble_desc">Показывать каждый абзац ответа ассистента в отдельном пузыре</string>
 </resources>
