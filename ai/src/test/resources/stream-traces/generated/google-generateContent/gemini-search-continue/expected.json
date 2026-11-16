@@ -1,0 +1,239 @@
+{
+    "role": "ASSISTANT",
+    "parts": [
+        {
+            "type": "reasoning",
+            "text": "**Discovering Villeneuve's Film**\n\nI'm now focused on locating Denis Villeneuve's most recent film announcement. My goal is to determine the film title and anticipated release date. A search query for \"Denis Villeneuve latest film announcement\" will be employed to find current information, and I will then condense this info with the source and release date, with 2026 being the current year.\n\n\n"
+        },
+        {
+            "type": "server_tool",
+            "id": "call_8042879709437250853",
+            "name": "GOOGLE_SEARCH_WEB",
+            "status": "COMPLETED",
+            "input": {
+                "queries": [
+                    "Denis Villeneuve upcoming movies release date",
+                    "Denis Villeneuve latest film announcement 2026",
+                    "Denis Villeneuve new movie 2025 2026"
+                ]
+            }
+        },
+        {
+            "type": "reasoning",
+            "text": "**Analyzing Villeneuve's Future**\n\nOkay, so I'm currently focused on Denis Villeneuve's filmography, particularly looking ahead to 2025 and 2026. Specifically, I'm diving into the upcoming *Dune: Part Three*. The December 18, 2026 release date is fixed. I'm wondering what else might be in the works!\n\n\n"
+        },
+        {
+            "type": "server_tool",
+            "id": "call_12065626742573420049",
+            "name": "GOOGLE_SEARCH_WEB",
+            "status": "COMPLETED",
+            "input": {
+                "queries": [
+                    "Denis Villeneuve filmography upcoming Wikipedia",
+                    "\"Denis Villeneuve\" \"James Bond\" release date",
+                    "\"Dune: Part Three\" Denis Villeneuve release date announcement"
+                ]
+            }
+        },
+        {
+            "type": "reasoning",
+            "text": "**Analyzing Villeneuve's Future**\n\nI'm currently focused on pinpointing Denis Villeneuve's film projects beyond mid-2025. My search query, targeting announcements after that date, is set to find instances of \"Denis Villeneuve\" announced or \"Denis Villeneuve\" set to direct in the year 202* to see if anything else is currently planned. This excludes Bond 26 and Dune Part Three as existing confirmed projects!\n\n\n"
+        },
+        {
+            "type": "server_tool",
+            "id": "call_6255412980197092823",
+            "name": "GOOGLE_SEARCH_WEB",
+            "status": "COMPLETED",
+            "input": {
+                "queries": [
+                    "\"Dune: Part Three\" release date Japan",
+                    "\"Denis Villeneuve\" \"set to direct\" 2025 OR 2026",
+                    "\"Bond 26\" Wikipedia"
+                ]
+            }
+        },
+        {
+            "type": "reasoning",
+            "text": "**Analyzing Verified References**\n\nI've made a breakthrough! Examining `3.2.3` and `3.3.5` regarding Bond 26 has yielded promising results. The verified reference URLs in `3.2.3`, specifically `https://deadline.com/2025/06/denis-villeneuve-james-bond-amazon-mgm-studios-1236442917/`, are exactly what I needed to support the conjecture. This finding seems significant, and I'll explore other sections to confirm.\n\n\n"
+        },
+        {
+            "type": "server_tool",
+            "id": "call_11732272641964113584",
+            "name": "GOOGLE_SEARCH_WEB",
+            "status": "COMPLETED",
+            "input": {
+                "queries": [
+                    "\"en.wikipedia.org/wiki/Dune:_Part_Three\"",
+                    "\"deadline.com/2025/06/denis-villeneuve-james-bond-amazon-mgm-studios-1236442917\"",
+                    "site:variety.com \"Dune: Part Three\" Denis Villeneuve December 18 2026"
+                ]
+            }
+        },
+        {
+            "type": "reasoning",
+            "text": "**Considering Film Project Options**\n\nI'm now focusing on clarifying the phrase \"Denis Villeneuve's latest film announcement.\" It seems there are two distinct possibilities to pursue. First, I have identified **the 26th James Bond film, *Bond 26* , announced by Amazon MGM Studios** as a project linked to the director.\n\n\n**Analyzing Bond 26 Details**\n\nI'm now zeroing in on *Bond 26*, confirmed to be directed by Denis Villeneuve. Key dates are firming up: the initial announcement was June 2025, and November 2026 brought casting teases. 2028 seems to be the target release year, following a 2027 production start. The *Deadline* article from June 2025 has been found.\n\n\n**Clarifying Release Schedule**\n\nI am now differentiating between *Bond 26* and *Dune: Part Three*. *Bond 26* is Denis Villeneuve's **newly announced directing project**, aiming for a 2028 release. Meanwhile, ***Dune: Part Three*** has a firm release date of December 18, 2026. The search for definitive URLs for both is ongoing.\n\n\n\n"
+        },
+        {
+            "type": "server_tool",
+            "id": "call_345867720683665895",
+            "name": "GOOGLE_SEARCH_WEB",
+            "status": "COMPLETED",
+            "input": {
+                "queries": [
+                    "\"dune-movie-3.jp\"",
+                    "\"hollywoodreporter.com\" \"Denis Villeneuve\" \"December 18, 2026\""
+                ]
+            }
+        },
+        {
+            "type": "reasoning",
+            "text": "**Analyzing Canonical URLs**\n\nI've homed in on three URLs extracted directly from snippets: `https://deadline.com/2025/06/denis-villeneuve-james-bond-amazon-mgm-studios-1236442`, `5.2.5`, and `5.1.8`. These should be canonical URLs for the **Bond 26 (the 26th James Bond film)**. I'm focusing on validating these as primary sources.\n\n\n"
+        },
+        {
+            "type": "server_tool",
+            "id": "call_2858192360527032903",
+            "name": "GOOGLE_SEARCH_WEB",
+            "status": "COMPLETED",
+            "input": {
+                "queries": [
+                    "\"dune-part-three-smashes-bfi-imax-record-ticket-sales\""
+                ]
+            }
+        },
+        {
+            "type": "reasoning",
+            "text": "**Verifying Data Integrity**\n\nI'm incredibly pleased to report that every single URL we've uncovered has been validated through multiple search results! This level of consistency is quite encouraging. Now, I'm meticulously re-examining the original prompt instructions to ensure we haven't overlooked any crucial details.\n\n\n**Clarifying Key Directives**\n\nI'm now zeroing in on the specifics of fulfilling the request perfectly. I'm focusing on providing both the *Bond 26* announcement and the *Dune: Part Three* release details, ensuring I address both of your key interests. I'm carefully double-checking the citation format. I'm ensuring both the announcement and the upcoming release are clearly presented and attributed correctly.\n\n\n**Pinpointing Key Details**\n\nI'm now zeroing in on the specifics for the Bond 26 film! I've extracted that the project falls under Amazon MGM's control, with Steven Knight writing the screenplay and Amy Pascal and David Heyman producing. Crucially, the target is a 2028 release, with production slated for 2027 following *Dune: Part Three*'s promotional run.\n\n\n**Summarizing Upcoming Release**\n\nI'm now putting together the final details for *Dune: Part Three*. This is a direct follow-up to the prompt. I've confirmed that the film, adapted from *Dune Messiah*, will be directed by Villeneuve, and co-written with Brian K. Vaughan. I've got the cast list, release date, and that IMAX 70mm tickets are already available! It will be a simultaneous theatrical release in the United States and Japan.\n\n\n**Confirming Global Dates**\n\nI've got the global release dates for *Dune: Part Three* locked down, and I'm very carefully double checking all cited PerQueryResult indices to ensure complete precision. I have validated *Dune: Part Three*'s December 18, 2026, release date and am verifying that the IMAX 70mm tickets are available. I've also found that the film is to be released in South Korea and the UK on December 16, 2026. I am working to ensure accuracy with URLs.\n\n\n**Refining Cast Details**\n\nI've been going over the cast information again. I can confirm Robert Pattinson and Anya Taylor-Joy are joining *Dune: Part Three* as Scytale and Alia, respectively. Additionally, um Turner and Nicholas Hoult have been suggested for roles. I'm cross-referencing this with all available sources to solidify this.\n\nI've also gathered information on the anticipated release of *Dune: Part Three*. The final trailer will be released on October 27, 2026. *Dune: Part Three* will be released in the UK and South Korea on December 16, 2026, with the US release following on December 18, 2026. I'm verifying all of this with the information about the Bond 26 film.\n\n\n**Consolidating Release Plans**\n\nI'm now integrating information regarding both upcoming films, and I've found that Denis Villeneuve is set to direct a James Bond film, according to Screen Daily. Knight is now writing, and Amazon MGM Studios is taking over creative control. Also, a November 15, 2026 report indicates Pattinson could be a front-runner. Finally, I'm making sure to cite all sources.\n\n\n"
+        },
+        {
+            "type": "text",
+            "text": "Based on your saved memory file (`/topics/entertainment.md`), you follow director **Denis Villeneuve** (and enjoy science fiction films). \n\nDepending on whether you mean the **most recent film project he was announced to direct** or his **next upcoming theatrical release**, here are the details for both:\n\n---\n\n### 1. Latest Newly Announced Project: The Next *James Bond* Film (*Bond 26*)\n* **Summary:** On June 25, 2025, Amazon MGM Studios officially announced that Denis Villeneuve will direct the 26th installment in the *James Bond* franchise—the first film under Amazon MGM's creative control following Daniel Craig's departure. *Peaky Blinders* creator Steven Knight is writing the screenplay, with Amy Pascal and David Heyman serving as producers and Tanya Lapointe as executive producer. Final screen tests to cast the new 007 have been underway in late 2026—Villeneuve even jokingly teased a reveal at the LACMA Art+Film Gala on November 7, 2026—with Robert Pattinson, Callum Turner, Jack Lowden, Josh O'Connor, and Nicholas Hoult reported among the contenders.\n* **Release Date:** **No official exact release date yet** (expected **2028**, with production reportedly slated to begin in 2027 after Villeneuve finishes his *Dune: Part Three* obligations).\n* **Source URL:** https://deadline.com/2025/06/denis-villeneuve-james-bond-amazon-mgm-studios-1236442917/\n\n---\n\n### 2. Next Upcoming Release (Sci-Fi): *Dune: Part Three*\n* **Summary:** Since you enjoy science fiction, Villeneuve's immediate upcoming film is ***Dune: Part Three***, the conclusion to his *Dune* trilogy adapted from Frank Herbert's novel *Dune Messiah* and co-written with Brian K. Vaughan. Set nearly two decades after *Dune: Part Two*, the story follows Emperor Paul Atreides (Timothée Chalamet) as he faces political conspiracy, rebellion, and the consequences of his rule. Returning cast members Zendaya, Florence Pugh, Rebecca Ferguson, Jason Momoa, Javier Bardem, Charlotte Rampling, and Anya Taylor-Joy are joined by newcomers Robert Pattinson (as Scytale) and Isaach de Bankolé. The final trailer and IMAX 70mm advance tickets have already launched ahead of next month's premiere.\n* **Release Date:** **December 18, 2026** (simultaneous release in the United States and Japan as 『デューン 砂の惑星PART3』, with early openings on December 16 in select markets like the UK and South Korea).\n* **Source URLs:** \n  * Official Japan Site: https://dune-movie-3.jp/\n  * Deadline Coverage: https://deadline.com/2026/10/dune-part-three-smashes-bfi-imax-record-ticket-sales-1237169586/",
+            "metadata": {
+                "thoughtSignature": "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"
+            }
+        }
+    ],
+    "annotations": [
+        {
+            "type": "url_citation",
+            "title": "theguardian.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFxQtcasSM8xzi7bdpNbcGed7dR5UPzMCFC51XBCmcQMiAf3R0GlflJ0NafslZzaQBqKij1uYch5Hw4q2IZdWaZvbIgf3BcpuZwmwFc8yxuqVexHSI1rT_16mlFcVw73HNUjqzyFa_mZ-vCwcmNGzW_k_1gCwOEHANp9v0UhbhkS4QCiEOJ4wlJIJZZpzu0Inif4nD-1Lx7RU1FOTNmpOA9ZdvweL8="
+        },
+        {
+            "type": "url_citation",
+            "title": "mensjournal.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE7QDr10-Cm5z1dG_p6vN0oaZEprEknDAYptLmbujIFy3pCktyZ9mPfco5UIckbFD1tBbmonW-wpqR6EWhwJF3nJxMaeajjfq5jhu96syuqKMBk5n_8QkHY2G7SfuJ4aBZOWl_KxiSu7JCywJYYdezzuGlvUPRD2xXVFXwgVGj4HtUs205gnwWTuyw="
+        },
+        {
+            "type": "url_citation",
+            "title": "screendaily.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFkC-2vlGvkffGh8pKGfoBFATNUTeJfE8D18IxTBlYejdnMyVWrK--OV-i3-QgW7qJyZLSSs7GoGaWgzqQRIgvWHzfDoh5il_fRGQvAmc0fnwMdiM5xx1zRDYnfWFYCvjF4kdZU7ZEkIFKBsvnXAvf6d1tAmvAr0AjDGzzROIAwxtJDgObXHjONB54qa4AqE_oVjC3XOSnDgtCsaRcEKQF3hAxyFCsLgloBohXV3Q=="
+        },
+        {
+            "type": "url_citation",
+            "title": "northeasttimes.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGxIVlJpfVzRDPHi44k1S1RDn9N3w5yZtXkyu52_DKHIiO6GDVDb06scFVDUuzjzGP_kemQDavhXKg7Mm97qdrbg12CF6kMmFoulXAv2d3ZHBQnBVfda6T2dHEaVNeo6-oj5NwCyBsa835rEcTKfS1btFzJrsjpcbEWODzO0n8bZXkjYo_WKESkFovQTe2U5UJxr559SdmqHY_rwtgyyUQ="
+        },
+        {
+            "type": "url_citation",
+            "title": "007travelers.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGzXwCmZh1Z-aomzyhepSsDl6xeFICzFmE9U-ciHsQIOb62hJA3Qz3Rx7X7iEbB20ILhquZKH_RKSPEAtjkd4fJYlcmFiZ1M4SVAN4H43bjA637k9pUDQLZAoWm6Msas_sNzvdeWNQTev28Sxd42XRPofUWITtJO2B4wXpzXdnsa1gBUuZMPnQ="
+        },
+        {
+            "type": "url_citation",
+            "title": "thenewdaily.com.au",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHBIuAJgkj1xb-RLd2PTXYbYWscJs9Dl5lMHe7EtGD32Sqv8uDHGmrVjMiMNyYltFDHuSUvFdUmDRnF7qaqGzqkwZoaUaQP9G9RppmTaWTbozfKxxRRAI-lFMxPHMZUEdv1dKq5Wye49FAwD8dEp5-epo-Ijg3LBsbUIs3Or25Ad_daCmtSqJP85e6kunD-6v38_gfEKQ=="
+        },
+        {
+            "type": "url_citation",
+            "title": "prediction.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGx1QNJF7zoVIwfHLgOseGNHmdIpuny1EHJ6QHw8GNi0rt5JXMbuu7fY_lrMxZmgeTQZ43wA2jhUveNml1FNjRHRNcB3XMWusMTvvQ7GHlX62Xvft2pIGX9hfr7QMt7bCFh0R11OKunKuIf1LrLjFS5K0K_C1muHQFQDq6xt0cJmPQgLLEctB8="
+        },
+        {
+            "type": "url_citation",
+            "title": "wikipedia.org",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGF4PduaecN1KPV61Lbf35_VRRXiAZHKR4rZwpkya9Afpw4Zg_k8d035xcLhjfxUTYv5MNYOlQA3q4ZN4QE43RrpjxWE9onFzao5S-BY_TXJ_GzUzQWXkVnezNHadaaxQ0pc7tb"
+        },
+        {
+            "type": "url_citation",
+            "title": "cineworld.co.uk",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFIAtRvAcyjI1jltzMqFI8rVJL1o0lJKs8lhNA8TJFBHQMd4xAbMvNmirF88xKDgx56o5Q0sgg4IRwRUSl-Ny98nHlO3Ntpix6w-b9MkYQduCjKTR_G00pBtK_WLq-qSzmsH2v8nijjmmJYoPXmAdKbZsttNLpAW9_nll93C4tm"
+        },
+        {
+            "type": "url_citation",
+            "title": "headtopics.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGC4UdOX544ik9db7CTJYcprHovir3NeVSt6lPv8-ePpQ-ke1sva7coaYZJCZG-bwN-soXyFu7yZW8-UfTzK-QPZ2HDUu-JsbInQnCN7cPtAWkMZnx-Hdh2hTIvM4vPI4fyFIBoVHHY-p_4pDBkdA2YyOBY_ojXC_3vQsBWF95wLDNMz-ffX5Ues46s7al-nV9MofEaxgLtig=="
+        },
+        {
+            "type": "url_citation",
+            "title": "nme.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFuyVRuID_nCPP-f6YKUj4hg5J3MYLbwaBWgot-Ifa2uYSWYn99Fqra2_GljPU4CWn0EWPQSjIhRDX0CMD8CCcEXPzojULuYHbUtlAFNaZ1Y9K4KcVKPBL5F5f-9z2uj5pq79_xigW8XA5z5xyTyhXFe3sKrnFBsFVy4SPEmvSi5Wl7jDf1UT2cb8ea7HEumlevQL281Vb-jI29hdn27n9DdI8n7aegKAaF"
+        },
+        {
+            "type": "url_citation",
+            "title": "wikidata.org",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE2d4s7Sf6GjW1fp_IinkPGEkXOm_ZwRe3FxHZUAhLzYwWa2TxITKReCqx1lVUh0UEtu3NWgUdYnJoam6z1ZVM9m-SNEJyiehct0cdDJie0yf8wAdoqsMH0tfUzkw=="
+        },
+        {
+            "type": "url_citation",
+            "title": "lihkg.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEXdgRPDuj2ikv0DudwgM71dU2iwSjTr9SzBR4MP7LWK3lhs6vuhXKPzen43h7Yc1FgJ8oUTYI4Qrpy-8Q5YE9hLks2lw_IAQ6pwi9F2j5HYzHRGW3qWh6KQDPdUQ=="
+        },
+        {
+            "type": "url_citation",
+            "title": "wikipedia.org",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEaLI0txtg8eMF08hiHw-TJX70ZhEvFiSmpkw-iKBRIDV5RNphP6M27uI49w2U1hvIwrcEdskJHQ8NlY6veMKcadR18L9Pj4mzx-5yweZvLAjoD7O7qPuMx0eDOv-Vte2F7ADuO"
+        },
+        {
+            "type": "url_citation",
+            "title": "ign.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEmOhAxHr3IzaA-xfewdj8GOIDWZ9_h4hbVAtJ-nxA5L7Lqo5Xfk3CAHo-GyxH_H9CH3rJfBCuMMjmLFYQXRKE9VFa8pdwzjlpvad001yASPrUIHZwyaXHmZXVKLxs8QxeTNQwAof95eNtlVX_DVnCiUg=="
+        },
+        {
+            "type": "url_citation",
+            "title": "district.in",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEuPakjBomZVn8xn5D6v3udaNNDUF0pALieQNLsQbz63J8Wl2JL5Di8GmKkvYY6UUW6ibvyDGVm7zIwU32UEsaO0V1n3xiZ0nRv0vg9q7ug9-GPWCj5ysWz-_1dmTE0ouEKlPr3YMc-Qo-bvcK0VrM7dV8MqFwTdWSDyks="
+        },
+        {
+            "type": "url_citation",
+            "title": "youtube.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQG08Gbz3e44H47QWH0tDyQcGSNC5MIpeqYKQB2u_SX2Nq2pbeXdF4FvPQoWTyoOhiM74PHnZYGpiXshUA9ohpOGphS1d2njH33q4VvMlpmeNvXNWZVqIOZ1ijiWGC_P4Ujg"
+        },
+        {
+            "type": "url_citation",
+            "title": "imax.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQG5Byl23x2FwzJNX-QVlY13XyJwyqb41vkYVkyH0xWe-UiwCADNt2s5b1oRsgXON9u8KA8dvJB2GQVNuwtk6ijeui0RB3a9cqZC36TKd0KNcC4RVET9lpO1D_K5B7XCFdw="
+        },
+        {
+            "type": "url_citation",
+            "title": "digg.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGC_t7e2zOojNkzksDGwu0AR4oaH60bxdL19D8gPFqt_nD3aKQUDdaB4nIyHwnowx2QUp8wtETmTrE_4_2-VXD7lBCTxW5FCHRvn4j8l0N_8Crzrhr4ewDGebd-HGQ="
+        },
+        {
+            "type": "url_citation",
+            "title": "koreajoongangdaily.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFVsttI7eum1OUX02SN34DPpY_arUw3CpR6XL00pHyVK77U18FNaHH251L0G-q5Xamw9wyV9F3nZg79rHjHkChTnd5yfEAr1wpRZXlIsMhJEAwo4B2UMBaKNZ6CBUQjlB2pxNcI_PJK8VfvvhNetuIhnvrXlq52FzAlAj4Dl7mDo-6F8KkHzQgXqpfpVE3nh9c-F79N7y7n6bjj1O-6xxoQPkOtEz51IdcGHQBCZM5Nv6Tu5gAcnFkqSF4eYnqs"
+        },
+        {
+            "type": "url_citation",
+            "title": "fansvoice.jp",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEA-7WRIP8ukighKMX3WwfLVfAAKjO_mYPV9LzkaAPxnLIlW-7PhzQSnAqT5QScMGMYy38n5qEniAhl9CLueXZ02OZMRojq7i6xnWBCfIDTQajMFDzpPtamL1nvcwMaRA0adN4m"
+        },
+        {
+            "type": "url_citation",
+            "title": "reddit.com",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEXNhms3CGW7pVZSCRU8ctL_dOqFMBdgASCOt4Tnh0onqozm0ql0-kV4dudxlWhnJVW3PmGCD_FCqE4FrWEF_01TAUNOHHNx73iQHRGsp4aDvgHZAR94r1hGZ_5C0yldeqPX7yHSfZeHvIS2nj_mub7EPKBL0t8bDs-o3_m8Jmoyml6_1uRBSKe_6FNLuY="
+        },
+        {
+            "type": "url_citation",
+            "title": "109cinemas.net",
+            "url": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQHWKJDlvLGDsECQHBrbuTLEGkeKnkApoGbsk9e-1mP3P2ZwRSjyEkDzjECYzyLM6k0vEp6CU0PM5mxxXReWvef586ziIH2QyNqmW5eAI_khoK9HRr-vQlQFQkGCQZw="
+        }
+    ],
+    "usage": {
+        "promptTokens": 399,
+        "completionTokens": 5369,
+        "cachedTokens": 0,
+        "totalTokens": 5768
+    },
+    "finished": true
+}
