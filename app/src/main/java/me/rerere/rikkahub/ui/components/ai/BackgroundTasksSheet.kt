@@ -4,11 +4,13 @@ import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -33,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -199,17 +202,35 @@ private fun ColumnScope.TaskDetail(
             }
         }
     }
-    HighlightCodeBlock(
-        code = task.command,
-        language = "bash",
-        modifier = Modifier.fillMaxWidth(),
-    )
-    BackgroundTaskLog(
-        task = task,
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .weight(1f),
-    )
+    ) {
+        // 长命令展开后限制高度并在内部滚动，避免把日志区挤没
+        val commandMaxHeight = maxHeight * 0.5f
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = commandMaxHeight)
+                    .clip(MaterialTheme.shapes.large)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                HighlightCodeBlock(
+                    code = task.command,
+                    language = "bash",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            BackgroundTaskLog(
+                task = task,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            )
+        }
+    }
 }
 
 @Composable
