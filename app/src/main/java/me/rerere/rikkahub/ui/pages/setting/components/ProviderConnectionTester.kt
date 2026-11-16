@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -43,188 +41,182 @@ import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.StreamChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.hugeicons.HugeIcons
-import me.rerere.hugeicons.stroke.Connect
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.UiState
 import org.koin.compose.koinInject
 
+// 只有 dialog 本身，开关由调用方持有：入口按钮所在的悬浮工具栏会在键盘弹出时移出 composition，
+// 如果 dialog 挂在按钮下面，点模型搜索框弹出键盘就会把 dialog 连同 sheet 一起销毁
 @Composable
-fun ProviderConnectionTester(
+fun ProviderConnectionTestDialog(
     internalProvider: ProviderSetting,
+    onDismissRequest: () -> Unit,
 ) {
-    var showTestDialog by remember { mutableStateOf(false) }
     val providerManager = koinInject<ProviderManager>()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    IconButton(onClick = { showTestDialog = true }) {
-        Icon(HugeIcons.Connect, null)
+    var model by remember(internalProvider) {
+        mutableStateOf(internalProvider.models.firstOrNull { it.type == ModelType.CHAT })
+    }
+    var nonStreamingState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
+    var streamingState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
+    var toolsState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
+    var streamingText by remember { mutableStateOf("") }
+
+    fun resetStates() {
+        nonStreamingState = UiState.Idle
+        streamingState = UiState.Idle
+        toolsState = UiState.Idle
+        streamingText = ""
     }
 
-    if (showTestDialog) {
-        var model by remember(internalProvider) {
-            mutableStateOf(internalProvider.models.firstOrNull { it.type == ModelType.CHAT })
-        }
-        var nonStreamingState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
-        var streamingState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
-        var toolsState: UiState<String> by remember { mutableStateOf(UiState.Idle) }
-        var streamingText by remember { mutableStateOf("") }
-
-        fun resetStates() {
-            nonStreamingState = UiState.Idle
-            streamingState = UiState.Idle
-            toolsState = UiState.Idle
-            streamingText = ""
-        }
-
-        AlertDialog(
-            onDismissRequest = { showTestDialog = false },
-            title = {
-                Text(stringResource(R.string.setting_provider_page_test_connection))
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ModelSelector(
-                        modelId = model?.id,
-                        providers = listOf(internalProvider),
-                        type = ModelType.CHAT,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        model = it
-                    }
-
-                    TestResultItem(
-                        label = stringResource(R.string.setting_provider_page_test_non_streaming),
-                        state = nonStreamingState,
-                        resultText = (nonStreamingState as? UiState.Success)?.data ?: ""
-                    )
-
-                    TestResultItem(
-                        label = stringResource(R.string.setting_provider_page_test_streaming),
-                        state = streamingState,
-                        resultText = streamingText
-                    )
-
-                    TestResultItem(
-                        label = stringResource(R.string.setting_provider_page_test_tool_call),
-                        state = toolsState,
-                        resultText = (toolsState as? UiState.Success)?.data ?: ""
-                    )
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        title = {
+            Text(stringResource(R.string.setting_provider_page_test_connection))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                ModelSelector(
+                    modelId = model?.id,
+                    providers = listOf(internalProvider),
+                    type = ModelType.CHAT,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    model = it
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTestDialog = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (model == null) return@TextButton
-                        val provider = providerManager.getProviderByType(internalProvider)
-                        resetStates()
-                        scope.launch {
-                            launch {
-                                runCatching {
-                                    nonStreamingState = UiState.Loading
-                                    val result = provider.generateText(
-                                        providerSetting = internalProvider,
-                                        messages = listOf(
-                                            UIMessage.system("You are a helpful assistant"),
-                                            UIMessage.user("hello"),
-                                        ),
-                                        params = TextGenerationParams(
-                                            model = model!!,
-                                            customHeaders = model!!.customHeaders,
-                                            customBody = model!!.customBodies,
-                                            reasoningLevel = ReasoningLevel.AUTO
-                                        )
+
+                TestResultItem(
+                    label = stringResource(R.string.setting_provider_page_test_non_streaming),
+                    state = nonStreamingState,
+                    resultText = (nonStreamingState as? UiState.Success)?.data ?: ""
+                )
+
+                TestResultItem(
+                    label = stringResource(R.string.setting_provider_page_test_streaming),
+                    state = streamingState,
+                    resultText = streamingText
+                )
+
+                TestResultItem(
+                    label = stringResource(R.string.setting_provider_page_test_tool_call),
+                    state = toolsState,
+                    resultText = (toolsState as? UiState.Success)?.data ?: ""
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (model == null) return@TextButton
+                    val provider = providerManager.getProviderByType(internalProvider)
+                    resetStates()
+                    scope.launch {
+                        launch {
+                            runCatching {
+                                nonStreamingState = UiState.Loading
+                                val result = provider.generateText(
+                                    providerSetting = internalProvider,
+                                    messages = listOf(
+                                        UIMessage.system("You are a helpful assistant"),
+                                        UIMessage.user("hello"),
+                                    ),
+                                    params = TextGenerationParams(
+                                        model = model!!,
+                                        customHeaders = model!!.customHeaders,
+                                        customBody = model!!.customBodies,
+                                        reasoningLevel = ReasoningLevel.AUTO
                                     )
-                                    val text = result.message.parts
+                                )
+                                val text = result.message.parts
+                                    .filterIsInstance<UIMessagePart.Text>()
+                                    .joinToString("") { it.text }
+                                nonStreamingState = UiState.Success(text)
+                            }.onFailure { nonStreamingState = UiState.Error(it) }
+                        }
+                        launch {
+                            runCatching {
+                                streamingState = UiState.Loading
+                                val flow = provider.streamText(
+                                    providerSetting = internalProvider,
+                                    messages = listOf(
+                                        UIMessage.system("You are a helpful assistant"),
+                                        UIMessage.user("hello"),
+                                    ),
+                                    params = TextGenerationParams(
+                                        model = model!!,
+                                        customHeaders = model!!.customHeaders,
+                                        customBody = model!!.customBodies,
+                                        reasoningLevel = ReasoningLevel.AUTO
+                                    )
+                                )
+                                flow.collect { chunk ->
+                                    if (chunk is StreamChunk.TextDelta) {
+                                        streamingText += chunk.text
+                                    }
+                                }
+                                streamingState = UiState.Success("")
+                            }.onFailure { streamingState = UiState.Error(it) }
+                        }
+                        launch {
+                            runCatching {
+                                toolsState = UiState.Loading
+                                val testTool = Tool(
+                                    name = "get_current_time",
+                                    description = "Get the current date and time.",
+                                    execute = { emptyList() }
+                                )
+                                val result = provider.generateText(
+                                    providerSetting = internalProvider,
+                                    messages = listOf(
+                                        UIMessage.system("You are a helpful assistant"),
+                                        UIMessage.user("Use the get_current_time tool."),
+                                    ),
+                                    params = TextGenerationParams(
+                                        model = model!!,
+                                        tools = listOf(testTool),
+                                        customHeaders = model!!.customHeaders,
+                                        customBody = model!!.customBodies,
+                                        reasoningLevel = ReasoningLevel.AUTO
+                                    )
+                                )
+                                val message = result.message
+                                val toolCall = message.parts
+                                    .filterIsInstance<UIMessagePart.Tool>()
+                                    .firstOrNull()
+                                val resultText = if (toolCall != null) {
+                                    context.getString(
+                                        R.string.setting_provider_page_test_tool_called,
+                                        toolCall.toolName,
+                                        toolCall.input
+                                    )
+                                } else {
+                                    val text = message.parts
                                         .filterIsInstance<UIMessagePart.Text>()
                                         .joinToString("") { it.text }
-                                    nonStreamingState = UiState.Success(text)
-                                }.onFailure { nonStreamingState = UiState.Error(it) }
-                            }
-                            launch {
-                                runCatching {
-                                    streamingState = UiState.Loading
-                                    val flow = provider.streamText(
-                                        providerSetting = internalProvider,
-                                        messages = listOf(
-                                            UIMessage.system("You are a helpful assistant"),
-                                            UIMessage.user("hello"),
-                                        ),
-                                        params = TextGenerationParams(
-                                            model = model!!,
-                                            customHeaders = model!!.customHeaders,
-                                            customBody = model!!.customBodies,
-                                            reasoningLevel = ReasoningLevel.AUTO
-                                        )
+                                    context.getString(
+                                        R.string.setting_provider_page_test_tool_not_called,
+                                        text
                                     )
-                                    flow.collect { chunk ->
-                                        if (chunk is StreamChunk.TextDelta) {
-                                            streamingText += chunk.text
-                                        }
-                                    }
-                                    streamingState = UiState.Success("")
-                                }.onFailure { streamingState = UiState.Error(it) }
-                            }
-                            launch {
-                                runCatching {
-                                    toolsState = UiState.Loading
-                                    val testTool = Tool(
-                                        name = "get_current_time",
-                                        description = "Get the current date and time.",
-                                        execute = { emptyList() }
-                                    )
-                                    val result = provider.generateText(
-                                        providerSetting = internalProvider,
-                                        messages = listOf(
-                                            UIMessage.system("You are a helpful assistant"),
-                                            UIMessage.user("Use the get_current_time tool."),
-                                        ),
-                                        params = TextGenerationParams(
-                                            model = model!!,
-                                            tools = listOf(testTool),
-                                            customHeaders = model!!.customHeaders,
-                                            customBody = model!!.customBodies,
-                                            reasoningLevel = ReasoningLevel.AUTO
-                                        )
-                                    )
-                                    val message = result.message
-                                    val toolCall = message.parts
-                                        .filterIsInstance<UIMessagePart.Tool>()
-                                        .firstOrNull()
-                                    val resultText = if (toolCall != null) {
-                                        context.getString(
-                                            R.string.setting_provider_page_test_tool_called,
-                                            toolCall.toolName,
-                                            toolCall.input
-                                        )
-                                    } else {
-                                        val text = message.parts
-                                            .filterIsInstance<UIMessagePart.Text>()
-                                            .joinToString("") { it.text }
-                                        context.getString(
-                                            R.string.setting_provider_page_test_tool_not_called,
-                                            text
-                                        )
-                                    }
-                                    toolsState = UiState.Success(resultText)
-                                }.onFailure { toolsState = UiState.Error(it) }
-                            }
+                                }
+                                toolsState = UiState.Success(resultText)
+                            }.onFailure { toolsState = UiState.Error(it) }
                         }
                     }
-                ) {
-                    Text(stringResource(R.string.setting_provider_page_test))
                 }
+            ) {
+                Text(stringResource(R.string.setting_provider_page_test))
             }
-        )
-    }
+        }
+    )
 }
 
 @Composable

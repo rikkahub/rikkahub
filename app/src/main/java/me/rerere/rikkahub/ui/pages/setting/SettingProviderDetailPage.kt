@@ -139,7 +139,7 @@ import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomBodies
 import me.rerere.rikkahub.ui.pages.assistant.detail.CustomHeaders
 import me.rerere.rikkahub.ui.pages.setting.components.ProviderConfigure
-import me.rerere.rikkahub.ui.pages.setting.components.ProviderConnectionTester
+import me.rerere.rikkahub.ui.pages.setting.components.ProviderConnectionTestDialog
 import me.rerere.rikkahub.ui.pages.setting.components.SettingProviderQuotaQuery
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.extendColors
@@ -302,6 +302,7 @@ private fun SettingProviderConfigPage(
 ) {
     var internalProvider by remember(provider) { mutableStateOf(provider) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showTestDialog by remember { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf(true) }
 
     Box(
@@ -364,9 +365,9 @@ private fun SettingProviderConfigPage(
                 expanded = expanded,
                 colors = CustomColors.floatingToolbarColors,
                 leadingContent = {
-                    ProviderConnectionTester(
-                        internalProvider = internalProvider,
-                    )
+                    IconButton(onClick = { showTestDialog = true }) {
+                        Icon(HugeIcons.Connect, null)
+                    }
 
                     if (!internalProvider.builtIn) {
                         IconButton(
@@ -403,6 +404,14 @@ private fun SettingProviderConfigPage(
                 }
             }
         }
+    }
+
+    // 工具栏在键盘弹出时会被移出 composition，dialog 不能挂在它下面
+    if (showTestDialog) {
+        ProviderConnectionTestDialog(
+            internalProvider = internalProvider,
+            onDismissRequest = { showTestDialog = false },
+        )
     }
 
     // Delete confirmation dialog
