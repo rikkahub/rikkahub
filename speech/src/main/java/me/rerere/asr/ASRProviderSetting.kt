@@ -174,6 +174,29 @@ sealed class ASRProviderSetting {
         }
     }
 
+    /**
+     * DeepSeek 语音识别。[POST {baseUrl}/v1/tools/asr] multipart 上传整段音频 (file 字段),
+     * 非流式, 单次最长 120 秒 / 8 MiB, 语种自动识别, 没有模型和语言参数。
+     * 客户端按 [segmentDurationSec] 分段上传 (WAV), 超过单次上限时会强制切段。
+     *
+     * 官方文档: https://api-docs.deepseek.com/zh-cn/guides/asr
+     */
+    @Serializable
+    @SerialName("deepseek")
+    data class DeepSeek(
+        override val id: Uuid = Uuid.random(),
+        override val name: String = "DeepSeek ASR",
+        val apiKey: String = "",
+        val baseUrl: String = "https://api.deepseek.com",
+        // 8000 | 16000 | 22050 | 24000 | 32000 | 44100 | 48000
+        val sampleRate: Int = 16000,
+        // 每多少秒自动上传一段; 0 = 仅 stop() 时上传 (仍受单次 120 秒上限约束)
+        val segmentDurationSec: Int = 30,
+    ) : ASRProviderSetting() {
+        override fun copyProvider(id: Uuid, name: String): ASRProviderSetting =
+            copy(id = id, name = name)
+    }
+
     companion object {
         val Types by lazy {
             listOf(
@@ -182,6 +205,7 @@ sealed class ASRProviderSetting {
                 Volcengine::class,
                 MiMo::class,
                 Step::class,
+                DeepSeek::class,
             )
         }
     }

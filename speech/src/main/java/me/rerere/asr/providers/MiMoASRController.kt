@@ -29,6 +29,7 @@ import me.rerere.asr.ASRState
 import me.rerere.asr.ASRStatus
 import me.rerere.asr.appendAmplitude
 import me.rerere.asr.calculateRmsAmplitude
+import me.rerere.asr.pcm16ToWav
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -301,52 +302,5 @@ class MiMoASRController(
 
     companion object {
         private val JSON_MEDIA_TYPE = "application/json".toMediaType()
-
-        /**
-         * 把 raw PCM16 little-endian 数据封装成最小 WAV (RIFF/WAVE/fmt/data)。
-         * MiMo 官方只接受 WAV/MP3, AudioRecord 输出的是 PCM, 必须自己包 WAV 头。
-         */
-        private fun pcm16ToWav(
-            pcm: ByteArray,
-            sampleRate: Int,
-            channels: Int,
-            bitsPerSample: Int
-        ): ByteArray {
-            val byteRate = sampleRate * channels * bitsPerSample / 8
-            val blockAlign = channels * bitsPerSample / 8
-            val dataSize = pcm.size
-            val out = ByteArrayOutputStream(44 + dataSize)
-
-            // RIFF header
-            out.write("RIFF".toByteArray(Charsets.US_ASCII))
-            writeIntLE(out, 36 + dataSize) // chunk size = file size - 8
-            out.write("WAVE".toByteArray(Charsets.US_ASCII))
-            // fmt chunk
-            out.write("fmt ".toByteArray(Charsets.US_ASCII))
-            writeIntLE(out, 16)            // PCM fmt chunk size
-            writeShortLE(out, 1)           // audio format = PCM
-            writeShortLE(out, channels)
-            writeIntLE(out, sampleRate)
-            writeIntLE(out, byteRate)
-            writeShortLE(out, blockAlign)
-            writeShortLE(out, bitsPerSample)
-            // data chunk
-            out.write("data".toByteArray(Charsets.US_ASCII))
-            writeIntLE(out, dataSize)
-            out.write(pcm)
-            return out.toByteArray()
-        }
-
-        private fun writeIntLE(out: ByteArrayOutputStream, value: Int) {
-            out.write(value and 0xFF)
-            out.write((value shr 8) and 0xFF)
-            out.write((value shr 16) and 0xFF)
-            out.write((value shr 24) and 0xFF)
-        }
-
-        private fun writeShortLE(out: ByteArrayOutputStream, value: Int) {
-            out.write(value and 0xFF)
-            out.write((value shr 8) and 0xFF)
-        }
     }
 }

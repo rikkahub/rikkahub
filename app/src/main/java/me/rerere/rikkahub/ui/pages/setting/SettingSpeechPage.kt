@@ -395,6 +395,7 @@ private fun AddASRProviderButton(onAdd: (ASRProviderSetting) -> Unit) {
             { ASRProviderSetting.Volcengine() },
             { ASRProviderSetting.MiMo() },
             { ASRProviderSetting.Step() },
+            { ASRProviderSetting.DeepSeek() },
         )
     }
 
@@ -444,6 +445,7 @@ private val TTSProviderSetting.typeName: String
         is TTSProviderSetting.ElevenLabs -> "ElevenLabs"
         is TTSProviderSetting.FishAudio -> "Fish Audio"
         is TTSProviderSetting.Volcengine -> "火山引擎"
+        is TTSProviderSetting.DeepSeek -> "DeepSeek"
     }
 
 // TTS 和 ASR 列表共用的服务商卡片，点卡片编辑，点单选圈设为当前使用
