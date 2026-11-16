@@ -562,7 +562,21 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
 
     private fun parseMessageParts(parts: JsonArray?): List<UIMessagePart> = buildList {
         parts.orEmpty().forEachIndexed { index, element ->
-            val part = parseMessagePart(element.jsonObject, index)
+            val part = parseMessagePart(element.jsonObject, index) ?: return@forEachIndexed
+            if (part is UIMessagePart.Text && part.text.isEmpty() && part.metadata != null) {
+                // 不带文本的签名 part：挂到前一个还没有签名的文本/思考 part 上，否则单独保留
+                val previous = lastOrNull()
+                when {
+                    previous is UIMessagePart.Text && previous.metadata == null ->
+                        set(lastIndex, previous.copy(metadata = part.metadata))
+
+                    previous is UIMessagePart.Reasoning && previous.metadata == null ->
+                        set(lastIndex, previous.copy(metadata = part.metadata))
+
+                    else -> add(part)
+                }
+                return@forEachIndexed
+            }
             if (part !is UIMessagePart.ServerTool) {
                 add(part)
                 return@forEachIndexed
@@ -588,7 +602,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
         }
     }
 
-    private fun parseMessagePart(jsonObject: JsonObject, index: Int): UIMessagePart {
+    private fun parseMessagePart(jsonObject: JsonObject, index: Int): UIMessagePart? {
         return when {
             jsonObject.containsKey("text") -> {
                 val thought = jsonObject["thought"]?.jsonPrimitive?.booleanOrNull ?: false
@@ -676,7 +690,14 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                 )
             }
 
-            else -> error("unknown message part type: $jsonObject")
+            // Gemini 可能单独下发只含 thoughtSignature 的 part
+            jsonObject.containsKey("thoughtSignature") -> UIMessagePart.Text(
+                text = "",
+                metadata = jsonObject.toGoogleThoughtMetadata(),
+            )
+
+            // 未知 part 直接跳过，避免整次请求失败
+            else -> null
         }
     }
 
