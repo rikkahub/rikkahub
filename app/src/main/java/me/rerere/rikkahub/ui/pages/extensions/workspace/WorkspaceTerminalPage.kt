@@ -269,6 +269,7 @@ private fun WorkspaceTerminalContent(
                             state.readiness == WorkspaceTerminalReadiness.NotInstalled -> {
                                 stringResource(R.string.workspace_terminal_not_installed)
                             }
+                            state.errorMessage != null -> state.errorMessage
                             else -> stringResource(R.string.workspace_terminal_no_tabs)
                         },
                         style = MaterialTheme.typography.bodyLarge,

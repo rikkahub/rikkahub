@@ -18,9 +18,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.AppScope
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.workspace.WorkspaceManager
+import me.rerere.workspace.WorkspaceMountUnavailableException
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -111,7 +113,7 @@ class WorkspaceTerminalSessionManager internal constructor(
         lateinit var job: Job
         job = appScope.launch(start = CoroutineStart.LAZY) {
             try {
-                createTab(workspace = workspace, onlyIfEmpty = onlyIfEmpty)
+                createTab(cachedWorkspace = workspace, onlyIfEmpty = onlyIfEmpty)
             } finally {
                 creationJobs.remove(root, job)
             }
@@ -120,15 +122,17 @@ class WorkspaceTerminalSessionManager internal constructor(
         job.start()
     }
 
-    private suspend fun createTab(workspace: WorkspaceEntity, onlyIfEmpty: Boolean) = withContext(
+    private suspend fun createTab(cachedWorkspace: WorkspaceEntity, onlyIfEmpty: Boolean) = withContext(
         Dispatchers.Main.immediate
     ) {
+        // 调用方拿到的可能是旧快照, 挂载表等配置以数据库为准
+        val workspace = workspaceRepository.getById(cachedWorkspace.id) ?: cachedWorkspace
         val root = workspace.root
         val initialState = currentState(root)
         if (initialState.isCreating || (onlyIfEmpty && initialState.tabs.isNotEmpty())) {
             return@withContext
         }
-        updateState(root) { it.copy(isCreating = true) }
+        updateState(root) { it.copy(isCreating = true, errorMessage = null) }
 
         // 不在本机 Rootfs 里运行的终端 (如远程) 无需准备, 连接在会话启动时建立
         val prepared = if (!workspace.capabilities().rootfs ||
@@ -169,7 +173,7 @@ class WorkspaceTerminalSessionManager internal constructor(
             onTitleUpdated = { title -> updateTitle(root, tabId, title) },
             onFinished = { markFinished(root = root, tabId = tabId) },
         )
-        val session = runCatching {
+        val result = runCatching {
             createWorkspaceTerminalSession(
                 transport = terminalTransport(workspace),
                 root = root,
@@ -177,10 +181,20 @@ class WorkspaceTerminalSessionManager internal constructor(
             )
         }.onFailure { error ->
             Log.e(TAG, "Failed to create terminal for workspace $root", error)
-        }.getOrNull()
+        }
+        val session = result.getOrNull()
 
         if (session == null) {
-            updateState(root) { it.copy(isCreating = false) }
+            // 例如工作区挂载的目录失效, 界面上要能看到原因
+            val message = when (val error = result.exceptionOrNull()) {
+                is WorkspaceMountUnavailableException -> appContext.getString(
+                    R.string.workspace_terminal_mounts_unavailable,
+                    error.targets.joinToString(),
+                )
+
+                else -> error?.message ?: appContext.getString(R.string.workspace_terminal_start_failed)
+            }
+            updateState(root) { it.copy(isCreating = false, errorMessage = message) }
             return@withContext
         }
 
@@ -208,7 +222,11 @@ class WorkspaceTerminalSessionManager internal constructor(
                 workspaceRepository.openSshShell(workspace, columns, rows)
             }
         } else {
-            workspaceManager.terminalLaunch(workspace.root, workspace.shellCompatibilityMode)?.toTransport()
+            workspaceManager.terminalLaunch(
+                root = workspace.root,
+                shellCompatibilityMode = workspace.shellCompatibilityMode,
+                extraMounts = workspace.extraBindMounts(),
+            )?.toTransport()
                 ?: error("Interactive terminal is not supported")
         }
 
@@ -262,6 +280,8 @@ internal data class WorkspaceTerminalTabsState(
     val readiness: WorkspaceTerminalReadiness = WorkspaceTerminalReadiness.Loading,
     val isCreating: Boolean = false,
     val nextTabNumber: Int = 1,
+    /** 最近一次新建终端失败的原因 */
+    val errorMessage: String? = null,
 )
 
 internal data class WorkspaceTerminalTab(

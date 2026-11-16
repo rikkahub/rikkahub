@@ -1858,4 +1858,21 @@
   <string name="chat_message_tool_phone_use_wait">等待 %1$s 秒</string>
   <string name="setting_display_page_split_assistant_bubble_title">依段落分割對話泡泡</string>
   <string name="setting_display_page_split_assistant_bubble_desc">將助理回覆的每個段落分別顯示在各自的泡泡中</string>
+  <string name="workspace_detail_storage_title">外部儲存空間</string>
+  <string name="workspace_detail_storage_desc">將裝置共用儲存空間中的資料夾以相同路徑掛載到 Rootfs。變更後，請重新開啟所有已開啟的終端機，變更才會生效。</string>
+  <string name="workspace_detail_storage_permission_missing">尚未授予所有檔案存取權限</string>
+  <string name="workspace_detail_storage_permission_missing_desc">點擊以在系統設定中授予權限。若未授予，將無法讀取或寫入已掛載的資料夾。</string>
+  <string name="workspace_detail_storage_writable">AI 寫入免核准</string>
+  <string name="workspace_detail_storage_needs_approval">AI 寫入需要核准</string>
+  <string name="workspace_detail_storage_writable_desc">關閉時，AI 使用檔案工具寫入此資料夾前，您必須先確認。</string>
+  <string name="workspace_detail_storage_add">新增資料夾</string>
+  <string name="workspace_detail_storage_edit">編輯資料夾</string>
+  <string name="workspace_detail_storage_path">路徑</string>
+  <string name="workspace_detail_storage_pick_folder">選擇資料夾</string>
+  <string name="workspace_detail_storage_pick_failed">無法解析此資料夾的路徑，請手動輸入。</string>
+  <string name="workspace_detail_storage_path_not_absolute">路徑必須是絕對路徑</string>
+  <string name="workspace_detail_storage_path_outside">只能掛載 /storage 下的資料夾，例如 %1$s</string>
+  <string name="workspace_detail_storage_path_unavailable">資料夾不存在，或未授予存取所有檔案的權限</string>
+  <string name="workspace_terminal_mounts_unavailable">已掛載的資料夾無法使用：%1$s。請在工作區設定中修正或移除它們。</string>
+  <string name="workspace_terminal_start_failed">無法啟動終端機</string>
 </resources>

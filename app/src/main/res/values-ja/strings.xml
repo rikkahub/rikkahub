@@ -1860,4 +1860,21 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_message_tool_phone_use_wait">%1$s秒待機</string>
   <string name="setting_display_page_split_assistant_bubble_title">バブルを段落ごとに分割</string>
   <string name="setting_display_page_split_assistant_bubble_desc">アシスタントの返信の各段落を個別のバブルに表示します</string>
+  <string name="workspace_detail_storage_title">外部ストレージ</string>
+  <string name="workspace_detail_storage_desc">デバイスの共有ストレージからフォルダを同じパスでRootfsにマウントします。変更後、開いているターミナルを再度開いて反映させてください。</string>
+  <string name="workspace_detail_storage_permission_missing">すべてのファイルへのアクセスが許可されていません</string>
+  <string name="workspace_detail_storage_permission_missing_desc">タップしてシステム設定で許可してください。許可しない場合、マウントされたフォルダの読み書きができません。</string>
+  <string name="workspace_detail_storage_writable">AIの書き込みは承認をスキップ</string>
+  <string name="workspace_detail_storage_needs_approval">AIの書き込みには承認が必要</string>
+  <string name="workspace_detail_storage_writable_desc">オフの場合、AIがファイルツールでこのフォルダーに書き込む前に確認が必要です。</string>
+  <string name="workspace_detail_storage_add">フォルダを追加</string>
+  <string name="workspace_detail_storage_edit">フォルダを編集</string>
+  <string name="workspace_detail_storage_path">パス</string>
+  <string name="workspace_detail_storage_pick_folder">フォルダを選択</string>
+  <string name="workspace_detail_storage_pick_failed">このフォルダのパスを解決できませんでした。手動で入力してください。</string>
+  <string name="workspace_detail_storage_path_not_absolute">パスは絶対パスである必要があります</string>
+  <string name="workspace_detail_storage_path_outside">マウントできるのは /storage 配下のフォルダのみです（例: %1$s）</string>
+  <string name="workspace_detail_storage_path_unavailable">フォルダが存在しないか、すべてのファイルへのアクセスが許可されていません</string>
+  <string name="workspace_terminal_mounts_unavailable">マウントされたフォルダーを利用できません: %1$s。ワークスペース設定で修正するか削除してください。</string>
+  <string name="workspace_terminal_start_failed">ターミナルの起動に失敗しました</string>
 </resources>

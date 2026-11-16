@@ -1860,4 +1860,21 @@
   <string name="chat_message_tool_phone_use_wait">Ожидание %1$s сек.</string>
   <string name="setting_display_page_split_assistant_bubble_title">Разделять пузыри по абзацам</string>
   <string name="setting_display_page_split_assistant_bubble_desc">Показывать каждый абзац ответа ассистента в отдельном пузыре</string>
+  <string name="workspace_detail_storage_title">Внешнее хранилище</string>
+  <string name="workspace_detail_storage_desc">Монтируйте папки из общего хранилища устройства в Rootfs по тем же путям. После изменений переоткройте открытые терминалы, чтобы изменения вступили в силу.</string>
+  <string name="workspace_detail_storage_permission_missing">Доступ ко всем файлам не предоставлен</string>
+  <string name="workspace_detail_storage_permission_missing_desc">Нажмите, чтобы предоставить разрешение в системных настройках. Без него нельзя читать или записывать подключённые папки.</string>
+  <string name="workspace_detail_storage_writable">ИИ записывает без подтверждения</string>
+  <string name="workspace_detail_storage_needs_approval">Запись ИИ требует одобрения</string>
+  <string name="workspace_detail_storage_writable_desc">Когда выключено, нужно подтверждать, прежде чем ИИ запишет в эту папку с помощью файловых инструментов.</string>
+  <string name="workspace_detail_storage_add">Добавить папку</string>
+  <string name="workspace_detail_storage_edit">Изменить папку</string>
+  <string name="workspace_detail_storage_path">Путь</string>
+  <string name="workspace_detail_storage_pick_folder">Выбрать папку</string>
+  <string name="workspace_detail_storage_pick_failed">Не удалось определить путь к этой папке. Введите его вручную.</string>
+  <string name="workspace_detail_storage_path_not_absolute">Путь должен быть абсолютным</string>
+  <string name="workspace_detail_storage_path_outside">Можно монтировать только папки в /storage, например %1$s</string>
+  <string name="workspace_detail_storage_path_unavailable">Папка не существует или не предоставлен доступ ко всем файлам</string>
+  <string name="workspace_terminal_mounts_unavailable">Смонтированные папки недоступны: %1$s. Исправьте или удалите их в настройках рабочей области.</string>
+  <string name="workspace_terminal_start_failed">Не удалось запустить терминал</string>
 </resources>

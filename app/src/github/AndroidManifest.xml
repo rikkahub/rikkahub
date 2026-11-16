@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
+
+  <!-- 工作区挂载共享存储目录需要「所有文件访问权限」；Play 对这个权限审核很严，只在 github 渠道声明 -->
+  <uses-permission
+    android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+    tools:ignore="ScopedStorage" />
 
   <application>
     <!-- Phone Use：只在 github 渠道声明，Play 不允许用无障碍服务做自动化。

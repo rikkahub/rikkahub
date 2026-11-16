@@ -60,6 +60,29 @@ class RootfsPathResolutionTest {
     }
 
     @Test
+    fun extraMountsResolveAndCountAsWritableOnlyWhenPassed() {
+        manager = createManager()
+        val documents = tempFolder.newFolder("documents")
+        File(documents, "a.txt").writeText("from storage")
+        val extra = listOf(
+            WorkspaceBindMount(source = documents, target = "/storage/emulated/0/Documents", writable = true),
+        )
+
+        val location = manager.resolveRootfsPath(root, "/storage/emulated/0/Documents/a.txt", extra)
+        assertEquals(documents, location.rootDir)
+        assertEquals("a.txt", location.relativePath)
+        assertEquals(12L, manager.rootfsFileSize(root, "/storage/emulated/0/Documents/a.txt", extra))
+        assertTrue(manager.layout(extra).isWritable("/storage/emulated/0/Documents/a.txt"))
+
+        // 不传工作区挂载时落到 Rootfs 目录, 其他工作区看不到
+        assertEquals(
+            manager.linuxDir(root),
+            manager.resolveRootfsPath(root, "/storage/emulated/0/Documents/a.txt").rootDir
+        )
+        assertTrue(!manager.layout().isWritable("/storage/emulated/0/Documents/a.txt"))
+    }
+
+    @Test
     fun workspacePathStillResolvesToFilesArea() {
         manager = createManager()
         File(manager.filesDir(root), "notes.txt").writeText("hello")

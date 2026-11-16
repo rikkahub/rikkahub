@@ -1858,4 +1858,21 @@
   <string name="chat_message_tool_phone_use_wait">انتظر %1$s ثانية</string>
   <string name="setting_display_page_split_assistant_bubble_title">تقسيم الفقاعات حسب الفقرة</string>
   <string name="setting_display_page_split_assistant_bubble_desc">إظهار كل فقرة من رد المساعد في فقاعة منفصلة</string>
+  <string name="workspace_detail_storage_title">التخزين الخارجي</string>
+  <string name="workspace_detail_storage_desc">ركّب المجلدات من التخزين المشترك للجهاز داخل Rootfs على نفس المسارات. بعد إجراء التغييرات، أعد فتح أي محطات طرفية مفتوحة حتى تسري التغييرات.</string>
+  <string name="workspace_detail_storage_permission_missing">لم يُمنح الوصول إلى جميع الملفات</string>
+  <string name="workspace_detail_storage_permission_missing_desc">اضغط لمنحه في إعدادات النظام. بدون ذلك، يتعذر قراءة المجلدات المثبتة أو الكتابة فيها.</string>
+  <string name="workspace_detail_storage_writable">كتابات الذكاء الاصطناعي تتجاوز الموافقة</string>
+  <string name="workspace_detail_storage_needs_approval">تتطلب كتابات الذكاء الاصطناعي موافقة</string>
+  <string name="workspace_detail_storage_writable_desc">عند إيقاف هذا الخيار، يجب عليك التأكيد قبل أن يكتب الذكاء الاصطناعي إلى هذا المجلد باستخدام أدوات الملفات.</string>
+  <string name="workspace_detail_storage_add">إضافة مجلد</string>
+  <string name="workspace_detail_storage_edit">تعديل المجلد</string>
+  <string name="workspace_detail_storage_path">المسار</string>
+  <string name="workspace_detail_storage_pick_folder">اختيار مجلد</string>
+  <string name="workspace_detail_storage_pick_failed">تعذّر تحديد مسار هذا المجلد. أدخله يدويًا.</string>
+  <string name="workspace_detail_storage_path_not_absolute">يجب أن يكون المسار مطلقًا</string>
+  <string name="workspace_detail_storage_path_outside">يمكن تركيب المجلدات الواقعة ضمن /storage فقط، على سبيل المثال %1$s</string>
+  <string name="workspace_detail_storage_path_unavailable">المجلد غير موجود، أو لم يُمنح الوصول إلى جميع الملفات</string>
+  <string name="workspace_terminal_mounts_unavailable">المجلدات المركّبة غير متاحة: %1$s. قم بإصلاحها أو إزالتها من إعدادات مساحة العمل.</string>
+  <string name="workspace_terminal_start_failed">تعذّر بدء الطرفية</string>
 </resources>

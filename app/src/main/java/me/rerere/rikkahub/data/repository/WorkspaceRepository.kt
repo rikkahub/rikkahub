@@ -16,6 +16,8 @@ import me.rerere.rikkahub.data.model.SshJumpHostDraft
 import me.rerere.rikkahub.data.model.SshJumpHostSettings
 import me.rerere.rikkahub.data.model.SshWorkspaceDraft
 import me.rerere.rikkahub.data.model.SshWorkspaceSettings
+import me.rerere.rikkahub.data.model.WorkspaceStorageMount
+import me.rerere.rikkahub.data.model.normalizeStorageMountPath
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.SecretCipher
 import me.rerere.workspace.RootfsInstallProgress
@@ -164,6 +166,32 @@ class WorkspaceRepository(
         dao.setShellCompatibilityMode(id, enabled, System.currentTimeMillis())
     }
 
+    /**
+     * 保存共享存储挂载列表, 路径规范化后按路径去重; 只对下次执行的命令和新开的终端生效。
+     * 新加入的路径必须是可访问的目录, 已保存的路径不再校验, 这样 SD 卡拔出后仍能删除或修改其他条目。
+     */
+    suspend fun setStorageMounts(id: String, mounts: List<WorkspaceStorageMount>) {
+        val workspace = dao.getById(id) ?: error("Workspace not found: $id")
+        require(workspace.capabilities().rootfs) { "Storage mounts are only available for local workspaces" }
+        val savedPaths = workspace.storageMountList().mapTo(HashSet()) { it.path }
+        val normalized = mounts
+            .map { it.copy(path = normalizeStorageMountPath(it.path)) }
+            .distinctBy { it.path }
+        withContext(Dispatchers.IO) {
+            normalized.filterNot { it.path in savedPaths }.forEach { mount ->
+                require(File(mount.path).isDirectory) {
+                    "Folder does not exist, or all files access is not granted: ${mount.path}"
+                }
+            }
+        }
+        dao.upsert(
+            workspace.copy(
+                storageMounts = JsonInstant.encodeToString(normalized),
+                updatedAt = System.currentTimeMillis(),
+            )
+        )
+    }
+
     suspend fun setToolApproval(id: String, toolName: String, needsApproval: Boolean): Boolean {
         val workspace = dao.getById(id) ?: return false
         val overrides = workspace.toolApprovalOverrides() + (toolName to needsApproval)
@@ -214,7 +242,7 @@ class WorkspaceRepository(
         if (workspace.isSsh()) {
             workspace.sshSettings()?.let { SshWorkspaceBackend.layoutOf(it.remoteDir) }
         } else {
-            manager.layout
+            manager.layout(workspace.extraBindMounts())
         }
     }
 
@@ -395,7 +423,7 @@ class WorkspaceRepository(
             val settings = workspace.sshSettings() ?: error("SSH workspace config is missing: ${workspace.id}")
             SshWorkspaceBackend(sshPool, workspace.id, settings.toConnectionConfig())
         } else {
-            manager.backend(workspace.root, workspace.shellCompatibilityMode)
+            manager.backend(workspace.root, workspace.shellCompatibilityMode, workspace.extraBindMounts())
         }
 
     private fun SshWorkspaceSettings.toConnectionConfig() = SshConnectionConfig(

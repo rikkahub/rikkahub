@@ -1858,4 +1858,21 @@
   <string name="chat_message_tool_phone_use_wait">Wait %1$s seconds</string>
   <string name="setting_display_page_split_assistant_bubble_title">Split Bubbles by Paragraph</string>
   <string name="setting_display_page_split_assistant_bubble_desc">Show each paragraph of an assistant reply in its own bubble</string>
+  <string name="workspace_detail_storage_title">External storage</string>
+  <string name="workspace_detail_storage_desc">Mount folders from the device shared storage into the Rootfs at the same paths. After changes, reopen any open terminals for them to take effect.</string>
+  <string name="workspace_detail_storage_permission_missing">All files access not granted</string>
+  <string name="workspace_detail_storage_permission_missing_desc">Tap to grant it in system settings. Without it, mounted folders cannot be read or written.</string>
+  <string name="workspace_detail_storage_writable">AI writes skip approval</string>
+  <string name="workspace_detail_storage_needs_approval">AI writes need approval</string>
+  <string name="workspace_detail_storage_writable_desc">When off, you must confirm before AI writes to this folder with file tools.</string>
+  <string name="workspace_detail_storage_add">Add folder</string>
+  <string name="workspace_detail_storage_edit">Edit folder</string>
+  <string name="workspace_detail_storage_path">Path</string>
+  <string name="workspace_detail_storage_pick_folder">Choose folder</string>
+  <string name="workspace_detail_storage_pick_failed">Could not resolve the path of this folder. Enter it manually.</string>
+  <string name="workspace_detail_storage_path_not_absolute">The path must be absolute</string>
+  <string name="workspace_detail_storage_path_outside">Only folders under /storage can be mounted, for example %1$s</string>
+  <string name="workspace_detail_storage_path_unavailable">The folder does not exist, or all files access is not granted</string>
+  <string name="workspace_terminal_mounts_unavailable">Mounted folders are unavailable: %1$s. Fix or remove them in the workspace settings.</string>
+  <string name="workspace_terminal_start_failed">Failed to start the terminal</string>
 </resources>
