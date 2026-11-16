@@ -23,16 +23,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
@@ -53,12 +56,16 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.utils.CrashHandler
 import org.koin.android.ext.android.inject
 import kotlin.uuid.Uuid
+
+// 盘上单个字段超过这么多字符才算「超大」：正常使用到不了这个量级，到了就可能在读写设置时撑爆内存
+private const val LARGE_FIELD_MIN_CHARS = 5_000_000
 
 class SafeModeActivity : ComponentActivity() {
     private val settingsStore by inject<SettingsStore>()
@@ -73,6 +80,10 @@ class SafeModeActivity : ComponentActivity() {
             RikkahubTheme {
                 val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
                 var showAssistantPicker by remember { mutableStateOf(false) }
+                val largeFields by remember { settingsStore.largeStoredFieldsFlow(LARGE_FIELD_MIN_CHARS) }
+                    .collectAsStateWithLifecycle(emptyList())
+                var pendingClearKey by remember { mutableStateOf<String?>(null) }
+                var clearing by remember { mutableStateOf(false) }
                 val scope = rememberCoroutineScope()
                 val context = LocalContext.current
 
@@ -103,13 +114,6 @@ class SafeModeActivity : ComponentActivity() {
                         )
 
                         Button(
-                            onClick = { showAssistantPicker = true },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(stringResource(R.string.safe_mode_switch_assistant))
-                        }
-
-                        OutlinedButton(
                             onClick = {
                                 startActivity(Intent(this@SafeModeActivity, RouteActivity::class.java))
                                 finish()
@@ -117,6 +121,37 @@ class SafeModeActivity : ComponentActivity() {
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(stringResource(R.string.safe_mode_enter_app))
+                        }
+
+                        OutlinedButton(
+                            onClick = { showAssistantPicker = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(stringResource(R.string.safe_mode_switch_assistant))
+                        }
+
+                        if (largeFields.isNotEmpty()) {
+                            CardGroup(
+                                modifier = Modifier.fillMaxWidth(),
+                                title = { Text("Oversized data") },
+                            ) {
+                                largeFields.forEach { (key, chars) ->
+                                    item(
+                                        headlineContent = { Text(storedFieldLabel(key)) },
+                                        supportingContent = {
+                                            Text("%.1f million characters".format(chars / 1_000_000f))
+                                        },
+                                        trailingContent = {
+                                            FilledTonalButton(
+                                                onClick = { pendingClearKey = key },
+                                                enabled = !clearing,
+                                            ) {
+                                                Text("Clear")
+                                            }
+                                        },
+                                    )
+                                }
+                            }
                         }
 
                         if (stackTrace != null) {
@@ -161,6 +196,39 @@ class SafeModeActivity : ComponentActivity() {
                     }
                 }
 
+                pendingClearKey?.let { key ->
+                    AlertDialog(
+                        onDismissRequest = { pendingClearKey = null },
+                        title = { Text("Clear ${storedFieldLabel(key)}?") },
+                        text = {
+                            Text(
+                                "This data is large enough to make the app run out of memory. " +
+                                    "Clearing resets it to the default and cannot be undone."
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    pendingClearKey = null
+                                    clearing = true
+                                    scope.launch {
+                                        try {
+                                            settingsStore.resetStoredField(key)
+                                        } finally {
+                                            clearing = false
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text("Clear", color = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingClearKey = null }) { Text("Cancel") }
+                        },
+                    )
+                }
+
                 if (showAssistantPicker) {
                     AssistantPickerSheet(
                         settings = settings,
@@ -175,6 +243,14 @@ class SafeModeActivity : ComponentActivity() {
             }
         }
     }
+}
+
+// 认得的 key 显示成界面上的名字，其余直接显示 key
+@Composable
+private fun storedFieldLabel(key: String): String = when (key) {
+    SettingsStore.LOREBOOKS.name -> stringResource(R.string.prompt_page_lorebook_tab)
+    SettingsStore.ASSISTANTS.name -> stringResource(R.string.safe_mode_assistants)
+    else -> key
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -534,7 +534,7 @@
   <string name="safe_mode_crash_report">クラッシュレポート</string>
   <string name="safe_mode_current_assistant">現在のアシスタント: %s</string>
   <string name="safe_mode_default_assistant">デフォルトアシスタント</string>
-  <string name="safe_mode_description">前回の起動時にアプリがクラッシュしました。別のアシスタントに切り替えて問題を解決できます。</string>
+  <string name="safe_mode_description">前回の起動時にアプリがクラッシュしました。</string>
   <string name="safe_mode_switch_assistant">アシスタントを切り替える</string>
   <string name="safe_mode_title">セーフモード</string>
   <string name="search_ability_scrape">スクレイピング</string>

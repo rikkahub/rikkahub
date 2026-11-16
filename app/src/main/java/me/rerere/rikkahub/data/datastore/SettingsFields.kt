@@ -27,6 +27,9 @@ internal class SettingsField<T, P : Any>(
         return settings.set(decode(stored))
     }
 
+    /** 把这个字段恢复成 key 不存在时的取值。 */
+    fun reset(settings: Settings): Settings = settings.set(property.get(MISSING_KEY_DEFAULTS))
+
     /** 编码结果为 null 时删除 key。 */
     fun write(preferences: MutablePreferences, settings: Settings) {
         val encoded = encode(property.get(settings))

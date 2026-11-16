@@ -534,7 +534,7 @@
   <string name="safe_mode_crash_report">當機報告</string>
   <string name="safe_mode_current_assistant">目前助理：%s</string>
   <string name="safe_mode_default_assistant">預設助理</string>
-  <string name="safe_mode_description">應用程式在上次啟動時崩潰。您可以切換到其他助理來解決此問題。</string>
+  <string name="safe_mode_description">應用程式在上次啟動時崩潰。</string>
   <string name="safe_mode_switch_assistant">切換助理</string>
   <string name="safe_mode_title">安全模式</string>
   <string name="search_ability_scrape">爬取</string>

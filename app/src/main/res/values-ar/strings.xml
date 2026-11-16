@@ -638,7 +638,7 @@
   <string name="safe_mode_crash_report">تقرير التعطل</string>
   <string name="safe_mode_current_assistant">المساعد الحالي: %s</string>
   <string name="safe_mode_default_assistant">المساعد الافتراضي</string>
-  <string name="safe_mode_description">تعطل التطبيق عند آخر تشغيل. يمكنك التبديل إلى مساعد مختلف لحل المشكلة.</string>
+  <string name="safe_mode_description">تعطل التطبيق عند آخر تشغيل.</string>
   <string name="safe_mode_enter_app">دخول التطبيق</string>
   <string name="safe_mode_switch_assistant">تبديل المساعد</string>
   <string name="safe_mode_title">الوضع الآمن</string>

@@ -534,7 +534,7 @@
   <string name="safe_mode_crash_report">충돌 보고서</string>
   <string name="safe_mode_current_assistant">현재 어시스턴트: %s</string>
   <string name="safe_mode_default_assistant">기본 비서</string>
-  <string name="safe_mode_description">앱이 마지막 실행에서 충돌했습니다. 문제를 해결하려면 다른 어시스턴트로 전환할 수 있습니다.</string>
+  <string name="safe_mode_description">앱이 마지막 실행에서 충돌했습니다.</string>
   <string name="safe_mode_switch_assistant">어시스턴트 전환</string>
   <string name="safe_mode_title">안전 모드</string>
   <string name="search_ability_scrape">스크래핑</string>

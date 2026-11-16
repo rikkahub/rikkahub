@@ -493,7 +493,7 @@
   <string name="safe_mode_crash_report">Absturzbericht</string>
   <string name="safe_mode_current_assistant">Aktueller Assistent: %s</string>
   <string name="safe_mode_default_assistant">Standard-Assistent</string>
-  <string name="safe_mode_description">Die App ist beim letzten Start abgestürzt. Du kannst zu einem anderen Assistenten wechseln, um das Problem zu beheben.</string>
+  <string name="safe_mode_description">Die App ist beim letzten Start abgestürzt.</string>
   <string name="safe_mode_enter_app">App öffnen</string>
   <string name="safe_mode_switch_assistant">Assistent wechseln</string>
   <string name="safe_mode_title">Sicherer Modus</string>
