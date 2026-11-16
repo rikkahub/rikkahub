@@ -1875,4 +1875,10 @@
   <string name="workspace_detail_storage_path_unavailable">資料夾不存在，或未授予存取所有檔案的權限</string>
   <string name="workspace_terminal_mounts_unavailable">已掛載的資料夾無法使用：%1$s。請在工作區設定中修正或移除它們。</string>
   <string name="workspace_terminal_start_failed">無法啟動終端機</string>
+  <string name="backup_page_import_from_deepseek">從 DeepSeek 匯入</string>
+  <string name="backup_page_import_deepseek_desc">僅將 DeepSeek 匯出 ZIP 中每個聊天的目前分支匯入目前的助理，包括思考過程和附件。已存在的對話會略過。</string>
+  <string name="backup_page_import_deepseek_read_error">無法讀取 DeepSeek 匯出檔案</string>
+  <string name="backup_page_import_deepseek_complete">DeepSeek 匯入完成</string>
+  <string name="backup_page_import_deepseek_summary">已匯入 %1$d 個對話\n略過 %2$d 個已存在的對話\n略過 %3$d 個空對話\n%4$d 個附件未包含在匯出檔中或無法匯入，已保留檔案名稱提示。</string>
+  <string name="backup_page_import_deepseek_missing_attachment">[附件未包含在匯出檔中或無法匯入：%1$s]</string>
 </resources>

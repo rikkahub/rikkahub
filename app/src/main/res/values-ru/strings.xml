@@ -1877,4 +1877,10 @@
   <string name="workspace_detail_storage_path_unavailable">Папка не существует или не предоставлен доступ ко всем файлам</string>
   <string name="workspace_terminal_mounts_unavailable">Смонтированные папки недоступны: %1$s. Исправьте или удалите их в настройках рабочей области.</string>
   <string name="workspace_terminal_start_failed">Не удалось запустить терминал</string>
+  <string name="backup_page_import_from_deepseek">Импорт из DeepSeek</string>
+  <string name="backup_page_import_deepseek_desc">Импортировать только текущую ветку каждого чата, включая рассуждения и вложения, из ZIP-экспорта DeepSeek в текущий ассистент. Существующие беседы пропускаются.</string>
+  <string name="backup_page_import_deepseek_read_error">Не удалось прочитать файл экспорта DeepSeek</string>
+  <string name="backup_page_import_deepseek_complete">Импорт из DeepSeek завершён</string>
+  <string name="backup_page_import_deepseek_summary">Импортировано бесед: %1$d\nПропущено существующих бесед: %2$d\nПропущено пустых бесед: %3$d\nВложений, отсутствующих в экспорте или не импортированных: %4$d. Их имена файлов сохранены как заполнители.</string>
+  <string name="backup_page_import_deepseek_missing_attachment">[Вложение отсутствует в экспорте или его не удалось импортировать: %1$s]</string>
 </resources>

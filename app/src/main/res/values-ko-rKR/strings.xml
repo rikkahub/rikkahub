@@ -1877,4 +1877,10 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="workspace_detail_storage_path_unavailable">폴더가 존재하지 않거나 모든 파일 액세스 권한이 부여되지 않았습니다</string>
   <string name="workspace_terminal_mounts_unavailable">마운트된 폴더를 사용할 수 없습니다: %1$s. 워크스페이스 설정에서 수정하거나 제거하세요.</string>
   <string name="workspace_terminal_start_failed">터미널을 시작하지 못했습니다</string>
+  <string name="backup_page_import_from_deepseek">DeepSeek에서 가져오기</string>
+  <string name="backup_page_import_deepseek_desc">DeepSeek 내보내기 ZIP에서 각 채팅의 현재 브랜치만 현재 어시스턴트로 가져옵니다(추론 및 첨부 파일 포함). 기존 대화는 건너뜁니다.</string>
+  <string name="backup_page_import_deepseek_read_error">DeepSeek 내보내기 파일을 읽을 수 없습니다</string>
+  <string name="backup_page_import_deepseek_complete">DeepSeek 가져오기 완료</string>
+  <string name="backup_page_import_deepseek_summary">가져온 대화: %1$d\n건너뛴 기존 대화: %2$d\n건너뛴 빈 대화: %3$d\n내보내기에서 누락되었거나 가져올 수 없는 첨부 파일: %4$d. 해당 파일 이름은 자리 표시자로 유지되었습니다.</string>
+  <string name="backup_page_import_deepseek_missing_attachment">[내보내기에 없거나 가져올 수 없는 첨부파일: %1$s]</string>
 </resources>

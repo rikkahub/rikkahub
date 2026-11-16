@@ -1875,4 +1875,10 @@
   <string name="workspace_detail_storage_path_unavailable">Der Ordner existiert nicht oder der Zugriff auf alle Dateien wurde nicht gewährt</string>
   <string name="workspace_terminal_mounts_unavailable">Eingebundene Ordner sind nicht verfügbar: %1$s. Behebe das Problem oder entferne sie in den Einstellungen des Arbeitsbereichs.</string>
   <string name="workspace_terminal_start_failed">Terminal konnte nicht gestartet werden</string>
+  <string name="backup_page_import_from_deepseek">Aus DeepSeek importieren</string>
+  <string name="backup_page_import_deepseek_desc">Importiere nur den aktuellen Zweig jedes Chats, einschließlich Reasoning und Anhängen, aus einem DeepSeek-Export-ZIP in den aktuellen Assistenten. Vorhandene Unterhaltungen werden übersprungen.</string>
+  <string name="backup_page_import_deepseek_read_error">DeepSeek-Exportdatei kann nicht gelesen werden</string>
+  <string name="backup_page_import_deepseek_complete">DeepSeek-Import abgeschlossen</string>
+  <string name="backup_page_import_deepseek_summary">Importierte Unterhaltungen: %1$d\nÜbersprungene vorhandene Unterhaltungen: %2$d\nÜbersprungene leere Unterhaltungen: %3$d\nIm Export fehlende oder nicht importierbare Anhänge: %4$d. Ihre Dateinamen wurden als Platzhalter beibehalten.</string>
+  <string name="backup_page_import_deepseek_missing_attachment">[Anhang fehlt im Export oder konnte nicht importiert werden: %1$s]</string>
 </resources>

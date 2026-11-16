@@ -1875,4 +1875,10 @@
   <string name="workspace_detail_storage_path_unavailable">The folder does not exist, or all files access is not granted</string>
   <string name="workspace_terminal_mounts_unavailable">Mounted folders are unavailable: %1$s. Fix or remove them in the workspace settings.</string>
   <string name="workspace_terminal_start_failed">Failed to start the terminal</string>
+  <string name="backup_page_import_from_deepseek">Import from DeepSeek</string>
+  <string name="backup_page_import_deepseek_desc">Import only the current branch of each chat, including reasoning and attachments, from a DeepSeek export ZIP into the current assistant. Existing conversations are skipped.</string>
+  <string name="backup_page_import_deepseek_read_error">Unable to read the DeepSeek export file</string>
+  <string name="backup_page_import_deepseek_complete">DeepSeek import complete</string>
+  <string name="backup_page_import_deepseek_summary">Conversations imported: %1$d\nExisting conversations skipped: %2$d\nEmpty conversations skipped: %3$d\nAttachments missing from the export or unable to be imported: %4$d. Their file names have been kept as placeholders.</string>
+  <string name="backup_page_import_deepseek_missing_attachment">[Attachment missing from the export or unable to be imported: %1$s]</string>
 </resources>

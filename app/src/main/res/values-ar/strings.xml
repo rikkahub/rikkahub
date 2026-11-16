@@ -1875,4 +1875,10 @@
   <string name="workspace_detail_storage_path_unavailable">المجلد غير موجود، أو لم يُمنح الوصول إلى جميع الملفات</string>
   <string name="workspace_terminal_mounts_unavailable">المجلدات المركّبة غير متاحة: %1$s. قم بإصلاحها أو إزالتها من إعدادات مساحة العمل.</string>
   <string name="workspace_terminal_start_failed">تعذّر بدء الطرفية</string>
+  <string name="backup_page_import_from_deepseek">استيراد من DeepSeek</string>
+  <string name="backup_page_import_deepseek_desc">استيراد الفرع الحالي لكل محادثة فقط، بما في ذلك الاستدلال والمرفقات، من ملف ZIP مُصدَّر من DeepSeek إلى المساعد الحالي. يتم تخطي المحادثات الموجودة.</string>
+  <string name="backup_page_import_deepseek_read_error">تعذّرت قراءة ملف التصدير من DeepSeek</string>
+  <string name="backup_page_import_deepseek_complete">اكتمل استيراد DeepSeek</string>
+  <string name="backup_page_import_deepseek_summary">المحادثات المستوردة: %1$d\nالمحادثات الموجودة التي تم تخطيها: %2$d\nالمحادثات الفارغة التي تم تخطيها: %3$d\nالمرفقات المفقودة من التصدير أو التي تعذّر استيرادها: %4$d. تم الاحتفاظ بأسماء ملفاتها كعناصر نائبة.</string>
+  <string name="backup_page_import_deepseek_missing_attachment">[مرفق مفقود من التصدير أو تعذّر استيراده: %1$s]</string>
 </resources>

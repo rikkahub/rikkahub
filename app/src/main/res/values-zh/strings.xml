@@ -1877,4 +1877,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_detail_storage_path_unavailable">该文件夹不存在，或未授予所有文件访问权限</string>
   <string name="workspace_terminal_mounts_unavailable">已挂载的文件夹不可用：%1$s。请在工作区设置中修复或移除它们。</string>
   <string name="workspace_terminal_start_failed">无法启动终端</string>
+  <string name="backup_page_import_from_deepseek">从 DeepSeek 导入</string>
+  <string name="backup_page_import_deepseek_desc">仅将 DeepSeek 导出 ZIP 中每个聊天的当前分支导入当前助手，包括思考过程和附件。已存在的会话会跳过。</string>
+  <string name="backup_page_import_deepseek_read_error">无法读取 DeepSeek 导出文件</string>
+  <string name="backup_page_import_deepseek_complete">DeepSeek 导入完成</string>
+  <string name="backup_page_import_deepseek_summary">已导入 %1$d 个会话\n跳过 %2$d 个已存在会话\n跳过 %3$d 个空会话\n%4$d 个附件未包含在导出包中或无法导入，已保留文件名提示。</string>
+  <string name="backup_page_import_deepseek_missing_attachment">[附件未包含在导出包中或无法导入：%1$s]</string>
 </resources>

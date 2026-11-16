@@ -1877,4 +1877,10 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="workspace_detail_storage_path_unavailable">フォルダが存在しないか、すべてのファイルへのアクセスが許可されていません</string>
   <string name="workspace_terminal_mounts_unavailable">マウントされたフォルダーを利用できません: %1$s。ワークスペース設定で修正するか削除してください。</string>
   <string name="workspace_terminal_start_failed">ターミナルの起動に失敗しました</string>
+  <string name="backup_page_import_from_deepseek">DeepSeekからインポート</string>
+  <string name="backup_page_import_deepseek_desc">DeepSeekのエクスポートZIPから、各チャットの現在のブランチのみを推論と添付ファイルを含めて現在のアシスタントにインポートします。既存の会話はスキップされます。</string>
+  <string name="backup_page_import_deepseek_read_error">DeepSeekのエクスポートファイルを読み取れません</string>
+  <string name="backup_page_import_deepseek_complete">DeepSeekのインポートが完了しました</string>
+  <string name="backup_page_import_deepseek_summary">インポートされた会話: %1$d\n既存の会話のスキップ: %2$d\n空の会話のスキップ: %3$d\nエクスポートに含まれていない、またはインポートできなかった添付ファイル: %4$d。ファイル名はプレースホルダーとして保持されています。</string>
+  <string name="backup_page_import_deepseek_missing_attachment">[エクスポートに存在しないかインポートできなかった添付ファイル: %1$s]</string>
 </resources>
