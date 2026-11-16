@@ -237,7 +237,7 @@ traces:
   - name: gemini-tool
     provider: google-generateContent
     apiKeyEnv: GEMINI_API_KEY
-    model: gemini-3.1-pro-preview
+    model: gemini-4-carbon
     body:
       generationConfig:
         thinkingConfig:
@@ -258,6 +258,85 @@ traces:
                     type: string
                     description: A focused search query for one topic.
                 required: [query]
+  # Gemini 官方：本地函数与内置 Google Search 混用（与 App 同时启用记忆和搜索时的请求一致）。
+  # 用于观察 toolCall / toolResponse 与 thoughtSignature 的分布（#2316、#2327）。
+  - name: gemini-search-tool
+    provider: google-generateContent
+    apiKeyEnv: GEMINI_API_KEY
+    model: gemini-4-carbon
+    body:
+      generationConfig:
+        thinkingConfig:
+          includeThoughts: true
+          thinkingLevel: high
+      contents:
+        - role: user
+          parts:
+            - text: >-
+                First read my saved memory file /topics/entertainment.md with the memory_read tool to
+                learn which movie director I follow. Then use Google Search to find that director's
+                latest film announcement, and summarize it with the release date and source URL.
+      tools:
+        - functionDeclarations:
+            - name: memory_read
+              description: Read a saved memory file of the user.
+              parameters:
+                type: object
+                properties:
+                  path:
+                    type: string
+                    description: Absolute path of the memory file, such as /topics/food.md.
+                required: [path]
+        - googleSearch: {}
+      toolConfig:
+        includeServerSideToolInvocations: true
+  # Gemini 官方：本地函数结果返回后，模型继续调用内置 Google Search 的续轮请求（#2327 出错前一步）。
+  # 第一步的签名使用官方占位值 skip_thought_signature_validator。
+  - name: gemini-search-continue
+    provider: google-generateContent
+    apiKeyEnv: GEMINI_API_KEY
+    model: gemini-4-carbon
+    body:
+      generationConfig:
+        thinkingConfig:
+          includeThoughts: true
+          thinkingLevel: high
+      contents:
+        - role: user
+          parts:
+            - text: >-
+                First read my saved memory file /topics/entertainment.md with the memory_read tool to
+                learn which movie director I follow. Then use Google Search to find that director's
+                latest film announcement, and summarize it with the release date and source URL.
+        - role: model
+          parts:
+            - functionCall:
+                id: memory-read-1
+                name: memory_read
+                args:
+                  path: /topics/entertainment.md
+              thoughtSignature: skip_thought_signature_validator
+        - role: user
+          parts:
+            - functionResponse:
+                id: memory-read-1
+                name: memory_read
+                response:
+                  result: "The user follows director Denis Villeneuve and enjoys science fiction films."
+      tools:
+        - functionDeclarations:
+            - name: memory_read
+              description: Read a saved memory file of the user.
+              parameters:
+                type: object
+                properties:
+                  path:
+                    type: string
+                    description: Absolute path of the memory file, such as /topics/food.md.
+                required: [path]
+        - googleSearch: {}
+      toolConfig:
+        includeServerSideToolInvocations: true
   # Gemini 官方：原生图像生成 SSE 协议。
   - name: gemini-image
     provider: google-generateContent
@@ -278,7 +357,7 @@ traces:
   - name: gemini-interactions-tool
     provider: google-interactions
     apiKeyEnv: GEMINI_API_KEY
-    model: gemini-3.1-pro-preview
+    model: gemini-4-carbon
     body:
       store: false
       input: "Research Kotlin, Ktor, and Compose Multiplatform independently. Compare their latest stable releases, including release dates and official source URLs."

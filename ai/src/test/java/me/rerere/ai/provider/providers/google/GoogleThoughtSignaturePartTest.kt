@@ -4,6 +4,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -99,6 +100,73 @@ class GoogleThoughtSignaturePartTest {
         assertEquals("sig-1", text.metadataAs<GoogleThoughtMetadata>()?.thoughtSignature)
     }
 
+    @Test
+    fun `search trace replays every signature in the next request`() {
+        // 第一步调用 memory_read，执行后继续生成并调用内置 Google Search（#2327 的场景）
+        var messages = replayTrace(listOf(UIMessage.user("hi")), "gemini-search-tool")
+        messages = messages.dropLast(1) + messages.last().let { assistant ->
+            assistant.copy(parts = assistant.parts.map { part ->
+                if (part is UIMessagePart.Tool) {
+                    part.copy(
+                        output = listOf(UIMessagePart.Text("Denis Villeneuve"))
+                    )
+                } else {
+                    part
+                }
+            })
+        }
+        messages = replayTrace(messages, "gemini-search-continue")
+
+        val contents = invokeBuildContents(messages)
+        assertEquals(
+            listOf("user", "model", "user", "model"),
+            contents.map { it.jsonObject["role"]!!.jsonPrimitive.content }
+        )
+
+        val providerSignatures = listOf("gemini-search-tool", "gemini-search-continue").flatMap { name ->
+            traceParts(name).mapNotNull { it["thoughtSignature"]?.jsonPrimitive?.contentOrNull }
+        }
+        val replayedSignatures = contents.flatMap { content ->
+            content.jsonObject["parts"]!!.jsonArray.mapNotNull {
+                it.jsonObject["thoughtSignature"]?.jsonPrimitive?.contentOrNull
+            }
+        }
+        assertEquals(providerSignatures, replayedSignatures)
+
+        val searchParts = contents[3].jsonObject["parts"]!!.jsonArray.map { it.jsonObject }
+            .filter { it.containsKey("toolCall") || it.containsKey("toolResponse") }
+        val providerSearchParts = traceParts("gemini-search-continue")
+            .filter { it.containsKey("toolCall") || it.containsKey("toolResponse") }
+        assertEquals(providerSearchParts, searchParts)
+    }
+
+    private fun traceEvents(name: String): List<SseEvent> = requireNotNull(
+        javaClass.classLoader?.getResource("stream-traces/generated/google-generateContent/$name/events.jsonl"),
+    ).readText().lineSequence().filter(String::isNotBlank).map { json.decodeFromString<SseEvent>(it) }.toList()
+
+    private fun traceParts(name: String): List<JsonObject> = traceEvents(name).flatMap { event ->
+        json.parseToJsonElement(event.data).jsonObject["candidates"]?.jsonArray.orEmpty().flatMap { candidate ->
+            candidate.jsonObject["content"]?.jsonObject?.get("parts")?.jsonArray.orEmpty().map { it.jsonObject }
+        }
+    }
+
+    private fun replayTrace(messages: List<UIMessage>, name: String): List<UIMessage> {
+        val decoder = GoogleStreamDecoder(name, "gemini-4-carbon")
+        val handler = StreamChunkHandler(Model(modelId = "gemini-4-carbon"))
+        var result = messages
+        traceEvents(
+            name
+        ).forEach { event -> decoder.accept(event).chunks.forEach { result = handler.handle(result, it) } }
+        decoder.onClosed().forEach { result = handler.handle(result, it) }
+        return result
+    }
+
+    private fun invokeBuildContents(messages: List<UIMessage>): JsonArray {
+        val method = GoogleProvider::class.java.getDeclaredMethod("buildContents", List::class.java)
+        method.isAccessible = true
+        return method.invoke(provider, messages) as JsonArray
+    }
+
     private fun decodeStream(vararg events: List<JsonObject>): List<UIMessage> {
         val decoder = GoogleStreamDecoder("response-1", "gemini-test")
         val handler = StreamChunkHandler(Model(modelId = "gemini-test"))
@@ -120,12 +188,8 @@ class GoogleThoughtSignaturePartTest {
         return messages
     }
 
-    private fun replayModelParts(messages: List<UIMessage>): JsonArray {
-        val method = GoogleProvider::class.java.getDeclaredMethod("buildContents", List::class.java)
-        method.isAccessible = true
-        val contents = method.invoke(provider, messages) as JsonArray
-        return contents[1].jsonObject["parts"]!!.jsonArray
-    }
+    private fun replayModelParts(messages: List<UIMessage>): JsonArray =
+        invokeBuildContents(messages)[1].jsonObject["parts"]!!.jsonArray
 
     @Suppress("UNCHECKED_CAST")
     private fun invokeParseMessageParts(parts: JsonArray): List<UIMessagePart> {
