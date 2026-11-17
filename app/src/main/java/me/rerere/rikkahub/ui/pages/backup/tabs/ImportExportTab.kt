@@ -23,9 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ui.toast.ToastType
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.FileExport
 import me.rerere.hugeicons.stroke.FileImport
@@ -143,19 +141,7 @@ fun ImportExportTab(
                         }
 
                         "deepseek" -> {
-                            deepSeekImportResult = withContext(Dispatchers.IO) {
-                                val tempFile = File.createTempFile("temp_deepseek_", ".zip", context.cacheDir)
-                                try {
-                                    requireNotNull(context.contentResolver.openInputStream(sourceUri)) {
-                                        context.getString(R.string.backup_page_import_deepseek_read_error)
-                                    }.use { input ->
-                                        tempFile.outputStream().use { output -> input.copyTo(output) }
-                                    }
-                                    vm.restoreFromDeepSeek(tempFile)
-                                } finally {
-                                    tempFile.delete()
-                                }
-                            }
+                            deepSeekImportResult = vm.restoreFromDeepSeek(sourceUri)
                         }
 
                         "cherry" -> {

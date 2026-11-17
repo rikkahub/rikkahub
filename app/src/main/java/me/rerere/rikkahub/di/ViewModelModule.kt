@@ -19,6 +19,7 @@ import me.rerere.rikkahub.ui.pages.imggen.ImgGenVM
 import me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationSessionsVM
 import me.rerere.rikkahub.ui.pages.mediacreation.MediaCreationVM
 import me.rerere.rikkahub.ui.pages.memory.MemoryFileVM
+import me.rerere.rikkahub.ui.pages.quickstart.QuickStartVM
 import me.rerere.rikkahub.ui.pages.search.SearchVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
@@ -73,6 +74,7 @@ val viewModelModule = module {
         )
     }
     viewModelOf(::BackupVM)
+    viewModelOf(::QuickStartVM)
     viewModelOf(::ImgGenVM)
     viewModelOf(::MediaCreationSessionsVM)
     viewModel<MediaCreationVM> {

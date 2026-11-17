@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.ui.pages.backup
 
-import android.app.Application
+import android.net.Uri
 import android.util.Log
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
@@ -11,20 +11,18 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.saveUploadFromBytes
-import me.rerere.rikkahub.data.model.bindConfig
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.sync.S3BackupItem
 import me.rerere.rikkahub.data.sync.S3Sync
 import me.rerere.rikkahub.data.sync.importer.ChatboxImporter
 import me.rerere.rikkahub.data.sync.importer.CherryStudioProviderImporter
 import me.rerere.rikkahub.data.sync.importer.DeepSeekImportResult
-import me.rerere.rikkahub.data.sync.importer.DeepSeekImporter
+import me.rerere.rikkahub.data.sync.importer.DeepSeekMigrator
 import me.rerere.rikkahub.data.sync.webdav.WebDavBackupItem
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.utils.UiState
@@ -33,12 +31,12 @@ import java.io.File
 private const val TAG = "BackupVM"
 
 class BackupVM(
-    private val context: Application,
     private val settingsStore: SettingsStore,
     private val webDavSync: WebDavSync,
     private val s3Sync: S3Sync,
     private val conversationRepository: ConversationRepository,
     private val filesManager: FilesManager,
+    private val deepSeekMigrator: DeepSeekMigrator,
 ) : ViewModel() {
     val settings = settingsStore.settingsFlow.stateIn(
         scope = viewModelScope,
@@ -176,28 +174,7 @@ class BackupVM(
         )
     }
 
-    suspend fun restoreFromDeepSeek(file: File): DeepSeekImportResult = withContext(Dispatchers.IO) {
-        val currentSettings = settingsStore.awaitLoaded()
-        DeepSeekImporter.importStreaming(
-            file = file,
-            assistantId = currentSettings.assistantId,
-            shouldImportConversation = { !conversationRepository.existsConversationById(it) },
-            formatMissingAttachment = { name ->
-                context.getString(R.string.backup_page_import_deepseek_missing_attachment, name)
-            },
-            saveAttachment = { resource ->
-                val entity = filesManager.saveUploadFromBytes(
-                    bytes = resource.bytes,
-                    displayName = resource.fileName,
-                    mimeType = resource.mimeType,
-                )
-                filesManager.getFile(entity).toUri().toString()
-            },
-            onConversation = { conversation ->
-                conversationRepository.insertConversation(conversation.bindConfig(currentSettings))
-            },
-        )
-    }
+    suspend fun restoreFromDeepSeek(uri: Uri): DeepSeekImportResult = deepSeekMigrator.import(uri)
 
     fun restoreFromCherryStudio(file: File) {
         val importProviders = CherryStudioProviderImporter.importProviders(file)
