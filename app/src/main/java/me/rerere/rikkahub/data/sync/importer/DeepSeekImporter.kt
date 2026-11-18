@@ -20,9 +20,9 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.utils.guessMimeTypeFromFileName
 import java.io.ByteArrayOutputStream
 import java.io.File
-import java.net.URLConnection
 import java.time.Instant
 import java.util.UUID
 import java.util.zip.ZipEntry
@@ -107,7 +107,7 @@ object DeepSeekImporter {
                                 val attachment = fileElement as? JsonObject ?: return@forEach
                                 val path = attachment["export_path"].text
                                 val name = attachment["file_name"].text ?: "attachment"
-                                val mime = URLConnection.guessContentTypeFromName(name) ?: "application/octet-stream"
+                                val mime = guessMimeTypeFromFileName(name)
                                 val url = if (path.isNullOrBlank()) {
                                     null
                                 } else {

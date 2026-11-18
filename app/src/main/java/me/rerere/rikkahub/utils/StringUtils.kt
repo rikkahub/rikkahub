@@ -1,10 +1,24 @@
 package me.rerere.rikkahub.utils
 
 import org.apache.commons.text.StringEscapeUtils
+import java.net.URLConnection
 import java.net.URLDecoder
 import java.net.URLEncoder
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+
+/**
+ * Guesses a MIME type from a file name's extension.
+ *
+ * Android 9/10's URLConnection.guessContentTypeFromName throws StringIndexOutOfBoundsException when a '#'
+ * appears before the last '.', so only the extension is handed to it.
+ */
+fun guessMimeTypeFromFileName(fileName: String): String {
+    val ext = fileName.substringAfterLast('/').substringAfterLast('.', "").filter { it.isLetterOrDigit() }
+    return ext.takeIf { it.isNotEmpty() }
+        ?.let { URLConnection.guessContentTypeFromName("file.${it.lowercase()}") }
+        ?: "application/octet-stream"
+}
 
 fun String.urlEncode(): String {
     return URLEncoder.encode(this, "UTF-8")
@@ -108,12 +122,12 @@ fun String.extractQuotedContent(): List<String> {
     val result = mutableListOf<String>()
     // 匹配多种引号类型
     val patterns = listOf(
-        "\u201C([^\u201D]*?)\u201D",  // 中文双引号
-        "\u2018([^\u2019]*?)\u2019",  // 中文单引号
-        """"([^"]*?)"""",  // 英文双引号
-        """'([^']*?)'""",  // 英文单引号
-        """「([^」]*?)」""",           // 直角引号
-        """『([^』]*?)』""",           // 白直角引号
+        "\u201C([^\u201D]*?)\u201D", // 中文双引号
+        "\u2018([^\u2019]*?)\u2019", // 中文单引号
+        """"([^"]*?)"""", // 英文双引号
+        """'([^']*?)'""", // 英文单引号
+        """「([^」]*?)」""", // 直角引号
+        """『([^』]*?)』""", // 白直角引号
     )
     for (pattern in patterns) {
         val regex = Regex(pattern)

@@ -165,23 +165,35 @@ class DeepSeekImporterTest {
             {"id":1,"parent_id":null,"role":"USER","fragments":[{"type":"FILE","files":[
               {"file_name":"missing.pdf","export_path":null,"is_image":false},
               {"file_name":"not-found.pdf","export_path":"missing.pdf","is_image":false},
-              {"file_name":"notes.txt","export_path":"chat_sessions/s_files/notes.txt","is_image":false}
+              {"file_name":"notes.txt","export_path":"chat_sessions/s_files/notes.txt","is_image":false},
+              {"file_name":"C#入门笔记.pdf","export_path":"chat_sessions/s_files/c.pdf","is_image":false}
             ]}]}
             """.trimIndent(),
             current = 1,
-        ), attachments = mapOf("chat_sessions/s_files/notes.txt" to "Notes".encodeToByteArray()))
+        ), attachments = mapOf(
+            "chat_sessions/s_files/notes.txt" to "Notes".encodeToByteArray(),
+            "chat_sessions/s_files/c.pdf" to "PDF".encodeToByteArray(),
+        ))
         val conversations = mutableListOf<Conversation>()
+        val attachments = mutableListOf<DeepSeekAttachment>()
         val result = DeepSeekImporter.importStreaming(
             backup,
             Uuid.random(),
-            saveAttachment = { "file:///notes.txt" },
+            saveAttachment = {
+                attachments += it
+                "file:///${it.fileName}"
+            },
             onConversation = { conversations += it },
         )
         assertEquals(2, result.missingAttachments)
         val message = conversations.single().currentMessages.single()
         assertTrue(message.toText().contains("missing.pdf"))
         assertTrue(message.toText().contains("not-found.pdf"))
-        assertEquals("notes.txt", message.parts.filterIsInstance<UIMessagePart.Document>().single().fileName)
+        assertEquals(
+            listOf("notes.txt", "C#入门笔记.pdf"),
+            message.parts.filterIsInstance<UIMessagePart.Document>().map { it.fileName },
+        )
+        assertEquals(listOf("text/plain", "application/pdf"), attachments.map { it.mimeType })
     }
 
     @Test
