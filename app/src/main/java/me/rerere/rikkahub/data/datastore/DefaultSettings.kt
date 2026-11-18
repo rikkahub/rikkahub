@@ -50,8 +50,6 @@ internal val DEFAULT_TTS_PROVIDERS = listOf(
     )
 )
 
-internal val DEFAULT_ASSISTANTS_IDS = DEFAULT_ASSISTANTS.map { it.id }
-
 val DEFAULT_MODE_INJECTIONS = listOf(
     PromptInjection.ModeInjection(
         id = Uuid.parse("b87eaf16-f5cd-4ac1-9e4f-b11ae3a61d74"),

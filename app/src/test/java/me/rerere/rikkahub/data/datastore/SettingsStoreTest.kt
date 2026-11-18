@@ -204,6 +204,31 @@ class SettingsStoreTest {
     }
 
     @Test
+    fun `a deleted built-in assistant stays deleted and the selection moves to a remaining one`() = runBlocking {
+        val store = open().store
+        val (removed, kept) = DEFAULT_ASSISTANTS
+        store.awaitLoaded()
+        store.selectAssistant(removed.id)
+
+        store.update { settings -> settings.copy(assistants = settings.assistants.filter { it.id != removed.id }) }
+
+        assertEquals(kept.id, store.settingsFlow.value.assistantId)
+        val stored = reopened()
+        assertEquals(listOf(kept.id), stored.assistants.map { it.id })
+        assertEquals(kept.id, stored.assistantId)
+    }
+
+    @Test
+    fun `removing every assistant brings back the built-in ones`() = runBlocking {
+        val store = open().store
+        store.awaitLoaded()
+
+        store.update { it.copy(assistants = emptyList()) }
+
+        assertEquals(DEFAULT_ASSISTANTS.map { it.id }, store.settingsFlow.value.assistants.map { it.id })
+    }
+
+    @Test
     fun `settings are normalized as soon as they are updated`() = runBlocking {
         val store = open().store
 
