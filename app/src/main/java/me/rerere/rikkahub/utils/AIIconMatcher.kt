@@ -45,6 +45,7 @@ fun computeAIIconByName(name: String): String? {
         PATTERN_TAVERN.containsMatchIn(lowerName) -> "tavern.png"
         PATTERN_CEREBRAS.containsMatchIn(lowerName) -> "cerebras-color.svg"
         PATTERN_NVIDIA.containsMatchIn(lowerName) -> "nvidia-color.svg"
+        PATTERN_SENSENOVA.containsMatchIn(lowerName) -> "sensenova-color.svg"
         PATTERN_PPIO.containsMatchIn(lowerName) -> "ppio-color.svg"
         PATTERN_VERCEL.containsMatchIn(lowerName) -> "vercel.svg"
         PATTERN_GROQ.containsMatchIn(lowerName) -> "groq.svg"
@@ -108,7 +109,8 @@ private val PATTERN_INTERN = Regex("intern|书生")
 private val PATTERN_COHERE = Regex("cohere|command-.+")
 private val PATTERN_TAVERN = Regex("tavern")
 private val PATTERN_CEREBRAS = Regex("cerebras")
-private val PATTERN_NVIDIA = Regex("nvidia")
+private val PATTERN_NVIDIA = Regex("nvidia|nemotron|英伟达")
+private val PATTERN_SENSENOVA = Regex("sensenova|sensetime|sensechat|商汤|日日新")
 private val PATTERN_PPIO = Regex("ppio|派欧")
 private val PATTERN_VERCEL = Regex("vercel")
 private val PATTERN_GROQ = Regex("groq")
