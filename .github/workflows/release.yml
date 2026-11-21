@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  # 推送版本号 tag（如 3.4.0，不带 v）时触发；nightly 等非版本号 tag 不会匹配
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+env:
+  # Play 发布轨道：production / beta / alpha / internal
+  PLAY_TRACK: production
+  # draft：上传后停在 Play Console 草稿，填好更新说明后手动发布
+  PLAY_STATUS: draft
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # 创建 Release 需要写权限
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # tag 必须和 versionName 一致，避免打错 tag 发出版本号对不上的包
+      - name: Check version
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION_NAME=$(sed -n 's/^ *versionName = "\(.*\)"/\1/p' app/build.gradle.kts)
+          if [ "$TAG" != "$VERSION_NAME" ]; then
+            echo "::error::tag ($TAG) 与 versionName ($VERSION_NAME) 不一致"
+            exit 1
+          fi
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+
+      # 与 Android Studio 自带的 JetBrains Runtime 21 保持一致
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'jetbrains'
+          java-version: '21'
+        env:
+          # jetbrains 安装器通过 GitHub API 查询版本，带上 token 避免被限流
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # web 模块的 preBuild 会执行 `pnpm run build` 构建前端，必须准备好 Node + pnpm
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-ui/pnpm-lock.yaml
+
+      # gradle 的 buildWebUi 任务只跑 build 不跑 install，需在此提前安装依赖
+      - name: Install web-ui dependencies
+        working-directory: web-ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Gradle cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+
+      - name: Prepare build files
+        run: |
+          # 解码base64编码的keystore文件
+          echo "${{ secrets.KEY_BASE64 }}" | base64 -d > app/app.key
+
+          # 写入签名配置到local.properties
+          echo "${{ secrets.SIGNING_CONFIG }}" > local.properties
+
+          # 写入Google Services配置
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > app/google-services.json
+
+      # 两个渠道必须分开跑：splits.abi 按命令里是否含 bundle 任务决定是否拆分，
+      # 放在同一条命令里 APK 就不会按 ABI 拆分了
+      - name: Build GitHub APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleGithubRelease
+
+      - name: Build Play AAB
+        run: ./gradlew bundlePlayRelease
+
+      # 只发 arm64 APK，文件名带版本号；mapping 压缩成 zip，解压后用 retrace 还原崩溃堆栈
+      - name: Prepare release assets
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/github/release/*-arm64-v8a-release.apk "dist/rikkahub-${VERSION}-arm64-v8a.apk"
+          cp app/build/outputs/mapping/githubRelease/mapping.txt "dist/mapping-${VERSION}.txt"
+          (cd dist && zip -j "mapping-${VERSION}.zip" "mapping-${VERSION}.txt" && rm "mapping-${VERSION}.txt")
+          ls -l dist
+
+      # 建草稿 Release，填好更新日志后在 GitHub 上手动发布
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
+          draft: true
+          files: dist/*
+
+      - name: Upload to Google Play
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: me.rerere.rikkahub
+          releaseFiles: app/build/outputs/bundle/playRelease/*.aab
+          mappingFile: app/build/outputs/mapping/playRelease/mapping.txt
+          releaseName: ${{ steps.version.outputs.version }}
+          track: ${{ env.PLAY_TRACK }}
+          status: ${{ env.PLAY_STATUS }}
