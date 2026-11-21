@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.phoneuse
 
+import android.content.ComponentName
 import android.content.Context
 import android.os.Build
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,6 +80,22 @@ interface PhoneController {
  */
 fun isFloatingChatWindowOn(context: Context, settings: Settings): Boolean =
     settings.displaySetting.enableFloatingChatWindow && android.provider.Settings.canDrawOverlays(context)
+
+// 服务类只在 github 渠道里，这里按名字找
+private const val PHONE_USE_SERVICE_CLASS = "me.rerere.rikkahub.phoneuse.PhoneUseAccessibilityService"
+
+/**
+ * 系统无障碍设置里是否勾选了 Phone Use。勾选了不代表服务在运行：
+ * ColorOS 等系统在最近任务里划掉应用后会停掉服务，设置里却仍显示开启，也不会再自动绑定，只能让用户关掉重开。
+ */
+fun isPhoneUseCheckedInSystem(context: Context): Boolean {
+    val enabled = android.provider.Settings.Secure.getString(
+        context.contentResolver,
+        android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+    ) ?: return false
+    val target = ComponentName(context.packageName, PHONE_USE_SERVICE_CLASS)
+    return enabled.split(':').any { ComponentName.unflattenFromString(it) == target }
+}
 
 /** 无障碍服务连接后把自己登记在这里，工具和设置页从这里拿 */
 class PhoneUseManager {

@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonObject
@@ -25,11 +27,13 @@ class PhoneUseToolTest {
     private val controller = FakeController(manager)
     private var selfInForeground = false
     private var floatingWindowOn = true
+    private var checkedInSystem = false
     private val tool: Tool = buildPhoneUseTool(
         ownPackageName = "me.rerere.rikkahub",
         manager = manager,
         saveScreenshot = { "file:///screenshot.jpg" },
         isFloatingWindowOn = { floatingWindowOn },
+        isCheckedInSystem = { checkedInSystem },
         isSelfInForeground = { selfInForeground },
     )
 
@@ -40,6 +44,23 @@ class PhoneUseToolTest {
     fun `fails with guidance when the accessibility service is off`() = runTest {
         val error = runCatching { call { put("action", "observe") } }.exceptionOrNull()
         assertTrue(error!!.message!!.contains("not enabled"))
+    }
+
+    @Test
+    fun `explains a service stopped by the system while still checked in settings`() = runTest {
+        checkedInSystem = true
+        val error = runCatching { call { put("action", "observe") } }.exceptionOrNull()
+        assertTrue(error!!.message!!.contains("turn it off and on again"))
+    }
+
+    @Test
+    fun `waits for a service that is still connecting`() = runTest {
+        checkedInSystem = true
+        launch {
+            delay(500)
+            manager.attach(controller)
+        }
+        assertTrue(call { put("action", "observe") }.isNotEmpty())
     }
 
     @Test
