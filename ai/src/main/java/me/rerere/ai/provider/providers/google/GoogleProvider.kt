@@ -165,9 +165,12 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                         return@mapNotNull null
                     }
 
+                    val modelId = modelObject["name"]!!.jsonPrimitive.content.substringAfter("/")
                     Model(
-                        modelId = modelObject["name"]!!.jsonPrimitive.content.substringAfter("/"),
-                        displayName = modelObject["displayName"]!!.jsonPrimitive.content,
+                        modelId = modelId,
+                        // 部分兼容接口不返回 displayName，回退到 modelId
+                        displayName = modelObject["displayName"]?.jsonPrimitiveOrNull?.contentOrNull
+                            ?.takeIf { it.isNotBlank() } ?: modelId,
                         type = if ("generateContent" in supportedGenerationMethods) ModelType.CHAT else ModelType.EMBEDDING,
                     )
                 }
