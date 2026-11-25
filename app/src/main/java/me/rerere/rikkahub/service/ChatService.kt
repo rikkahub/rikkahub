@@ -955,7 +955,10 @@ class ChatService(
     // ---- 压缩对话历史 ----
 
     /**
-     * 把上一个检查点之后的消息压缩成摘要检查点。
+     * 开始把上一个检查点之后的消息压缩成摘要检查点，不等它完成。
+     *
+     * 压缩和生成一样在会话的任务槽里跑：聊天页显示压缩中，切换对话、离开页面都不影响，停止生成可以取消；
+     * 失败报告到这个对话的错误里。返回失败只表示没能开始，比如正在生成。
      *
      * [keepRecentMessages] 为 0 时压缩全部消息，请求和上一轮对话前缀一致，缓存命中最好；
      * 大于 0 时最近的这些消息不参与压缩、留在检查点之后，对话已经超出模型上下文、整段发不出去时用来缩小压缩请求。
@@ -965,9 +968,8 @@ class ChatService(
         additionalPrompt: String,
         keepRecentMessages: Int = 0,
     ): Result<Unit> = runCatching {
-        withLoadedSession<Unit>(conversationId) { session ->
-            val result = CompletableDeferred<Unit>()
-            val job = synchronized(session) {
+        withLoadedSession(conversationId) { session ->
+            synchronized(session) {
                 // 生成中的回复还没写完，压缩不到它，检查点也不能插到它前面。
                 // 等审批时允许压缩：保留区可以把待审批的工具留在检查点之后
                 check(session.getJob() == null) { context.getString(R.string.chat_page_compress_blocked_generating) }
@@ -976,15 +978,12 @@ class ChatService(
                     additionalPrompt = additionalPrompt,
                     keepRecentMessages = keepRecentMessages,
                     clearSuggestions = true,
-                    onResult = result::completeWith,
-                )
-            }
-            try {
-                result.await()
-            } catch (e: CancellationException) {
-                // 压缩弹窗取消时调用方被取消，压缩任务跟着取消
-                job.cancel()
-                throw e
+                ) { result ->
+                    // 停止生成取消的不算失败，addError 会忽略
+                    result.onFailure { e ->
+                        addError(e, session.id, title = context.getString(R.string.error_title_compress_conversation))
+                    }
+                }
             }
         }
     }
