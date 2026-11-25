@@ -1931,4 +1931,7 @@
   <string name="quick_start_card_desc">RikkaHub benötigt einen Modellanbieter zum Chatten. Folge dem Schnellstart, um einen Anbieter und ein Standardmodell einzurichten, oder migriere deinen Chatverlauf von DeepSeek.</string>
   <string name="setting_page_quick_start">Schnellstart</string>
   <string name="setting_page_quick_start_desc">Richte Anbieter und Modelle Schritt für Schritt ein oder migriere von DeepSeek</string>
+  <string name="setting_page_preferences_notification_battery_optimization">Akkuoptimierung ignorieren</string>
+  <string name="setting_page_preferences_notification_battery_optimization_on">Zugelassen. Die Hintergrundgenerierung wird vom System seltener beendet</string>
+  <string name="setting_page_preferences_notification_battery_optimization_off">Nicht erlaubt. Das System kann die Generierung im Hintergrund stoppen, um Akku zu sparen</string>
 </resources>

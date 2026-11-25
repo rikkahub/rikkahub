@@ -1933,4 +1933,7 @@
   <string name="quick_start_page_deepseek_import_desc">Выберите ZIP-файл из предыдущего шага. Для каждого чата в текущего ассистента \"%1$s\" импортируется отображаемая сейчас ветка, включая рассуждения и вложения. Уже импортированные чаты пропускаются, поэтому повторный импорт безопасен.</string>
   <string name="quick_start_page_deepseek_importing">Импорт…</string>
   <string name="quick_start_page_deepseek_import_another">Импортировать другой ZIP</string>
+  <string name="setting_page_preferences_notification_battery_optimization">Игнорировать оптимизацию батареи</string>
+  <string name="setting_page_preferences_notification_battery_optimization_on">Разрешено. Система реже останавливает фоновую генерацию</string>
+  <string name="setting_page_preferences_notification_battery_optimization_off">Не разрешено. Система может останавливать генерацию в фоне для экономии заряда батареи</string>
 </resources>

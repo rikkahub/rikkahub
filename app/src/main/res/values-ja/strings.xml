@@ -1933,4 +1933,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="quick_start_page_deepseek_import_desc">前の手順の ZIP を選択します。各チャットでは、現在表示されているブランチが、推論と添付ファイルを含めて現在のアシスタント \"%1$s\" にインポートされます。すでにインポート済みのチャットはスキップされるため、再度インポートしても安全です。</string>
   <string name="quick_start_page_deepseek_importing">インポート中…</string>
   <string name="quick_start_page_deepseek_import_another">別の ZIP をインポート</string>
+  <string name="setting_page_preferences_notification_battery_optimization">バッテリー最適化を無視</string>
+  <string name="setting_page_preferences_notification_battery_optimization_on">許可済み。バックグラウンドでの生成がシステムによって停止されにくくなります</string>
+  <string name="setting_page_preferences_notification_battery_optimization_off">許可されていません。バッテリーを節約するため、バックグラウンドでの生成が停止される場合があります</string>
 </resources>

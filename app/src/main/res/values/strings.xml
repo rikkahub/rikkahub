@@ -1776,6 +1776,9 @@
   <string name="setting_page_preferences_notification_floating_window_desc">When you leave the app while the AI is still replying, show a floating icon. Tap it to check progress, confirm tool calls and reply quickly</string>
   <string name="setting_page_preferences_notification_overlay_permission">Grant overlay permission</string>
   <string name="setting_page_preferences_notification_overlay_permission_desc">The floating window will not appear without this permission</string>
+  <string name="setting_page_preferences_notification_battery_optimization">Ignore battery optimization</string>
+  <string name="setting_page_preferences_notification_battery_optimization_on">Allowed. Background generation is less likely to be stopped by the system</string>
+  <string name="setting_page_preferences_notification_battery_optimization_off">Not allowed. The system may stop background generation to save battery</string>
   <string name="floating_chat_open_conversation">Open conversation</string>
   <string name="floating_chat_collapse">Collapse</string>
   <string name="floating_chat_close">Close floating window</string>

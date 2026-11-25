@@ -1931,4 +1931,7 @@
   <string name="quick_start_page_deepseek_import_desc">選擇上一步下載的 ZIP 檔案。每個聊天都會將目前顯示的分支匯入目前的助理 \"%1$s\"，包括推理和附件。已匯入的聊天會被略過，因此再次匯入是安全的。</string>
   <string name="quick_start_page_deepseek_importing">匯入中…</string>
   <string name="quick_start_page_deepseek_import_another">匯入另一個 ZIP</string>
+  <string name="setting_page_preferences_notification_battery_optimization">忽略電池最佳化</string>
+  <string name="setting_page_preferences_notification_battery_optimization_on">已允許。背景生成較不容易被系統停止</string>
+  <string name="setting_page_preferences_notification_battery_optimization_off">未允許。系統可能會為了節省電量而停止背景生成</string>
 </resources>

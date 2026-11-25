@@ -1931,4 +1931,7 @@
   <string name="quick_start_card_desc">يحتاج RikkaHub إلى مزوّد نماذج للدردشة. اتبع البدء السريع لإعداد مزوّد ونموذج افتراضي، أو انقل سجل محادثاتك من DeepSeek.</string>
   <string name="setting_page_quick_start">البدء السريع</string>
   <string name="setting_page_quick_start_desc">أعدّ المزوّدين والنماذج خطوة بخطوة، أو قم بالترحيل من DeepSeek</string>
+  <string name="setting_page_preferences_notification_battery_optimization">تجاهل تحسين البطارية</string>
+  <string name="setting_page_preferences_notification_battery_optimization_on">مسموح. من غير المرجح أن يوقف النظام عملية التوليد في الخلفية</string>
+  <string name="setting_page_preferences_notification_battery_optimization_off">غير مسموح. قد يوقف النظام عملية التوليد في الخلفية لتوفير طاقة البطارية</string>
 </resources>

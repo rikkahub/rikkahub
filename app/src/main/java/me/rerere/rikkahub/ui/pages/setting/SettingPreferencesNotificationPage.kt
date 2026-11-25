@@ -1,7 +1,11 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -77,9 +81,11 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
 
     val context = LocalContext.current
     var canDrawOverlays by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    var ignoringBatteryOptimizations by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
     // 从系统设置页授权回来后刷新
     LifecycleResumeEffect(Unit) {
         canDrawOverlays = Settings.canDrawOverlays(context)
+        ignoringBatteryOptimizations = isIgnoringBatteryOptimizations(context)
         onPauseOrDispose {}
     }
 
@@ -184,6 +190,24 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
                             },
                         )
                     }
+                    item(
+                        onClick = { openBatteryOptimizationSettings(context, ignoringBatteryOptimizations) },
+                        headlineContent = { Text(stringResource(R.string.setting_page_preferences_notification_battery_optimization)) },
+                        supportingContent = {
+                            Text(
+                                stringResource(
+                                    if (ignoringBatteryOptimizations) {
+                                        R.string.setting_page_preferences_notification_battery_optimization_on
+                                    } else {
+                                        R.string.setting_page_preferences_notification_battery_optimization_off
+                                    }
+                                )
+                            )
+                        },
+                        trailingContent = {
+                            Icon(HugeIcons.ArrowRight01, contentDescription = null)
+                        },
+                    )
                 }
             }
         }
@@ -246,5 +270,33 @@ fun SettingPreferencesNotificationPage(vm: SettingVM = koinViewModel()) {
                 }
             },
         )
+    }
+}
+
+private fun isIgnoringBatteryOptimizations(context: Context): Boolean =
+    context.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(context.packageName) == true
+
+/**
+ * 还没加入白名单时，github 版直接弹出系统对话框；Play 版没有声明对应权限，打开系统的电池优化列表让用户自己找。
+ * 已经加入时也打开列表，方便用户改回去。个别系统没有这些页面，退回应用详情页。
+ */
+@SuppressLint("BatteryLife")
+private fun openBatteryOptimizationSettings(context: Context, ignoring: Boolean) {
+    val intents = buildList {
+        if (!ignoring && !BuildConfig.IS_PLAY_STORE) {
+            add(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, "package:${context.packageName}".toUri())
+            )
+        }
+        add(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        add(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, "package:${context.packageName}".toUri()))
+    }
+    for (intent in intents) {
+        try {
+            context.startActivity(intent)
+            return
+        } catch (_: ActivityNotFoundException) {
+            // 换下一个
+        }
     }
 }
