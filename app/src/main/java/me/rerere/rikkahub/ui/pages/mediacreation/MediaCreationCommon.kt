@@ -193,6 +193,21 @@ internal fun MediaGenerationProviderSetting.presets(kind: MediaKind): MediaCreat
             durations = listOf(4, 5, 6, 8, 10),
         )
     }
+
+    // 预设对应 GPT-Image 2.6 和 MiniMax H3：图像的 size 是比例，配合 1k / 2k / 4k 档位；H3 时长 4–15 秒
+    is MediaGenerationProviderSetting.ApiMart -> when (kind) {
+        MediaKind.IMAGE -> MediaCreationPresets(
+            resolutions = listOf("1k", "2k", "4k"),
+            aspectRatios = listOf("1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "21:9"),
+            counts = IMAGE_COUNTS,
+        )
+
+        MediaKind.VIDEO -> MediaCreationPresets(
+            resolutions = listOf("2K", "768P"),
+            aspectRatios = VIDEO_ASPECT_RATIOS,
+            durations = listOf(5, 10, 15),
+        )
+    }
 }
 
 private val IMAGE_COUNTS = listOf(1, 2, 3, 4)

@@ -217,6 +217,40 @@ sealed class MediaGenerationProviderSetting {
         }
     }
 
+    /** APIMart 聚合平台：图像和视频都是异步任务，结果是 CDN 直链，下载不需要密钥。 */
+    @Serializable
+    @SerialName("apimart")
+    data class ApiMart(
+        override val id: Uuid = Uuid.random(),
+        override val name: String = "APIMart",
+        override val apiKey: String = "",
+        override val baseUrl: String = "https://api.apimart.ai/v1",
+        override val models: List<MediaGenerationModel> = listOf(
+            MediaGenerationModel(modelId = "gpt-image-2.6-flare", kind = MediaKind.IMAGE),
+            MediaGenerationModel(modelId = "gpt-image-2.6-sunburst", kind = MediaKind.IMAGE),
+            MediaGenerationModel(modelId = "MiniMax-H3", kind = MediaKind.VIDEO),
+        ),
+    ) : MediaGenerationProviderSetting() {
+        override val supportedKinds: Set<MediaKind>
+            get() = setOf(MediaKind.IMAGE, MediaKind.VIDEO)
+
+        override fun copyProvider(
+            id: Uuid,
+            name: String,
+            apiKey: String,
+            baseUrl: String,
+            models: List<MediaGenerationModel>,
+        ): MediaGenerationProviderSetting {
+            return this.copy(
+                id = id,
+                name = name,
+                apiKey = apiKey,
+                baseUrl = baseUrl,
+                models = models,
+            )
+        }
+    }
+
     companion object {
         val Types by lazy {
             listOf(
@@ -225,6 +259,7 @@ sealed class MediaGenerationProviderSetting {
                 Volcengine::class,
                 MiniMax::class,
                 OpenRouter::class,
+                ApiMart::class,
             )
         }
     }

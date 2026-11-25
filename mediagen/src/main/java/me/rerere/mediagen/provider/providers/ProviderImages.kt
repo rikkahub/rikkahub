@@ -8,6 +8,8 @@ internal fun imageMimeType(format: String?, fallback: String): String = when (fo
     "png" -> "image/png"
     "jpg", "jpeg" -> "image/jpeg"
     "webp" -> "image/webp"
+    "gif" -> "image/gif"
+    "svg" -> "image/svg+xml"
     else -> fallback
 }
 

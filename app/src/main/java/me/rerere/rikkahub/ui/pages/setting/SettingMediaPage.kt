@@ -321,6 +321,7 @@ private fun AddMediaProviderButton(onAdd: (MediaGenerationProviderSetting) -> Un
             { MediaGenerationProviderSetting.Volcengine() },
             { MediaGenerationProviderSetting.MiniMax() },
             { MediaGenerationProviderSetting.OpenRouter() },
+            { MediaGenerationProviderSetting.ApiMart() },
         )
     }
 

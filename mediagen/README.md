@@ -20,8 +20,9 @@ setting 是厂商级的，只保存凭据（`apiKey` / `baseUrl`）和该厂商�
 | 火山方舟              | Seedream，生成 + 参考图生图，同步 | Seedance，异步任务 |
 | MiniMax           | 未实现                     | H3，异步任务        |
 | OpenRouter        | 生成 + 参考图生图，同步           | 异步任务           |
+| APIMart（聚合平台）     | GPT-Image，生成 + 参考图生图，异步任务 | MiniMax H3 等，异步任务 |
 
-适配器按厂商分包，放在 `provider/providers/{openai,aliyun,volcengine,minimax,openrouter}` 下，公用的 HTTP 和图片工具留在
+适配器按厂商分包，放在 `provider/providers/{openai,aliyun,volcengine,minimax,openrouter,apimart}` 下，公用的 HTTP 和图片工具留在
 `provider/providers`。两种 kind 都实现的厂商，provider 只做路由，图像和视频协议各自放在 `{Vendor}ImageGeneration` /
 `{Vendor}VideoGeneration` 里。
 给已有厂商补另一种 kind 时，加上对应的类和路由分支并扩充 `supportedKinds`，setting 和公共接口不用改。
@@ -34,7 +35,7 @@ setting 是厂商级的，只保存凭据（`apiKey` / `baseUrl`）和该厂商�
 2. 任务未到终态时用 `query` 轮询；
 3. 成功后从 `outputs` 取结果。
 
-同步接口（各家的图像）在 `create` 里直接返回终态任务，没有可查询的任务。上层不需要区分两种情况：
+同步接口（除 APIMart 以外各家的图像）在 `create` 里直接返回终态任务，没有可查询的任务。上层不需要区分两种情况：
 `MediaGenerationManager.generate` 提交后跟踪到终态，同步供应商只发出一次，异步供应商按间隔轮询；
 `watch` 用于按任务 ID 恢复轮询。两者都是可取消的 Flow。
 
@@ -78,21 +79,22 @@ setting 是厂商级的，只保存凭据（`apiKey` / `baseUrl`）和该厂商�
 
 ## 图像
 
-各家的图像接口都是同步的，生成一张高质量图片可能需要数分钟，传入的 `OkHttpClient` 需要配置足够长的读超时。请求里带
+除 APIMart 以外，各家的图像接口都是同步的，生成一张高质量图片可能需要数分钟，传入的 `OkHttpClient` 需要配置足够长的读超时。
+APIMart 的图像也是提交任务再轮询，和视频走同一套流程。请求里带
 `MediaGenerationInput.Image` 就是编辑 / 参考图生图，否则是文生图；图像接口不区分 `ImageRole`。
 
 ### 字段映射
 
-| 公共字段                | OpenAI        | 火山 Seedream           | 阿里万相 / 千问               | OpenRouter                  |
-|---------------------|---------------|-----------------------|-------------------------|-----------------------------|
-| `count`             | `n`           | 只接受 1，组图走 `extraParameters` | `n`                     | `n`                         |
-| `resolution`        | `size`        | `size`（`2K` 或 `2048x2048`） | `size`（`2K`，像素尺寸转成 `1536*1024`） | 档位走 `resolution`，像素尺寸走 `size` |
-| `aspectRatio`       | 不支持           | 不支持                   | 不支持                     | `aspect_ratio`              |
-| `watermark`         | 不支持           | `watermark`           | `watermark`             | 不支持                         |
-| `seed`              | 不支持           | 不支持                   | `seed`                  | `seed`                      |
-| `promptEnhancement` | 不支持           | 不支持，走 `extraParameters` | `prompt_extend`         | 不支持                         |
-| 图片输入                | 本地文件，multipart | 公网地址 / data URI / 本地文件 | 公网地址 / data URI / 本地文件  | 公网地址 / data URI / 本地文件      |
-| 结果                  | 内联字节或 url     | 24 小时有效的 url，或内联字节    | 24 小时有效的 url           | 内联字节                        |
+| 公共字段                | OpenAI        | 火山 Seedream           | 阿里万相 / 千问               | OpenRouter                  | APIMart                          |
+|---------------------|---------------|-----------------------|-------------------------|-----------------------------|----------------------------------|
+| `count`             | `n`           | 只接受 1，组图走 `extraParameters` | `n`                     | `n`                         | `n`（1–4）                         |
+| `resolution`        | `size`        | `size`（`2K` 或 `2048x2048`） | `size`（`2K`，像素尺寸转成 `1536*1024`） | 档位走 `resolution`，像素尺寸走 `size` | 档位转小写走 `resolution`，像素尺寸走 `size` |
+| `aspectRatio`       | 不支持           | 不支持                   | 不支持                     | `aspect_ratio`              | `size`，不能和像素尺寸同时给              |
+| `watermark`         | 不支持           | `watermark`           | `watermark`             | 不支持                         | 不支持                              |
+| `seed`              | 不支持           | 不支持                   | `seed`                  | `seed`                      | 不支持                              |
+| `promptEnhancement` | 不支持           | 不支持，走 `extraParameters` | `prompt_extend`         | 不支持                         | 不支持                              |
+| 图片输入                | 本地文件，multipart | 公网地址 / data URI / 本地文件 | 公网地址 / data URI / 本地文件  | 公网地址 / data URI / 本地文件      | 公网地址 / data URI / 本地文件           |
+| 结果                  | 内联字节或 url     | 24 小时有效的 url，或内联字节    | 24 小时有效的 url           | 内联字节                        | 约 24 小时有效的 url                    |
 
 `durationSeconds`、`generateAudio`、`callbackUrl` 各家的图像接口都不支持，传了会直接报错。
 
@@ -138,21 +140,34 @@ setting 是厂商级的，只保存凭据（`apiKey` / `baseUrl`）和该厂商�
 - `usage.cost`（美元）等信息保留在 `task.metadata`；
 - 各模型接受哪些字段和取值见 `GET {baseUrl}/images/models`。
 
+### APIMart
+
+- `POST {baseUrl}/images/generations`（JSON，异步）提交，响应的 `data[0].task_id` 是任务 ID；图像和视频共用
+  `GET {baseUrl}/tasks/{id}` 轮询。状态 `submitted` / `pending` / `processing` / `completed` / `failed` / `cancelled`
+  分别对应排队、排队、运行、成功、失败、取消；
+- 参考图放在 `image_urls`（字符串数组，最多 16 张），本地文件会编码成 data URI；
+- `size` 有两种写法：比例（`16:9`）配合 `resolution` 档位（`1k` / `2k` / `4k`，只接受小写，适配器会转换），或者
+  像素尺寸（`1536x1024`），此时档位被忽略。所以 `aspectRatio` 和像素尺寸的 `resolution` 不能同时给；
+- `quality`、`output_format`（含 `gif`、`svg`）、`background`、`mask_url`、`markup_url`、`complexity`、GIF 的
+  `frame_count` / `frame_duration_ms`、SVG 的 `svg` 对象等走 `extraParameters`；
+- 结果在 `data.result.images[].url[]`（每项的 `url` 是数组），按扩展名推断 `mimeType`；`cost`、`progress`、
+  `expires_at` 等保留在 `task.metadata`。
+
 ## 视频
 
 ### 能力差异
 
-| 能力        | 阿里万相 3.0        | 火山 Seedance 2.0 | MiniMax H3     | OpenRouter        |
-|-----------|-----------------|-----------------|----------------|-------------------|
-| 文生视频      | 支持              | 支持              | 支持，且 prompt 必填 | 支持                |
-| 首/尾帧      | 支持              | 支持              | 支持             | 取决于模型             |
-| 参考图/视频/音频 | 支持，不能和首/尾帧混用    | 支持，不能和首/尾帧混用    | 支持，不能和首/尾帧混用   | 取决于模型，和首/尾帧混用时被忽略 |
-| 必填参数      | 无               | 无               | 分辨率、时长；文生视频还要比例 | 无                 |
-| 文件/网页输入   | 支持              | 不支持             | 不支持            | 不支持               |
-| 智能时长 `-1` | 支持              | 部分模型支持          | 不支持            | 不支持               |
-| 请求级回调 URL | 不支持，使用账号级异步回调配置 | 支持              | 支持             | 支持（必须是 HTTPS）     |
-| 有声输出开关    | 支持              | 部分模型支持          | API 未暴露        | 部分模型支持            |
-| 水印开关      | 支持              | 支持              | 支持             | API 未暴露           |
+| 能力        | 阿里万相 3.0        | 火山 Seedance 2.0 | MiniMax H3     | OpenRouter        | APIMart（MiniMax H3）  |
+|-----------|-----------------|-----------------|----------------|-------------------|----------------------|
+| 文生视频      | 支持              | 支持              | 支持，且 prompt 必填 | 支持                | 支持，且 prompt 必填       |
+| 首/尾帧      | 支持              | 支持              | 支持             | 取决于模型             | 支持                   |
+| 参考图/视频/音频 | 支持，不能和首/尾帧混用    | 支持，不能和首/尾帧混用    | 支持，不能和首/尾帧混用   | 取决于模型，和首/尾帧混用时被忽略 | 支持，不能和首/尾帧混用；音频不能单独给 |
+| 必填参数      | 无               | 无               | 分辨率、时长；文生视频还要比例 | 无                 | 无（默认 5 秒、2K，文生视频默认 16:9） |
+| 文件/网页输入   | 支持              | 不支持             | 不支持            | 不支持               | 不支持                  |
+| 智能时长 `-1` | 支持              | 部分模型支持          | 不支持            | 不支持               | 不支持                  |
+| 请求级回调 URL | 不支持，使用账号级异步回调配置 | 支持              | 支持             | 支持（必须是 HTTPS）     | 支持（`webhook`）        |
+| 有声输出开关    | 支持              | 部分模型支持          | API 未暴露        | 部分模型支持            | API 未暴露              |
+| 水印开关      | 支持              | 支持              | 支持             | API 未暴露           | 支持                   |
 
 各家的视频接口都是一个任务产出一段视频，`count` 只接受 1，传更大的值会直接报错。
 
@@ -170,6 +185,16 @@ setting 是厂商级的，只保存凭据（`apiKey` / `baseUrl`）和该厂商�
   `setting.downloadHeaders(url)`；
 - 轮询响应里没有时长、分辨率等信息，`usage.cost`（美元）保留在 `task.metadata`；
 - 各模型支持的时长、分辨率、比例、首尾帧见 `GET {baseUrl}/videos/models`，取值不被接受时接口返回 400 并列出可用值。
+
+### APIMart
+
+- `POST {baseUrl}/videos/generations` 提交，和图像一样用 `GET {baseUrl}/tasks/{id}` 轮询；同一个接口还承接 Hailuo 等
+  其它视频模型，适配器按 MiniMax H3 的文档实现，其它模型的专属字段走 `extraParameters`；
+- 生成方式由字段决定，没有 `mode`：图片统一放进 `image_with_roles`（`{url, role}`，`role` 是 `first_frame` /
+  `last_frame` / `reference_image`），参考视频、参考音频分别是 `video_urls`、`audio_urls`。`Raw` 输入作为
+  `image_with_roles` 的一项原样下发；
+- `callbackUrl` 映射为 `webhook`，`watermark` 映射为 `watermark`；
+- 结果在 `data.result.videos[].url`，约 24 小时有效，失败的任务自动退款。
 
 ## 使用示例
 
@@ -222,3 +247,6 @@ manager.generate(
 - [MiniMax H3 查询任务](https://platform.minimaxi.com/docs/api-reference/video-generation-v2-query)
 - [OpenRouter 图像生成](https://openrouter.ai/docs/guides/overview/multimodal/image-generation)
 - [OpenRouter 视频生成](https://openrouter.ai/docs/guides/overview/multimodal/video-generation)
+- [APIMart GPT-Image-2.6 图像生成](https://docs.apimart.ai/cn/api-reference/images/gpt-image-2.6/generation)
+- [APIMart MiniMax-H3 视频生成](https://docs.apimart.ai/cn/api-reference/videos/minimax-h3/generation)
+- [APIMart 查询任务状态](https://docs.apimart.ai/cn/api-reference/tasks/status)

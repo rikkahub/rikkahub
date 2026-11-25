@@ -79,6 +79,11 @@ fun MediaGenerationProviderSetting.capabilities(kind: MediaKind): MediaGeneratio
             MediaKind.IMAGE -> OPENROUTER_IMAGE
             MediaKind.VIDEO -> OPENROUTER_VIDEO
         }
+
+        is MediaGenerationProviderSetting.ApiMart -> when (kind) {
+            MediaKind.IMAGE -> APIMART_IMAGE
+            MediaKind.VIDEO -> APIMART_VIDEO
+        }
     }
 
 // 图像接口不区分图片角色，统一当作参考图
@@ -184,5 +189,29 @@ private val OPENROUTER_VIDEO = MediaGenerationCapabilities(
     videoInput = true,
     // 两者同时出现时接口不报错，但只按首尾帧生成，参考素材被忽略
     framesExcludeReferences = true,
+    requiresRemoteInputs = true,
+)
+
+private val APIMART_IMAGE = MediaGenerationCapabilities(
+    parameters = setOf(
+        MediaGenerationParameter.COUNT,
+        MediaGenerationParameter.RESOLUTION,
+        MediaGenerationParameter.ASPECT_RATIO,
+    ),
+    imageRoles = REFERENCE_ONLY,
+    requiresPrompt = true,
+)
+
+private val APIMART_VIDEO = MediaGenerationCapabilities(
+    parameters = setOf(
+        MediaGenerationParameter.RESOLUTION,
+        MediaGenerationParameter.ASPECT_RATIO,
+        MediaGenerationParameter.DURATION,
+        MediaGenerationParameter.WATERMARK,
+    ),
+    imageRoles = ALL_IMAGE_ROLES,
+    videoInput = true,
+    framesExcludeReferences = true,
+    requiresPrompt = true,
     requiresRemoteInputs = true,
 )

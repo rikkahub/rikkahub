@@ -10,6 +10,7 @@ import me.rerere.mediagen.model.MediaGenerationModel
 import me.rerere.mediagen.model.MediaGenerationRequest
 import me.rerere.mediagen.model.MediaGenerationTask
 import me.rerere.mediagen.provider.providers.aliyun.AliyunMediaGenerationProvider
+import me.rerere.mediagen.provider.providers.apimart.ApiMartMediaGenerationProvider
 import me.rerere.mediagen.provider.providers.minimax.MiniMaxMediaGenerationProvider
 import me.rerere.mediagen.provider.providers.openai.OpenAIMediaGenerationProvider
 import me.rerere.mediagen.provider.providers.openrouter.OpenRouterMediaGenerationProvider
@@ -26,6 +27,7 @@ class MediaGenerationManager(
     private val volcengine = VolcengineMediaGenerationProvider(client)
     private val miniMax = MiniMaxMediaGenerationProvider(client)
     private val openRouter = OpenRouterMediaGenerationProvider(client)
+    private val apiMart = ApiMartMediaGenerationProvider(client)
 
     suspend fun create(
         setting: MediaGenerationProviderSetting,
@@ -86,6 +88,7 @@ class MediaGenerationManager(
             is MediaGenerationProviderSetting.Volcengine -> volcengine
             is MediaGenerationProviderSetting.MiniMax -> miniMax
             is MediaGenerationProviderSetting.OpenRouter -> openRouter
+            is MediaGenerationProviderSetting.ApiMart -> apiMart
         }
 
     // 厂商适配器尚未实现该模型的 kind 时返回失败，否则返回 null
