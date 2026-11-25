@@ -53,7 +53,7 @@ class MediaGenerationManager(
         setting: MediaGenerationProviderSetting,
         model: MediaGenerationModel,
         request: MediaGenerationRequest,
-        interval: Duration = 15.seconds,
+        interval: Duration = 5.seconds,
     ): Flow<MediaGenerationTask> = flow {
         require(interval.isPositive()) { "interval must be positive" }
         val task = create(setting, model, request).getOrThrow()
@@ -70,7 +70,7 @@ class MediaGenerationManager(
         setting: MediaGenerationProviderSetting,
         model: MediaGenerationModel,
         taskId: String,
-        interval: Duration = 15.seconds,
+        interval: Duration = 5.seconds,
     ): Flow<MediaGenerationTask> = flow {
         require(interval.isPositive()) { "interval must be positive" }
         while (true) {
