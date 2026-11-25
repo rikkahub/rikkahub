@@ -358,7 +358,8 @@ fun ChatInput(
                             )
                         }
 
-                        if (loading) {
+                        // 录音中熄屏会截断语音输入；两种情况共用一个，各放一个的话先结束的那个会清掉亮屏标记
+                        if (loading || asrState.isRecording) {
                             KeepScreenOn()
                         }
 
