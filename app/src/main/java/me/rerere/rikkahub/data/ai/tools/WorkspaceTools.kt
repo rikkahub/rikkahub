@@ -258,6 +258,14 @@ private fun createShellTool(
                     put("type", "string")
                     put("description", "Shell command to run")
                 })
+                put("description", buildJsonObject {
+                    put("type", "string")
+                    put(
+                        "description",
+                        "Clear, concise description of what this command does in active voice, usually 5-10 words, " +
+                            "written in the user's language. It is shown to the user in place of the raw command."
+                    )
+                })
                 put("cwd", buildJsonObject {
                     put("type", "string")
                     put(
