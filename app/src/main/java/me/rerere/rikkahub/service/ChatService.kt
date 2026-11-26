@@ -89,9 +89,14 @@ import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
+
+// 一轮回复里连续调用工具可以跑很久，每隔这么久把已经执行完的步骤落一次库
+private val TurnCheckpointInterval = 30.seconds
 
 data class ChatError(
     val id: Uuid = Uuid.random(),
@@ -727,6 +732,7 @@ class ChatService(
             // 上一段是压缩后新开的；摘要加系统提示词本身就超过阈值时再压也没用，这一轮不再压缩
             var afterCompression = false
             var compressionUseless = false
+            var lastCheckpoint = TimeSource.Monotonic.markNow()
             try {
                 while (true) {
                     val replyNodeId = target.nodeId
@@ -761,6 +767,14 @@ class ChatService(
                                 appEventBus.tryEmit(
                                     AppEvent.ChatGenerationUpdate(conversationId, event.message, senderName)
                                 )
+                                // 平时等这一轮结束才落库，中途进程崩溃或被杀时整轮的操作都没了 (#2377)。
+                                // 工具执行完是完整的一步，只在这里存，不会把生成到一半的内容写进库
+                                if (event.message.endsWithExecutedTool() &&
+                                    lastCheckpoint.elapsedNow() >= TurnCheckpointInterval
+                                ) {
+                                    lastCheckpoint = TimeSource.Monotonic.markNow()
+                                    saveTurnCheckpoint(session)
+                                }
                             }
 
                             is AgentEvent.Retrying -> {
@@ -845,6 +859,17 @@ class ChatService(
                 title = context.getString(R.string.error_title_generation)
             )
             return TurnResult.Failed
+        }
+    }
+
+    // 中途落库只是多一层保险，失败了不影响这一轮继续，结束时还会再存一次
+    private suspend fun saveTurnCheckpoint(session: ConversationSession) {
+        try {
+            session.flush()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to save turn checkpoint for ${session.id}", e)
         }
     }
 
@@ -1533,3 +1558,7 @@ class ChatService(
         if (session.isInitialized) finishInterruptedPendingTools(session)
     }
 }
+
+// 一批工具按顺序执行，最后一个有了结果就是都执行完了；模型开始回复后末尾是新内容，不再成立
+private fun UIMessage.endsWithExecutedTool(): Boolean =
+    (parts.lastOrNull() as? UIMessagePart.Tool)?.isExecuted == true
