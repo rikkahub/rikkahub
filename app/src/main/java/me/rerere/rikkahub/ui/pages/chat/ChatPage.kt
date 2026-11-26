@@ -63,7 +63,6 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderSetting
@@ -105,7 +104,6 @@ import me.rerere.rikkahub.utils.navigateToChatPage
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
-import kotlin.time.Duration.Companion.milliseconds
 import kotlin.uuid.Uuid
 
 @Composable
@@ -335,6 +333,7 @@ private fun ChatPageContent(
     // 列表滚到标题栏下面时才显示胶囊背景，空页面或在顶部时按钮直接浮在背景上
     // 概览页有自己的列表，切过去后跟着它判断
     val previewListState = rememberLazyListState()
+    val chatScrollAnchor = remember { ChatScrollAnchorState() }
     val listScrolledUnderTopBar by remember(chatListState, previewListState) {
         derivedStateOf {
             if (previewMode) previewListState.canScrollBackward else chatListState.canScrollBackward
@@ -427,11 +426,8 @@ private fun ChatPageContent(
                                 messageId = inputState.editingMessage!!,
                             )
                         } else {
+                            chatScrollAnchor.anchorNextUserMessage(conversation.messageNodes)
                             vm.handleMessageSend(inputState.getContents())
-                            scope.launch {
-                                delay(100.milliseconds)
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                            }
                         }
                         inputState.clearInput()
                     },
@@ -442,10 +438,8 @@ private fun ChatPageContent(
                                 messageId = inputState.editingMessage!!,
                             )
                         } else {
+                            chatScrollAnchor.anchorNextUserMessage(conversation.messageNodes)
                             vm.handleMessageSend(content = inputState.getContents(), answer = false)
-                            scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                            }
                         }
                         inputState.clearInput()
                     },
@@ -464,6 +458,7 @@ private fun ChatPageContent(
                 state = chatListState,
                 previewListState = previewListState,
                 selectionState = selectionState,
+                scrollAnchor = chatScrollAnchor,
                 loading = loadingJob != null,
                 compressing = sessionActivity == SessionActivity.Compressing,
                 processingStatus = processingStatus,
@@ -475,6 +470,7 @@ private fun ChatPageContent(
                 onDismissError = onDismissError,
                 onClearAllErrors = onClearAllErrors,
                 onRegenerate = {
+                    chatScrollAnchor.anchorTurnOf(conversation.messageNodes, it.id)
                     vm.regenerateAtMessage(it)
                 },
                 onEdit = {
