@@ -1909,8 +1909,6 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="quick_start_page_deepseek_api_desc">웹사이트 계정과 API는 별도로 청구됩니다. DeepSeek Platform에서 API 키를 생성하고 충전한 뒤, 내장 DeepSeek 제공자에 입력하고 모델을 추가한 다음, 일반 탭에서 기본 모델로 설정하세요.</string>
   <string name="quick_start_page_deepseek_get_key">API 키 받기</string>
   <string name="quick_start_page_deepseek_configure">DeepSeek 설정</string>
-  <string name="quick_start_card_title">아직 사용 가능한 모델이 없습니다</string>
-  <string name="quick_start_card_desc">RikkaHub에서 채팅하려면 모델 제공자가 필요합니다. 빠른 시작에 따라 제공자와 기본 모델을 설정하거나 DeepSeek에서 채팅 기록을 마이그레이션하세요.</string>
   <string name="setting_page_quick_start">빠른 시작</string>
   <string name="setting_page_quick_start_desc">제공자와 모델을 단계별로 설정하거나 DeepSeek에서 마이그레이션하세요</string>
   <string name="quick_start_page_model_locked">이전 단계를 완료하고 모델을 추가하면 여기에서 사용할 수 있습니다.</string>

@@ -1919,8 +1919,6 @@
   <string name="quick_start_page_deepseek_api_desc">Аккаунт на сайте и API оплачиваются отдельно: создайте API-ключ и пополните баланс на платформе DeepSeek, введите его во встроенном провайдере DeepSeek и добавьте модели, затем установите её как модель по умолчанию на вкладке «Общие».</string>
   <string name="quick_start_page_deepseek_get_key">Получить API-ключ</string>
   <string name="quick_start_page_deepseek_configure">Настроить DeepSeek</string>
-  <string name="quick_start_card_title">Модели пока недоступны</string>
-  <string name="quick_start_card_desc">Для чата RikkaHub нужен провайдер моделей. Следуйте инструкции быстрого старта, чтобы настроить провайдера и модель по умолчанию, или перенесите историю чатов из DeepSeek.</string>
   <string name="setting_page_quick_start">Быстрый старт</string>
   <string name="setting_page_quick_start_desc">Пошаговая настройка провайдеров и моделей или перенос из DeepSeek</string>
   <string name="quick_start_page_deepseek_title">Переход с DeepSeek</string>

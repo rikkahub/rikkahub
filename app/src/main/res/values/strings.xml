@@ -1932,8 +1932,6 @@
   <string name="quick_start_page_deepseek_api_desc">Your website account and the API are billed separately: create an API key and top up on the DeepSeek Platform, enter it in the built-in DeepSeek provider and add models, then set it as the default model on the General tab.</string>
   <string name="quick_start_page_deepseek_get_key">Get API Key</string>
   <string name="quick_start_page_deepseek_configure">Set up DeepSeek</string>
-  <string name="quick_start_card_title">No models available yet</string>
-  <string name="quick_start_card_desc">RikkaHub needs a model provider to chat. Follow the quick start to set up a provider and default model, or migrate your chat history from DeepSeek.</string>
   <string name="setting_page_quick_start">Quick Start</string>
   <string name="setting_page_quick_start_desc">Set up providers and models step by step, or migrate from DeepSeek</string>
 </resources>

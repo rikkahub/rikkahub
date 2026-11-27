@@ -1931,8 +1931,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="quick_start_page_deepseek_api_desc">网页版账号和 API 是分开计费的：在 DeepSeek 开放平台创建 API Key 并充值，填进内置的 DeepSeek 提供商并添加模型，再到「通用」页把它设为默认模型。</string>
   <string name="quick_start_page_deepseek_get_key">获取 API Key</string>
   <string name="quick_start_page_deepseek_configure">配置 DeepSeek</string>
-  <string name="quick_start_card_title">还没有可用的模型</string>
-  <string name="quick_start_card_desc">RikkaHub 需要接入模型服务商才能聊天。跟着快速入门配置提供商和默认模型，也可以从 DeepSeek 迁移聊天记录。</string>
   <string name="setting_page_quick_start">快速入门</string>
   <string name="setting_page_quick_start_desc">一步步配置提供商和模型，或从 DeepSeek 迁移</string>
   <string name="setting_page_preferences_notification_battery_optimization">忽略电池优化</string>

@@ -1917,8 +1917,6 @@
   <string name="quick_start_page_deepseek_api_desc">您的網站帳號與 API 是分開計費的：請在 DeepSeek 平台建立 API 金鑰並儲值，將其填入內建的 DeepSeek 供應商並新增模型，然後在「一般」分頁中設為預設模型。</string>
   <string name="quick_start_page_deepseek_get_key">取得 API 金鑰</string>
   <string name="quick_start_page_deepseek_configure">設定 DeepSeek</string>
-  <string name="quick_start_card_title">尚無可用模型</string>
-  <string name="quick_start_card_desc">RikkaHub 需要模型供應商才能進行對話。請依照快速入門設定供應商與預設模型，或從 DeepSeek 移轉您的聊天記錄。</string>
   <string name="setting_page_quick_start">快速入門</string>
   <string name="setting_page_quick_start_desc">逐步設定供應商與模型，或從 DeepSeek 移轉</string>
   <string name="quick_start_page_deepseek_title">從 DeepSeek 遷移</string>

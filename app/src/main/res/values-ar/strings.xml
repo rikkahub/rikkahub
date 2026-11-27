@@ -1927,8 +1927,6 @@
   <string name="quick_start_page_deepseek_api_desc">يُفوتر حسابك على الموقع وAPI بشكل منفصل: أنشئ مفتاح API واشحن الرصيد على منصة DeepSeek، وأدخله في مزوّد DeepSeek المدمج وأضف النماذج، ثم عيّنه كنموذج افتراضي في علامة التبويب «عام».</string>
   <string name="quick_start_page_deepseek_get_key">احصل على مفتاح API</string>
   <string name="quick_start_page_deepseek_configure">إعداد DeepSeek</string>
-  <string name="quick_start_card_title">لا توجد نماذج متاحة بعد</string>
-  <string name="quick_start_card_desc">يحتاج RikkaHub إلى مزوّد نماذج للدردشة. اتبع البدء السريع لإعداد مزوّد ونموذج افتراضي، أو انقل سجل محادثاتك من DeepSeek.</string>
   <string name="setting_page_quick_start">البدء السريع</string>
   <string name="setting_page_quick_start_desc">أعدّ المزوّدين والنماذج خطوة بخطوة، أو قم بالترحيل من DeepSeek</string>
   <string name="setting_page_preferences_notification_battery_optimization">تجاهل تحسين البطارية</string>

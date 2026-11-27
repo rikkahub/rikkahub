@@ -61,13 +61,11 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
-import me.rerere.rikkahub.data.model.getChatModelOf
 import me.rerere.rikkahub.data.model.withConversation
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.message.ChatMessage
 import me.rerere.rikkahub.ui.components.ui.ErrorCardsDisplay
 import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
-import me.rerere.rikkahub.ui.pages.quickstart.QuickStartCard
 import me.rerere.rikkahub.ui.theme.ChatFontProvider
 import me.rerere.rikkahub.utils.plus
 import me.rerere.ui.components.ListSelectableItem
@@ -307,10 +305,6 @@ private fun ChatListNormal(
             .associateBy { it.id }
     }
     val lastMessageIndex = conversation.messageNodes.lastIndex
-    // 流式输出时会频繁重组，只在相关配置变了才重新查找模型
-    val needsSetup = remember(settings.init, settings.providers, settings.chatModelId, settings.assistants, conversation.assistantId, conversation.config) {
-        !settings.init && settings.getChatModelOf(conversation) == null
-    }
 
     Box(
         modifier = Modifier
@@ -440,13 +434,6 @@ private fun ChatListNormal(
             if (loading && conversation.messageNodes.isEmpty()) {
                 item(LoadingIndicatorKey) {
                     ChatLoadingIndicator(processingStatus = processingStatus)
-                }
-            }
-
-            // 没有可用模型就发不了消息，放在消息后面，空会话时在顶部、有消息时贴着输入框
-            if (needsSetup) {
-                item(key = "QuickStartCard") {
-                    QuickStartCard(modifier = Modifier.animateItem())
                 }
             }
 

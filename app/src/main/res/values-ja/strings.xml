@@ -1919,8 +1919,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="quick_start_page_deepseek_api_desc">ウェブサイトのアカウントとAPIは別々に課金されます。DeepSeek PlatformでAPIキーを作成して残高を追加し、内蔵のDeepSeekプロバイダーに入力してモデルを追加したうえで、一般タブでデフォルトモデルに設定してください。</string>
   <string name="quick_start_page_deepseek_get_key">APIキーを取得</string>
   <string name="quick_start_page_deepseek_configure">DeepSeekを設定</string>
-  <string name="quick_start_card_title">利用可能なモデルがまだありません</string>
-  <string name="quick_start_card_desc">RikkaHubでチャットするにはモデルプロバイダーが必要です。クイックスタートに従ってプロバイダーとデフォルトモデルを設定するか、DeepSeekからチャット履歴を移行してください。</string>
   <string name="setting_page_quick_start">クイックスタート</string>
   <string name="setting_page_quick_start_desc">プロバイダーとモデルを順を追って設定するか、DeepSeekから移行します</string>
   <string name="quick_start_page_deepseek_title">DeepSeek から移行</string>
